@@ -42,6 +42,7 @@ import {
   Key,
   Users,
   FileText,
+  Globe,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -107,6 +108,7 @@ const menuGroups: MenuGroup[] = [
 const adminMenuItems: MenuItem[] = [
   { icon: Users, label: "团队管理", path: "/admin/team" },
   { icon: Key, label: "API 密钥", path: "/admin/api-keys" },
+  { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
   { icon: Settings, label: "系统设置", path: "/admin/settings" },
 ];
 

@@ -5,12 +5,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Download, Loader2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+
+type PptStage = "idle" | "structuring" | "generating_images" | "building_pptx" | "done";
 
 export default function DesignPlanning() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -22,7 +25,8 @@ export default function DesignPlanning() {
   });
   const [report, setReport] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [pptStage, setPptStage] = useState<PptStage>("idle");
+  const [pptProgress, setPptProgress] = useState(0);
 
   const generateMutation = trpc.benchmark.generate.useMutation({
     onSuccess: (data) => {
@@ -38,32 +42,73 @@ export default function DesignPlanning() {
 
   const exportMutation = trpc.benchmark.exportPpt.useMutation({
     onSuccess: (data) => {
-      setIsExporting(false);
-      toast.success(`PPT 已生成（${data.slideCount} 页），正在下载...`);
-      // Download the PPTX file from S3 URL
+      setPptStage("done");
+      setPptProgress(100);
+      toast.success(`PPT 已生成（${data.slideCount} 页，含 ${data.imageCount} 张配图），正在下载...`);
       const a = document.createElement("a");
       a.href = data.url;
       a.download = `${data.title}-对标调研.pptx`;
       a.target = "_blank";
       a.click();
+      // Reset after a delay
+      setTimeout(() => {
+        setPptStage("idle");
+        setPptProgress(0);
+      }, 3000);
     },
     onError: () => {
-      setIsExporting(false);
-      toast.error("PPT 导出失败");
+      setPptStage("idle");
+      setPptProgress(0);
+      toast.error("PPT 生成失败，请重试");
     },
   });
+
+  // Simulate progress stages while PPT is being generated
+  useEffect(() => {
+    if (pptStage === "idle" || pptStage === "done") return;
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    if (pptStage === "structuring") {
+      timers.push(setTimeout(() => setPptProgress(15), 500));
+      timers.push(setTimeout(() => setPptProgress(25), 2000));
+      timers.push(setTimeout(() => {
+        setPptStage("generating_images");
+        setPptProgress(30);
+      }, 4000));
+    }
+
+    if (pptStage === "generating_images") {
+      timers.push(setTimeout(() => setPptProgress(40), 1000));
+      timers.push(setTimeout(() => setPptProgress(55), 5000));
+      timers.push(setTimeout(() => setPptProgress(65), 10000));
+      timers.push(setTimeout(() => {
+        setPptStage("building_pptx");
+        setPptProgress(75);
+      }, 15000));
+    }
+
+    if (pptStage === "building_pptx") {
+      timers.push(setTimeout(() => setPptProgress(85), 2000));
+      timers.push(setTimeout(() => setPptProgress(92), 5000));
+    }
+
+    return () => timers.forEach(clearTimeout);
+  }, [pptStage]);
 
   const handleGenerate = () => {
     if (!form.projectName.trim()) { toast.error("请输入项目名称"); return; }
     if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
     setIsGenerating(true);
+    setReport("");
     generateMutation.mutate({ ...form, toolId });
   };
 
   const handleExportPpt = () => {
     if (!report) { toast.error("请先生成调研报告"); return; }
-    setIsExporting(true);
-    exportMutation.mutate({ content: report, title: form.projectName });
+    setPptStage("structuring");
+    setPptProgress(5);
+    exportMutation.mutate({ content: report, title: form.projectName, projectType: form.projectType });
   };
 
   const projectTypes = [
@@ -75,6 +120,16 @@ export default function DesignPlanning() {
     { value: "cultural", label: "文化空间" },
     { value: "other", label: "其他" },
   ];
+
+  const pptStageLabels: Record<PptStage, string> = {
+    idle: "",
+    structuring: "正在分析报告结构，规划 PPT 页面...",
+    generating_images: "正在获取真实案例照片与设计配图...",
+    building_pptx: "正在组装 PPT 文件...",
+    done: "PPT 生成完成！",
+  };
+
+  const isPptGenerating = pptStage !== "idle" && pptStage !== "done";
 
   return (
     <div className="space-y-6">
@@ -154,30 +209,94 @@ export default function DesignPlanning() {
             </Card>
 
             {/* Output Panel */}
-            <Card className="lg:col-span-3">
-              <CardHeader className="pb-4 flex flex-row items-center justify-between">
-                <CardTitle className="text-base font-medium">调研报告</CardTitle>
-                {report && (
-                  <Button variant="outline" size="sm" onClick={handleExportPpt} disabled={isExporting}>
-                    {isExporting ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Download className="h-3 w-3 mr-1.5" />}
-                    导出 PPT
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                {report ? (
-                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                    <Streamdown>{report}</Streamdown>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                    <Compass className="h-12 w-12 mb-3 opacity-20" />
-                    <p className="text-sm">填写项目信息后，点击生成调研报告</p>
-                    <p className="text-xs mt-1 opacity-60">AI 将为您分析对标案例并生成专业报告</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="lg:col-span-3 space-y-4">
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base font-medium">调研报告</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {report ? (
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                      <Streamdown>{report}</Streamdown>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                      <Compass className="h-12 w-12 mb-3 opacity-20" />
+                      <p className="text-sm">填写项目信息后，点击生成调研报告</p>
+                      <p className="text-xs mt-1 opacity-60">AI 将为您分析对标案例并生成专业报告</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* PPT Generation Section - Only visible after report is generated */}
+              {report && (
+                <Card className="border-2 border-dashed border-accent/30 bg-accent/5">
+                  <CardContent className="py-6">
+                    {pptStage === "idle" ? (
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="flex items-center gap-3 text-center">
+                          <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center">
+                            <Presentation className="h-6 w-6 text-accent" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-medium text-foreground">生成对标案例 PPT</h3>
+                            <p className="text-sm text-muted-foreground">
+                              约 15 页图文并茂的 PPTX，案例页含真实项目照片，设计思路页含 Pexels 配图
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={handleExportPpt}
+                          size="lg"
+                          className="bg-accent hover:bg-accent/90 text-white px-8"
+                        >
+                          <Presentation className="h-4 w-4 mr-2" />
+                          生成 PPT
+                        </Button>
+                      </div>
+                    ) : pptStage === "done" ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <CheckCircle2 className="h-10 w-10 text-green-500" />
+                        <p className="font-medium text-green-700">PPT 生成完成，已开始下载</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-foreground">{pptStageLabels[pptStage]}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {pptStage === "generating_images" && (
+                                <span className="flex items-center gap-1">
+                                  <ImageIcon className="h-3 w-3" />
+                                  正在从来源网站抓取真实案例照片，并从 Pexels 获取设计配图...
+                                </span>
+                              )}
+                              {pptStage === "structuring" && "分析报告内容，规划封面、目录、案例分析、总结等页面"}
+                              {pptStage === "building_pptx" && "将文字和图片组装为 PPTX 文件并上传"}
+                            </p>
+                          </div>
+                          <span className="text-sm font-mono text-muted-foreground">{pptProgress}%</span>
+                        </div>
+                        <Progress value={pptProgress} className="h-2" />
+                        <div className="flex justify-center gap-6 text-xs text-muted-foreground">
+                          <span className={pptStage === "structuring" ? "text-accent font-medium" : pptProgress > 25 ? "text-foreground" : ""}>
+                            ① 结构化
+                          </span>
+                          <span className={pptStage === "generating_images" ? "text-accent font-medium" : pptProgress > 65 ? "text-foreground" : ""}>
+                            ② 获取照片
+                          </span>
+                          <span className={pptStage === "building_pptx" ? "text-accent font-medium" : pptProgress > 90 ? "text-foreground" : ""}>
+                            ③ 组装导出
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
         </TabsContent>
 

@@ -435,3 +435,73 @@ describe("openclawApi", () => {
     expect(typeof module.openclawRouter).toBe("function"); // Express Router is a function
   });
 });
+
+// ─── Benchmark Module Tests ────────────────────────────────
+
+describe("benchmark", () => {
+  it("benchmark.generate requires authentication", async () => {
+    const caller = createPublicCaller();
+    await expect(
+      caller.benchmark.generate({
+        projectName: "Test",
+        projectType: "office",
+        requirements: "Test requirements",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("benchmark.generate validates referenceCount max", async () => {
+    const caller = createAuthCaller();
+    // referenceCount max is 10, passing 20 should fail at Zod validation
+    await expect(
+      caller.benchmark.generate({
+        projectName: "Test",
+        projectType: "office",
+        requirements: "Test",
+        referenceCount: 20,
+      })
+    ).rejects.toThrow();
+  });
+
+  it("benchmark.exportPpt requires authentication", async () => {
+    const caller = createPublicCaller();
+    await expect(
+      caller.benchmark.exportPpt({
+        content: "# Test Report",
+        title: "Test",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("benchmark.exportPpt rejects empty content", async () => {
+    const caller = createAuthCaller();
+    await expect(
+      caller.benchmark.exportPpt({
+        content: "",
+        title: "Test",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("benchmark.exportPpt rejects empty title", async () => {
+    const caller = createAuthCaller();
+    await expect(
+      caller.benchmark.exportPpt({
+        content: "Some content",
+        title: "",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("benchmark.generate rejects referenceCount below min", async () => {
+    const caller = createAuthCaller();
+    await expect(
+      caller.benchmark.generate({
+        projectName: "Test",
+        projectType: "office",
+        requirements: "Test",
+        referenceCount: 0, // Min is 1
+      })
+    ).rejects.toThrow();
+  });
+});

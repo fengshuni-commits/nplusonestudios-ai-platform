@@ -438,3 +438,40 @@ export async function createWorkflowTemplate(data: InsertWorkflowTemplate) {
   const result = await db.insert(workflowTemplates).values(data);
   return { id: result[0].insertId };
 }
+
+// ─── Case Sources ───────────────────────────────────────
+
+import { caseSources, InsertCaseSource } from "../drizzle/schema";
+
+export async function listCaseSources(activeOnly = true) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = activeOnly ? [eq(caseSources.isActive, true)] : [];
+  return db.select().from(caseSources).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(caseSources.sortOrder);
+}
+
+export async function getCaseSourceById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(caseSources).where(eq(caseSources.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createCaseSource(data: InsertCaseSource) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(caseSources).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function updateCaseSource(id: number, data: Partial<InsertCaseSource>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(caseSources).set(data).where(eq(caseSources.id, id));
+}
+
+export async function deleteCaseSource(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(caseSources).where(eq(caseSources.id, id));
+}

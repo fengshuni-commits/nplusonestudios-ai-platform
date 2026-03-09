@@ -269,3 +269,29 @@ export const workflowInstances = mysqlTable("workflow_instances", {
 });
 
 export type WorkflowInstance = typeof workflowInstances.$inferSelect;
+
+// ─── Case Source Sites (案例来源网站配置) ───────────────
+export const caseSources = mysqlTable("case_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  baseUrl: text("baseUrl").notNull(),
+  description: text("description"),
+  /** CSS selector for project images on detail pages */
+  imageSelector: varchar("imageSelector", { length: 512 }),
+  /** CSS selector for project title */
+  titleSelector: varchar("titleSelector", { length: 512 }),
+  /** CSS selector for project description */
+  descSelector: varchar("descSelector", { length: 512 }),
+  /** Image URL domain (e.g. images.adsttc.com for ArchDaily) */
+  imageDomain: varchar("imageDomain", { length: 256 }),
+  /** Preferred image size keyword in URL (e.g. large_jpg, newsletter) */
+  preferredSize: varchar("preferredSize", { length: 64 }),
+  isActive: boolean("isActive").default(true),
+  sortOrder: int("sortOrder").default(0),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CaseSource = typeof caseSources.$inferSelect;
+export type InsertCaseSource = typeof caseSources.$inferInsert;

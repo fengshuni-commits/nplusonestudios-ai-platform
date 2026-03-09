@@ -20,6 +20,7 @@ import Workflows from "./pages/Workflows";
 import AdminTeam from "./pages/AdminTeam";
 import AdminApiKeys from "./pages/AdminApiKeys";
 import AdminSettings from "./pages/AdminSettings";
+import AdminCaseSources from "./pages/AdminCaseSources";
 import MeetingMinutes from "./pages/MeetingMinutes";
 
 function Router() {
@@ -41,6 +42,7 @@ function Router() {
         <Route path="/workflows" component={Workflows} />
         <Route path="/admin/team" component={AdminTeam} />
         <Route path="/admin/api-keys" component={AdminApiKeys} />
+        <Route path="/admin/case-sources" component={AdminCaseSources} />
         <Route path="/admin/settings" component={AdminSettings} />
         <Route component={NotFound} />
       </Switch>
