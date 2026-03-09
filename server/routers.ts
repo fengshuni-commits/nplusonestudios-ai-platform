@@ -11,7 +11,23 @@ import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import crypto from "crypto";
-import PptxGenJS from "pptxgenjs";
+// pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
+import { createRequire } from "module";
+let _PptxGenJS: any = null;
+async function getPptxGenJS() {
+  if (_PptxGenJS) return _PptxGenJS;
+  try {
+    // Try CJS require first (most reliable in tsx watch)
+    const req = createRequire(import.meta.url);
+    const mod = req("pptxgenjs");
+    _PptxGenJS = mod.default || mod;
+  } catch {
+    // Fallback to dynamic import
+    const mod = await import("pptxgenjs") as any;
+    _PptxGenJS = mod.default?.default || mod.default || mod;
+  }
+  return _PptxGenJS;
+}
 import { scrapeProjectPage, downloadImageAsBase64, searchPexelsImages } from "./scraper";
 
 // ─── Dashboard ───────────────────────────────────────────
@@ -534,7 +550,8 @@ ${siteUrls}
       }
 
       // Step 4: Build PPTX with pptxgenjs
-      const pptx = new PptxGenJS();
+      const PptxCtor = await getPptxGenJS();
+      const pptx = new PptxCtor();
       pptx.author = "N+1 STUDIOS";
       pptx.company = "N+1 STUDIOS";
       pptx.title = `${input.title} - 对标调研报告`;

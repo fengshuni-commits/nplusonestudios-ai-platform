@@ -52,3 +52,6 @@
 - [x] 后台新增案例来源网站管理（管理员配置常用网站）
 - [x] 网页抓取服务（针对性抓取 ArchDaily/Dezeen/谷德等）
 - [x] Pexels API 集成（搜索建筑风格配图）
+
+## Bug 修复
+- [x] 对标调研模块"生成PPT"按钮不可用（pptxgenjs ESM/CJS 互操作问题，已通过 createRequire 修复）
