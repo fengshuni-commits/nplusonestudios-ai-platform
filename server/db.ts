@@ -475,3 +475,37 @@ export async function deleteCaseSource(id: number) {
   if (!db) return;
   await db.delete(caseSources).where(eq(caseSources.id, id));
 }
+
+// ─── Generation History ─────────────────────────────────
+import { generationHistory, InsertGenerationHistory } from "../drizzle/schema";
+
+export async function listGenerationHistory(userId: number, opts?: { module?: string; limit?: number; offset?: number }) {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0 };
+  const conditions = [eq(generationHistory.userId, userId)];
+  if (opts?.module) conditions.push(eq(generationHistory.module, opts.module));
+  const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+  const items = await db.select().from(generationHistory)
+    .where(where)
+    .orderBy(desc(generationHistory.createdAt))
+    .limit(opts?.limit || 50)
+    .offset(opts?.offset || 0);
+  const countResult = await db.select({ count: sql<number>`count(*)` }).from(generationHistory).where(where);
+  return { items, total: countResult[0]?.count || 0 };
+}
+
+export async function createGenerationHistory(data: InsertGenerationHistory) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(generationHistory).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function getGenerationHistoryById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(generationHistory)
+    .where(and(eq(generationHistory.id, id), eq(generationHistory.userId, userId)))
+    .limit(1);
+  return result[0];
+}

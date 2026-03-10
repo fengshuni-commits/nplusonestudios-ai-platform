@@ -295,3 +295,28 @@ export const caseSources = mysqlTable("case_sources", {
 
 export type CaseSource = typeof caseSources.$inferSelect;
 export type InsertCaseSource = typeof caseSources.$inferInsert;
+
+// ─── Generation History (生成记录) ──────────────────────
+export const generationHistory = mysqlTable("generation_history", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** Module: benchmark_report, benchmark_ppt, ai_render, meeting_minutes */
+  module: varchar("module", { length: 64 }).notNull(),
+  /** Human-readable title for the generation */
+  title: varchar("title", { length: 512 }).notNull(),
+  /** Brief description or summary */
+  summary: text("summary"),
+  /** Input parameters (JSON) */
+  inputParams: json("inputParams"),
+  /** Output URL (e.g. PPT download link, image URL) */
+  outputUrl: text("outputUrl"),
+  /** Output content (e.g. report text, for text-based outputs) */
+  outputContent: text("outputContent"),
+  /** Status: success, failed, processing */
+  status: mysqlEnum("status", ["success", "failed", "processing"]).default("success").notNull(),
+  /** Duration in milliseconds */
+  durationMs: int("durationMs"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type GenerationHistory = typeof generationHistory.$inferSelect;
+export type InsertGenerationHistory = typeof generationHistory.$inferInsert;

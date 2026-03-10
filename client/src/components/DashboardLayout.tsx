@@ -16,17 +16,23 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarProvider,
   SidebarTrigger,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarGroupContent,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  LayoutDashboard,
   LogOut,
   PanelLeft,
   Compass,
@@ -43,6 +49,13 @@ import {
   Users,
   FileText,
   Globe,
+  ChevronRight,
+  History,
+  ShoppingCart,
+  Ruler,
+  Wrench,
+  Building2,
+  ClipboardList,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -55,67 +68,76 @@ type MenuItem = {
   path: string;
 };
 
-type MenuGroup = {
+type MenuSection = {
+  id: string;
   label: string;
+  icon: React.ComponentType<{ className?: string }>;
   items: MenuItem[];
+  adminOnly?: boolean;
 };
 
-const menuGroups: MenuGroup[] = [
+// ── 板块定义 ──────────────────────────────────────────
+// 设计板块（最上面）
+// 营建板块（第二）
+// 项目管理板块（第三）
+// 管理板块（管理员专属，最下面）
+// 历史板块（所有用户，最底部）
+
+const menuSections: MenuSection[] = [
   {
-    label: "概览",
-    items: [
-      { icon: LayoutDashboard, label: "工作台", path: "/" },
-      { icon: FolderKanban, label: "项目管理", path: "/projects" },
-    ],
-  },
-  {
+    id: "design",
     label: "设计",
+    icon: PenTool,
     items: [
       { icon: Compass, label: "项目策划", path: "/design/planning" },
-      { icon: PenTool, label: "设计工具", path: "/design/tools" },
+      { icon: Ruler, label: "设计工具", path: "/design/tools" },
     ],
   },
   {
+    id: "construction",
     label: "营建",
+    icon: Building2,
     items: [
       { icon: HardHat, label: "施工管理", path: "/construction/docs" },
-      { icon: FolderKanban, label: "采购跟踪", path: "/construction/procurement" },
+      { icon: ShoppingCart, label: "采购跟踪", path: "/construction/procurement" },
     ],
   },
   {
-    label: "资源",
-    items: [
-      { icon: Image, label: "素材库", path: "/assets" },
-      { icon: BookOpen, label: "出品标准", path: "/standards" },
-    ],
-  },
-  {
+    id: "project",
     label: "项目管理",
+    icon: ClipboardList,
     items: [
+      { icon: FolderKanban, label: "项目管理", path: "/projects" },
       { icon: FileText, label: "会议纪要", path: "/meeting" },
     ],
   },
   {
-    label: "AI 与集成",
+    id: "admin",
+    label: "管理",
+    icon: Settings,
+    adminOnly: true,
     items: [
+      { icon: BookOpen, label: "出品标准", path: "/standards" },
+      { icon: Image, label: "素材库", path: "/assets" },
       { icon: Sparkles, label: "AI 工具中心", path: "/ai-tools" },
       { icon: Webhook, label: "API 与 Webhook", path: "/integrations" },
       { icon: Workflow, label: "工作流", path: "/workflows" },
+      { icon: Users, label: "团队管理", path: "/admin/team" },
+      { icon: Key, label: "API 密钥", path: "/admin/api-keys" },
+      { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
+    ],
+  },
+  {
+    id: "history",
+    label: "历史",
+    icon: History,
+    items: [
+      { icon: History, label: "生成记录", path: "/history" },
     ],
   },
 ];
 
-const adminMenuItems: MenuItem[] = [
-  { icon: Users, label: "团队管理", path: "/admin/team" },
-  { icon: Key, label: "API 密钥", path: "/admin/api-keys" },
-  { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
-  { icon: Settings, label: "系统设置", path: "/admin/settings" },
-];
-
-const allMenuItems = [
-  ...menuGroups.flatMap((g) => g.items),
-  ...adminMenuItems,
-];
+const allMenuItems = menuSections.flatMap((s) => s.items);
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 260;
@@ -200,9 +222,32 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = allMenuItems.find((item) => item.path === location);
+  const activeMenuItem = allMenuItems.find((item) => item.path === location || (item.path !== "/" && location.startsWith(item.path)));
   const isMobile = useIsMobile();
   const isAdmin = user?.role === "admin";
+
+  // Track which sections are expanded - auto-expand section containing active item
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const section of menuSections) {
+      if (section.items.some(item => item.path === location || (item.path !== "/" && location.startsWith(item.path)))) {
+        initial.add(section.id);
+      }
+    }
+    return initial;
+  });
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -234,6 +279,11 @@ function DashboardLayoutContent({
     };
   }, [isResizing, setSidebarWidth]);
 
+  // Filter sections based on admin role
+  const visibleSections = menuSections.filter(
+    (section) => !section.adminOnly || isAdmin
+  );
+
   return (
     <>
       <div className="relative" ref={sidebarRef}>
@@ -242,7 +292,7 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-14 justify-center">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
@@ -262,68 +312,66 @@ function DashboardLayoutContent({
           </SidebarHeader>
 
           <SidebarContent className="gap-0 px-2">
-            {menuGroups.map((group) => (
-              <SidebarGroup key={group.label} className="py-1">
-                <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-sidebar-foreground/40 font-medium px-2 mb-0.5">
-                  {group.label}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {group.items.map((item) => {
-                      const isActive =
-                        location === item.path ||
-                        (item.path !== "/" &&
-                          location.startsWith(item.path));
-                      return (
-                        <SidebarMenuItem key={item.path}>
-                          <SidebarMenuButton
-                            isActive={isActive}
-                            onClick={() => setLocation(item.path)}
-                            tooltip={item.label}
-                            className="h-9 text-[13px] font-normal"
-                          >
-                            <item.icon
-                              className={`h-4 w-4 ${isActive ? "text-sidebar-primary" : "text-sidebar-foreground/60"}`}
-                            />
-                            <span>{item.label}</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
+            {visibleSections.map((section) => {
+              const isExpanded = expandedSections.has(section.id);
+              const sectionHasActive = section.items.some(
+                (item) => location === item.path || (item.path !== "/" && location.startsWith(item.path))
+              );
 
-            {isAdmin && (
-              <SidebarGroup className="py-1 mt-auto">
-                <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-sidebar-foreground/40 font-medium px-2 mb-0.5">
-                  管理
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {adminMenuItems.map((item) => {
-                      const isActive = location === item.path;
-                      return (
-                        <SidebarMenuItem key={item.path}>
-                          <SidebarMenuButton
-                            isActive={isActive}
-                            onClick={() => setLocation(item.path)}
-                            tooltip={item.label}
-                            className="h-9 text-[13px] font-normal"
-                          >
-                            <item.icon
-                              className={`h-4 w-4 ${isActive ? "text-sidebar-primary" : "text-sidebar-foreground/60"}`}
-                            />
-                            <span>{item.label}</span>
-                          </SidebarMenuButton>
+              return (
+                <SidebarGroup key={section.id} className="py-0.5">
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <Collapsible
+                        open={isExpanded}
+                        onOpenChange={() => toggleSection(section.id)}
+                        className="group/collapsible"
+                      >
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                              tooltip={section.label}
+                              className={`h-9 text-[13px] font-medium ${sectionHasActive && !isExpanded ? "text-sidebar-primary" : ""}`}
+                            >
+                              <section.icon
+                                className={`h-4 w-4 ${sectionHasActive ? "text-sidebar-primary" : "text-sidebar-foreground/60"}`}
+                              />
+                              <span>{section.label}</span>
+                              <ChevronRight
+                                className={`ml-auto h-3.5 w-3.5 text-sidebar-foreground/40 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`}
+                              />
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {section.items.map((item) => {
+                                const isActive =
+                                  location === item.path ||
+                                  (item.path !== "/" && location.startsWith(item.path));
+                                return (
+                                  <SidebarMenuSubItem key={item.path}>
+                                    <SidebarMenuSubButton
+                                      isActive={isActive}
+                                      onClick={() => setLocation(item.path)}
+                                      className="text-[13px]"
+                                    >
+                                      <item.icon
+                                        className={`h-3.5 w-3.5 ${isActive ? "text-sidebar-primary" : "text-sidebar-foreground/60"}`}
+                                      />
+                                      <span>{item.label}</span>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                );
+                              })}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
                         </SidebarMenuItem>
-                      );
-                    })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
+                      </Collapsible>
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              );
+            })}
           </SidebarContent>
 
           <SidebarFooter className="p-3">
@@ -336,10 +384,10 @@ function DashboardLayoutContent({
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none text-sidebar-foreground">
+                    <p className="text-sm font-medium truncate leading-tight text-sidebar-foreground">
                       {user?.name || "用户"}
                     </p>
-                    <p className="text-xs text-sidebar-foreground/50 truncate mt-1">
+                    <p className="text-[11px] text-sidebar-foreground/50 truncate leading-tight mt-0.5">
                       {user?.email || ""}
                     </p>
                   </div>

@@ -40,8 +40,10 @@ const pptJobStore = new Map<string, PptJob>();
 
 async function generatePptInBackground(
   jobId: string,
-  input: { content: string; title: string; projectType?: string }
+  input: { content: string; title: string; projectType?: string },
+  userId?: number
 ) {
+  const pptStartTime = Date.now();
   try {
     // Stage 1: LLM structuring
     pptJobStore.set(jobId, { status: "processing", progress: 10, stage: "structuring" });
@@ -545,9 +547,33 @@ async function generatePptInBackground(
       imageCount: imageBase64Map.size,
     });
     console.log(`[PPT] Job ${jobId} completed: ${slideData.slides.length} slides, ${imageBase64Map.size} images`);
+
+    // Record in generation history
+    if (userId) {
+      await db.createGenerationHistory({
+        userId,
+        module: "benchmark_ppt",
+        title: `${input.title} - 调研 PPT`,
+        summary: `${slideData.slides.length} 页幻灯片，${imageBase64Map.size} 张配图`,
+        outputUrl: url,
+        status: "success",
+        durationMs: Date.now() - pptStartTime,
+      }).catch(() => {});
+    }
   } catch (err: any) {
     console.error(`[PPT] Job ${jobId} failed:`, err);
     pptJobStore.set(jobId, { status: "failed", error: err?.message || "PPT 生成失败" });
+    // Record failure in history
+    if (userId) {
+      await db.createGenerationHistory({
+        userId,
+        module: "benchmark_ppt",
+        title: `${input.title} - 调研 PPT`,
+        summary: err?.message || "PPT 生成失败",
+        status: "failed",
+        durationMs: Date.now() - pptStartTime,
+      }).catch(() => {});
+    }
   }
 }
 
@@ -919,6 +945,17 @@ ${siteUrls}
           durationMs: Date.now() - startTime,
         });
 
+        // Record in generation history
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "benchmark_report",
+          title: `${input.projectName} - 对标调研报告`,
+          summary: `${input.projectType} | ${input.requirements?.substring(0, 100) || ''}`,
+          inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
+          status: "success",
+          durationMs: Date.now() - startTime,
+        }).catch(() => {});
+
         return { content, generatedAt: new Date().toISOString() };
       } catch (error) {
         await db.createAiToolLog({
@@ -942,12 +979,12 @@ ${siteUrls}
   // In-memory job queue for PPT generation
   startExportPpt: protectedProcedure
     .input(z.object({ content: z.string().min(1), title: z.string().min(1), projectType: z.string().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const jobId = nanoid();
       // Store job in memory and start processing in background
       pptJobStore.set(jobId, { status: "processing", progress: 5, stage: "structuring" });
       // Fire-and-forget: run PPT generation in background
-      generatePptInBackground(jobId, input).catch(err => {
+      generatePptInBackground(jobId, input, ctx.user.id).catch(err => {
         console.error("[PPT] Background job failed:", err);
         pptJobStore.set(jobId, { status: "failed", error: err?.message || "PPT 生成失败" });
       });
@@ -974,11 +1011,11 @@ ${siteUrls}
   // Legacy sync endpoint - redirects to async version
   exportPpt: protectedProcedure
     .input(z.object({ content: z.string().min(1), title: z.string().min(1), projectType: z.string().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       // Use the async pipeline and wait for it
       const jobId = nanoid();
       pptJobStore.set(jobId, { status: "processing", progress: 5, stage: "structuring" });
-      await generatePptInBackground(jobId, input);
+      await generatePptInBackground(jobId, input, ctx.user.id);
       const job = pptJobStore.get(jobId);
       if (job?.status === "done") {
         return { url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount };
@@ -1311,6 +1348,29 @@ const uploadRouter = router({
     }),
 });
 
+// ─── History ────────────────────────────────────────────
+
+const historyRouter = router({
+  list: protectedProcedure
+    .input(z.object({
+      module: z.string().optional(),
+      limit: z.number().min(1).max(100).optional(),
+      offset: z.number().min(0).optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      return db.listGenerationHistory(ctx.user.id, {
+        module: input?.module,
+        limit: input?.limit || 50,
+        offset: input?.offset || 0,
+      });
+    }),
+  getById: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return db.getGenerationHistoryById(input.id, ctx.user.id);
+    }),
+});
+
 // ─── Main Router ─────────────────────────────────────────
 
 export const appRouter = router({
@@ -1335,6 +1395,7 @@ export const appRouter = router({
   meeting: meetingRouter,
   admin: adminRouter,
   upload: uploadRouter,
+  history: historyRouter,
 });
 
 export type AppRouter = typeof appRouter;
