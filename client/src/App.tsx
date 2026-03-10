@@ -22,6 +22,9 @@ import AdminSettings from "./pages/AdminSettings";
 import AdminCaseSources from "./pages/AdminCaseSources";
 import MeetingMinutes from "./pages/MeetingMinutes";
 import HistoryPage from "./pages/History";
+import MediaXiaohongshu from "./pages/MediaXiaohongshu";
+import MediaWechat from "./pages/MediaWechat";
+import MediaInstagram from "./pages/MediaInstagram";
 
 function Router() {
   return (
@@ -44,6 +47,11 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/projects/:id" component={ProjectDetail} />
         <Route path="/meeting" component={MeetingMinutes} />
+
+        {/* 媒体板块 */}
+        <Route path="/media/xiaohongshu" component={MediaXiaohongshu} />
+        <Route path="/media/wechat" component={MediaWechat} />
+        <Route path="/media/instagram" component={MediaInstagram} />
 
         {/* 历史板块 */}
         <Route path="/history" component={HistoryPage} />

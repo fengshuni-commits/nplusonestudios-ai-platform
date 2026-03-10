@@ -31,6 +31,10 @@ import {
   Compass,
   PanelLeftOpen,
   PanelLeftClose,
+  Megaphone,
+  BookMarked,
+  MessageCircle,
+  Camera,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useLocation } from "wouter";
@@ -77,6 +81,16 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: FolderKanban, label: "项目管理", path: "/projects" },
       { icon: FileText, label: "会议纪要", path: "/meeting" },
+    ],
+  },
+  {
+    id: "media",
+    label: "媒体",
+    icon: Megaphone,
+    items: [
+      { icon: BookMarked, label: "小红书", path: "/media/xiaohongshu" },
+      { icon: MessageCircle, label: "公众号", path: "/media/wechat" },
+      { icon: Camera, label: "Instagram", path: "/media/instagram" },
     ],
   },
   {

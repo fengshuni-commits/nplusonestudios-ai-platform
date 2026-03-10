@@ -1364,8 +1364,175 @@ const uploadRouter = router({
       return { url, key };
     }),
 });
+// ─── Media Content Generation ───────────────────────────────────
 
-// ─── History ────────────────────────────────────────────
+const mediaRouter = router({
+  generate: protectedProcedure
+    .input(z.object({
+      platform: z.enum(["xiaohongshu", "wechat", "instagram"]),
+      topic: z.string().min(1),
+      projectName: z.string().optional(),
+      style: z.string().optional(),
+      referenceImageUrl: z.string().url().optional(),
+      additionalNotes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const startTime = Date.now();
+
+      const platformConfig: Record<string, { name: string; systemPrompt: string; imagePrompt: string }> = {
+        xiaohongshu: {
+          name: "小红书",
+          systemPrompt: `你是一位专业的建筑设计小红书内容创作者，为 N+1 STUDIOS 建筑设计事务所撰写内容。
+请根据主题生成小红书风格的图文内容，返回严格的 JSON 格式：
+{
+  "title": "吸引眼球的标题，含表情符号，15字以内",
+  "content": "正文内容，300-500字，分段落，每段开头用表情符号，口语化但专业",
+  "tags": ["标签1", "标签2", ...],
+  "coverImagePrompt": "用于生成封面图的英文描述，建筑摄影风格"
+}
+注意：小红书风格要求标题吸引人、内容有干货、标签精准。内容要体现专业性和设计美学。`,
+          imagePrompt: "architectural photography, modern design, professional",
+        },
+        wechat: {
+          name: "公众号",
+          systemPrompt: `你是一位专业的建筑设计微信公众号编辑，为 N+1 STUDIOS 建筑设计事务所撰写文章。
+请根据主题生成公众号风格的文章内容，返回严格的 JSON 格式：
+{
+  "title": "文章标题，正式且有吸引力，20字以内",
+  "summary": "摘要，50-80字，用于分享卡片显示",
+  "content": "正文内容，800-1200字，分段落并带小标题，专业且有深度",
+  "coverImagePrompt": "用于生成封面图的英文描述，建筑摄影风格"
+}
+注意：公众号文章要求专业深度、逻辑清晰、有观点输出。体现事务所的专业水准和设计思考。`,
+          imagePrompt: "architectural design, editorial photography, minimalist",
+        },
+        instagram: {
+          name: "Instagram",
+          systemPrompt: `You are a professional architectural design Instagram content creator for N+1 STUDIOS, an architecture firm.
+Generate Instagram-style content based on the topic. Return strict JSON format:
+{
+  "caption": "English caption, 100-200 words, engaging and professional, with line breaks",
+  "hashtags": ["#hashtag1", "#hashtag2", ...],
+  "coverImagePrompt": "English description for generating cover image, architectural photography style"
+}
+Note: Instagram content should be visually driven, use professional English, include relevant architecture/design hashtags. The tone should be sophisticated yet approachable.`,
+          imagePrompt: "architectural photography, Instagram aesthetic, high contrast",
+        },
+      };
+
+      const config = platformConfig[input.platform];
+      if (!config) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid platform" });
+
+      try {
+        // Step 1: Generate text content via LLM
+        const userMessage = [
+          `主题：${input.topic}`,
+          input.projectName ? `项目名称：${input.projectName}` : "",
+          input.style ? `风格偏好：${input.style}` : "",
+          input.additionalNotes ? `补充说明：${input.additionalNotes}` : "",
+        ].filter(Boolean).join("\n");
+
+        const llmResponse = await invokeLLM({
+          messages: [
+            { role: "system", content: config.systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "media_content",
+              strict: true,
+              schema: input.platform === "instagram" ? {
+                type: "object",
+                properties: {
+                  caption: { type: "string" },
+                  hashtags: { type: "array", items: { type: "string" } },
+                  coverImagePrompt: { type: "string" },
+                },
+                required: ["caption", "hashtags", "coverImagePrompt"],
+                additionalProperties: false,
+              } : input.platform === "xiaohongshu" ? {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  content: { type: "string" },
+                  tags: { type: "array", items: { type: "string" } },
+                  coverImagePrompt: { type: "string" },
+                },
+                required: ["title", "content", "tags", "coverImagePrompt"],
+                additionalProperties: false,
+              } : {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  summary: { type: "string" },
+                  content: { type: "string" },
+                  coverImagePrompt: { type: "string" },
+                },
+                required: ["title", "summary", "content", "coverImagePrompt"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const rawContent = llmResponse.choices[0].message.content;
+        const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+        const textContent = JSON.parse(contentStr || "{}");
+
+        // Step 2: Generate cover image
+        let coverImageUrl: string | null = null;
+        try {
+          const imagePrompt = textContent.coverImagePrompt || `${config.imagePrompt}, ${input.topic}`;
+          const genOpts: Parameters<typeof generateImage>[0] = { prompt: imagePrompt };
+          if (input.referenceImageUrl) {
+            genOpts.originalImages = [{ url: input.referenceImageUrl, mimeType: "image/png" }];
+          }
+          const imageResult = await generateImage(genOpts);
+          coverImageUrl = imageResult.url || null;
+        } catch (imgErr) {
+          console.error("[Media] Cover image generation failed:", imgErr);
+          // Continue without image
+        }
+
+        // Step 3: Record in history
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: `media_${input.platform}`,
+          title: `${config.name} - ${input.topic.substring(0, 40)}`,
+          summary: input.topic.substring(0, 200),
+          inputParams: { platform: input.platform, topic: input.topic, style: input.style },
+          outputUrl: coverImageUrl,
+          status: "success",
+          durationMs: Date.now() - startTime,
+        }).catch(() => {});
+
+        return {
+          platform: input.platform,
+          textContent,
+          coverImageUrl,
+          durationMs: Date.now() - startTime,
+        };
+      } catch (error: any) {
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: `media_${input.platform}`,
+          title: `${config.name} - ${input.topic.substring(0, 40)}`,
+          summary: error?.message || "Generation failed",
+          inputParams: { platform: input.platform, topic: input.topic },
+          status: "failed",
+          durationMs: Date.now() - startTime,
+        }).catch(() => {});
+
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `${config.name}内容生成失败，请稍后重试`,
+        });
+      }
+    }),
+});
+
+// ─── History ────────────────────────────────────────────────────
 
 const historyRouter = router({
   list: protectedProcedure
@@ -1412,6 +1579,7 @@ export const appRouter = router({
   meeting: meetingRouter,
   admin: adminRouter,
   upload: uploadRouter,
+  media: mediaRouter,
   history: historyRouter,
 });
 
