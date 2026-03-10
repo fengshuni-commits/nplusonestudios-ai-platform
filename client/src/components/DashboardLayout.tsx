@@ -29,8 +29,10 @@ import {
   Building2,
   ClipboardList,
   Compass,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
@@ -106,6 +108,7 @@ const menuSections: MenuSection[] = [
 const allMenuItems = menuSections.flatMap((s) => s.items);
 
 const ICON_BAR_WIDTH = 48;
+const EXPANDED_WIDTH = 200;
 
 export default function DashboardLayout({
   children,
@@ -156,6 +159,13 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const isAdmin = user?.role === "admin";
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      return localStorage.getItem("sidebar-expanded") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -167,7 +177,6 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
   );
 
   // Filter sections based on admin role
-  // Separate bottom sections (admin, history) from main sections
   const mainSections = menuSections.filter(
     (s) => !s.adminOnly && s.id !== "history" && s.id !== "admin"
   ).filter((s) => !s.adminOnly || isAdmin);
@@ -176,19 +185,33 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
     (s) => (s.id === "history" || (s.id === "admin" && isAdmin))
   );
 
+  const toggleExpanded = useCallback(() => {
+    setExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sidebar-expanded", String(next));
+      } catch { /* ignore */ }
+      return next;
+    });
+    // Close any hover popover when toggling
+    setHoveredSection(null);
+  }, []);
+
   const handleSectionEnter = useCallback((sectionId: string) => {
+    if (expanded) return; // No hover popover in expanded mode
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current);
       hoverTimeoutRef.current = null;
     }
     setHoveredSection(sectionId);
-  }, []);
+  }, [expanded]);
 
   const handleSectionLeave = useCallback(() => {
+    if (expanded) return;
     hoverTimeoutRef.current = setTimeout(() => {
       setHoveredSection(null);
     }, 150);
-  }, []);
+  }, [expanded]);
 
   const handlePopoverEnter = useCallback(() => {
     if (hoverTimeoutRef.current) {
@@ -219,60 +242,101 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
     ? menuSections.find((s) => s.id === hoveredSection)
     : null;
 
+  const sidebarWidth = expanded ? EXPANDED_WIDTH : ICON_BAR_WIDTH;
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Narrow Icon Sidebar */}
+      {/* Sidebar */}
       <div
-        className="flex flex-col h-full bg-sidebar border-r border-sidebar-border shrink-0 z-50"
-        style={{ width: ICON_BAR_WIDTH }}
+        className="flex flex-col h-full bg-sidebar border-r border-sidebar-border shrink-0 z-50 transition-[width] duration-200 ease-in-out"
+        style={{ width: sidebarWidth }}
       >
-        {/* Top: Main section icons */}
-        <div className="flex flex-col items-center pt-3 gap-1 flex-1">
+        {/* Toggle Button at Top */}
+        <div className={`flex items-center ${expanded ? "px-3" : "justify-center"} pt-3 pb-1`}>
+          <button
+            onClick={toggleExpanded}
+            className="flex items-center justify-center w-8 h-8 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+            title={expanded ? "收起侧边栏" : "展开侧边栏"}
+          >
+            {expanded ? (
+              <PanelLeftClose className="h-[16px] w-[16px]" />
+            ) : (
+              <PanelLeftOpen className="h-[16px] w-[16px]" />
+            )}
+          </button>
+        </div>
+
+        {/* Top: Main section icons/items */}
+        <div className={`flex flex-col ${expanded ? "px-2" : "items-center"} gap-0.5 flex-1 pt-1`}>
           {mainSections.map((section) => (
-            <SidebarIconButton
-              key={section.id}
-              section={section}
-              location={location}
-              isHovered={hoveredSection === section.id}
-              onMouseEnter={() => handleSectionEnter(section.id)}
-              onMouseLeave={handleSectionLeave}
-              onClick={() => {
-                // Click on icon navigates to first item
-                if (section.items.length === 1) {
-                  setLocation(section.items[0].path);
-                }
-              }}
-            />
+            expanded ? (
+              <ExpandedSection
+                key={section.id}
+                section={section}
+                location={location}
+                onNavigate={setLocation}
+              />
+            ) : (
+              <SidebarIconButton
+                key={section.id}
+                section={section}
+                location={location}
+                isHovered={hoveredSection === section.id}
+                onMouseEnter={() => handleSectionEnter(section.id)}
+                onMouseLeave={handleSectionLeave}
+                onClick={() => {
+                  if (section.items.length === 1) {
+                    setLocation(section.items[0].path);
+                  }
+                }}
+              />
+            )
           ))}
         </div>
 
         {/* Bottom: Admin, History, User */}
-        <div className="flex flex-col items-center pb-3 gap-1">
+        <div className={`flex flex-col ${expanded ? "px-2" : "items-center"} pb-3 gap-0.5`}>
           {bottomSections.map((section) => (
-            <SidebarIconButton
-              key={section.id}
-              section={section}
-              location={location}
-              isHovered={hoveredSection === section.id}
-              onMouseEnter={() => handleSectionEnter(section.id)}
-              onMouseLeave={handleSectionLeave}
-              onClick={() => {
-                if (section.items.length === 1) {
-                  setLocation(section.items[0].path);
-                }
-              }}
-            />
+            expanded ? (
+              <ExpandedSection
+                key={section.id}
+                section={section}
+                location={location}
+                onNavigate={setLocation}
+              />
+            ) : (
+              <SidebarIconButton
+                key={section.id}
+                section={section}
+                location={location}
+                isHovered={hoveredSection === section.id}
+                onMouseEnter={() => handleSectionEnter(section.id)}
+                onMouseLeave={handleSectionLeave}
+                onClick={() => {
+                  if (section.items.length === 1) {
+                    setLocation(section.items[0].path);
+                  }
+                }}
+              />
+            )
           ))}
 
           {/* User Avatar */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-sidebar-accent transition-colors focus:outline-none mt-1">
-                <Avatar className="h-7 w-7 border border-sidebar-border">
+              <button className={`flex items-center ${expanded ? "gap-2.5 w-full px-2 py-2 rounded-md hover:bg-sidebar-accent" : "justify-center w-10 h-10 rounded-lg hover:bg-sidebar-accent"} transition-colors focus:outline-none mt-1`}>
+                <Avatar className="h-7 w-7 border border-sidebar-border shrink-0">
                   <AvatarFallback className="text-[11px] font-medium bg-sidebar-primary text-sidebar-primary-foreground">
                     {user?.name?.charAt(0).toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
+                {expanded && (
+                  <div className="flex flex-col items-start min-w-0">
+                    <span className="text-xs font-medium text-sidebar-foreground truncate max-w-[120px]">
+                      {user?.name || "用户"}
+                    </span>
+                  </div>
+                )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end" className="w-48">
@@ -301,11 +365,12 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Hover Popover - Sub menu */}
-      {hoveredSectionData && hoveredSectionData.items.length > 1 && (
+      {/* Hover Popover - Sub menu (only in collapsed mode) */}
+      {!expanded && hoveredSectionData && hoveredSectionData.items.length > 1 && (
         <HoverPopover
           ref={popoverRef}
           section={hoveredSectionData}
+          sidebarWidth={ICON_BAR_WIDTH}
           location={location}
           onNavigate={setLocation}
           onMouseEnter={handlePopoverEnter}
@@ -342,7 +407,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ─── Sidebar Icon Button ─────────────────────────────── */
+/* ─── Sidebar Icon Button (Collapsed Mode) ───────────── */
 
 function SidebarIconButton({
   section,
@@ -375,7 +440,7 @@ function SidebarIconButton({
       <button
         onClick={onClick}
         className={`
-          flex flex-col items-center justify-center w-10 h-10 rounded-lg transition-all duration-150
+          flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-150
           ${sectionHasActive
             ? "bg-sidebar-accent text-sidebar-primary"
             : isHovered
@@ -391,20 +456,103 @@ function SidebarIconButton({
   );
 }
 
-/* ─── Hover Popover ───────────────────────────────────── */
+/* ─── Expanded Section (Expanded Mode) ───────────────── */
 
-import { forwardRef } from "react";
+function ExpandedSection({
+  section,
+  location,
+  onNavigate,
+}: {
+  section: MenuSection;
+  location: string;
+  onNavigate: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(() =>
+    section.items.some(
+      (item) =>
+        location === item.path ||
+        (item.path !== "/" && location.startsWith(item.path))
+    )
+  );
+
+  // Auto-open when navigating to a section item
+  useEffect(() => {
+    const hasActive = section.items.some(
+      (item) =>
+        location === item.path ||
+        (item.path !== "/" && location.startsWith(item.path))
+    );
+    if (hasActive) setOpen(true);
+  }, [location, section.items]);
+
+  return (
+    <div className="mb-0.5">
+      <button
+        onClick={() => {
+          if (section.items.length === 1) {
+            onNavigate(section.items[0].path);
+          } else {
+            setOpen((prev) => !prev);
+          }
+        }}
+        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 transition-colors uppercase tracking-wider"
+      >
+        <section.icon className="h-4 w-4 shrink-0" />
+        <span className="truncate">{section.label}</span>
+        {section.items.length > 1 && (
+          <svg
+            className={`h-3 w-3 ml-auto shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        )}
+      </button>
+      {open && section.items.length > 1 && (
+        <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
+          {section.items.map((item) => {
+            const isActive =
+              location === item.path ||
+              (item.path !== "/" && location.startsWith(item.path));
+            return (
+              <button
+                key={item.path}
+                onClick={() => onNavigate(item.path)}
+                className={`
+                  flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-colors
+                  ${isActive
+                    ? "bg-sidebar-accent text-sidebar-primary font-medium"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  }
+                `}
+              >
+                <item.icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-sidebar-primary" : "text-sidebar-foreground/40"}`} />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Hover Popover (Collapsed Mode) ─────────────────── */
 
 const HoverPopover = forwardRef<
   HTMLDivElement,
   {
     section: MenuSection;
+    sidebarWidth: number;
     location: string;
     onNavigate: (path: string) => void;
     onMouseEnter: () => void;
     onMouseLeave: () => void;
   }
->(function HoverPopover({ section, location, onNavigate, onMouseEnter, onMouseLeave }, ref) {
+>(function HoverPopover({ section, sidebarWidth, location, onNavigate, onMouseEnter, onMouseLeave }, ref) {
   const [position, setPosition] = useState<{ top?: number; bottom?: number }>({});
   const popoverInnerRef = useRef<HTMLDivElement>(null);
 
@@ -413,11 +561,8 @@ const HoverPopover = forwardRef<
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const viewportH = window.innerHeight;
-    // Estimate popover height: header(32) + items * 36 + padding(12)
     const estimatedHeight = 32 + section.items.length * 36 + 12;
-    // If popover would overflow bottom of screen, anchor to bottom instead
     if (rect.top + estimatedHeight > viewportH - 8) {
-      // Align bottom of popover with bottom of the icon button
       setPosition({ bottom: viewportH - rect.bottom });
     } else {
       setPosition({ top: rect.top });
@@ -433,7 +578,7 @@ const HoverPopover = forwardRef<
       }}
       className="fixed z-[100] bg-popover text-popover-foreground border border-border rounded-lg shadow-lg py-1.5 min-w-[160px] animate-in fade-in-0 zoom-in-95 duration-100"
       style={{
-        left: ICON_BAR_WIDTH + 4,
+        left: sidebarWidth + 4,
         ...(position.bottom !== undefined
           ? { bottom: position.bottom }
           : { top: position.top ?? 0 }),
