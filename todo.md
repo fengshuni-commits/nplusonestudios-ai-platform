@@ -37,7 +37,7 @@
 - [x] "开发中"模块卡片展示（含功能规划说明）
 - [x] 团队管理页面（仅管理员可见）
 - [x] 后端 tRPC routers 与 db helpers
-- [x] Vitest 测试覆盖（49 项测试全部通过，含 Pexels API 验证）
+- [x] Vitest 测试覆盖（53 项测试全部通过，含 Pexels API 验证 + PPT 异步导出测试）
 
 ## 对标调研模块优化
 - [x] 分阶段输出：第一步生成文本报告，第二步点击按钮生成PPT
@@ -55,3 +55,5 @@
 
 ## Bug 修复
 - [x] 对标调研模块"生成PPT"按钮不可用（pptxgenjs ESM/CJS 互操作问题，已通过 createRequire 修复）
+- [x] 对标调研报告生成 API 返回 HTML 而非 JSON（临时性 sandbox 502 错误，重启服务器后恢复正常）
+- [x] /design/planning 页面 "Failed to fetch" 错误（PPT 导出改为异步模式，避免长连接超时）

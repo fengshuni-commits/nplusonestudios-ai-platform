@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 
@@ -27,6 +27,8 @@ export default function DesignPlanning() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [pptStage, setPptStage] = useState<PptStage>("idle");
   const [pptProgress, setPptProgress] = useState(0);
+  const [pptJobId, setPptJobId] = useState<string | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const generateMutation = trpc.benchmark.generate.useMutation({
     onSuccess: (data) => {
@@ -40,61 +42,100 @@ export default function DesignPlanning() {
     },
   });
 
-  const exportMutation = trpc.benchmark.exportPpt.useMutation({
+  const startExportMutation = trpc.benchmark.startExportPpt.useMutation({
     onSuccess: (data) => {
-      setPptStage("done");
-      setPptProgress(100);
-      toast.success(`PPT 已生成（${data.slideCount} 页，含 ${data.imageCount} 张配图），正在下载...`);
-      const a = document.createElement("a");
-      a.href = data.url;
-      a.download = `${data.title}-对标调研.pptx`;
-      a.target = "_blank";
-      a.click();
-      // Reset after a delay
-      setTimeout(() => {
-        setPptStage("idle");
-        setPptProgress(0);
-      }, 3000);
+      setPptJobId(data.jobId);
+      // Polling will start via useEffect below
     },
     onError: () => {
       setPptStage("idle");
       setPptProgress(0);
-      toast.error("PPT 生成失败，请重试");
+      toast.error("PPT 生成启动失败，请重试");
     },
   });
 
-  // Simulate progress stages while PPT is being generated
+  const utils = trpc.useUtils();
+
+  // Poll for PPT job status
+  const pollJobStatus = useCallback(async (jobId: string) => {
+    try {
+      const result = await utils.benchmark.exportPptStatus.fetch({ jobId });
+      if (result.status === "done") {
+        setPptStage("done");
+        setPptProgress(100);
+        toast.success(`PPT 已生成（${result.slideCount} 页，含 ${result.imageCount} 张配图），正在下载...`);
+        // Trigger download
+        const a = document.createElement("a");
+        a.href = result.url!;
+        a.download = `${result.title}-对标调研.pptx`;
+        a.target = "_blank";
+        a.click();
+        // Reset after a delay
+        setTimeout(() => {
+          setPptStage("idle");
+          setPptProgress(0);
+          setPptJobId(null);
+        }, 3000);
+        return true; // Stop polling
+      } else if (result.status === "failed") {
+        setPptStage("idle");
+        setPptProgress(0);
+        setPptJobId(null);
+        toast.error(result.error || "PPT 生成失败，请重试");
+        return true; // Stop polling
+      } else if (result.status === "not_found") {
+        setPptStage("idle");
+        setPptProgress(0);
+        setPptJobId(null);
+        toast.error("PPT 任务未找到，请重试");
+        return true; // Stop polling
+      } else {
+        // Still processing - update progress from server
+        setPptProgress(result.progress || 0);
+        const stage = result.stage as PptStage;
+        if (stage && stage !== "idle" && stage !== "done") {
+          setPptStage(stage);
+        }
+        return false; // Continue polling
+      }
+    } catch (err) {
+      console.error("[PPT Poll] Error:", err);
+      // Don't stop polling on transient errors - just log and retry
+      return false;
+    }
+  }, [utils]);
+
+  // Start/stop polling when jobId changes
   useEffect(() => {
-    if (pptStage === "idle" || pptStage === "done") return;
-
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    if (pptStage === "structuring") {
-      timers.push(setTimeout(() => setPptProgress(15), 500));
-      timers.push(setTimeout(() => setPptProgress(25), 2000));
-      timers.push(setTimeout(() => {
-        setPptStage("generating_images");
-        setPptProgress(30);
-      }, 4000));
+    if (!pptJobId) {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
     }
 
-    if (pptStage === "generating_images") {
-      timers.push(setTimeout(() => setPptProgress(40), 1000));
-      timers.push(setTimeout(() => setPptProgress(55), 5000));
-      timers.push(setTimeout(() => setPptProgress(65), 10000));
-      timers.push(setTimeout(() => {
-        setPptStage("building_pptx");
-        setPptProgress(75);
-      }, 15000));
-    }
+    // Poll every 3 seconds
+    const poll = async () => {
+      const shouldStop = await pollJobStatus(pptJobId);
+      if (shouldStop && pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
 
-    if (pptStage === "building_pptx") {
-      timers.push(setTimeout(() => setPptProgress(85), 2000));
-      timers.push(setTimeout(() => setPptProgress(92), 5000));
-    }
+    // Initial poll after a short delay
+    const initialTimeout = setTimeout(poll, 1500);
+    pollTimerRef.current = setInterval(poll, 3000);
 
-    return () => timers.forEach(clearTimeout);
-  }, [pptStage]);
+    return () => {
+      clearTimeout(initialTimeout);
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [pptJobId, pollJobStatus]);
 
   const handleGenerate = () => {
     if (!form.projectName.trim()) { toast.error("请输入项目名称"); return; }
@@ -108,7 +149,7 @@ export default function DesignPlanning() {
     if (!report) { toast.error("请先生成调研报告"); return; }
     setPptStage("structuring");
     setPptProgress(5);
-    exportMutation.mutate({ content: report, title: form.projectName, projectType: form.projectType });
+    startExportMutation.mutate({ content: report, title: form.projectName, projectType: form.projectType });
   };
 
   const projectTypes = [
@@ -125,7 +166,7 @@ export default function DesignPlanning() {
     idle: "",
     structuring: "正在分析报告结构，规划 PPT 页面...",
     generating_images: "正在获取真实案例照片与设计配图...",
-    building_pptx: "正在组装 PPT 文件...",
+    building_pptx: "正在组装 PPT 文件并上传...",
     done: "PPT 生成完成！",
   };
 
