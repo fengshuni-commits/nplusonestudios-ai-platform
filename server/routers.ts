@@ -1034,18 +1034,41 @@ const renderingRouter = router({
       toolId: z.number().optional(),
       referenceImageUrl: z.string().url().optional(),
       parentHistoryId: z.number().optional(),
+      materialImageUrl: z.string().url().optional(),
+      maskImageData: z.string().optional(),
+      aspectRatio: z.string().optional(),
+      resolution: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
-      const fullPrompt = input.style
-        ? `${input.prompt}, style: ${input.style}`
-        : input.prompt;
+
+      // Build prompt with style, aspect ratio, and resolution hints
+      let fullPrompt = input.prompt;
+      if (input.style) fullPrompt += `, style: ${input.style}`;
+      if (input.aspectRatio) fullPrompt += `, aspect ratio: ${input.aspectRatio}`;
+      if (input.resolution === "hd") fullPrompt += `, high resolution, detailed`;
+      if (input.resolution === "ultra") fullPrompt += `, ultra high resolution, extremely detailed, 4K`;
 
       try {
         const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
+
+        // Collect original images: reference + optional material
+        const originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
         if (input.referenceImageUrl) {
-          genOpts.originalImages = [{ url: input.referenceImageUrl, mimeType: "image/png" }];
+          originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
         }
+        if (input.materialImageUrl) {
+          originalImages.push({ url: input.materialImageUrl, mimeType: "image/png" });
+        }
+        // If mask data is provided, include it as a base64 image
+        if (input.maskImageData) {
+          const maskBase64 = input.maskImageData.replace(/^data:image\/\w+;base64,/, "");
+          originalImages.push({ b64Json: maskBase64, mimeType: "image/png" });
+        }
+        if (originalImages.length > 0) {
+          genOpts.originalImages = originalImages;
+        }
+
         const result = await generateImage(genOpts);
 
         await db.createAiToolLog({
@@ -1062,9 +1085,19 @@ const renderingRouter = router({
         const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,
           module: "ai_render",
-          title: input.referenceImageUrl ? `图生图 - ${input.prompt.substring(0, 40)}` : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
+          title: input.referenceImageUrl
+            ? (input.maskImageData ? `局部重绘 - ${input.prompt.substring(0, 40)}` : `图生图 - ${input.prompt.substring(0, 40)}`)
+            : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
           summary: fullPrompt.substring(0, 200),
-          inputParams: { prompt: input.prompt, style: input.style, referenceImageUrl: input.referenceImageUrl || null },
+          inputParams: {
+            prompt: input.prompt,
+            style: input.style,
+            referenceImageUrl: input.referenceImageUrl || null,
+            materialImageUrl: input.materialImageUrl || null,
+            hasMask: !!input.maskImageData,
+            aspectRatio: input.aspectRatio || null,
+            resolution: input.resolution || null,
+          },
           outputUrl: result.url,
           status: "success",
           durationMs: Date.now() - startTime,

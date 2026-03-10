@@ -4,8 +4,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AiToolSelector from "@/components/AiToolSelector";
+import ImageMaskEditor from "@/components/ImageMaskEditor";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus, RefreshCw } from "lucide-react";
+import {
+  Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus,
+  RefreshCw, Paintbrush, Plus, RatioIcon, MonitorIcon,
+} from "lucide-react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
@@ -14,10 +18,12 @@ export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("architectural-rendering");
+  const [aspectRatio, setAspectRatio] = useState("auto");
+  const [resolution, setResolution] = useState("standard");
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string; historyId?: number }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Reference image state - supports both file upload and URL
+  // Reference image state
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
@@ -25,8 +31,22 @@ export default function DesignTools() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mask editor state
+  const [showMaskEditor, setShowMaskEditor] = useState(false);
+  const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
+
+  // Material image state
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  const [materialPreview, setMaterialPreview] = useState<string | null>(null);
+  const [materialUrl, setMaterialUrl] = useState<string | null>(null);
+  const [materialName, setMaterialName] = useState<string | null>(null);
+  const materialInputRef = useRef<HTMLInputElement>(null);
+
   // Edit chain tracking
   const [parentHistoryId, setParentHistoryId] = useState<number | undefined>(undefined);
+
+  // Track reference image natural dimensions for adaptive display
+  const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
 
@@ -43,7 +63,6 @@ export default function DesignTools() {
       if (histId) {
         setParentHistoryId(Number(histId));
       }
-      // Clean up URL params without reload
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [searchString]);
@@ -52,7 +71,6 @@ export default function DesignTools() {
     onSuccess: (data) => {
       if (data.url) {
         setGeneratedImages((prev) => [{ url: data.url!, prompt: data.prompt, historyId: data.historyId }, ...prev]);
-        // Update parentHistoryId for next iteration in the chain
         if (data.historyId) {
           setParentHistoryId(data.historyId);
         }
@@ -66,30 +84,40 @@ export default function DesignTools() {
     },
   });
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // ─── File handling helpers ─────────────────────────────
+  const validateImageFile = useCallback((file: File): boolean => {
     if (!file.type.startsWith("image/")) {
       toast.error("请上传图片文件");
-      return;
+      return false;
     }
-
     if (file.size > 10 * 1024 * 1024) {
       toast.error("图片大小不能超过 10MB");
-      return;
+      return false;
     }
+    return true;
+  }, []);
 
+  const readFileAsDataUrl = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  // ─── Reference image handlers ─────────────────────────
+  const handleRefFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !validateImageFile(file)) return;
     setReferenceFile(file);
     setReferenceUrl(null);
     setReferenceName(file.name);
-    setParentHistoryId(undefined); // New file upload breaks the chain
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setReferencePreview(ev.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    setParentHistoryId(undefined);
+    setMaskDataUrl(null);
+    setShowMaskEditor(false);
+    const dataUrl = await readFileAsDataUrl(file);
+    setReferencePreview(dataUrl);
+  }, [validateImageFile, readFileAsDataUrl]);
 
   const handleRemoveReference = useCallback(() => {
     setReferenceFile(null);
@@ -97,58 +125,83 @@ export default function DesignTools() {
     setReferenceUrl(null);
     setReferenceName(null);
     setParentHistoryId(undefined);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    setMaskDataUrl(null);
+    setShowMaskEditor(false);
+    setRefImgDimensions(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleRefDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("请上传图片文件");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("图片大小不能超过 10MB");
-      return;
-    }
+    if (!file || !validateImageFile(file)) return;
     setReferenceFile(file);
     setReferenceUrl(null);
     setReferenceName(file.name);
     setParentHistoryId(undefined);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setReferencePreview(ev.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    setMaskDataUrl(null);
+    setShowMaskEditor(false);
+    const dataUrl = await readFileAsDataUrl(file);
+    setReferencePreview(dataUrl);
+  }, [validateImageFile, readFileAsDataUrl]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
-  // Click generated image to use as reference for further generation
+  // ─── Material image handlers ──────────────────────────
+  const handleMaterialFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !validateImageFile(file)) return;
+    setMaterialFile(file);
+    setMaterialUrl(null);
+    setMaterialName(file.name);
+    const dataUrl = await readFileAsDataUrl(file);
+    setMaterialPreview(dataUrl);
+  }, [validateImageFile, readFileAsDataUrl]);
+
+  const handleRemoveMaterial = useCallback(() => {
+    setMaterialFile(null);
+    setMaterialPreview(null);
+    setMaterialUrl(null);
+    setMaterialName(null);
+    if (materialInputRef.current) materialInputRef.current.value = "";
+  }, []);
+
+  // ─── Use generated image as reference ─────────────────
   const handleUseAsReference = useCallback((imageUrl: string, imagePrompt: string, historyId?: number) => {
     setReferenceUrl(imageUrl);
     setReferencePreview(imageUrl);
     setReferenceFile(null);
     setReferenceName("上一次生成结果");
-    if (historyId) {
-      setParentHistoryId(historyId);
-    }
-    // Pre-fill prompt with previous prompt for easy editing
-    if (!prompt.trim()) {
-      setPrompt(imagePrompt);
-    }
+    setMaskDataUrl(null);
+    setShowMaskEditor(false);
+    if (historyId) setParentHistoryId(historyId);
+    if (!prompt.trim()) setPrompt(imagePrompt);
     toast.success("已将图片设为参考图，修改描述后再次生成");
-    // Scroll to top of the form
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [prompt]);
 
+  // ─── Mask handling ────────────────────────────────────
+  const handleMaskSave = useCallback((dataUrl: string) => {
+    setMaskDataUrl(dataUrl);
+    setShowMaskEditor(false);
+    toast.success("标注区域已保存，生成时将只修改标注区域");
+  }, []);
+
+  const handleMaskCancel = useCallback(() => {
+    setShowMaskEditor(false);
+  }, []);
+
+  // ─── Reference image load for dimensions ──────────────
+  const handleRefImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setRefImgDimensions({ w: img.naturalWidth, h: img.naturalHeight });
+  }, []);
+
+  // ─── Generate ─────────────────────────────────────────
   const hasReference = !!(referenceFile || referenceUrl);
 
   const handleGenerate = async () => {
@@ -160,7 +213,10 @@ export default function DesignTools() {
 
     try {
       let referenceImageUrl: string | undefined;
+      let materialImageUrl: string | undefined;
+      let maskImageData: string | undefined;
 
+      // Upload reference image if needed
       if (referenceUrl) {
         referenceImageUrl = referenceUrl;
       } else if (referenceFile) {
@@ -183,12 +239,44 @@ export default function DesignTools() {
         setIsUploading(false);
       }
 
+      // Upload material image if present
+      if (materialUrl) {
+        materialImageUrl = materialUrl;
+      } else if (materialFile) {
+        setIsUploading(true);
+        try {
+          const base64 = await fileToBase64(materialFile);
+          const uploadResult = await uploadMutation.mutateAsync({
+            fileName: materialFile.name,
+            fileData: base64,
+            contentType: materialFile.type,
+            folder: "material-images",
+          });
+          materialImageUrl = uploadResult.url;
+        } catch {
+          toast.error("素材图片上传失败");
+          setIsGenerating(false);
+          setIsUploading(false);
+          return;
+        }
+        setIsUploading(false);
+      }
+
+      // Include mask data if available
+      if (maskDataUrl) {
+        maskImageData = maskDataUrl;
+      }
+
       generateMutation.mutate({
         prompt,
         style,
         toolId,
         referenceImageUrl,
         parentHistoryId,
+        materialImageUrl,
+        maskImageData,
+        aspectRatio: aspectRatio !== "auto" ? aspectRatio : undefined,
+        resolution: resolution !== "standard" ? resolution : undefined,
       });
     } catch {
       setIsGenerating(false);
@@ -196,6 +284,7 @@ export default function DesignTools() {
     }
   };
 
+  // ─── Options ──────────────────────────────────────────
   const styles = [
     { value: "architectural-rendering", label: "建筑渲染" },
     { value: "sketch", label: "手绘草图" },
@@ -206,24 +295,61 @@ export default function DesignTools() {
     { value: "axonometric", label: "轴测图" },
   ];
 
+  const aspectRatios = [
+    { value: "auto", label: "自动" },
+    { value: "1:1", label: "1:1 正方形" },
+    { value: "4:3", label: "4:3 标准" },
+    { value: "3:2", label: "3:2 经典" },
+    { value: "16:9", label: "16:9 宽屏" },
+    { value: "9:16", label: "9:16 竖屏" },
+    { value: "3:4", label: "3:4 竖版" },
+  ];
+
+  const resolutions = [
+    { value: "standard", label: "标准 (1024px)" },
+    { value: "hd", label: "高清 (1536px)" },
+    { value: "ultra", label: "超高清 (2048px)" },
+  ];
+
+  // Compute reference image display style (adaptive)
+  const refDisplayStyle = (() => {
+    if (!refImgDimensions) return {};
+    const ratio = refImgDimensions.w / refImgDimensions.h;
+    if (ratio > 2) {
+      // Very wide panoramic
+      return { maxHeight: "120px" };
+    } else if (ratio > 1.2) {
+      // Landscape
+      return { maxHeight: "200px" };
+    } else if (ratio < 0.6) {
+      // Very tall portrait
+      return { maxHeight: "280px" };
+    } else if (ratio < 0.9) {
+      // Portrait
+      return { maxHeight: "240px" };
+    }
+    // Square-ish
+    return { maxHeight: "220px" };
+  })();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">设计工具</h1>
-          <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代</p>
+          <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代与局部调整</p>
         </div>
         <AiToolSelector category="rendering" value={toolId} onChange={setToolId} label="AI 工具" />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Input Panel */}
+        {/* ─── Input Panel ─────────────────────────────── */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-4">
             <CardTitle className="text-base font-medium">生成参数</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Reference Image Upload */}
+            {/* ── Reference Image ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <ImagePlus className="h-3.5 w-3.5" />
@@ -231,37 +357,61 @@ export default function DesignTools() {
                 <span className="text-xs text-muted-foreground font-normal">（可选）</span>
               </Label>
 
-              {referencePreview ? (
+              {referencePreview && !showMaskEditor ? (
                 <div className="relative group rounded-lg overflow-hidden border border-border bg-muted">
                   <img
                     src={referencePreview}
                     alt="参考图片"
-                    className="w-full h-36 object-cover"
+                    className="w-full object-contain bg-black/5"
+                    style={refDisplayStyle}
+                    onLoad={handleRefImageLoad}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
-                  <button
-                    type="button"
-                    onClick={handleRemoveReference}
-                    className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  {/* Mask indicator */}
+                  {maskDataUrl && (
+                    <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full">
+                      <Paintbrush className="h-2.5 w-2.5" />
+                      已标注区域
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => setShowMaskEditor(true)}
+                      className="h-7 px-2 rounded-md bg-black/60 text-white text-[11px] flex items-center gap-1 hover:bg-black/80 transition-colors"
+                      title="画笔标注局部区域"
+                    >
+                      <Paintbrush className="h-3 w-3" />
+                      标注
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveReference}
+                      className="h-7 w-7 rounded-md bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
                     <p className="text-xs text-white/90 truncate">{referenceName || "参考图片"}</p>
                   </div>
                 </div>
+              ) : referencePreview && showMaskEditor ? (
+                <ImageMaskEditor
+                  imageUrl={referencePreview}
+                  onSave={handleMaskSave}
+                  onCancel={handleMaskCancel}
+                />
               ) : (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  onDrop={handleDrop}
+                  onDrop={handleRefDrop}
                   onDragOver={handleDragOver}
                   className="border-2 border-dashed border-border/60 rounded-lg p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
                 >
                   <Upload className="h-5 w-5 text-muted-foreground/60" />
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">
-                      点击或拖拽上传参考图片
-                    </p>
+                    <p className="text-xs text-muted-foreground">点击或拖拽上传参考图片</p>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">
                       也可点击右侧生成结果中的图片直接作为参考
                     </p>
@@ -274,11 +424,11 @@ export default function DesignTools() {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={handleFileSelect}
+                onChange={handleRefFileSelect}
               />
             </div>
 
-            {/* Scene Description */}
+            {/* ── Scene Description ── */}
             <div className="space-y-2">
               <Label>场景描述 *</Label>
               <Textarea
@@ -286,50 +436,137 @@ export default function DesignTools() {
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={
                   hasReference
-                    ? "描述您希望基于参考图做出的改变，例如：将材质改为清水混凝土，增加绿植墙面，改为暖色调灯光..."
-                    : "描述您想要生成的建筑场景，例如：一个现代科技公司的开放式办公空间，大面积落地窗，混凝土与木材结合的材质..."
+                    ? maskDataUrl
+                      ? "描述标注区域需要做的调整，例如：将这个区域的材质改为木饰面，增加绿植..."
+                      : "描述您希望基于参考图做出的改变，例如：将材质改为清水混凝土，增加绿植墙面..."
+                    : "描述您想要生成的建筑场景，例如：一个现代科技公司的开放式办公空间，大面积落地窗..."
                 }
-                rows={5}
+                rows={4}
               />
             </div>
 
-            {/* Style */}
+            {/* ── Material Image (Additional Reference) ── */}
             <div className="space-y-2">
-              <Label>渲染风格</Label>
-              <Select value={style} onValueChange={setStyle}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {styles.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="flex items-center gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                增加素材
+                <span className="text-xs text-muted-foreground font-normal">（可选，与参考图结合生成）</span>
+              </Label>
+
+              {materialPreview ? (
+                <div className="relative group rounded-lg overflow-hidden border border-border bg-muted">
+                  <img
+                    src={materialPreview}
+                    alt="素材图片"
+                    className="w-full h-24 object-contain bg-black/5"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveMaterial}
+                    className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent px-2 py-1">
+                    <p className="text-[10px] text-white/90 truncate">{materialName || "素材"}</p>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => materialInputRef.current?.click()}
+                  className="border border-dashed border-border/60 rounded-lg p-3 flex items-center justify-center gap-2 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
+                >
+                  <Plus className="h-4 w-4 text-muted-foreground/50" />
+                  <span className="text-xs text-muted-foreground">添加素材图片</span>
+                </div>
+              )}
+
+              <input
+                ref={materialInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleMaterialFileSelect}
+              />
             </div>
 
-            {/* Generate Button */}
+            {/* ── Style + Aspect Ratio + Resolution ── */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>渲染风格</Label>
+                <Select value={style} onValueChange={setStyle}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {styles.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    <RatioIcon className="h-3 w-3" />
+                    图片比例
+                  </Label>
+                  <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {aspectRatios.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    <MonitorIcon className="h-3 w-3" />
+                    分辨率
+                  </Label>
+                  <Select value={resolution} onValueChange={setResolution}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {resolutions.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Generate Button ── */}
             <Button onClick={handleGenerate} disabled={isGenerating} className="w-full">
               {isGenerating ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {isUploading ? "上传参考图..." : "生成中..."}
+                  {isUploading ? "上传图片..." : "生成中..."}
                 </>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  {hasReference ? "图生图" : "生成图像"}
+                  {maskDataUrl ? "局部重绘" : hasReference ? "图生图" : "生成图像"}
                 </>
               )}
             </Button>
 
-            {hasReference && (
+            {(hasReference || maskDataUrl || materialPreview) && (
               <p className="text-[11px] text-muted-foreground/70 text-center">
-                将基于参考图片和描述共同生成新图像
+                {maskDataUrl
+                  ? "将只修改标注区域，保持其余部分不变"
+                  : materialPreview && hasReference
+                    ? "将结合参考图与素材图片共同生成新图像"
+                    : hasReference
+                      ? "将基于参考图片和描述共同生成新图像"
+                      : "将基于描述生成新图像"}
               </p>
             )}
           </CardContent>
         </Card>
 
-        {/* Output Panel */}
+        {/* ─── Output Panel ────────────────────────────── */}
         <Card className="lg:col-span-3">
           <CardHeader className="pb-4">
             <CardTitle className="text-base font-medium">生成结果</CardTitle>
