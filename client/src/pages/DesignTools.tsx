@@ -5,9 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus } from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus, RefreshCw } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
+import { useSearch } from "wouter";
 
 export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -16,13 +17,29 @@ export default function DesignTools() {
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Reference image state
+  // Reference image state - supports both file upload and URL
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null); // Direct URL (from click or history)
+  const [referenceName, setReferenceName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
+
+  // Check URL params for reference image (from history page)
+  const searchString = useSearch();
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const refUrl = params.get("ref");
+    if (refUrl) {
+      setReferenceUrl(refUrl);
+      setReferencePreview(refUrl);
+      setReferenceName("来自历史记录");
+      // Clean up URL params without reload
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [searchString]);
 
   const generateMutation = trpc.rendering.generate.useMutation({
     onSuccess: (data) => {
@@ -42,20 +59,19 @@ export default function DesignTools() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       toast.error("请上传图片文件");
       return;
     }
 
-    // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
       toast.error("图片大小不能超过 10MB");
       return;
     }
 
     setReferenceFile(file);
-    // Create preview
+    setReferenceUrl(null); // Clear URL reference when uploading new file
+    setReferenceName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
       setReferencePreview(ev.target?.result as string);
@@ -66,6 +82,8 @@ export default function DesignTools() {
   const handleRemoveReference = useCallback(() => {
     setReferenceFile(null);
     setReferencePreview(null);
+    setReferenceUrl(null);
+    setReferenceName(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -85,6 +103,8 @@ export default function DesignTools() {
       return;
     }
     setReferenceFile(file);
+    setReferenceUrl(null);
+    setReferenceName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
       setReferencePreview(ev.target?.result as string);
@@ -97,6 +117,23 @@ export default function DesignTools() {
     e.stopPropagation();
   }, []);
 
+  // Click generated image to use as reference for further generation
+  const handleUseAsReference = useCallback((imageUrl: string, imagePrompt: string) => {
+    setReferenceUrl(imageUrl);
+    setReferencePreview(imageUrl);
+    setReferenceFile(null);
+    setReferenceName("上一次生成结果");
+    // Pre-fill prompt with previous prompt for easy editing
+    if (!prompt.trim()) {
+      setPrompt(imagePrompt);
+    }
+    toast.success("已将图片设为参考图，修改描述后再次生成");
+    // Scroll to top of the form
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [prompt]);
+
+  const hasReference = !!(referenceFile || referenceUrl);
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error("请输入场景描述");
@@ -107,8 +144,11 @@ export default function DesignTools() {
     try {
       let referenceImageUrl: string | undefined;
 
-      // Upload reference image if provided
-      if (referenceFile) {
+      if (referenceUrl) {
+        // Already have a URL (from click or history), use directly
+        referenceImageUrl = referenceUrl;
+      } else if (referenceFile) {
+        // Need to upload file first
         setIsUploading(true);
         try {
           const base64 = await fileToBase64(referenceFile);
@@ -155,7 +195,7 @@ export default function DesignTools() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">设计工具</h1>
-          <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图</p>
+          <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代</p>
         </div>
         <AiToolSelector category="rendering" value={toolId} onChange={setToolId} label="AI 工具" />
       </div>
@@ -191,7 +231,7 @@ export default function DesignTools() {
                     <X className="h-3.5 w-3.5" />
                   </button>
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
-                    <p className="text-xs text-white/90 truncate">{referenceFile?.name}</p>
+                    <p className="text-xs text-white/90 truncate">{referenceName || "参考图片"}</p>
                   </div>
                 </div>
               ) : (
@@ -207,7 +247,7 @@ export default function DesignTools() {
                       点击或拖拽上传参考图片
                     </p>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                      上传后 AI 将基于参考图 + 描述生成新图像
+                      也可点击右侧生成结果中的图片直接作为参考
                     </p>
                   </div>
                 </div>
@@ -229,7 +269,7 @@ export default function DesignTools() {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={
-                  referenceFile
+                  hasReference
                     ? "描述您希望基于参考图做出的改变，例如：将材质改为清水混凝土，增加绿植墙面，改为暖色调灯光..."
                     : "描述您想要生成的建筑场景，例如：一个现代科技公司的开放式办公空间，大面积落地窗，混凝土与木材结合的材质..."
                 }
@@ -260,12 +300,12 @@ export default function DesignTools() {
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  {referenceFile ? "图生图" : "生成图像"}
+                  {hasReference ? "图生图" : "生成图像"}
                 </>
               )}
             </Button>
 
-            {referenceFile && (
+            {hasReference && (
               <p className="text-[11px] text-muted-foreground/70 text-center">
                 将基于参考图片和描述共同生成新图像
               </p>
@@ -284,13 +324,39 @@ export default function DesignTools() {
                 {generatedImages.map((img, idx) => (
                   <div key={idx} className="space-y-2">
                     <div className="relative group rounded-lg overflow-hidden bg-muted">
-                      <img src={img.url} alt={img.prompt} className="w-full h-auto" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <Button variant="secondary" size="sm" asChild>
-                          <a href={img.url} download target="_blank" rel="noopener noreferrer">
-                            <Download className="h-4 w-4 mr-1.5" />下载
-                          </a>
-                        </Button>
+                      <img
+                        src={img.url}
+                        alt={img.prompt}
+                        className="w-full h-auto cursor-pointer transition-transform"
+                        onClick={() => handleUseAsReference(img.url, img.prompt)}
+                        title="点击将此图片作为参考图，进一步生成新图像"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
+                        <div className="flex gap-2 pointer-events-auto">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUseAsReference(img.url, img.prompt);
+                            }}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                            继续编辑
+                          </Button>
+                          <Button variant="secondary" size="sm" asChild>
+                            <a
+                              href={img.url}
+                              download
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1.5" />
+                              下载
+                            </a>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">{img.prompt}</p>
@@ -302,7 +368,7 @@ export default function DesignTools() {
                 <ImageIcon className="h-12 w-12 mb-3 opacity-20" />
                 <p className="text-sm">输入场景描述后，点击生成图像</p>
                 <p className="text-xs mt-1 opacity-60">
-                  可上传参考图片进行图生图，或直接用文字描述生成
+                  生成后可点击结果图片，作为参考图进一步迭代
                 </p>
               </div>
             )}
@@ -319,7 +385,6 @@ function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove "data:image/png;base64," prefix
       const base64 = result.split(",")[1];
       resolve(base64);
     };

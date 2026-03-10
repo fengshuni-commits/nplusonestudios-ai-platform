@@ -22,13 +22,21 @@ import {
   Loader2,
   History as HistoryIcon,
   Filter,
+  RefreshCw,
+  BookOpen,
+  Instagram,
+  Megaphone,
 } from "lucide-react";
+import { useLocation } from "wouter";
 
 const MODULE_MAP: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   benchmark_report: { label: "对标调研报告", icon: FileText, color: "text-blue-600 bg-blue-50" },
   benchmark_ppt: { label: "调研 PPT", icon: Presentation, color: "text-purple-600 bg-purple-50" },
   ai_render: { label: "AI 效果图", icon: Image, color: "text-emerald-600 bg-emerald-50" },
   meeting_minutes: { label: "会议纪要", icon: MessageSquare, color: "text-amber-600 bg-amber-50" },
+  media_xiaohongshu: { label: "小红书", icon: BookOpen, color: "text-red-500 bg-red-50" },
+  media_wechat: { label: "公众号", icon: Megaphone, color: "text-green-600 bg-green-50" },
+  media_instagram: { label: "Instagram", icon: Instagram, color: "text-pink-500 bg-pink-50" },
 };
 
 const STATUS_MAP: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -66,6 +74,7 @@ function formatTime(dateStr: string | Date): string {
 
 export default function HistoryPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
+  const [, navigate] = useLocation();
 
   const queryInput = useMemo(() => ({
     module: moduleFilter === "all" ? undefined : moduleFilter,
@@ -77,6 +86,11 @@ export default function HistoryPage() {
 
   const items = data?.items || [];
   const total = data?.total || 0;
+
+  // Navigate to design tools with reference image URL
+  const handleContinueEdit = (imageUrl: string) => {
+    navigate(`/design/tools?ref=${encodeURIComponent(imageUrl)}`);
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -100,6 +114,9 @@ export default function HistoryPage() {
               <SelectItem value="benchmark_ppt">调研 PPT</SelectItem>
               <SelectItem value="ai_render">AI 效果图</SelectItem>
               <SelectItem value="meeting_minutes">会议纪要</SelectItem>
+              <SelectItem value="media_xiaohongshu">小红书</SelectItem>
+              <SelectItem value="media_wechat">公众号</SelectItem>
+              <SelectItem value="media_instagram">Instagram</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -136,15 +153,30 @@ export default function HistoryPage() {
               const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.success;
               const ModuleIcon = moduleInfo.icon;
               const StatusIcon = statusInfo.icon;
+              const isAiRender = item.module === "ai_render";
 
               return (
                 <Card key={item.id} className="border border-border/50 shadow-none hover:border-border transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
-                      {/* Module icon */}
-                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${moduleInfo.color}`}>
-                        <ModuleIcon className="h-4.5 w-4.5" />
-                      </div>
+                      {/* Module icon / thumbnail for AI renders */}
+                      {isAiRender && item.outputUrl && item.status === "success" ? (
+                        <div
+                          className="h-14 w-14 rounded-lg overflow-hidden shrink-0 cursor-pointer border border-border/50 hover:border-primary/50 transition-colors"
+                          onClick={() => handleContinueEdit(item.outputUrl!)}
+                          title="点击继续编辑此图片"
+                        >
+                          <img
+                            src={item.outputUrl}
+                            alt={item.title}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${moduleInfo.color}`}>
+                          <ModuleIcon className="h-4.5 w-4.5" />
+                        </div>
+                      )}
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
@@ -174,20 +206,36 @@ export default function HistoryPage() {
                       </div>
 
                       {/* Actions */}
-                      {item.outputUrl && item.status === "success" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-muted-foreground hover:text-foreground shrink-0"
-                          onClick={() => window.open(item.outputUrl!, "_blank")}
-                        >
-                          {item.module === "benchmark_ppt" ? (
-                            <Download className="h-3.5 w-3.5" />
-                          ) : (
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* AI render: continue edit button */}
+                        {isAiRender && item.outputUrl && item.status === "success" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                            onClick={() => handleContinueEdit(item.outputUrl!)}
+                            title="继续编辑"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {/* Download / open */}
+                        {item.outputUrl && item.status === "success" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                            onClick={() => window.open(item.outputUrl!, "_blank")}
+                            title={item.module === "benchmark_ppt" ? "下载" : "查看"}
+                          >
+                            {item.module === "benchmark_ppt" ? (
+                              <Download className="h-3.5 w-3.5" />
+                            ) : (
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
