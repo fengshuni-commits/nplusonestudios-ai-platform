@@ -1032,6 +1032,7 @@ const renderingRouter = router({
       prompt: z.string().min(1),
       style: z.string().optional(),
       toolId: z.number().optional(),
+      referenceImageUrl: z.string().url().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1040,7 +1041,11 @@ const renderingRouter = router({
         : input.prompt;
 
       try {
-        const result = await generateImage({ prompt: fullPrompt });
+        const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
+        if (input.referenceImageUrl) {
+          genOpts.originalImages = [{ url: input.referenceImageUrl, mimeType: "image/png" }];
+        }
+        const result = await generateImage(genOpts);
 
         await db.createAiToolLog({
           toolId: input.toolId || 0,
@@ -1051,6 +1056,18 @@ const renderingRouter = router({
           status: "success",
           durationMs: Date.now() - startTime,
         });
+
+        // Record in generation history
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "ai_render",
+          title: input.referenceImageUrl ? `图生图 - ${input.prompt.substring(0, 40)}` : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
+          summary: fullPrompt.substring(0, 200),
+          inputParams: { prompt: input.prompt, style: input.style, hasReference: !!input.referenceImageUrl },
+          outputUrl: result.url,
+          status: "success",
+          durationMs: Date.now() - startTime,
+        }).catch(() => {});
 
         return { url: result.url, prompt: fullPrompt };
       } catch (error) {
