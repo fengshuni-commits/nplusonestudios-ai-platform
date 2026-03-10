@@ -414,26 +414,38 @@ const HoverPopover = forwardRef<
     onMouseLeave: () => void;
   }
 >(function HoverPopover({ section, location, onNavigate, onMouseEnter, onMouseLeave }, ref) {
-  // Find the icon button position for this section
-  const [topOffset, setTopOffset] = useState(0);
-  const sectionRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top?: number; bottom?: number }>({});
+  const popoverInnerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Find the button element for this section by traversing the sidebar
-    const sidebar = document.querySelector(`[data-section-id="${section.id}"]`);
-    if (sidebar) {
-      const rect = sidebar.getBoundingClientRect();
-      setTopOffset(rect.top);
+    const el = document.querySelector(`[data-section-id="${section.id}"]`);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const viewportH = window.innerHeight;
+    // Estimate popover height: header(32) + items * 36 + padding(12)
+    const estimatedHeight = 32 + section.items.length * 36 + 12;
+    // If popover would overflow bottom of screen, anchor to bottom instead
+    if (rect.top + estimatedHeight > viewportH - 8) {
+      // Align bottom of popover with bottom of the icon button
+      setPosition({ bottom: viewportH - rect.bottom });
+    } else {
+      setPosition({ top: rect.top });
     }
-  }, [section.id]);
+  }, [section.id, section.items.length]);
 
   return (
     <div
-      ref={ref}
+      ref={(node) => {
+        (popoverInnerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      }}
       className="fixed z-[100] bg-popover text-popover-foreground border border-border rounded-lg shadow-lg py-1.5 min-w-[160px] animate-in fade-in-0 zoom-in-95 duration-100"
       style={{
         left: ICON_BAR_WIDTH + 4,
-        top: topOffset > 0 ? topOffset : undefined,
+        ...(position.bottom !== undefined
+          ? { bottom: position.bottom }
+          : { top: position.top ?? 0 }),
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
