@@ -14,16 +14,19 @@ export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("architectural-rendering");
-  const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([]);
+  const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string; historyId?: number }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Reference image state - supports both file upload and URL
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
-  const [referenceUrl, setReferenceUrl] = useState<string | null>(null); // Direct URL (from click or history)
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [referenceName, setReferenceName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit chain tracking
+  const [parentHistoryId, setParentHistoryId] = useState<number | undefined>(undefined);
 
   const uploadMutation = trpc.upload.file.useMutation();
 
@@ -32,10 +35,14 @@ export default function DesignTools() {
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     const refUrl = params.get("ref");
+    const histId = params.get("historyId");
     if (refUrl) {
       setReferenceUrl(refUrl);
       setReferencePreview(refUrl);
       setReferenceName("来自历史记录");
+      if (histId) {
+        setParentHistoryId(Number(histId));
+      }
       // Clean up URL params without reload
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -44,7 +51,11 @@ export default function DesignTools() {
   const generateMutation = trpc.rendering.generate.useMutation({
     onSuccess: (data) => {
       if (data.url) {
-        setGeneratedImages((prev) => [{ url: data.url!, prompt: data.prompt }, ...prev]);
+        setGeneratedImages((prev) => [{ url: data.url!, prompt: data.prompt, historyId: data.historyId }, ...prev]);
+        // Update parentHistoryId for next iteration in the chain
+        if (data.historyId) {
+          setParentHistoryId(data.historyId);
+        }
       }
       setIsGenerating(false);
       toast.success("图像生成完成");
@@ -70,8 +81,9 @@ export default function DesignTools() {
     }
 
     setReferenceFile(file);
-    setReferenceUrl(null); // Clear URL reference when uploading new file
+    setReferenceUrl(null);
     setReferenceName(file.name);
+    setParentHistoryId(undefined); // New file upload breaks the chain
     const reader = new FileReader();
     reader.onload = (ev) => {
       setReferencePreview(ev.target?.result as string);
@@ -84,6 +96,7 @@ export default function DesignTools() {
     setReferencePreview(null);
     setReferenceUrl(null);
     setReferenceName(null);
+    setParentHistoryId(undefined);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -105,6 +118,7 @@ export default function DesignTools() {
     setReferenceFile(file);
     setReferenceUrl(null);
     setReferenceName(file.name);
+    setParentHistoryId(undefined);
     const reader = new FileReader();
     reader.onload = (ev) => {
       setReferencePreview(ev.target?.result as string);
@@ -118,11 +132,14 @@ export default function DesignTools() {
   }, []);
 
   // Click generated image to use as reference for further generation
-  const handleUseAsReference = useCallback((imageUrl: string, imagePrompt: string) => {
+  const handleUseAsReference = useCallback((imageUrl: string, imagePrompt: string, historyId?: number) => {
     setReferenceUrl(imageUrl);
     setReferencePreview(imageUrl);
     setReferenceFile(null);
     setReferenceName("上一次生成结果");
+    if (historyId) {
+      setParentHistoryId(historyId);
+    }
     // Pre-fill prompt with previous prompt for easy editing
     if (!prompt.trim()) {
       setPrompt(imagePrompt);
@@ -145,10 +162,8 @@ export default function DesignTools() {
       let referenceImageUrl: string | undefined;
 
       if (referenceUrl) {
-        // Already have a URL (from click or history), use directly
         referenceImageUrl = referenceUrl;
       } else if (referenceFile) {
-        // Need to upload file first
         setIsUploading(true);
         try {
           const base64 = await fileToBase64(referenceFile);
@@ -173,6 +188,7 @@ export default function DesignTools() {
         style,
         toolId,
         referenceImageUrl,
+        parentHistoryId,
       });
     } catch {
       setIsGenerating(false);
@@ -328,7 +344,7 @@ export default function DesignTools() {
                         src={img.url}
                         alt={img.prompt}
                         className="w-full h-auto cursor-pointer transition-transform"
-                        onClick={() => handleUseAsReference(img.url, img.prompt)}
+                        onClick={() => handleUseAsReference(img.url, img.prompt, img.historyId)}
                         title="点击将此图片作为参考图，进一步生成新图像"
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
@@ -338,7 +354,7 @@ export default function DesignTools() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleUseAsReference(img.url, img.prompt);
+                              handleUseAsReference(img.url, img.prompt, img.historyId);
                             }}
                           >
                             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />

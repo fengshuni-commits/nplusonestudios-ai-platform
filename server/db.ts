@@ -509,3 +509,160 @@ export async function getGenerationHistoryById(id: number, userId: number) {
     .limit(1);
   return result[0];
 }
+
+/**
+ * Get the full edit chain for a given root history item.
+ * Finds the root ancestor first, then returns all descendants in chronological order.
+ */
+export async function getEditChain(rootId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  // First, find the root ancestor by walking up the parentId chain
+  let currentId = rootId;
+  let safety = 50; // prevent infinite loops
+  while (safety-- > 0) {
+    const item = await db.select().from(generationHistory)
+      .where(and(eq(generationHistory.id, currentId), eq(generationHistory.userId, userId)))
+      .limit(1);
+    if (!item[0]) break;
+    if (!item[0].parentId) break; // reached root
+    currentId = item[0].parentId;
+  }
+  const actualRootId = currentId;
+
+  // Now collect the full chain: root + all descendants
+  // Use iterative approach: collect all items for this user in ai_render module,
+  // then build the chain in memory
+  const allRenderItems = await db.select().from(generationHistory)
+    .where(and(eq(generationHistory.userId, userId), eq(generationHistory.module, "ai_render")))
+    .orderBy(generationHistory.createdAt);
+
+  // Build a map of parentId -> children
+  const childrenMap = new Map<number, typeof allRenderItems>();
+  const itemMap = new Map<number, (typeof allRenderItems)[0]>();
+  for (const item of allRenderItems) {
+    itemMap.set(item.id, item);
+    if (item.parentId) {
+      const siblings = childrenMap.get(item.parentId) || [];
+      siblings.push(item);
+      childrenMap.set(item.parentId, siblings);
+    }
+  }
+
+  // BFS from root to collect chain in order
+  const chain: typeof allRenderItems = [];
+  const root = itemMap.get(actualRootId);
+  if (!root) return [];
+  
+  const queue = [root];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    chain.push(current);
+    const children = childrenMap.get(current.id) || [];
+    // Sort children by createdAt
+    children.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    queue.push(...children);
+  }
+
+  return chain;
+}
+
+/**
+ * List history items grouped for thumbnail grid display.
+ * For ai_render items: only return root items (parentId IS NULL) with the count of children and latest image.
+ * For other modules: return as-is.
+ */
+export async function listGroupedHistory(userId: number, opts?: { module?: string; limit?: number; offset?: number }) {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0 };
+
+  const limit = opts?.limit || 50;
+  const offset = opts?.offset || 0;
+
+  // If filtering to a specific non-render module, use the simple list
+  if (opts?.module && opts.module !== "ai_render") {
+    return listGenerationHistory(userId, opts);
+  }
+
+  // For ai_render or "all" view, we need grouped results
+  // Strategy: get root ai_render items (parentId IS NULL) with chain info,
+  // plus non-render items
+
+  if (opts?.module === "ai_render") {
+    // Only ai_render: get roots with chain metadata
+    const roots = await db.select().from(generationHistory)
+      .where(and(
+        eq(generationHistory.userId, userId),
+        eq(generationHistory.module, "ai_render"),
+        sql`${generationHistory.parentId} IS NULL`
+      ))
+      .orderBy(desc(generationHistory.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(generationHistory)
+      .where(and(
+        eq(generationHistory.userId, userId),
+        eq(generationHistory.module, "ai_render"),
+        sql`${generationHistory.parentId} IS NULL`
+      ));
+
+    // For each root, find the latest descendant and count
+    const enrichedItems = await Promise.all(roots.map(async (root) => {
+      const descendants = await db.select().from(generationHistory)
+        .where(and(
+          eq(generationHistory.userId, userId),
+          eq(generationHistory.module, "ai_render"),
+          sql`${generationHistory.parentId} IS NOT NULL`
+        ))
+        .orderBy(desc(generationHistory.createdAt));
+
+      // Build chain count by walking from this root
+      const chainItems = await getEditChain(root.id, userId);
+      const latestItem = chainItems[chainItems.length - 1];
+
+      return {
+        ...root,
+        chainLength: chainItems.length,
+        latestOutputUrl: latestItem?.outputUrl || root.outputUrl,
+        latestTitle: latestItem?.title || root.title,
+      };
+    }));
+
+    return { items: enrichedItems, total: countResult[0]?.count || 0 };
+  }
+
+  // "all" module view: mix ai_render roots with other module items
+  // Get all non-render items + render roots only
+  const conditions = [
+    eq(generationHistory.userId, userId),
+    sql`(${generationHistory.module} != 'ai_render' OR ${generationHistory.parentId} IS NULL)`,
+  ];
+  const where = and(...conditions);
+
+  const items = await db.select().from(generationHistory)
+    .where(where)
+    .orderBy(desc(generationHistory.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  const countResult = await db.select({ count: sql<number>`count(*)` }).from(generationHistory).where(where);
+
+  // Enrich ai_render roots with chain info
+  const enrichedItems = await Promise.all(items.map(async (item) => {
+    if (item.module === "ai_render" && !item.parentId) {
+      const chainItems = await getEditChain(item.id, userId);
+      const latestItem = chainItems[chainItems.length - 1];
+      return {
+        ...item,
+        chainLength: chainItems.length,
+        latestOutputUrl: latestItem?.outputUrl || item.outputUrl,
+        latestTitle: latestItem?.title || item.title,
+      };
+    }
+    return { ...item, chainLength: 1, latestOutputUrl: item.outputUrl, latestTitle: item.title };
+  }));
+
+  return { items: enrichedItems, total: countResult[0]?.count || 0 };
+}

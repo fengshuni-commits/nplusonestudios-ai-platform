@@ -316,6 +316,8 @@ export const generationHistory = mysqlTable("generation_history", {
   status: mysqlEnum("status", ["success", "failed", "processing"]).default("success").notNull(),
   /** Duration in milliseconds */
   durationMs: int("durationMs"),
+  /** Parent history ID for edit chain (null = root/first generation) */
+  parentId: int("parentId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type GenerationHistory = typeof generationHistory.$inferSelect;

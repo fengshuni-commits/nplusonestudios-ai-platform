@@ -1033,6 +1033,7 @@ const renderingRouter = router({
       style: z.string().optional(),
       toolId: z.number().optional(),
       referenceImageUrl: z.string().url().optional(),
+      parentHistoryId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1057,19 +1058,20 @@ const renderingRouter = router({
           durationMs: Date.now() - startTime,
         });
 
-        // Record in generation history
-        await db.createGenerationHistory({
+        // Record in generation history with edit chain support
+        const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,
           module: "ai_render",
           title: input.referenceImageUrl ? `图生图 - ${input.prompt.substring(0, 40)}` : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
           summary: fullPrompt.substring(0, 200),
-          inputParams: { prompt: input.prompt, style: input.style, hasReference: !!input.referenceImageUrl },
+          inputParams: { prompt: input.prompt, style: input.style, referenceImageUrl: input.referenceImageUrl || null },
           outputUrl: result.url,
           status: "success",
           durationMs: Date.now() - startTime,
-        }).catch(() => {});
+          parentId: input.parentHistoryId || null,
+        }).catch(() => ({ id: 0 }));
 
-        return { url: result.url, prompt: fullPrompt };
+        return { url: result.url, prompt: fullPrompt, historyId: historyResult.id };
       } catch (error) {
         await db.createAiToolLog({
           toolId: input.toolId || 0,
@@ -1552,6 +1554,26 @@ const historyRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       return db.getGenerationHistoryById(input.id, ctx.user.id);
+    }),
+  /** Get edit chain: all items sharing the same root ancestor */
+  getEditChain: protectedProcedure
+    .input(z.object({ rootId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return db.getEditChain(input.rootId, ctx.user.id);
+    }),
+  /** List root items (items with no parent, or latest in each chain) grouped for thumbnail grid */
+  listGrouped: protectedProcedure
+    .input(z.object({
+      module: z.string().optional(),
+      limit: z.number().min(1).max(100).optional(),
+      offset: z.number().min(0).optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      return db.listGroupedHistory(ctx.user.id, {
+        module: input?.module,
+        limit: input?.limit || 50,
+        offset: input?.offset || 0,
+      });
     }),
 });
 
