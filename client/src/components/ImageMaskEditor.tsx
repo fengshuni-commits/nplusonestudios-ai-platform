@@ -4,279 +4,237 @@ import { Slider } from "@/components/ui/slider";
 import { Paintbrush, Eraser, RotateCcw, Check, X } from "lucide-react";
 
 interface ImageMaskEditorProps {
-  imageUrl: string;
+  /**
+   * Width and height of the image as displayed on screen.
+   * The canvas overlay will match these dimensions exactly.
+   */
+  displayWidth: number;
+  displayHeight: number;
+  /** Natural (original) width of the image for high-res mask output */
+  naturalWidth: number;
+  /** Natural (original) height of the image for high-res mask output */
+  naturalHeight: number;
+  /** Called with the mask data URL (black/white PNG) when user confirms */
   onSave: (maskDataUrl: string) => void;
+  /** Called when user cancels */
   onCancel: () => void;
 }
 
-export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMaskEditorProps) {
+/**
+ * Inline mask editor that renders as an absolute-positioned canvas overlay.
+ * Must be placed inside a `position: relative` container that also holds the image.
+ */
+export default function ImageMaskEditor({
+  displayWidth,
+  displayHeight,
+  naturalWidth,
+  naturalHeight,
+  onSave,
+  onCancel,
+}: ImageMaskEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [tool, setTool] = useState<"brush" | "eraser">("brush");
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const [hasDrawn, setHasDrawn] = useState(false);
 
-  // When the <img> element loads, calculate canvas dimensions
-  const handleImageLoad = useCallback(() => {
-    const img = imgRef.current;
-    const container = containerRef.current;
-    if (!img || !container) return;
-
-    const nw = img.naturalWidth;
-    const nh = img.naturalHeight;
-    setNaturalSize({ width: nw, height: nh });
-
-    const containerWidth = container.clientWidth;
-    const maxHeight = 500;
-    const ratio = nw / nh;
-
-    let canvasW = containerWidth;
-    let canvasH = containerWidth / ratio;
-
-    if (canvasH > maxHeight) {
-      canvasH = maxHeight;
-      canvasW = maxHeight * ratio;
-    }
-
-    setCanvasSize({ width: Math.round(canvasW), height: Math.round(canvasH) });
-    setImageLoaded(true);
-    setLoadError(false);
-  }, []);
-
-  const handleImageError = useCallback(() => {
-    setLoadError(true);
-    setImageLoaded(false);
-  }, []);
-
-  // Initialize canvas once size is set
+  // Initialize / resize canvas
   useEffect(() => {
-    if (!imageLoaded || !canvasRef.current || canvasSize.width === 0) return;
     const canvas = canvasRef.current;
+    if (!canvas || !displayWidth || !displayHeight) return;
+    canvas.width = Math.round(displayWidth);
+    canvas.height = Math.round(displayHeight);
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }, [imageLoaded, canvasSize]);
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+  }, [displayWidth, displayHeight]);
 
-  const getCanvasCoords = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
+  const getCoords = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
+      const rect = canvas.getBoundingClientRect();
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    },
+    []
+  );
 
-    let clientX: number, clientY: number;
-    if ("touches" in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
+  const draw = useCallback(
+    (x: number, y: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+      ctx.beginPath();
+      ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
+      ctx.fillStyle = tool === "eraser" ? "rgba(0,0,0,1)" : "rgba(255,80,50,0.45)";
+      ctx.fill();
+      setHasDrawn(true);
+    },
+    [brushSize, tool]
+  );
 
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    };
-  }, []);
+  // ─── Pointer handlers ──────────────────────────────
+  const onDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      e.preventDefault();
+      setIsDrawing(true);
+      const c = getCoords(e);
+      draw(c.x, c.y);
+    },
+    [getCoords, draw]
+  );
+  const onMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDrawing) return;
+      const c = getCoords(e);
+      draw(c.x, c.y);
+    },
+    [isDrawing, getCoords, draw]
+  );
+  const onUp = useCallback(() => setIsDrawing(false), []);
 
-  const draw = useCallback((x: number, y: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
-    ctx.beginPath();
-    ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 80, 80, 0.45)";
-    ctx.fill();
-  }, [brushSize, tool]);
-
-  const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    setIsDrawing(true);
-    const { x, y } = getCanvasCoords(e);
-    draw(x, y);
-  }, [getCanvasCoords, draw]);
-
-  const handlePointerMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const { x, y } = getCanvasCoords(e);
-    draw(x, y);
-  }, [isDrawing, getCanvasCoords, draw]);
-
-  const handlePointerUp = useCallback(() => {
-    setIsDrawing(false);
-  }, []);
+  const onTouchDown = useCallback(
+    (e: React.TouchEvent<HTMLCanvasElement>) => {
+      e.preventDefault();
+      setIsDrawing(true);
+      const c = getCoords(e);
+      draw(c.x, c.y);
+    },
+    [getCoords, draw]
+  );
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLCanvasElement>) => {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const c = getCoords(e);
+      draw(c.x, c.y);
+    },
+    [isDrawing, getCoords, draw]
+  );
 
   const handleClear = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
   }, []);
 
   const handleSave = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || naturalSize.width === 0) return;
-
-    // Create a mask image at the original image resolution
-    // White = area to edit, Black = area to keep
-    const maskCanvas = document.createElement("canvas");
-    maskCanvas.width = naturalSize.width;
-    maskCanvas.height = naturalSize.height;
-    const maskCtx = maskCanvas.getContext("2d");
-    if (!maskCtx) return;
-
-    // Fill with black (keep everything)
-    maskCtx.fillStyle = "#000000";
-    maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-
-    // Scale the drawn mask to the original image size
-    const scaleX = naturalSize.width / canvasSize.width;
-    const scaleY = naturalSize.height / canvasSize.height;
-
-    // Get the drawn mask data
+    if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const drawData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Create white areas where the user painted
-    const maskData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
-    for (let y = 0; y < maskCanvas.height; y++) {
-      for (let x = 0; x < maskCanvas.width; x++) {
-        const srcX = Math.min(Math.floor(x / scaleX), canvas.width - 1);
-        const srcY = Math.min(Math.floor(y / scaleY), canvas.height - 1);
-        const srcIdx = (srcY * canvas.width + srcX) * 4;
-        const alpha = drawData.data[srcIdx + 3];
-        if (alpha > 10) {
-          const dstIdx = (y * maskCanvas.width + x) * 4;
-          maskData.data[dstIdx] = 255;     // R
-          maskData.data[dstIdx + 1] = 255; // G
-          maskData.data[dstIdx + 2] = 255; // B
-          maskData.data[dstIdx + 3] = 255; // A
+    // Build a black/white mask at the original image resolution
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = naturalWidth;
+    maskCanvas.height = naturalHeight;
+    const mctx = maskCanvas.getContext("2d");
+    if (!mctx) return;
+
+    mctx.fillStyle = "#000";
+    mctx.fillRect(0, 0, naturalWidth, naturalHeight);
+
+    const scaleX = naturalWidth / canvas.width;
+    const scaleY = naturalHeight / canvas.height;
+    const src = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const dst = mctx.getImageData(0, 0, naturalWidth, naturalHeight);
+
+    for (let my = 0; my < naturalHeight; my++) {
+      const sy = Math.min(Math.floor(my / scaleY), canvas.height - 1);
+      for (let mx = 0; mx < naturalWidth; mx++) {
+        const sx = Math.min(Math.floor(mx / scaleX), canvas.width - 1);
+        if (src.data[(sy * canvas.width + sx) * 4 + 3] > 10) {
+          const di = (my * naturalWidth + mx) * 4;
+          dst.data[di] = dst.data[di + 1] = dst.data[di + 2] = dst.data[di + 3] = 255;
         }
       }
     }
-    maskCtx.putImageData(maskData, 0, 0);
-
-    const dataUrl = maskCanvas.toDataURL("image/png");
-    onSave(dataUrl);
-  }, [canvasSize, naturalSize, onSave]);
+    mctx.putImageData(dst, 0, 0);
+    onSave(maskCanvas.toDataURL("image/png"));
+  }, [naturalWidth, naturalHeight, onSave]);
 
   return (
-    <div className="space-y-3">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Button
-          variant={tool === "brush" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTool("brush")}
-          className="h-8"
-        >
-          <Paintbrush className="h-3.5 w-3.5 mr-1" />
-          画笔
-        </Button>
-        <Button
-          variant={tool === "eraser" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTool("eraser")}
-          className="h-8"
-        >
-          <Eraser className="h-3.5 w-3.5 mr-1" />
-          橡皮
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleClear} className="h-8">
-          <RotateCcw className="h-3.5 w-3.5 mr-1" />
-          清除
-        </Button>
+    <>
+      {/* Canvas overlay — sits on top of the image */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 z-20 cursor-crosshair"
+        style={{ touchAction: "none", width: displayWidth, height: displayHeight }}
+        onMouseDown={onDown}
+        onMouseMove={onMove}
+        onMouseUp={onUp}
+        onMouseLeave={onUp}
+        onTouchStart={onTouchDown}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onUp}
+      />
 
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap">笔刷: {brushSize}px</span>
+      {/* Floating toolbar at the top of the image */}
+      <div className="absolute top-2 left-2 right-2 z-30 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm rounded-lg px-2 py-1.5 shadow-lg border border-border">
+        <div className="flex items-center gap-0.5 bg-muted rounded p-0.5">
+          <button
+            type="button"
+            onClick={() => setTool("brush")}
+            className={`h-6 px-1.5 rounded text-[11px] flex items-center gap-1 transition-colors ${
+              tool === "brush" ? "bg-primary text-primary-foreground" : "hover:bg-muted-foreground/10"
+            }`}
+          >
+            <Paintbrush className="h-3 w-3" />
+            画笔
+          </button>
+          <button
+            type="button"
+            onClick={() => setTool("eraser")}
+            className={`h-6 px-1.5 rounded text-[11px] flex items-center gap-1 transition-colors ${
+              tool === "eraser" ? "bg-primary text-primary-foreground" : "hover:bg-muted-foreground/10"
+            }`}
+          >
+            <Eraser className="h-3 w-3" />
+            橡皮
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-1 min-w-[80px]">
           <Slider
             value={[brushSize]}
             onValueChange={([v]) => setBrushSize(v)}
             min={5}
             max={80}
             step={1}
-            className="w-24"
+            className="flex-1"
           />
+          <span className="text-[10px] text-muted-foreground w-5 text-right">{brushSize}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleClear}
+          className="h-6 px-1.5 rounded text-[11px] flex items-center gap-1 hover:bg-muted transition-colors text-muted-foreground"
+        >
+          <RotateCcw className="h-3 w-3" />
+        </button>
+
+        <div className="flex items-center gap-1 ml-auto">
+          <Button variant="ghost" size="sm" onClick={onCancel} className="h-6 px-1.5 text-[11px]">
+            <X className="h-3 w-3" />
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={!hasDrawn} className="h-6 px-2 text-[11px]">
+            <Check className="h-3 w-3 mr-0.5" />
+            确认
+          </Button>
         </div>
       </div>
 
-      {/* Canvas area */}
-      <div ref={containerRef} className="relative rounded-lg overflow-hidden border border-border bg-muted">
-        {/* Always render the img element so it can load; hide it before loaded */}
-        <img
-          ref={imgRef}
-          src={imageUrl}
-          alt="参考图"
-          crossOrigin="anonymous"
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-          style={
-            imageLoaded && canvasSize.width > 0
-              ? { width: canvasSize.width, height: canvasSize.height, display: "block" }
-              : { display: "none" }
-          }
-          draggable={false}
-        />
-
-        {imageLoaded && canvasSize.width > 0 && (
-          <canvas
-            ref={canvasRef}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            className="absolute inset-0 cursor-crosshair"
-            style={{ touchAction: "none" }}
-            onMouseDown={handlePointerDown}
-            onMouseMove={handlePointerMove}
-            onMouseUp={handlePointerUp}
-            onMouseLeave={handlePointerUp}
-            onTouchStart={handlePointerDown}
-            onTouchMove={handlePointerMove}
-            onTouchEnd={handlePointerUp}
-          />
-        )}
-
-        {!imageLoaded && !loadError && (
-          <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-            <div className="flex flex-col items-center gap-2">
-              <div className="h-5 w-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-              加载图片中...
-            </div>
-          </div>
-        )}
-
-        {loadError && (
-          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
-            <X className="h-6 w-6 text-destructive/60" />
-            <p>图片加载失败</p>
-            <p className="text-[11px] text-muted-foreground/60">请尝试重新上传图片后再标注</p>
-          </div>
-        )}
+      {/* Hint text at the bottom */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 bg-black/60 text-white text-[10px] px-3 py-1 rounded-full">
+        在图片上圈出需要调整的区域
       </div>
-
-      <p className="text-[11px] text-muted-foreground">
-        用画笔在图片上圈出需要局部调整的区域（红色标注），AI 将只修改标注区域
-      </p>
-
-      {/* Action buttons */}
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onCancel}>
-          <X className="h-3.5 w-3.5 mr-1" />
-          取消标注
-        </Button>
-        <Button size="sm" onClick={handleSave} disabled={!imageLoaded}>
-          <Check className="h-3.5 w-3.5 mr-1" />
-          确认标注
-        </Button>
-      </div>
-    </div>
+    </>
   );
 }

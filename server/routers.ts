@@ -1042,9 +1042,22 @@ const renderingRouter = router({
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
 
-      // Build prompt with style
+      // Build prompt with style and aspect ratio instruction
       let fullPrompt = input.prompt;
       if (input.style) fullPrompt += `, style: ${input.style}`;
+
+      // Strongly enforce aspect ratio in prompt for better compliance
+      const ratioLabels: Record<string, string> = {
+        "1:1": "square composition (1:1 aspect ratio)",
+        "4:3": "4:3 aspect ratio landscape composition",
+        "3:2": "3:2 aspect ratio landscape composition",
+        "16:9": "wide cinematic 16:9 aspect ratio panoramic composition",
+        "9:16": "tall portrait 9:16 aspect ratio vertical composition",
+        "3:4": "3:4 aspect ratio portrait composition",
+      };
+      if (input.aspectRatio && ratioLabels[input.aspectRatio]) {
+        fullPrompt = `[IMPORTANT: Generate image with ${ratioLabels[input.aspectRatio]}] ${fullPrompt}`;
+      }
 
       // Calculate image size from aspect ratio and resolution
       const resolutionMap: Record<string, number> = {

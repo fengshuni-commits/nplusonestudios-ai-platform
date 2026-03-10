@@ -51,6 +51,24 @@ export async function generateImage(
     baseUrl
   ).toString();
 
+  // Build request body with size parameter in multiple formats for compatibility
+  const body: Record<string, any> = {
+    prompt: options.prompt,
+    original_images: options.originalImages || [],
+  };
+
+  if (options.size) {
+    // Send size in multiple formats to maximize compatibility
+    body.size = options.size; // "1024x768" format
+    // Also parse into width/height for APIs that use separate fields
+    const [w, h] = options.size.split("x").map(Number);
+    if (w && h) {
+      body.width = w;
+      body.height = h;
+      body.image_size = options.size;
+    }
+  }
+
   const response = await fetch(fullUrl, {
     method: "POST",
     headers: {
@@ -59,11 +77,7 @@ export async function generateImage(
       "connect-protocol-version": "1",
       authorization: `Bearer ${ENV.forgeApiKey}`,
     },
-    body: JSON.stringify({
-      prompt: options.prompt,
-      original_images: options.originalImages || [],
-      ...(options.size ? { size: options.size } : {}),
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

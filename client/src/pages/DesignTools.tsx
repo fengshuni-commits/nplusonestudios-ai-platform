@@ -6,12 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import AiToolSelector from "@/components/AiToolSelector";
 import ImageMaskEditor from "@/components/ImageMaskEditor";
 import { trpc } from "@/lib/trpc";
 import {
   Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus,
-  RefreshCw, Paintbrush, Plus, RatioIcon, MonitorIcon, FolderOpen, Search, Check,
+  RefreshCw, Paintbrush, RatioIcon, MonitorIcon, FolderOpen, Search, Check,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -34,16 +35,21 @@ export default function DesignTools() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mask editor state
-  const [showMaskEditor, setShowMaskEditor] = useState(false);
+  // Mask editor state — now on the right-side result image
+  const [editingImageIdx, setEditingImageIdx] = useState<number | null>(null);
   const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
+  // Track displayed image dimensions for the mask overlay
+  const [editImgDims, setEditImgDims] = useState<{ dw: number; dh: number; nw: number; nh: number } | null>(null);
+  const editImgRef = useRef<HTMLImageElement>(null);
 
-  // Material from asset library
+  // Material (dual: asset library + local upload)
   const [materialUrl, setMaterialUrl] = useState<string | null>(null);
   const [materialName, setMaterialName] = useState<string | null>(null);
   const [materialPreview, setMaterialPreview] = useState<string | null>(null);
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [assetSearch, setAssetSearch] = useState("");
+  const materialFileRef = useRef<HTMLInputElement>(null);
 
   // Edit chain tracking
   const [parentHistoryId, setParentHistoryId] = useState<number | undefined>(undefined);
@@ -52,9 +58,11 @@ export default function DesignTools() {
   const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
+  const createAssetMutation = trpc.assets.create.useMutation();
+  const assetsUploadMutation = trpc.assets.upload.useMutation();
 
   // Fetch assets for the picker
-  const { data: allAssets } = trpc.assets.list.useQuery(undefined, {
+  const { data: allAssets, refetch: refetchAssets } = trpc.assets.list.useQuery(undefined, {
     enabled: showAssetPicker,
   });
 
@@ -84,9 +92,7 @@ export default function DesignTools() {
       setReferenceUrl(refUrl);
       setReferencePreview(refUrl);
       setReferenceName("来自历史记录");
-      if (histId) {
-        setParentHistoryId(Number(histId));
-      }
+      if (histId) setParentHistoryId(Number(histId));
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [searchString]);
@@ -95,11 +101,11 @@ export default function DesignTools() {
     onSuccess: (data) => {
       if (data.url) {
         setGeneratedImages((prev) => [{ url: data.url!, prompt: data.prompt, historyId: data.historyId }, ...prev]);
-        if (data.historyId) {
-          setParentHistoryId(data.historyId);
-        }
+        if (data.historyId) setParentHistoryId(data.historyId);
       }
       setIsGenerating(false);
+      setEditingImageIdx(null);
+      setMaskDataUrl(null);
       toast.success("图像生成完成");
     },
     onError: (err) => {
@@ -110,14 +116,8 @@ export default function DesignTools() {
 
   // ─── File handling helpers ─────────────────────────────
   const validateImageFile = useCallback((file: File): boolean => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("请上传图片文件");
-      return false;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("图片大小不能超过 10MB");
-      return false;
-    }
+    if (!file.type.startsWith("image/")) { toast.error("请上传图片文件"); return false; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("图片大小不能超过 10MB"); return false; }
     return true;
   }, []);
 
@@ -138,7 +138,7 @@ export default function DesignTools() {
     setReferenceName(file.name);
     setParentHistoryId(undefined);
     setMaskDataUrl(null);
-    setShowMaskEditor(false);
+    setEditingImageIdx(null);
     const dataUrl = await readFileAsDataUrl(file);
     setReferencePreview(dataUrl);
   }, [validateImageFile, readFileAsDataUrl]);
@@ -150,7 +150,7 @@ export default function DesignTools() {
     setReferenceName(null);
     setParentHistoryId(undefined);
     setMaskDataUrl(null);
-    setShowMaskEditor(false);
+    setEditingImageIdx(null);
     setRefImgDimensions(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
@@ -165,30 +165,40 @@ export default function DesignTools() {
     setReferenceName(file.name);
     setParentHistoryId(undefined);
     setMaskDataUrl(null);
-    setShowMaskEditor(false);
+    setEditingImageIdx(null);
     const dataUrl = await readFileAsDataUrl(file);
     setReferencePreview(dataUrl);
   }, [validateImageFile, readFileAsDataUrl]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); }, []);
 
-  // ─── Material from asset library ──────────────────────
+  // ─── Material handlers (dual: library + local upload) ──
   const handleSelectAsset = useCallback((asset: any) => {
     setMaterialUrl(asset.fileUrl);
     setMaterialPreview(asset.thumbnailUrl || asset.fileUrl);
     setMaterialName(asset.name);
+    setMaterialFile(null);
     setShowAssetPicker(false);
     setAssetSearch("");
     toast.success(`已选择素材: ${asset.name}`);
   }, []);
 
+  const handleMaterialFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !validateImageFile(file)) return;
+    setMaterialFile(file);
+    setMaterialUrl(null);
+    setMaterialName(file.name);
+    const dataUrl = await readFileAsDataUrl(file);
+    setMaterialPreview(dataUrl);
+  }, [validateImageFile, readFileAsDataUrl]);
+
   const handleRemoveMaterial = useCallback(() => {
     setMaterialUrl(null);
     setMaterialPreview(null);
     setMaterialName(null);
+    setMaterialFile(null);
+    if (materialFileRef.current) materialFileRef.current.value = "";
   }, []);
 
   // ─── Use generated image as reference ─────────────────
@@ -198,22 +208,47 @@ export default function DesignTools() {
     setReferenceFile(null);
     setReferenceName("上一次生成结果");
     setMaskDataUrl(null);
-    setShowMaskEditor(false);
+    setEditingImageIdx(null);
     if (historyId) setParentHistoryId(historyId);
     if (!prompt.trim()) setPrompt(imagePrompt);
     toast.success("已将图片设为参考图，修改描述后再次生成");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [prompt]);
 
-  // ─── Mask handling ────────────────────────────────────
+  // ─── Mask editing on result image ─────────────────────
+  const handleStartMaskEdit = useCallback((idx: number) => {
+    setEditingImageIdx(idx);
+    setMaskDataUrl(null);
+    // Also set this image as reference
+    const img = generatedImages[idx];
+    if (img) {
+      setReferenceUrl(img.url);
+      setReferencePreview(img.url);
+      setReferenceFile(null);
+      setReferenceName("标注编辑中");
+      if (img.historyId) setParentHistoryId(img.historyId);
+    }
+  }, [generatedImages]);
+
   const handleMaskSave = useCallback((dataUrl: string) => {
     setMaskDataUrl(dataUrl);
-    setShowMaskEditor(false);
-    toast.success("标注区域已保存，生成时将只修改标注区域");
+    toast.success("标注区域已保存，修改描述后点击「局部重绘」");
   }, []);
 
   const handleMaskCancel = useCallback(() => {
-    setShowMaskEditor(false);
+    setEditingImageIdx(null);
+    setMaskDataUrl(null);
+  }, []);
+
+  // Track result image load for mask overlay dimensions
+  const handleEditImgLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setEditImgDims({
+      dw: img.clientWidth,
+      dh: img.clientHeight,
+      nw: img.naturalWidth,
+      nh: img.naturalHeight,
+    });
   }, []);
 
   // ─── Reference image load for dimensions ──────────────
@@ -226,10 +261,7 @@ export default function DesignTools() {
   const hasReference = !!(referenceFile || referenceUrl);
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      toast.error("请输入场景描述");
-      return;
-    }
+    if (!prompt.trim()) { toast.error("请输入场景描述"); return; }
     setIsGenerating(true);
 
     try {
@@ -245,46 +277,52 @@ export default function DesignTools() {
         try {
           const base64 = await fileToBase64(referenceFile);
           const uploadResult = await uploadMutation.mutateAsync({
-            fileName: referenceFile.name,
-            fileData: base64,
-            contentType: referenceFile.type,
-            folder: "reference-images",
+            fileName: referenceFile.name, fileData: base64, contentType: referenceFile.type, folder: "reference-images",
           });
           referenceImageUrl = uploadResult.url;
-        } catch {
-          toast.error("参考图片上传失败");
-          setIsGenerating(false);
-          setIsUploading(false);
-          return;
-        }
+        } catch { toast.error("参考图片上传失败"); setIsGenerating(false); setIsUploading(false); return; }
         setIsUploading(false);
       }
 
-      // Material image from asset library
+      // Material image: upload local file if needed, and sync to asset library
       if (materialUrl) {
         materialImageUrl = materialUrl;
+      } else if (materialFile) {
+        setIsUploading(true);
+        try {
+          const base64 = await fileToBase64(materialFile);
+          // Upload to assets storage
+          const uploadResult = await assetsUploadMutation.mutateAsync({
+            fileName: materialFile.name, fileData: base64, contentType: materialFile.type,
+          });
+          materialImageUrl = uploadResult.url;
+          // Sync to asset library
+          await createAssetMutation.mutateAsync({
+            name: materialFile.name.replace(/\.[^.]+$/, ""),
+            fileUrl: uploadResult.url,
+            fileKey: uploadResult.key,
+            fileType: materialFile.type,
+            fileSize: materialFile.size,
+            thumbnailUrl: uploadResult.url,
+            category: "image",
+            tags: "素材,设计工具上传",
+          });
+          toast.success("素材已同步到素材库");
+          refetchAssets();
+        } catch { toast.error("素材上传失败"); setIsGenerating(false); setIsUploading(false); return; }
+        setIsUploading(false);
       }
 
-      // Include mask data if available
-      if (maskDataUrl) {
-        maskImageData = maskDataUrl;
-      }
+      if (maskDataUrl) maskImageData = maskDataUrl;
 
       generateMutation.mutate({
-        prompt,
-        style,
-        toolId,
-        referenceImageUrl,
-        parentHistoryId,
-        materialImageUrl,
-        maskImageData,
+        prompt, style, toolId,
+        referenceImageUrl, parentHistoryId,
+        materialImageUrl, maskImageData,
         aspectRatio: aspectRatio !== "auto" ? aspectRatio : undefined,
         resolution: resolution !== "standard" ? resolution : undefined,
       });
-    } catch {
-      setIsGenerating(false);
-      setIsUploading(false);
-    }
+    } catch { setIsGenerating(false); setIsUploading(false); }
   };
 
   // ─── Options ──────────────────────────────────────────
@@ -350,7 +388,7 @@ export default function DesignTools() {
                 <span className="text-xs text-muted-foreground font-normal">（可选）</span>
               </Label>
 
-              {referencePreview && !showMaskEditor ? (
+              {referencePreview ? (
                 <div className="relative group rounded-lg overflow-hidden border border-border bg-muted">
                   <img
                     src={referencePreview}
@@ -369,15 +407,6 @@ export default function DesignTools() {
                   <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
-                      onClick={() => setShowMaskEditor(true)}
-                      className="h-7 px-2 rounded-md bg-black/60 text-white text-[11px] flex items-center gap-1 hover:bg-black/80 transition-colors"
-                      title="画笔标注局部区域"
-                    >
-                      <Paintbrush className="h-3 w-3" />
-                      标注
-                    </button>
-                    <button
-                      type="button"
                       onClick={handleRemoveReference}
                       className="h-7 w-7 rounded-md bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
                     >
@@ -388,12 +417,6 @@ export default function DesignTools() {
                     <p className="text-xs text-white/90 truncate">{referenceName || "参考图片"}</p>
                   </div>
                 </div>
-              ) : referencePreview && showMaskEditor ? (
-                <ImageMaskEditor
-                  imageUrl={referencePreview}
-                  onSave={handleMaskSave}
-                  onCancel={handleMaskCancel}
-                />
               ) : (
                 <div
                   onClick={() => fileInputRef.current?.click()}
@@ -411,13 +434,7 @@ export default function DesignTools() {
                 </div>
               )}
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleRefFileSelect}
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleRefFileSelect} />
             </div>
 
             {/* ── Scene Description ── */}
@@ -437,21 +454,17 @@ export default function DesignTools() {
               />
             </div>
 
-            {/* ── Material from Asset Library ── */}
+            {/* ── Material: dual entry (asset library + local upload) ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <FolderOpen className="h-3.5 w-3.5" />
                 增加素材
-                <span className="text-xs text-muted-foreground font-normal">（从素材库选择）</span>
+                <span className="text-xs text-muted-foreground font-normal">（可选）</span>
               </Label>
 
               {materialPreview ? (
                 <div className="relative group rounded-lg overflow-hidden border border-border bg-muted">
-                  <img
-                    src={materialPreview}
-                    alt="素材图片"
-                    className="w-full h-24 object-contain bg-black/5"
-                  />
+                  <img src={materialPreview} alt="素材图片" className="w-full h-24 object-contain bg-black/5" />
                   <button
                     type="button"
                     onClick={handleRemoveMaterial}
@@ -464,14 +477,24 @@ export default function DesignTools() {
                   </div>
                 </div>
               ) : (
-                <div
-                  onClick={() => setShowAssetPicker(true)}
-                  className="border border-dashed border-border/60 rounded-lg p-3 flex items-center justify-center gap-2 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
-                >
-                  <FolderOpen className="h-4 w-4 text-muted-foreground/50" />
-                  <span className="text-xs text-muted-foreground">从素材库选择</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div
+                    onClick={() => setShowAssetPicker(true)}
+                    className="border border-dashed border-border/60 rounded-lg p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
+                  >
+                    <FolderOpen className="h-4 w-4 text-muted-foreground/50" />
+                    <span className="text-[11px] text-muted-foreground">素材库选择</span>
+                  </div>
+                  <div
+                    onClick={() => materialFileRef.current?.click()}
+                    className="border border-dashed border-border/60 rounded-lg p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
+                  >
+                    <Upload className="h-4 w-4 text-muted-foreground/50" />
+                    <span className="text-[11px] text-muted-foreground">本地上传</span>
+                  </div>
                 </div>
               )}
+              <input ref={materialFileRef} type="file" accept="image/*" className="hidden" onChange={handleMaterialFileSelect} />
             </div>
 
             {/* ── Style + Aspect Ratio + Resolution ── */}
@@ -562,39 +585,64 @@ export default function DesignTools() {
                   <div key={idx} className="space-y-2">
                     <div className="relative group rounded-lg overflow-hidden bg-muted">
                       <img
+                        ref={editingImageIdx === idx ? editImgRef : undefined}
                         src={img.url}
                         alt={img.prompt}
-                        className="w-full h-auto cursor-pointer transition-transform"
-                        onClick={() => handleUseAsReference(img.url, img.prompt, img.historyId)}
-                        title="点击将此图片作为参考图，进一步生成新图像"
+                        className={`w-full h-auto ${editingImageIdx === idx ? "" : "cursor-pointer"} transition-transform`}
+                        onClick={editingImageIdx === idx ? undefined : () => handleUseAsReference(img.url, img.prompt, img.historyId)}
+                        title={editingImageIdx === idx ? undefined : "点击将此图片作为参考图"}
+                        onLoad={editingImageIdx === idx ? handleEditImgLoad : undefined}
                       />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
-                        <div className="flex gap-2 pointer-events-auto">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUseAsReference(img.url, img.prompt, img.historyId);
-                            }}
-                          >
-                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                            继续编辑
-                          </Button>
-                          <Button variant="secondary" size="sm" asChild>
-                            <a
-                              href={img.url}
-                              download
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
+
+                      {/* Mask editor overlay on this image */}
+                      {editingImageIdx === idx && editImgDims && (
+                        <ImageMaskEditor
+                          displayWidth={editImgDims.dw}
+                          displayHeight={editImgDims.dh}
+                          naturalWidth={editImgDims.nw}
+                          naturalHeight={editImgDims.nh}
+                          onSave={handleMaskSave}
+                          onCancel={handleMaskCancel}
+                        />
+                      )}
+
+                      {/* Hover actions (hidden during mask editing) */}
+                      {editingImageIdx !== idx && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
+                          <div className="flex gap-2 pointer-events-auto">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); handleUseAsReference(img.url, img.prompt, img.historyId); }}
                             >
-                              <Download className="h-3.5 w-3.5 mr-1.5" />
-                              下载
-                            </a>
-                          </Button>
+                              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                              继续编辑
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); handleStartMaskEdit(idx); }}
+                            >
+                              <Paintbrush className="h-3.5 w-3.5 mr-1.5" />
+                              局部标注
+                            </Button>
+                            <Button variant="secondary" size="sm" asChild>
+                              <a href={img.url} download target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                                <Download className="h-3.5 w-3.5 mr-1.5" />
+                                下载
+                              </a>
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* Mask saved indicator */}
+                      {maskDataUrl && editingImageIdx === null && idx === 0 && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full">
+                          <Paintbrush className="h-2.5 w-2.5" />
+                          已标注 · 修改描述后点击局部重绘
+                        </div>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">{img.prompt}</p>
                   </div>
@@ -605,7 +653,7 @@ export default function DesignTools() {
                 <ImageIcon className="h-12 w-12 mb-3 opacity-20" />
                 <p className="text-sm">输入场景描述后，点击生成图像</p>
                 <p className="text-xs mt-1 opacity-60">
-                  生成后可点击结果图片，作为参考图进一步迭代
+                  生成后可点击结果图片作为参考图，或使用「局部标注」进行精细编辑
                 </p>
               </div>
             )}
@@ -643,11 +691,7 @@ export default function DesignTools() {
                     className="group relative rounded-lg overflow-hidden border border-border bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
                   >
                     <div className="aspect-square">
-                      <img
-                        src={asset.thumbnailUrl || asset.fileUrl}
-                        alt={asset.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -658,9 +702,7 @@ export default function DesignTools() {
                     </div>
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
                       <p className="text-[11px] text-white/90 truncate">{asset.name}</p>
-                      {asset.tags && (
-                        <p className="text-[9px] text-white/60 truncate">{asset.tags}</p>
-                      )}
+                      {asset.tags && <p className="text-[9px] text-white/60 truncate">{asset.tags}</p>}
                     </div>
                   </div>
                 ))}
@@ -668,12 +710,8 @@ export default function DesignTools() {
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <ImageIcon className="h-10 w-10 mb-3 opacity-20" />
-                <p className="text-sm">
-                  {assetSearch ? "没有找到匹配的素材" : "素材库中暂无图片素材"}
-                </p>
-                <p className="text-xs mt-1 opacity-60">
-                  请先在管理页面上传素材到素材库
-                </p>
+                <p className="text-sm">{assetSearch ? "没有找到匹配的素材" : "素材库中暂无图片素材"}</p>
+                <p className="text-xs mt-1 opacity-60">请先在管理页面上传素材到素材库</p>
               </div>
             )}
           </ScrollArea>

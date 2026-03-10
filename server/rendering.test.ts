@@ -50,7 +50,7 @@ describe("rendering router input validation", () => {
     ).rejects.toThrow();
   });
 
-  it("rendering.generate accepts new optional parameters in schema", async () => {
+  it("rendering.generate accepts all optional parameters in schema", async () => {
     const user = createTestUser();
     const ctx = createContext(user);
     const caller = appRouter.createCaller(ctx);
@@ -63,6 +63,8 @@ describe("rendering router input validation", () => {
         maskImageData: "data:image/png;base64,iVBORw0KGgo=",
         aspectRatio: "16:9",
         resolution: "hd",
+        parentHistoryId: 1,
+        referenceImageUrl: "https://example.com/ref.png",
       });
     } catch (err: any) {
       // Should fail at image generation, not input validation
@@ -90,7 +92,7 @@ describe("rendering router input validation", () => {
 });
 
 describe("aspect ratio and resolution size calculation", () => {
-  // Test the size calculation logic that mirrors the server-side implementation
+  // Mirror the server-side calculateImageSize logic
   function calculateImageSize(aspectRatio?: string, resolution?: string): string | undefined {
     const resolutionMap: Record<string, number> = {
       standard: 1024,
@@ -135,8 +137,7 @@ describe("aspect ratio and resolution size calculation", () => {
   });
 
   it("calculates 1:1 square correctly", () => {
-    const size = calculateImageSize("1:1", "standard");
-    expect(size).toBe("1024x1024");
+    expect(calculateImageSize("1:1", "standard")).toBe("1024x1024");
   });
 
   it("calculates 16:9 widescreen correctly", () => {
@@ -144,7 +145,6 @@ describe("aspect ratio and resolution size calculation", () => {
     expect(size).toBeDefined();
     const [w, h] = size!.split("x").map(Number);
     expect(w).toBe(1024);
-    // 1024 / (16/9) ≈ 576, rounded to nearest 64 = 576
     expect(h).toBe(576);
     expect(w).toBeGreaterThan(h);
   });
@@ -159,25 +159,30 @@ describe("aspect ratio and resolution size calculation", () => {
 
   it("calculates 4:3 standard correctly", () => {
     const size = calculateImageSize("4:3", "standard");
-    expect(size).toBeDefined();
     const [w, h] = size!.split("x").map(Number);
     expect(w).toBe(1024);
     expect(h).toBe(768);
   });
 
+  it("calculates 3:2 correctly", () => {
+    const size = calculateImageSize("3:2", "standard");
+    const [w, h] = size!.split("x").map(Number);
+    expect(w).toBe(1024);
+    // 1024 / 1.5 ≈ 683, rounded to 64 = 704
+    expect(h % 64).toBe(0);
+    expect(w).toBeGreaterThan(h);
+  });
+
   it("applies HD resolution to aspect ratio", () => {
-    const size = calculateImageSize("1:1", "hd");
-    expect(size).toBe("1536x1536");
+    expect(calculateImageSize("1:1", "hd")).toBe("1536x1536");
   });
 
   it("applies ultra resolution to aspect ratio", () => {
-    const size = calculateImageSize("1:1", "ultra");
-    expect(size).toBe("2048x2048");
+    expect(calculateImageSize("1:1", "ultra")).toBe("2048x2048");
   });
 
   it("applies HD resolution without aspect ratio", () => {
-    const size = calculateImageSize(undefined, "hd");
-    expect(size).toBe("1536x1536");
+    expect(calculateImageSize(undefined, "hd")).toBe("1536x1536");
   });
 
   it("all dimensions are multiples of 64", () => {
@@ -192,5 +197,37 @@ describe("aspect ratio and resolution size calculation", () => {
         expect(h % 64).toBe(0);
       }
     }
+  });
+});
+
+describe("assets router - material upload and sync", () => {
+  it("assets.create requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.assets.create({
+        name: "test-material",
+        fileUrl: "https://example.com/img.png",
+        fileKey: "assets/test.png",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("assets.upload requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.assets.upload({
+        fileName: "test.png",
+        fileData: "iVBORw0KGgo=",
+        contentType: "image/png",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("assets.list requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.assets.list()).rejects.toThrow();
   });
 });
