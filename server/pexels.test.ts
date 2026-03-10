@@ -9,7 +9,7 @@ describe("Pexels API Key", () => {
     expect(key!.length).toBeGreaterThan(5);
   });
 
-  it("should be able to search photos", async () => {
+  it("should be able to search photos", { timeout: 15000 }, async () => {
     const key = process.env.PEXELS_API_KEY;
     if (!key) {
       console.warn("PEXELS_API_KEY not set, skipping live test");

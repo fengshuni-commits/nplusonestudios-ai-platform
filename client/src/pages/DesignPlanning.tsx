@@ -8,12 +8,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2 } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 
 type PptStage = "idle" | "structuring" | "generating_images" | "building_pptx" | "done";
+
+interface PptResult {
+  url: string;
+  title: string;
+  slideCount: number;
+  imageCount: number;
+}
 
 export default function DesignPlanning() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -28,6 +35,7 @@ export default function DesignPlanning() {
   const [pptStage, setPptStage] = useState<PptStage>("idle");
   const [pptProgress, setPptProgress] = useState(0);
   const [pptJobId, setPptJobId] = useState<string | null>(null);
+  const [pptResult, setPptResult] = useState<PptResult | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const generateMutation = trpc.benchmark.generate.useMutation({
@@ -45,7 +53,6 @@ export default function DesignPlanning() {
   const startExportMutation = trpc.benchmark.startExportPpt.useMutation({
     onSuccess: (data) => {
       setPptJobId(data.jobId);
-      // Polling will start via useEffect below
     },
     onError: () => {
       setPptStage("idle");
@@ -63,47 +70,42 @@ export default function DesignPlanning() {
       if (result.status === "done") {
         setPptStage("done");
         setPptProgress(100);
-        toast.success(`PPT 已生成（${result.slideCount} 页，含 ${result.imageCount} 张配图），正在下载...`);
-        // Trigger download
-        const a = document.createElement("a");
-        a.href = result.url!;
-        a.download = `${result.title}-对标调研.pptx`;
-        a.target = "_blank";
-        a.click();
-        // Reset after a delay
-        setTimeout(() => {
-          setPptStage("idle");
-          setPptProgress(0);
-          setPptJobId(null);
-        }, 3000);
+        const pptData: PptResult = {
+          url: result.url!,
+          title: result.title || form.projectName,
+          slideCount: result.slideCount || 0,
+          imageCount: result.imageCount || 0,
+        };
+        setPptResult(pptData);
+        toast.success(`PPT 已生成（${pptData.slideCount} 页，含 ${pptData.imageCount} 张配图）`);
+        // Auto-trigger download
+        triggerDownload(pptData.url, pptData.title);
         return true; // Stop polling
       } else if (result.status === "failed") {
         setPptStage("idle");
         setPptProgress(0);
         setPptJobId(null);
         toast.error(result.error || "PPT 生成失败，请重试");
-        return true; // Stop polling
+        return true;
       } else if (result.status === "not_found") {
         setPptStage("idle");
         setPptProgress(0);
         setPptJobId(null);
         toast.error("PPT 任务未找到，请重试");
-        return true; // Stop polling
+        return true;
       } else {
-        // Still processing - update progress from server
         setPptProgress(result.progress || 0);
         const stage = result.stage as PptStage;
         if (stage && stage !== "idle" && stage !== "done") {
           setPptStage(stage);
         }
-        return false; // Continue polling
+        return false;
       }
     } catch (err) {
       console.error("[PPT Poll] Error:", err);
-      // Don't stop polling on transient errors - just log and retry
       return false;
     }
-  }, [utils]);
+  }, [utils, form.projectName]);
 
   // Start/stop polling when jobId changes
   useEffect(() => {
@@ -115,7 +117,6 @@ export default function DesignPlanning() {
       return;
     }
 
-    // Poll every 3 seconds
     const poll = async () => {
       const shouldStop = await pollJobStatus(pptJobId);
       if (shouldStop && pollTimerRef.current) {
@@ -124,7 +125,6 @@ export default function DesignPlanning() {
       }
     };
 
-    // Initial poll after a short delay
     const initialTimeout = setTimeout(poll, 1500);
     pollTimerRef.current = setInterval(poll, 3000);
 
@@ -137,11 +137,27 @@ export default function DesignPlanning() {
     };
   }, [pptJobId, pollJobStatus]);
 
+  const triggerDownload = (url: string, title: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}-对标调研.pptx`;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleGenerate = () => {
     if (!form.projectName.trim()) { toast.error("请输入项目名称"); return; }
     if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
     setIsGenerating(true);
     setReport("");
+    // Reset PPT state when generating a new report
+    setPptStage("idle");
+    setPptProgress(0);
+    setPptJobId(null);
+    setPptResult(null);
     generateMutation.mutate({ ...form, toolId });
   };
 
@@ -149,7 +165,22 @@ export default function DesignPlanning() {
     if (!report) { toast.error("请先生成调研报告"); return; }
     setPptStage("structuring");
     setPptProgress(5);
+    setPptResult(null);
     startExportMutation.mutate({ content: report, title: form.projectName, projectType: form.projectType });
+  };
+
+  const handleRedownload = () => {
+    if (pptResult) {
+      triggerDownload(pptResult.url, pptResult.title);
+      toast.success("正在重新下载 PPT");
+    }
+  };
+
+  const handleRegeneratePpt = () => {
+    setPptStage("idle");
+    setPptProgress(0);
+    setPptJobId(null);
+    setPptResult(null);
   };
 
   const projectTypes = [
@@ -165,12 +196,21 @@ export default function DesignPlanning() {
   const pptStageLabels: Record<PptStage, string> = {
     idle: "",
     structuring: "正在分析报告结构，规划 PPT 页面...",
-    generating_images: "正在获取真实案例照片与设计配图...",
+    generating_images: "正在从 Pexels 获取高质量建筑设计配图...",
     building_pptx: "正在组装 PPT 文件并上传...",
     done: "PPT 生成完成！",
   };
 
   const isPptGenerating = pptStage !== "idle" && pptStage !== "done";
+
+  // Clean report: remove empty source links like [来源]() or [来源](#)
+  const cleanedReport = useMemo(() => {
+    if (!report) return "";
+    return report
+      .replace(/\s*\[来源\]\(\s*\)/g, "")
+      .replace(/\s*\[来源\]\(#\)/g, "")
+      .replace(/\s*\[来源\]\(https?:\/\/\)/g, "");
+  }, [report]);
 
   return (
     <div className="space-y-6">
@@ -258,7 +298,7 @@ export default function DesignPlanning() {
                 <CardContent>
                   {report ? (
                     <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                      <Streamdown>{report}</Streamdown>
+                      <Streamdown>{cleanedReport}</Streamdown>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -270,11 +310,11 @@ export default function DesignPlanning() {
                 </CardContent>
               </Card>
 
-              {/* PPT Generation Section - Only visible after report is generated */}
+              {/* PPT Generation Section */}
               {report && (
-                <Card className="border-2 border-dashed border-accent/30 bg-accent/5">
+                <Card className={`border-2 border-dashed ${pptStage === "done" ? "border-green-500/30 bg-green-50/50 dark:bg-green-950/10" : "border-accent/30 bg-accent/5"}`}>
                   <CardContent className="py-6">
-                    {pptStage === "idle" ? (
+                    {pptStage === "idle" && !pptResult ? (
                       <div className="flex flex-col items-center gap-4">
                         <div className="flex items-center gap-3 text-center">
                           <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center">
@@ -283,7 +323,7 @@ export default function DesignPlanning() {
                           <div className="text-left">
                             <h3 className="font-medium text-foreground">生成对标案例 PPT</h3>
                             <p className="text-sm text-muted-foreground">
-                              约 15 页图文并茂的 PPTX，案例页含真实项目照片，设计思路页含 Pexels 配图
+                              约 10-15 页图文并茂的 PPTX，含高质量建筑设计配图
                             </p>
                           </div>
                         </div>
@@ -296,12 +336,39 @@ export default function DesignPlanning() {
                           生成 PPT
                         </Button>
                       </div>
-                    ) : pptStage === "done" ? (
-                      <div className="flex flex-col items-center gap-3">
+                    ) : pptStage === "done" || pptResult ? (
+                      /* Done state - persistent with download button */
+                      <div className="flex flex-col items-center gap-4">
                         <CheckCircle2 className="h-10 w-10 text-green-500" />
-                        <p className="font-medium text-green-700">PPT 生成完成，已开始下载</p>
+                        <div className="text-center">
+                          <p className="font-medium text-green-700 dark:text-green-400">PPT 生成完成</p>
+                          {pptResult && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              共 {pptResult.slideCount} 页，含 {pptResult.imageCount} 张配图
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            onClick={handleRedownload}
+                            size="lg"
+                            className="bg-green-600 hover:bg-green-700 text-white px-6"
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            下载 PPT
+                          </Button>
+                          <Button
+                            onClick={handleRegeneratePpt}
+                            variant="outline"
+                            size="lg"
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            重新生成
+                          </Button>
+                        </div>
                       </div>
                     ) : (
+                      /* Processing state with progress */
                       <div className="space-y-4">
                         <div className="flex items-center gap-3">
                           <Loader2 className="h-5 w-5 animate-spin text-accent" />
@@ -311,7 +378,7 @@ export default function DesignPlanning() {
                               {pptStage === "generating_images" && (
                                 <span className="flex items-center gap-1">
                                   <ImageIcon className="h-3 w-3" />
-                                  正在从来源网站抓取真实案例照片，并从 Pexels 获取设计配图...
+                                  正在从 Pexels 获取高质量建筑与设计照片...
                                 </span>
                               )}
                               {pptStage === "structuring" && "分析报告内容，规划封面、目录、案例分析、总结等页面"}

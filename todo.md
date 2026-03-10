@@ -57,3 +57,10 @@
 - [x] 对标调研模块"生成PPT"按钮不可用（pptxgenjs ESM/CJS 互操作问题，已通过 createRequire 修复）
 - [x] 对标调研报告生成 API 返回 HTML 而非 JSON（临时性 sandbox 502 错误，重启服务器后恢复正常）
 - [x] /design/planning 页面 "Failed to fetch" 错误（PPT 导出改为异步模式，避免长连接超时）
+
+## PPT 生成质量全面改进
+- [x] PPT 版式设计优化（参考 NotebookLM，铜色建筑事务所风格，6 种版式布局）
+- [x] 修复 PPT 中的案例链接错误（移除 LLM 幻觉 URL，改为 sourceName 标签）
+- [x] 修复图片获取不正确的问题（全部改用 Pexels API + LLM 生成英文搜索词）
+- [x] PPT 完成后保持下载状态，支持重新下载和重新生成
+- [x] 报告中空“来源”链接自动清理

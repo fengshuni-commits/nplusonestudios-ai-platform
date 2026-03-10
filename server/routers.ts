@@ -28,7 +28,7 @@ async function getPptxGenJS() {
   }
   return _PptxGenJS;
 }
-import { scrapeProjectPage, downloadImageAsBase64, searchPexelsImages } from "./scraper";
+import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 
 // ─── PPT Job Store (in-memory async queue) ──────────────
 type PptJob =
@@ -50,35 +50,37 @@ async function generatePptInBackground(
       messages: [
         {
           role: "system",
-          content: `你是 N+1 STUDIOS 的建筑设计 PPT 制作专家。请将以下对标调研报告转换为约 15 页的 PPT 结构。
+          content: `你是 N+1 STUDIOS 的建筑设计 PPT 制作专家。请将以下对标调研报告转换为约 12-15 页的 PPT 结构。
 
-要求：
+页面结构要求：
 - 第1页：封面（layout: cover）
 - 第2页：目录页（layout: toc）
-- 第3页：项目概述与调研目标（layout: text_only）
-- 第4-12页：对标案例详细分析（每个案例 1-2 页，layout: case_study）
-- 第13页：设计策略建议汇总（layout: concept，配图用 Pexels 图库）
-- 第14页：材料与工艺参考（layout: concept，配图用 Pexels 图库）
-- 第15页：总结与下一步建议（layout: summary）
-
-**关键区分**：
-- case_study 页：用于对标案例介绍。必须提供 sourceUrl 字段，填写报告中该案例的真实来源网页 URL（如 ArchDaily、Dezeen 等网站的项目页面）。这些页面的真实照片将被抓取作为 PPT 配图。
-- concept 页：用于设计思路、材料工艺等。提供 pexelsQuery 字段（英文），用于从 Pexels 图库搜索配图。
+- 第3页：项目概述与调研目标（layout: section_intro）
+- 第4-10页：对标案例详细分析（每个案例 1 页，layout: case_study）
+- 第11页：设计策略建议汇总（layout: insight）
+- 第12页：材料与工艺参考（layout: insight）
+- 第13页：总结与下一步建议（layout: summary）
 
 每页字段：
-- title: 标题
+- title: 标题（简洁有力，不超过20字）
 - subtitle: 副标题（可为空字符串）
-- bullets: 要点数组，每项不超过40字
-- sourceUrl: 案例来源网页 URL（仅 case_study 页面填写，其他页填空字符串）
-- pexelsQuery: Pexels 图片搜索关键词（仅 concept 页面填写，英文，如 "modern office interior design materials"，其他页填空字符串）
-- layout: cover / toc / text_only / case_study / concept / summary`
+- bullets: 要点数组，每项不超过30字，每页最多5个要点
+- sourceName: 案例来源网站名称（仅 case_study 页填写，如 "ArchDaily" 或 "Dezeen"，其他页填空字符串）
+- pexelsQuery: Pexels 图片搜索关键词（英文，必须为每个 case_study 和 insight 页提供精准的搜索词，例如 "modern glass office building exterior"、"minimalist lobby interior design"、"concrete texture wall architecture"）
+- layout: cover / toc / section_intro / case_study / insight / summary
+
+**重要**：
+- 不要生成任何 URL 链接，只用 sourceName 标注来源网站名称
+- pexelsQuery 必须是英文，且要具体描述建筑/空间的视觉特征，以便搜索到高质量配图
+- 每个 case_study 页和 insight 页都必须提供 pexelsQuery
+- 要点要精炼，每页不超过5个 bullet，避免文字过多`
         },
         { role: "user", content: `项目类型：${input.projectType || "办公空间"}\n\n${input.content}` }
       ],
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "ppt_structure_v2",
+          name: "ppt_structure_v3",
           strict: true,
           schema: {
             type: "object",
@@ -91,11 +93,11 @@ async function generatePptInBackground(
                     title: { type: "string" },
                     subtitle: { type: "string" },
                     bullets: { type: "array", items: { type: "string" } },
-                    sourceUrl: { type: "string" },
+                    sourceName: { type: "string" },
                     pexelsQuery: { type: "string" },
-                    layout: { type: "string", enum: ["cover", "toc", "text_only", "case_study", "concept", "summary"] }
+                    layout: { type: "string", enum: ["cover", "toc", "section_intro", "case_study", "insight", "summary"] }
                   },
-                  required: ["title", "subtitle", "bullets", "sourceUrl", "pexelsQuery", "layout"],
+                  required: ["title", "subtitle", "bullets", "sourceName", "pexelsQuery", "layout"],
                   additionalProperties: false
                 }
               }
@@ -114,65 +116,46 @@ async function generatePptInBackground(
     const slideData = JSON.parse(structureContent) as {
       slides: Array<{
         title: string; subtitle: string; bullets: string[];
-        sourceUrl: string; pexelsQuery: string; layout: string;
+        sourceName: string; pexelsQuery: string; layout: string;
       }>
     };
 
-    // Stage 2: Scrape images
-    pptJobStore.set(jobId, { status: "processing", progress: 30, stage: "generating_images" });
+    // Stage 2: Fetch Pexels images for all slides that need them
+    pptJobStore.set(jobId, { status: "processing", progress: 25, stage: "generating_images" });
 
     const imageBase64Map: Map<number, { data: string; ext: string }> = new Map();
 
-    // 2a: Scrape case study pages for real photos
-    const caseSlides = slideData.slides
-      .map((s, i) => ({ index: i, url: s.sourceUrl, layout: s.layout }))
-      .filter(s => s.layout === "case_study" && s.url && s.url.startsWith("http"));
-
-    for (let ci = 0; ci < caseSlides.length; ci++) {
-      const cs = caseSlides[ci];
-      try {
-        const scraped = await scrapeProjectPage(cs.url);
-        if (scraped && scraped.images.length > 0) {
-          const imgUrl = scraped.images[0].url;
-          const b64 = await downloadImageAsBase64(imgUrl);
-          if (b64) {
-            const mimeMatch = b64.match(/^data:(image\/\w+);/);
-            const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpeg';
-            const rawB64 = b64.replace(/^data:image\/\w+;base64,/, '');
-            imageBase64Map.set(cs.index, { data: rawB64, ext });
-          }
-        }
-      } catch (err) {
-        console.error(`[PPT] Failed to scrape case ${cs.url}:`, err);
-      }
-      // Update progress within image stage (30-65)
-      const imgProgress = 30 + Math.round((ci + 1) / Math.max(caseSlides.length + 2, 1) * 35);
-      pptJobStore.set(jobId, { status: "processing", progress: imgProgress, stage: "generating_images" });
-    }
-
-    // 2b: Search Pexels for concept/design pages
-    const conceptSlides = slideData.slides
+    const slidesNeedingImages = slideData.slides
       .map((s, i) => ({ index: i, query: s.pexelsQuery, layout: s.layout }))
-      .filter(s => s.layout === "concept" && s.query && s.query.trim().length > 0);
+      .filter(s => s.query && s.query.trim().length > 0);
 
-    for (const cs of conceptSlides) {
+    for (let ci = 0; ci < slidesNeedingImages.length; ci++) {
+      const cs = slidesNeedingImages[ci];
       try {
-        const pexelsResults = await searchPexelsImages(cs.query, 1);
-        if (pexelsResults.length > 0 && pexelsResults[0].url) {
-          const b64 = await downloadImageAsBase64(pexelsResults[0].url);
-          if (b64) {
-            const mimeMatch = b64.match(/^data:(image\/\w+);/);
-            const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpeg';
-            const rawB64 = b64.replace(/^data:image\/\w+;base64,/, '');
-            imageBase64Map.set(cs.index, { data: rawB64, ext });
+        // Search Pexels for high-quality architecture photos
+        const pexelsResults = await searchPexelsImages(cs.query, 3);
+        // Pick the best result (first available)
+        for (const pr of pexelsResults) {
+          if (pr.url) {
+            const b64 = await downloadImageAsBase64(pr.url);
+            if (b64) {
+              const mimeMatch = b64.match(/^data:(image\/\w+);/);
+              const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpeg';
+              const rawB64 = b64.replace(/^data:image\/\w+;base64,/, '');
+              imageBase64Map.set(cs.index, { data: rawB64, ext });
+              break;
+            }
           }
         }
       } catch (err) {
         console.error(`[PPT] Failed to fetch Pexels image for "${cs.query}":`, err);
       }
+      // Update progress (25-65)
+      const imgProgress = 25 + Math.round((ci + 1) / Math.max(slidesNeedingImages.length, 1) * 40);
+      pptJobStore.set(jobId, { status: "processing", progress: imgProgress, stage: "generating_images" });
     }
 
-    // Stage 3: Build PPTX
+    // Stage 3: Build PPTX with professional layout design
     pptJobStore.set(jobId, { status: "processing", progress: 70, stage: "building_pptx" });
 
     const PptxCtor = await getPptxGenJS();
@@ -182,10 +165,30 @@ async function generatePptInBackground(
     pptx.title = `${input.title} - 对标调研报告`;
     pptx.layout = "LAYOUT_16x9";
 
+    // Professional color palette inspired by architecture firms
     const C = {
-      bg: "F5F0EB", darkBg: "2C2C2C", title: "2C2C2C", subtitle: "6B6560",
-      accent: "C17F59", text: "3D3D3D", white: "FFFFFF", lightGray: "F0ECE7",
+      charcoal: "1A1A2E",   // Deep dark background
+      slate: "2D2D3F",      // Slightly lighter dark
+      warmGray: "F5F0EB",   // Warm light background
+      cream: "FAF8F5",      // Lightest background
+      copper: "B87333",     // Primary accent (copper/bronze)
+      copperLight: "D4956B", // Light copper
+      copperDark: "8B5E3C", // Dark copper
+      text: "2C2C2C",       // Main text
+      textLight: "6B6560",  // Secondary text
+      textOnDark: "E8E4DF", // Text on dark backgrounds
+      white: "FFFFFF",
+      divider: "D4CFC8",    // Subtle divider lines
+      tagBg: "EDE8E2",      // Tag/badge background
     };
+
+    // Font settings
+    const F = {
+      title: "Microsoft YaHei",
+      body: "Microsoft YaHei",
+    };
+
+    let caseIndex = 0; // Track case study numbering
 
     for (let i = 0; i < slideData.slides.length; i++) {
       const sd = slideData.slides[i];
@@ -193,66 +196,336 @@ async function generatePptInBackground(
       const hasImage = imageBase64Map.has(i);
 
       if (sd.layout === "cover") {
-        s.background = { color: C.darkBg };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.08, fill: { color: C.accent } });
-        s.addText(sd.title, { x: 0.8, y: 1.8, w: 8.4, h: 1.2, fontSize: 36, fontFace: "Microsoft YaHei", color: C.white, bold: true });
-        s.addText(sd.subtitle || "对标调研报告", { x: 0.8, y: 3.1, w: 8.4, h: 0.6, fontSize: 18, fontFace: "Microsoft YaHei", color: C.accent });
-        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 3.9, w: 1.5, h: 0.04, fill: { color: C.accent } });
-        s.addText(`N+1 STUDIOS | ${new Date().toLocaleDateString("zh-CN")}`, { x: 0.8, y: 4.6, w: 8.4, h: 0.4, fontSize: 11, fontFace: "Microsoft YaHei", color: C.subtitle });
+        // ══════ COVER SLIDE ══════
+        // Full dark background with elegant typography
+        s.background = { color: C.charcoal };
+        // Top accent line
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
+        // Decorative vertical line
+        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 1.2, w: 0.03, h: 2.5, fill: { color: C.copper } });
+        // Main title
+        s.addText(sd.title, {
+          x: 1.1, y: 1.3, w: 7.5, h: 1.0,
+          fontSize: 32, fontFace: F.title, color: C.white, bold: true,
+          lineSpacingMultiple: 1.2,
+        });
+        // Subtitle
+        s.addText(sd.subtitle || "对标调研报告", {
+          x: 1.1, y: 2.4, w: 7.5, h: 0.5,
+          fontSize: 16, fontFace: F.body, color: C.copperLight,
+        });
+        // Horizontal divider
+        s.addShape(pptx.ShapeType.rect, { x: 1.1, y: 3.2, w: 2.0, h: 0.025, fill: { color: C.copper } });
+        // Company + date
+        s.addText(`N+1 STUDIOS`, {
+          x: 1.1, y: 3.6, w: 4, h: 0.35,
+          fontSize: 14, fontFace: F.title, color: C.copper, bold: true,
+        });
+        s.addText(new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long" }), {
+          x: 1.1, y: 4.0, w: 4, h: 0.3,
+          fontSize: 11, fontFace: F.body, color: C.textLight,
+        });
+        // Cover image (right side, if available)
+        if (hasImage) {
+          const imgData = imageBase64Map.get(i)!;
+          s.addImage({ data: `image/${imgData.ext};base64,${imgData.data}`, x: 5.5, y: 0.04, w: 4.5, h: 5.59 });
+          // Semi-transparent overlay on image edge for text readability
+          s.addShape(pptx.ShapeType.rect, { x: 5.0, y: 0.04, w: 1.0, h: 5.59, fill: { color: C.charcoal, transparency: 50 } });
+        }
+
       } else if (sd.layout === "toc") {
-        s.background = { color: C.white };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.12, h: 5.63, fill: { color: C.accent } });
-        s.addText(sd.title, { x: 0.5, y: 0.3, w: 9, h: 0.7, fontSize: 24, fontFace: "Microsoft YaHei", color: C.title, bold: true });
-        const tocItems = sd.bullets.map((b, idx) => ({ text: `${String(idx + 1).padStart(2, "0")}   ${b}`, options: { fontSize: 14, fontFace: "Microsoft YaHei", color: C.text, paraSpaceAfter: 10, lineSpacingMultiple: 1.6 } }));
-        s.addText(tocItems as any, { x: 0.8, y: 1.2, w: 8.4, h: 4.0, valign: "top" });
+        // ══════ TABLE OF CONTENTS ══════
+        s.background = { color: C.cream };
+        // Left accent bar
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.06, h: 5.63, fill: { color: C.copper } });
+        // Section label
+        s.addText("目录", {
+          x: 0.8, y: 0.4, w: 2, h: 0.35,
+          fontSize: 10, fontFace: F.body, color: C.copper, bold: true, charSpacing: 3,
+        });
+        // Title
+        s.addText(sd.title, {
+          x: 0.8, y: 0.8, w: 8, h: 0.6,
+          fontSize: 22, fontFace: F.title, color: C.text, bold: true,
+        });
+        // Divider
+        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 1.5, w: 8.4, h: 0.01, fill: { color: C.divider } });
+        // TOC items with numbers
+        const tocItems = sd.bullets.map((b, idx) => ({
+          text: `${String(idx + 1).padStart(2, "0")}`,
+          options: { fontSize: 20, fontFace: F.title, color: C.copper, bold: true, breakType: idx > 0 ? "n" as const : undefined, paraSpaceAfter: 4 }
+        }));
+        const tocDescs = sd.bullets.map((b) => ({
+          text: `    ${b}`,
+          options: { fontSize: 13, fontFace: F.body, color: C.text, paraSpaceAfter: 16, lineSpacingMultiple: 1.3 }
+        }));
+        // Interleave numbers and descriptions
+        const tocContent: any[] = [];
+        for (let t = 0; t < sd.bullets.length; t++) {
+          tocContent.push(tocItems[t], tocDescs[t]);
+        }
+        s.addText(tocContent, { x: 0.8, y: 1.7, w: 8.4, h: 3.5, valign: "top" });
+
+      } else if (sd.layout === "section_intro") {
+        // ══════ SECTION INTRO ══════
+        s.background = { color: C.warmGray };
+        // Top accent
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
+        // Large section number
+        s.addText("01", {
+          x: 0.8, y: 0.6, w: 2, h: 1.2,
+          fontSize: 48, fontFace: F.title, color: C.copper, bold: true, transparency: 30,
+        });
+        // Title
+        s.addText(sd.title, {
+          x: 0.8, y: 1.6, w: 8.4, h: 0.7,
+          fontSize: 24, fontFace: F.title, color: C.text, bold: true,
+        });
+        // Subtitle
+        if (sd.subtitle) {
+          s.addText(sd.subtitle, {
+            x: 0.8, y: 2.3, w: 8.4, h: 0.4,
+            fontSize: 13, fontFace: F.body, color: C.textLight, italic: true,
+          });
+        }
+        // Divider
+        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 2.9, w: 1.5, h: 0.02, fill: { color: C.copper } });
+        // Bullets
+        const introBullets = sd.bullets.map(b => ({
+          text: b,
+          options: {
+            fontSize: 13, fontFace: F.body, color: C.text,
+            bullet: { code: "2014" }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5,
+            indentLevel: 0,
+          },
+        }));
+        s.addText(introBullets as any, { x: 0.8, y: 3.2, w: 8.4, h: 2.0, valign: "top" });
+
       } else if (sd.layout === "case_study") {
-        s.background = { color: C.white };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent } });
+        // ══════ CASE STUDY SLIDE ══════
+        caseIndex++;
+        s.background = { color: C.cream };
+        // Top accent line
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.03, fill: { color: C.copper } });
+
         if (hasImage) {
-          s.addText(sd.title, { x: 0.6, y: 0.3, w: 4.6, h: 0.7, fontSize: 20, fontFace: "Microsoft YaHei", color: C.title, bold: true });
-          if (sd.subtitle) s.addText(sd.subtitle, { x: 0.6, y: 0.95, w: 4.6, h: 0.4, fontSize: 11, fontFace: "Microsoft YaHei", color: C.accent, italic: true });
+          // ── Layout: Image right (60/40 split) ──
+          // Left content area
+          // Case number badge
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 0.35, w: 0.55, h: 0.55, fill: { color: C.copper }, rectRadius: 0.06 });
+          s.addText(String(caseIndex).padStart(2, "0"), {
+            x: 0.6, y: 0.35, w: 0.55, h: 0.55,
+            fontSize: 14, fontFace: F.title, color: C.white, bold: true, align: "center", valign: "middle",
+          });
+          // Title
+          s.addText(sd.title, {
+            x: 1.3, y: 0.3, w: 3.8, h: 0.65,
+            fontSize: 18, fontFace: F.title, color: C.text, bold: true,
+            lineSpacingMultiple: 1.1,
+          });
+          // Subtitle (architect/location)
+          if (sd.subtitle) {
+            s.addText(sd.subtitle, {
+              x: 1.3, y: 0.95, w: 3.8, h: 0.35,
+              fontSize: 10, fontFace: F.body, color: C.copper, italic: true,
+            });
+          }
+          // Divider
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.4, w: 4.5, h: 0.01, fill: { color: C.divider } });
+          // Bullets
+          const caseBullets = sd.bullets.map(b => ({
+            text: b,
+            options: {
+              fontSize: 11, fontFace: F.body, color: C.text,
+              bullet: { code: "25AA", color: C.copper }, paraSpaceAfter: 7, lineSpacingMultiple: 1.4,
+            },
+          }));
+          s.addText(caseBullets as any, { x: 0.6, y: 1.55, w: 4.5, h: 3.2, valign: "top" });
+          // Source tag
+          if (sd.sourceName) {
+            s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 4.9, w: 1.8, h: 0.3, fill: { color: C.tagBg }, rectRadius: 0.04 });
+            s.addText(`来源：${sd.sourceName}`, {
+              x: 0.6, y: 4.9, w: 1.8, h: 0.3,
+              fontSize: 8, fontFace: F.body, color: C.textLight, align: "center", valign: "middle",
+            });
+          }
+          // Image (right side)
           const imgData = imageBase64Map.get(i)!;
-          s.addImage({ data: `image/${imgData.ext};base64,${imgData.data}`, x: 5.4, y: 0.3, w: 4.3, h: 3.2, rounding: true });
-          const bullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 12, fontFace: "Microsoft YaHei", color: C.text, bullet: { code: "25CF", color: C.accent }, paraSpaceAfter: 6, lineSpacingMultiple: 1.4 } }));
-          s.addText(bullets as any, { x: 0.6, y: 1.4, w: 4.6, h: 3.5, valign: "top" });
-          if (sd.sourceUrl) s.addText(`来源：${sd.sourceUrl}`, { x: 0.6, y: 5.1, w: 8, h: 0.3, fontSize: 7, fontFace: "Microsoft YaHei", color: C.subtitle, hyperlink: { url: sd.sourceUrl } });
+          s.addImage({
+            data: `image/${imgData.ext};base64,${imgData.data}`,
+            x: 5.3, y: 0.3, w: 4.4, h: 4.95,
+            rounding: true,
+          });
+          // Photo credit
+          s.addText("图片来源: Pexels", {
+            x: 5.3, y: 5.25, w: 4.4, h: 0.2,
+            fontSize: 7, fontFace: F.body, color: C.textLight, align: "right",
+          });
         } else {
-          s.addText(sd.title, { x: 0.8, y: 0.3, w: 8.4, h: 0.7, fontSize: 22, fontFace: "Microsoft YaHei", color: C.title, bold: true });
-          if (sd.subtitle) s.addText(sd.subtitle, { x: 0.8, y: 0.95, w: 8.4, h: 0.4, fontSize: 12, fontFace: "Microsoft YaHei", color: C.accent, italic: true });
-          const bullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 14, fontFace: "Microsoft YaHei", color: C.text, bullet: { code: "25CF", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.4 } }));
-          s.addText(bullets as any, { x: 0.8, y: 1.5, w: 8.4, h: 3.3, valign: "top" });
-          if (sd.sourceUrl) s.addText(`来源：${sd.sourceUrl}`, { x: 0.8, y: 5.1, w: 8, h: 0.3, fontSize: 7, fontFace: "Microsoft YaHei", color: C.subtitle, hyperlink: { url: sd.sourceUrl } });
+          // ── Layout: Text only (no image) ──
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 0.35, w: 0.55, h: 0.55, fill: { color: C.copper }, rectRadius: 0.06 });
+          s.addText(String(caseIndex).padStart(2, "0"), {
+            x: 0.6, y: 0.35, w: 0.55, h: 0.55,
+            fontSize: 14, fontFace: F.title, color: C.white, bold: true, align: "center", valign: "middle",
+          });
+          s.addText(sd.title, {
+            x: 1.3, y: 0.3, w: 8, h: 0.65,
+            fontSize: 20, fontFace: F.title, color: C.text, bold: true,
+          });
+          if (sd.subtitle) {
+            s.addText(sd.subtitle, {
+              x: 1.3, y: 0.95, w: 8, h: 0.35,
+              fontSize: 11, fontFace: F.body, color: C.copper, italic: true,
+            });
+          }
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.5, w: 8.8, h: 0.01, fill: { color: C.divider } });
+          const caseBullets = sd.bullets.map(b => ({
+            text: b,
+            options: {
+              fontSize: 13, fontFace: F.body, color: C.text,
+              bullet: { code: "25AA", color: C.copper }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5,
+            },
+          }));
+          s.addText(caseBullets as any, { x: 0.8, y: 1.7, w: 8.4, h: 3.0, valign: "top" });
+          if (sd.sourceName) {
+            s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 4.9, w: 1.8, h: 0.3, fill: { color: C.tagBg }, rectRadius: 0.04 });
+            s.addText(`来源：${sd.sourceName}`, {
+              x: 0.8, y: 4.9, w: 1.8, h: 0.3,
+              fontSize: 8, fontFace: F.body, color: C.textLight, align: "center", valign: "middle",
+            });
+          }
         }
-      } else if (sd.layout === "concept") {
-        s.background = { color: C.lightGray };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent } });
+        // Footer
+        s.addText(`N+1 STUDIOS  |  对标调研`, {
+          x: 7.5, y: 5.25, w: 2.2, h: 0.2,
+          fontSize: 7, fontFace: F.body, color: C.textLight, align: "right",
+        });
+
+      } else if (sd.layout === "insight") {
+        // ══════ INSIGHT / STRATEGY SLIDE ══════
+        s.background = { color: C.warmGray };
+        // Top accent
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.03, fill: { color: C.copper } });
+
         if (hasImage) {
+          // ── Layout: Full-width image top + text bottom ──
           const imgData = imageBase64Map.get(i)!;
-          s.addImage({ data: `image/${imgData.ext};base64,${imgData.data}`, x: 0.5, y: 0.3, w: 9.0, h: 3.2, rounding: true });
-          s.addText(sd.title, { x: 0.5, y: 3.6, w: 9, h: 0.5, fontSize: 18, fontFace: "Microsoft YaHei", color: C.title, bold: true });
-          const bullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 12, fontFace: "Microsoft YaHei", color: C.text, bullet: { code: "25B8", color: C.accent }, paraSpaceAfter: 5, lineSpacingMultiple: 1.3 } }));
-          s.addText(bullets as any, { x: 0.5, y: 4.15, w: 9, h: 1.2, valign: "top" });
-          s.addText("配图来源：Pexels", { x: 0.5, y: 5.1, w: 4, h: 0.3, fontSize: 7, fontFace: "Microsoft YaHei", color: C.subtitle });
+          s.addImage({
+            data: `image/${imgData.ext};base64,${imgData.data}`,
+            x: 0.5, y: 0.3, w: 9.0, h: 2.8,
+            rounding: true,
+          });
+          // Title below image
+          s.addText(sd.title, {
+            x: 0.5, y: 3.25, w: 9, h: 0.5,
+            fontSize: 18, fontFace: F.title, color: C.text, bold: true,
+          });
+          // Divider
+          s.addShape(pptx.ShapeType.rect, { x: 0.5, y: 3.8, w: 1.2, h: 0.02, fill: { color: C.copper } });
+          // Bullets
+          const insightBullets = sd.bullets.map(b => ({
+            text: b,
+            options: {
+              fontSize: 11, fontFace: F.body, color: C.text,
+              bullet: { code: "25B8", color: C.copper }, paraSpaceAfter: 6, lineSpacingMultiple: 1.3,
+            },
+          }));
+          s.addText(insightBullets as any, { x: 0.5, y: 3.95, w: 9, h: 1.3, valign: "top" });
+          s.addText("图片来源: Pexels", {
+            x: 7.5, y: 5.25, w: 2, h: 0.2,
+            fontSize: 7, fontFace: F.body, color: C.textLight, align: "right",
+          });
         } else {
-          s.addText(sd.title, { x: 0.8, y: 0.3, w: 8.4, h: 0.7, fontSize: 22, fontFace: "Microsoft YaHei", color: C.title, bold: true });
-          const bullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 14, fontFace: "Microsoft YaHei", color: C.text, bullet: { code: "25B8", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.4 } }));
-          s.addText(bullets as any, { x: 0.8, y: 1.2, w: 8.4, h: 4.0, valign: "top" });
+          // ── Text-only insight ──
+          s.addText(sd.title, {
+            x: 0.8, y: 0.5, w: 8.4, h: 0.6,
+            fontSize: 22, fontFace: F.title, color: C.text, bold: true,
+          });
+          if (sd.subtitle) {
+            s.addText(sd.subtitle, {
+              x: 0.8, y: 1.1, w: 8.4, h: 0.35,
+              fontSize: 12, fontFace: F.body, color: C.copper, italic: true,
+            });
+          }
+          s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 1.6, w: 1.5, h: 0.02, fill: { color: C.copper } });
+          const insightBullets = sd.bullets.map(b => ({
+            text: b,
+            options: {
+              fontSize: 13, fontFace: F.body, color: C.text,
+              bullet: { code: "25B8", color: C.copper }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5,
+            },
+          }));
+          s.addText(insightBullets as any, { x: 0.8, y: 1.8, w: 8.4, h: 3.5, valign: "top" });
         }
+
       } else if (sd.layout === "summary") {
-        s.background = { color: C.darkBg };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.08, fill: { color: C.accent } });
-        s.addText(sd.title, { x: 0.8, y: 0.4, w: 8.4, h: 0.8, fontSize: 24, fontFace: "Microsoft YaHei", color: C.white, bold: true });
-        const summaryBullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 13, fontFace: "Microsoft YaHei", color: C.lightGray, bullet: { code: "25B8", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.5 } }));
-        s.addText(summaryBullets as any, { x: 0.8, y: 1.4, w: 8.4, h: 3.8, valign: "top" });
-        s.addText("N+1 STUDIOS | 谢谢", { x: 0.8, y: 5.1, w: 8.4, h: 0.3, fontSize: 10, fontFace: "Microsoft YaHei", color: C.accent });
+        // ══════ SUMMARY / CLOSING SLIDE ══════
+        s.background = { color: C.charcoal };
+        // Top accent
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
+        // Decorative vertical line
+        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 0.6, w: 0.03, h: 1.5, fill: { color: C.copper } });
+        // Title
+        s.addText(sd.title, {
+          x: 1.1, y: 0.7, w: 8, h: 0.7,
+          fontSize: 24, fontFace: F.title, color: C.white, bold: true,
+        });
+        // Subtitle
+        if (sd.subtitle) {
+          s.addText(sd.subtitle, {
+            x: 1.1, y: 1.4, w: 8, h: 0.35,
+            fontSize: 12, fontFace: F.body, color: C.copperLight,
+          });
+        }
+        // Divider
+        s.addShape(pptx.ShapeType.rect, { x: 1.1, y: 2.1, w: 8, h: 0.01, fill: { color: C.copper, transparency: 50 } });
+        // Summary bullets
+        const summaryBullets = sd.bullets.map(b => ({
+          text: b,
+          options: {
+            fontSize: 12, fontFace: F.body, color: C.textOnDark,
+            bullet: { code: "25B8", color: C.copper }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5,
+          },
+        }));
+        s.addText(summaryBullets as any, { x: 1.1, y: 2.3, w: 8, h: 2.5, valign: "top" });
+        // Footer
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.0, w: 10, h: 0.63, fill: { color: C.slate } });
+        s.addText("N+1 STUDIOS", {
+          x: 0.8, y: 5.05, w: 3, h: 0.5,
+          fontSize: 14, fontFace: F.title, color: C.copper, bold: true,
+        });
+        s.addText("感谢您的关注", {
+          x: 6, y: 5.05, w: 3.5, h: 0.5,
+          fontSize: 11, fontFace: F.body, color: C.textLight, align: "right",
+        });
+
       } else {
-        s.background = { color: C.white };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent } });
-        s.addText(sd.title, { x: 0.8, y: 0.3, w: 8.4, h: 0.7, fontSize: 22, fontFace: "Microsoft YaHei", color: C.title, bold: true });
-        if (sd.subtitle) s.addText(sd.subtitle, { x: 0.8, y: 0.95, w: 8.4, h: 0.4, fontSize: 12, fontFace: "Microsoft YaHei", color: C.accent, italic: true });
-        const textBullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 14, fontFace: "Microsoft YaHei", color: C.text, bullet: { code: "25CF", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.4 } }));
-        s.addText(textBullets as any, { x: 0.8, y: 1.5, w: 8.4, h: 3.8, valign: "top" });
-        s.addText("N+1 STUDIOS", { x: 0.8, y: 5.1, w: 4, h: 0.3, fontSize: 8, fontFace: "Microsoft YaHei", color: C.subtitle });
+        // ══════ FALLBACK / TEXT_ONLY ══════
+        s.background = { color: C.cream };
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.03, fill: { color: C.copper } });
+        s.addText(sd.title, {
+          x: 0.8, y: 0.4, w: 8.4, h: 0.6,
+          fontSize: 22, fontFace: F.title, color: C.text, bold: true,
+        });
+        if (sd.subtitle) {
+          s.addText(sd.subtitle, {
+            x: 0.8, y: 1.0, w: 8.4, h: 0.35,
+            fontSize: 12, fontFace: F.body, color: C.copper, italic: true,
+          });
+        }
+        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 1.5, w: 1.5, h: 0.02, fill: { color: C.copper } });
+        const textBullets = sd.bullets.map(b => ({
+          text: b,
+          options: {
+            fontSize: 13, fontFace: F.body, color: C.text,
+            bullet: { code: "2014" }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5,
+          },
+        }));
+        s.addText(textBullets as any, { x: 0.8, y: 1.7, w: 8.4, h: 3.5, valign: "top" });
+        s.addText("N+1 STUDIOS", {
+          x: 7.5, y: 5.25, w: 2.2, h: 0.2,
+          fontSize: 7, fontFace: F.body, color: C.textLight, align: "right",
+        });
       }
     }
 
@@ -698,367 +971,19 @@ ${siteUrls}
       return { status: "processing" as const, progress: job.progress || 0, stage: job.stage || "structuring" };
     }),
 
-  // Legacy sync endpoint kept for backward compatibility (unused by new frontend)
+  // Legacy sync endpoint - redirects to async version
   exportPpt: protectedProcedure
     .input(z.object({ content: z.string().min(1), title: z.string().min(1), projectType: z.string().optional() }))
     .mutation(async ({ input }) => {
-      // Step 1: Use LLM to structure the report into ~15 slides
-      // Key change: each case page must include a sourceUrl for real photo scraping
-      // and a pexelsQuery for design concept pages
-      const structureResponse = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `你是 N+1 STUDIOS 的建筑设计 PPT 制作专家。请将以下对标调研报告转换为约 15 页的 PPT 结构。
-
-要求：
-- 第1页：封面（layout: cover）
-- 第2页：目录页（layout: toc）
-- 第3页：项目概述与调研目标（layout: text_only）
-- 第4-12页：对标案例详细分析（每个案例 1-2 页，layout: case_study）
-- 第13页：设计策略建议汇总（layout: concept，配图用 Pexels 图库）
-- 第14页：材料与工艺参考（layout: concept，配图用 Pexels 图库）
-- 第15页：总结与下一步建议（layout: summary）
-
-**关键区分**：
-- case_study 页：用于对标案例介绍。必须提供 sourceUrl 字段，填写报告中该案例的真实来源网页 URL（如 ArchDaily、Dezeen 等网站的项目页面）。这些页面的真实照片将被抓取作为 PPT 配图。
-- concept 页：用于设计思路、材料工艺等。提供 pexelsQuery 字段（英文），用于从 Pexels 图库搜索配图。
-
-每页字段：
-- title: 标题
-- subtitle: 副标题（可为空字符串）
-- bullets: 要点数组，每项不超过40字
-- sourceUrl: 案例来源网页 URL（仅 case_study 页面填写，其他页填空字符串）
-- pexelsQuery: Pexels 图片搜索关键词（仅 concept 页面填写，英文，如 "modern office interior design materials"，其他页填空字符串）
-- layout: cover / toc / text_only / case_study / concept / summary`
-          },
-          { role: "user", content: `项目类型：${input.projectType || "办公空间"}\n\n${input.content}` }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "ppt_structure_v2",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                slides: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      title: { type: "string" },
-                      subtitle: { type: "string" },
-                      bullets: { type: "array", items: { type: "string" } },
-                      sourceUrl: { type: "string" },
-                      pexelsQuery: { type: "string" },
-                      layout: { type: "string", enum: ["cover", "toc", "text_only", "case_study", "concept", "summary"] }
-                    },
-                    required: ["title", "subtitle", "bullets", "sourceUrl", "pexelsQuery", "layout"],
-                    additionalProperties: false
-                  }
-                }
-              },
-              required: ["slides"],
-              additionalProperties: false
-            }
-          }
-        }
-      });
-
-      const structureContent = typeof structureResponse.choices[0]?.message?.content === 'string'
-        ? structureResponse.choices[0].message.content
-        : '{"slides":[]}';
-
-      const slideData = JSON.parse(structureContent) as {
-        slides: Array<{
-          title: string;
-          subtitle: string;
-          bullets: string[];
-          sourceUrl: string;
-          pexelsQuery: string;
-          layout: string;
-        }>
-      };
-
-      // Step 2: Scrape real case photos from source URLs + search Pexels for concept pages
-      const imageBase64Map: Map<number, { data: string; ext: string }> = new Map();
-
-      // 2a: Scrape case study pages for real photos
-      const caseSlides = slideData.slides
-        .map((s, i) => ({ index: i, url: s.sourceUrl, layout: s.layout }))
-        .filter(s => s.layout === "case_study" && s.url && s.url.startsWith("http"));
-
-      for (const cs of caseSlides) {
-        try {
-          const scraped = await scrapeProjectPage(cs.url);
-          if (scraped && scraped.images.length > 0) {
-            // Download the best image (first one, usually hero image)
-            const imgUrl = scraped.images[0].url;
-            const b64 = await downloadImageAsBase64(imgUrl);
-            if (b64) {
-              // Extract mime type from data URI
-              const mimeMatch = b64.match(/^data:(image\/\w+);/);
-              const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpeg';
-              const rawB64 = b64.replace(/^data:image\/\w+;base64,/, '');
-              imageBase64Map.set(cs.index, { data: rawB64, ext });
-            }
-          }
-        } catch (err) {
-          console.error(`[PPT] Failed to scrape case ${cs.url}:`, err);
-        }
+      // Use the async pipeline and wait for it
+      const jobId = nanoid();
+      pptJobStore.set(jobId, { status: "processing", progress: 5, stage: "structuring" });
+      await generatePptInBackground(jobId, input);
+      const job = pptJobStore.get(jobId);
+      if (job?.status === "done") {
+        return { url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount };
       }
-
-      // 2b: Search Pexels for concept/design pages
-      const conceptSlides = slideData.slides
-        .map((s, i) => ({ index: i, query: s.pexelsQuery, layout: s.layout }))
-        .filter(s => s.layout === "concept" && s.query && s.query.trim().length > 0);
-
-      for (const cs of conceptSlides) {
-        try {
-          const pexelsResults = await searchPexelsImages(cs.query, 1);
-          if (pexelsResults.length > 0 && pexelsResults[0].url) {
-            const b64 = await downloadImageAsBase64(pexelsResults[0].url);
-            if (b64) {
-              const mimeMatch = b64.match(/^data:(image\/\w+);/);
-              const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpeg';
-              const rawB64 = b64.replace(/^data:image\/\w+;base64,/, '');
-              imageBase64Map.set(cs.index, { data: rawB64, ext });
-            }
-          }
-        } catch (err) {
-          console.error(`[PPT] Failed to fetch Pexels image for "${cs.query}":`, err);
-        }
-      }
-
-      // Step 4: Build PPTX with pptxgenjs
-      const PptxCtor = await getPptxGenJS();
-      const pptx = new PptxCtor();
-      pptx.author = "N+1 STUDIOS";
-      pptx.company = "N+1 STUDIOS";
-      pptx.title = `${input.title} - 对标调研报告`;
-      pptx.layout = "LAYOUT_16x9";
-
-      const C = {
-        bg: "F5F0EB", darkBg: "2C2C2C", title: "2C2C2C", subtitle: "6B6560",
-        accent: "C17F59", text: "3D3D3D", white: "FFFFFF", lightGray: "F0ECE7",
-      };
-
-      for (let i = 0; i < slideData.slides.length; i++) {
-        const sd = slideData.slides[i];
-        const s = pptx.addSlide();
-        const hasImage = imageBase64Map.has(i);
-
-        if (sd.layout === "cover") {
-          // ── Cover Slide ──
-          s.background = { color: C.darkBg };
-          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.08, fill: { color: C.accent } });
-          s.addText(sd.title, {
-            x: 0.8, y: 1.8, w: 8.4, h: 1.2,
-            fontSize: 36, fontFace: "Microsoft YaHei", color: C.white, bold: true,
-          });
-          s.addText(sd.subtitle || "对标调研报告", {
-            x: 0.8, y: 3.1, w: 8.4, h: 0.6,
-            fontSize: 18, fontFace: "Microsoft YaHei", color: C.accent,
-          });
-          s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 3.9, w: 1.5, h: 0.04, fill: { color: C.accent } });
-          s.addText(`N+1 STUDIOS | ${new Date().toLocaleDateString("zh-CN")}`, {
-            x: 0.8, y: 4.6, w: 8.4, h: 0.4,
-            fontSize: 11, fontFace: "Microsoft YaHei", color: C.subtitle,
-          });
-
-        } else if (sd.layout === "toc") {
-          // ── Table of Contents ──
-          s.background = { color: C.white };
-          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.12, h: 5.63, fill: { color: C.accent } });
-          s.addText(sd.title, {
-            x: 0.5, y: 0.3, w: 9, h: 0.7,
-            fontSize: 24, fontFace: "Microsoft YaHei", color: C.title, bold: true,
-          });
-          const tocItems = sd.bullets.map((b, idx) => ({
-            text: `${String(idx + 1).padStart(2, "0")}   ${b}`,
-            options: {
-              fontSize: 14, fontFace: "Microsoft YaHei", color: C.text,
-              paraSpaceAfter: 10, lineSpacingMultiple: 1.6,
-            },
-          }));
-          s.addText(tocItems as any, { x: 0.8, y: 1.2, w: 8.4, h: 4.0, valign: "top" });
-
-        } else if (sd.layout === "case_study") {
-          // ── Case Study: real scraped photo + text ──
-          s.background = { color: C.white };
-          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent } });
-
-          if (hasImage) {
-            // Split layout: text left, real photo right
-            s.addText(sd.title, {
-              x: 0.6, y: 0.3, w: 4.6, h: 0.7,
-              fontSize: 20, fontFace: "Microsoft YaHei", color: C.title, bold: true,
-            });
-            if (sd.subtitle) {
-              s.addText(sd.subtitle, {
-                x: 0.6, y: 0.95, w: 4.6, h: 0.4,
-                fontSize: 11, fontFace: "Microsoft YaHei", color: C.accent, italic: true,
-              });
-            }
-            const imgData = imageBase64Map.get(i)!;
-            s.addImage({
-              data: `image/${imgData.ext};base64,${imgData.data}`,
-              x: 5.4, y: 0.3, w: 4.3, h: 3.2,
-              rounding: true,
-            });
-            const bullets = sd.bullets.map(b => ({
-              text: b,
-              options: {
-                fontSize: 12, fontFace: "Microsoft YaHei", color: C.text,
-                bullet: { code: "25CF", color: C.accent }, paraSpaceAfter: 6, lineSpacingMultiple: 1.4,
-              },
-            }));
-            s.addText(bullets as any, { x: 0.6, y: 1.4, w: 4.6, h: 3.5, valign: "top" });
-            // Source attribution
-            if (sd.sourceUrl) {
-              s.addText(`来源：${sd.sourceUrl}`, {
-                x: 0.6, y: 5.1, w: 8, h: 0.3,
-                fontSize: 7, fontFace: "Microsoft YaHei", color: C.subtitle,
-                hyperlink: { url: sd.sourceUrl },
-              });
-            }
-          } else {
-            // No image scraped: full-width text layout
-            s.addText(sd.title, {
-              x: 0.8, y: 0.3, w: 8.4, h: 0.7,
-              fontSize: 22, fontFace: "Microsoft YaHei", color: C.title, bold: true,
-            });
-            if (sd.subtitle) {
-              s.addText(sd.subtitle, {
-                x: 0.8, y: 0.95, w: 8.4, h: 0.4,
-                fontSize: 12, fontFace: "Microsoft YaHei", color: C.accent, italic: true,
-              });
-            }
-            const bullets = sd.bullets.map(b => ({
-              text: b,
-              options: {
-                fontSize: 14, fontFace: "Microsoft YaHei", color: C.text,
-                bullet: { code: "25CF", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.4,
-              },
-            }));
-            s.addText(bullets as any, { x: 0.8, y: 1.5, w: 8.4, h: 3.3, valign: "top" });
-            if (sd.sourceUrl) {
-              s.addText(`来源：${sd.sourceUrl}`, {
-                x: 0.8, y: 5.1, w: 8, h: 0.3,
-                fontSize: 7, fontFace: "Microsoft YaHei", color: C.subtitle,
-                hyperlink: { url: sd.sourceUrl },
-              });
-            }
-          }
-
-        } else if (sd.layout === "concept") {
-          // ── Design Concept: Pexels photo + text ──
-          s.background = { color: C.lightGray };
-          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent } });
-
-          if (hasImage) {
-            // Large image top, text bottom
-            const imgData = imageBase64Map.get(i)!;
-            s.addImage({
-              data: `image/${imgData.ext};base64,${imgData.data}`,
-              x: 0.5, y: 0.3, w: 9.0, h: 3.2,
-              rounding: true,
-            });
-            s.addText(sd.title, {
-              x: 0.5, y: 3.6, w: 9, h: 0.5,
-              fontSize: 18, fontFace: "Microsoft YaHei", color: C.title, bold: true,
-            });
-            const bullets = sd.bullets.map(b => ({
-              text: b,
-              options: {
-                fontSize: 12, fontFace: "Microsoft YaHei", color: C.text,
-                bullet: { code: "25B8", color: C.accent }, paraSpaceAfter: 5, lineSpacingMultiple: 1.3,
-              },
-            }));
-            s.addText(bullets as any, { x: 0.5, y: 4.15, w: 9, h: 1.2, valign: "top" });
-            s.addText("配图来源：Pexels", {
-              x: 0.5, y: 5.1, w: 4, h: 0.3,
-              fontSize: 7, fontFace: "Microsoft YaHei", color: C.subtitle,
-            });
-          } else {
-            // No Pexels image: text-only fallback
-            s.addText(sd.title, {
-              x: 0.8, y: 0.3, w: 8.4, h: 0.7,
-              fontSize: 22, fontFace: "Microsoft YaHei", color: C.title, bold: true,
-            });
-            const bullets = sd.bullets.map(b => ({
-              text: b,
-              options: {
-                fontSize: 14, fontFace: "Microsoft YaHei", color: C.text,
-                bullet: { code: "25B8", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.4,
-              },
-            }));
-            s.addText(bullets as any, { x: 0.8, y: 1.2, w: 8.4, h: 4.0, valign: "top" });
-          }
-
-        } else if (sd.layout === "summary") {
-          // ── Summary Slide ──
-          s.background = { color: C.darkBg };
-          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.08, fill: { color: C.accent } });
-          s.addText(sd.title, {
-            x: 0.8, y: 0.4, w: 8.4, h: 0.8,
-            fontSize: 24, fontFace: "Microsoft YaHei", color: C.white, bold: true,
-          });
-          const summaryBullets = sd.bullets.map(b => ({
-            text: b,
-            options: {
-              fontSize: 13, fontFace: "Microsoft YaHei", color: C.lightGray,
-              bullet: { code: "25B8", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.5,
-            },
-          }));
-          s.addText(summaryBullets as any, { x: 0.8, y: 1.4, w: 8.4, h: 3.8, valign: "top" });
-          s.addText("N+1 STUDIOS | 谢谢", {
-            x: 0.8, y: 5.1, w: 8.4, h: 0.3,
-            fontSize: 10, fontFace: "Microsoft YaHei", color: C.accent,
-          });
-
-        } else {
-          // ── Default text_only / fallback ──
-          s.background = { color: C.white };
-          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent } });
-          s.addText(sd.title, {
-            x: 0.8, y: 0.3, w: 8.4, h: 0.7,
-            fontSize: 22, fontFace: "Microsoft YaHei", color: C.title, bold: true,
-          });
-          if (sd.subtitle) {
-            s.addText(sd.subtitle, {
-              x: 0.8, y: 0.95, w: 8.4, h: 0.4,
-              fontSize: 12, fontFace: "Microsoft YaHei", color: C.accent, italic: true,
-            });
-          }
-          const textBullets = sd.bullets.map(b => ({
-            text: b,
-            options: {
-              fontSize: 14, fontFace: "Microsoft YaHei", color: C.text,
-              bullet: { code: "25CF", color: C.accent }, paraSpaceAfter: 8, lineSpacingMultiple: 1.4,
-            },
-          }));
-          s.addText(textBullets as any, { x: 0.8, y: 1.5, w: 8.4, h: 3.8, valign: "top" });
-          s.addText("N+1 STUDIOS", {
-            x: 0.8, y: 5.1, w: 4, h: 0.3,
-            fontSize: 8, fontFace: "Microsoft YaHei", color: C.subtitle,
-          });
-        }
-      }
-
-      // Step 5: Export PPTX and upload to S3
-      const pptxBase64 = await pptx.write({ outputType: "base64" }) as string;
-      const pptxBuffer = Buffer.from(pptxBase64, "base64");
-      const fileKey = `pptx/${nanoid()}-${input.title}.pptx`;
-      const { url } = await storagePut(fileKey, pptxBuffer, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-
-      return {
-        url,
-        title: input.title,
-        slideCount: slideData.slides.length,
-        imageCount: imageBase64Map.size,
-      };
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PPT 生成失败" });
     }),
 });
 
