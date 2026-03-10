@@ -1042,15 +1042,53 @@ const renderingRouter = router({
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
 
-      // Build prompt with style, aspect ratio, and resolution hints
+      // Build prompt with style
       let fullPrompt = input.prompt;
       if (input.style) fullPrompt += `, style: ${input.style}`;
-      if (input.aspectRatio) fullPrompt += `, aspect ratio: ${input.aspectRatio}`;
-      if (input.resolution === "hd") fullPrompt += `, high resolution, detailed`;
-      if (input.resolution === "ultra") fullPrompt += `, ultra high resolution, extremely detailed, 4K`;
+
+      // Calculate image size from aspect ratio and resolution
+      const resolutionMap: Record<string, number> = {
+        standard: 1024,
+        hd: 1536,
+        ultra: 2048,
+      };
+      const baseSize = resolutionMap[input.resolution || "standard"] || 1024;
+
+      const aspectRatioMap: Record<string, [number, number]> = {
+        "1:1": [1, 1],
+        "4:3": [4, 3],
+        "3:2": [3, 2],
+        "16:9": [16, 9],
+        "9:16": [9, 16],
+        "3:4": [3, 4],
+      };
+
+      let imageSize: string | undefined;
+      const ratioEntry = input.aspectRatio ? aspectRatioMap[input.aspectRatio] : undefined;
+      if (ratioEntry) {
+        const [rw, rh] = ratioEntry;
+        const ratio = rw / rh;
+        let w: number, h: number;
+        if (ratio >= 1) {
+          w = baseSize;
+          h = Math.round(baseSize / ratio);
+        } else {
+          h = baseSize;
+          w = Math.round(baseSize * ratio);
+        }
+        // Round to nearest 64 for model compatibility
+        w = Math.round(w / 64) * 64;
+        h = Math.round(h / 64) * 64;
+        imageSize = `${w}x${h}`;
+      } else if (input.resolution && input.resolution !== "standard") {
+        imageSize = `${baseSize}x${baseSize}`;
+      }
 
       try {
         const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
+        if (imageSize) {
+          genOpts.size = imageSize;
+        }
 
         // Collect original images: reference + optional material
         const originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];

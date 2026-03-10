@@ -25,6 +25,7 @@ export type GenerateImageOptions = {
     b64Json?: string;
     mimeType?: string;
   }>;
+  size?: string; // e.g. "1024x1024", "1536x1024", "1024x1536"
 };
 
 export type GenerateImageResponse = {
@@ -61,6 +62,7 @@ export async function generateImage(
     body: JSON.stringify({
       prompt: options.prompt,
       original_images: options.originalImages || [],
+      ...(options.size ? { size: options.size } : {}),
     }),
   });
 

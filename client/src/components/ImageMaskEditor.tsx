@@ -12,41 +12,46 @@ interface ImageMaskEditorProps {
 export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMaskEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [tool, setTool] = useState<"brush" | "eraser">("brush");
   const [imageLoaded, setImageLoaded] = useState(false);
-  const imgRef = useRef<HTMLImageElement | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
 
-  // Load image and set up canvas
-  useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      imgRef.current = img;
-      setImageLoaded(true);
+  // When the <img> element loads, calculate canvas dimensions
+  const handleImageLoad = useCallback(() => {
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!img || !container) return;
 
-      // Calculate canvas size to fit container while maintaining aspect ratio
-      const container = containerRef.current;
-      if (!container) return;
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    setNaturalSize({ width: nw, height: nh });
 
-      const containerWidth = container.clientWidth;
-      const maxHeight = 500;
-      const ratio = img.width / img.height;
+    const containerWidth = container.clientWidth;
+    const maxHeight = 500;
+    const ratio = nw / nh;
 
-      let canvasW = containerWidth;
-      let canvasH = containerWidth / ratio;
+    let canvasW = containerWidth;
+    let canvasH = containerWidth / ratio;
 
-      if (canvasH > maxHeight) {
-        canvasH = maxHeight;
-        canvasW = maxHeight * ratio;
-      }
+    if (canvasH > maxHeight) {
+      canvasH = maxHeight;
+      canvasW = maxHeight * ratio;
+    }
 
-      setCanvasSize({ width: Math.round(canvasW), height: Math.round(canvasH) });
-    };
-    img.src = imageUrl;
-  }, [imageUrl]);
+    setCanvasSize({ width: Math.round(canvasW), height: Math.round(canvasH) });
+    setImageLoaded(true);
+    setLoadError(false);
+  }, []);
+
+  const handleImageError = useCallback(() => {
+    setLoadError(true);
+    setImageLoaded(false);
+  }, []);
 
   // Initialize canvas once size is set
   useEffect(() => {
@@ -54,8 +59,6 @@ export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMas
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
-    // Clear canvas (transparent = no mask)
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }, [imageLoaded, canvasSize]);
 
@@ -120,13 +123,13 @@ export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMas
 
   const handleSave = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !imgRef.current) return;
+    if (!canvas || naturalSize.width === 0) return;
 
     // Create a mask image at the original image resolution
     // White = area to edit, Black = area to keep
     const maskCanvas = document.createElement("canvas");
-    maskCanvas.width = imgRef.current.width;
-    maskCanvas.height = imgRef.current.height;
+    maskCanvas.width = naturalSize.width;
+    maskCanvas.height = naturalSize.height;
     const maskCtx = maskCanvas.getContext("2d");
     if (!maskCtx) return;
 
@@ -135,8 +138,8 @@ export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMas
     maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
 
     // Scale the drawn mask to the original image size
-    const scaleX = imgRef.current.width / canvasSize.width;
-    const scaleY = imgRef.current.height / canvasSize.height;
+    const scaleX = naturalSize.width / canvasSize.width;
+    const scaleY = naturalSize.height / canvasSize.height;
 
     // Get the drawn mask data
     const ctx = canvas.getContext("2d");
@@ -164,7 +167,7 @@ export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMas
 
     const dataUrl = maskCanvas.toDataURL("image/png");
     onSave(dataUrl);
-  }, [canvasSize, onSave]);
+  }, [canvasSize, naturalSize, onSave]);
 
   return (
     <div className="space-y-3">
@@ -208,34 +211,53 @@ export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMas
 
       {/* Canvas area */}
       <div ref={containerRef} className="relative rounded-lg overflow-hidden border border-border bg-muted">
+        {/* Always render the img element so it can load; hide it before loaded */}
+        <img
+          ref={imgRef}
+          src={imageUrl}
+          alt="参考图"
+          crossOrigin="anonymous"
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          style={
+            imageLoaded && canvasSize.width > 0
+              ? { width: canvasSize.width, height: canvasSize.height, display: "block" }
+              : { display: "none" }
+          }
+          draggable={false}
+        />
+
         {imageLoaded && canvasSize.width > 0 && (
-          <>
-            <img
-              src={imageUrl}
-              alt="参考图"
-              style={{ width: canvasSize.width, height: canvasSize.height }}
-              className="block"
-              draggable={false}
-            />
-            <canvas
-              ref={canvasRef}
-              width={canvasSize.width}
-              height={canvasSize.height}
-              className="absolute inset-0 cursor-crosshair"
-              style={{ touchAction: "none" }}
-              onMouseDown={handlePointerDown}
-              onMouseMove={handlePointerMove}
-              onMouseUp={handlePointerUp}
-              onMouseLeave={handlePointerUp}
-              onTouchStart={handlePointerDown}
-              onTouchMove={handlePointerMove}
-              onTouchEnd={handlePointerUp}
-            />
-          </>
+          <canvas
+            ref={canvasRef}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            className="absolute inset-0 cursor-crosshair"
+            style={{ touchAction: "none" }}
+            onMouseDown={handlePointerDown}
+            onMouseMove={handlePointerMove}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchMove={handlePointerMove}
+            onTouchEnd={handlePointerUp}
+          />
         )}
-        {!imageLoaded && (
+
+        {!imageLoaded && !loadError && (
           <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-            加载图片中...
+            <div className="flex flex-col items-center gap-2">
+              <div className="h-5 w-5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+              加载图片中...
+            </div>
+          </div>
+        )}
+
+        {loadError && (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
+            <X className="h-6 w-6 text-destructive/60" />
+            <p>图片加载失败</p>
+            <p className="text-[11px] text-muted-foreground/60">请尝试重新上传图片后再标注</p>
           </div>
         )}
       </div>
@@ -250,7 +272,7 @@ export default function ImageMaskEditor({ imageUrl, onSave, onCancel }: ImageMas
           <X className="h-3.5 w-3.5 mr-1" />
           取消标注
         </Button>
-        <Button size="sm" onClick={handleSave}>
+        <Button size="sm" onClick={handleSave} disabled={!imageLoaded}>
           <Check className="h-3.5 w-3.5 mr-1" />
           确认标注
         </Button>

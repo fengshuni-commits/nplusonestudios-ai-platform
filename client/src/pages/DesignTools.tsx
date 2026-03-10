@@ -3,14 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import AiToolSelector from "@/components/AiToolSelector";
 import ImageMaskEditor from "@/components/ImageMaskEditor";
 import { trpc } from "@/lib/trpc";
 import {
   Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus,
-  RefreshCw, Paintbrush, Plus, RatioIcon, MonitorIcon,
+  RefreshCw, Paintbrush, Plus, RatioIcon, MonitorIcon, FolderOpen, Search, Check,
 } from "lucide-react";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 
@@ -35,12 +38,12 @@ export default function DesignTools() {
   const [showMaskEditor, setShowMaskEditor] = useState(false);
   const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
 
-  // Material image state
-  const [materialFile, setMaterialFile] = useState<File | null>(null);
-  const [materialPreview, setMaterialPreview] = useState<string | null>(null);
+  // Material from asset library
   const [materialUrl, setMaterialUrl] = useState<string | null>(null);
   const [materialName, setMaterialName] = useState<string | null>(null);
-  const materialInputRef = useRef<HTMLInputElement>(null);
+  const [materialPreview, setMaterialPreview] = useState<string | null>(null);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetSearch, setAssetSearch] = useState("");
 
   // Edit chain tracking
   const [parentHistoryId, setParentHistoryId] = useState<number | undefined>(undefined);
@@ -49,6 +52,27 @@ export default function DesignTools() {
   const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
+
+  // Fetch assets for the picker
+  const { data: allAssets } = trpc.assets.list.useQuery(undefined, {
+    enabled: showAssetPicker,
+  });
+
+  // Filter assets to images only, with search
+  const imageAssets = useMemo(() => {
+    if (!allAssets) return [];
+    return allAssets.filter((a: any) => {
+      const isImage = a.fileType?.startsWith("image/") ||
+        /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(a.fileUrl || "") ||
+        a.category === "image";
+      if (!isImage) return false;
+      if (assetSearch.trim()) {
+        const q = assetSearch.toLowerCase();
+        return (a.name?.toLowerCase().includes(q) || a.tags?.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q));
+      }
+      return true;
+    });
+  }, [allAssets, assetSearch]);
 
   // Check URL params for reference image (from history page)
   const searchString = useSearch();
@@ -151,23 +175,20 @@ export default function DesignTools() {
     e.stopPropagation();
   }, []);
 
-  // ─── Material image handlers ──────────────────────────
-  const handleMaterialFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !validateImageFile(file)) return;
-    setMaterialFile(file);
-    setMaterialUrl(null);
-    setMaterialName(file.name);
-    const dataUrl = await readFileAsDataUrl(file);
-    setMaterialPreview(dataUrl);
-  }, [validateImageFile, readFileAsDataUrl]);
+  // ─── Material from asset library ──────────────────────
+  const handleSelectAsset = useCallback((asset: any) => {
+    setMaterialUrl(asset.fileUrl);
+    setMaterialPreview(asset.thumbnailUrl || asset.fileUrl);
+    setMaterialName(asset.name);
+    setShowAssetPicker(false);
+    setAssetSearch("");
+    toast.success(`已选择素材: ${asset.name}`);
+  }, []);
 
   const handleRemoveMaterial = useCallback(() => {
-    setMaterialFile(null);
-    setMaterialPreview(null);
     setMaterialUrl(null);
+    setMaterialPreview(null);
     setMaterialName(null);
-    if (materialInputRef.current) materialInputRef.current.value = "";
   }, []);
 
   // ─── Use generated image as reference ─────────────────
@@ -239,27 +260,9 @@ export default function DesignTools() {
         setIsUploading(false);
       }
 
-      // Upload material image if present
+      // Material image from asset library
       if (materialUrl) {
         materialImageUrl = materialUrl;
-      } else if (materialFile) {
-        setIsUploading(true);
-        try {
-          const base64 = await fileToBase64(materialFile);
-          const uploadResult = await uploadMutation.mutateAsync({
-            fileName: materialFile.name,
-            fileData: base64,
-            contentType: materialFile.type,
-            folder: "material-images",
-          });
-          materialImageUrl = uploadResult.url;
-        } catch {
-          toast.error("素材图片上传失败");
-          setIsGenerating(false);
-          setIsUploading(false);
-          return;
-        }
-        setIsUploading(false);
       }
 
       // Include mask data if available
@@ -315,20 +318,10 @@ export default function DesignTools() {
   const refDisplayStyle = (() => {
     if (!refImgDimensions) return {};
     const ratio = refImgDimensions.w / refImgDimensions.h;
-    if (ratio > 2) {
-      // Very wide panoramic
-      return { maxHeight: "120px" };
-    } else if (ratio > 1.2) {
-      // Landscape
-      return { maxHeight: "200px" };
-    } else if (ratio < 0.6) {
-      // Very tall portrait
-      return { maxHeight: "280px" };
-    } else if (ratio < 0.9) {
-      // Portrait
-      return { maxHeight: "240px" };
-    }
-    // Square-ish
+    if (ratio > 2) return { maxHeight: "120px" };
+    if (ratio > 1.2) return { maxHeight: "200px" };
+    if (ratio < 0.6) return { maxHeight: "280px" };
+    if (ratio < 0.9) return { maxHeight: "240px" };
     return { maxHeight: "220px" };
   })();
 
@@ -367,7 +360,6 @@ export default function DesignTools() {
                     onLoad={handleRefImageLoad}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
-                  {/* Mask indicator */}
                   {maskDataUrl && (
                     <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full">
                       <Paintbrush className="h-2.5 w-2.5" />
@@ -445,12 +437,12 @@ export default function DesignTools() {
               />
             </div>
 
-            {/* ── Material Image (Additional Reference) ── */}
+            {/* ── Material from Asset Library ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5" />
+                <FolderOpen className="h-3.5 w-3.5" />
                 增加素材
-                <span className="text-xs text-muted-foreground font-normal">（可选，与参考图结合生成）</span>
+                <span className="text-xs text-muted-foreground font-normal">（从素材库选择）</span>
               </Label>
 
               {materialPreview ? (
@@ -473,21 +465,13 @@ export default function DesignTools() {
                 </div>
               ) : (
                 <div
-                  onClick={() => materialInputRef.current?.click()}
+                  onClick={() => setShowAssetPicker(true)}
                   className="border border-dashed border-border/60 rounded-lg p-3 flex items-center justify-center gap-2 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
                 >
-                  <Plus className="h-4 w-4 text-muted-foreground/50" />
-                  <span className="text-xs text-muted-foreground">添加素材图片</span>
+                  <FolderOpen className="h-4 w-4 text-muted-foreground/50" />
+                  <span className="text-xs text-muted-foreground">从素材库选择</span>
                 </div>
               )}
-
-              <input
-                ref={materialInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleMaterialFileSelect}
-              />
             </div>
 
             {/* ── Style + Aspect Ratio + Resolution ── */}
@@ -628,6 +612,73 @@ export default function DesignTools() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ─── Asset Picker Dialog ──────────────────────── */}
+      <Dialog open={showAssetPicker} onOpenChange={setShowAssetPicker}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              从素材库选择
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={assetSearch}
+              onChange={(e) => setAssetSearch(e.target.value)}
+              placeholder="搜索素材名称或标签..."
+              className="pl-9"
+            />
+          </div>
+
+          <ScrollArea className="h-[50vh]">
+            {imageAssets.length > 0 ? (
+              <div className="grid grid-cols-3 gap-3 p-1">
+                {imageAssets.map((asset: any) => (
+                  <div
+                    key={asset.id}
+                    onClick={() => handleSelectAsset(asset)}
+                    className="group relative rounded-lg overflow-hidden border border-border bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                  >
+                    <div className="aspect-square">
+                      <img
+                        src={asset.thumbnailUrl || asset.fileUrl}
+                        alt={asset.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="h-4 w-4 text-primary-foreground" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
+                      <p className="text-[11px] text-white/90 truncate">{asset.name}</p>
+                      {asset.tags && (
+                        <p className="text-[9px] text-white/60 truncate">{asset.tags}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <ImageIcon className="h-10 w-10 mb-3 opacity-20" />
+                <p className="text-sm">
+                  {assetSearch ? "没有找到匹配的素材" : "素材库中暂无图片素材"}
+                </p>
+                <p className="text-xs mt-1 opacity-60">
+                  请先在管理页面上传素材到素材库
+                </p>
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
