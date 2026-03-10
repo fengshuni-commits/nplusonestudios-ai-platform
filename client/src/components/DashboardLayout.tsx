@@ -105,7 +105,7 @@ const menuSections: MenuSection[] = [
 
 const allMenuItems = menuSections.flatMap((s) => s.items);
 
-const ICON_BAR_WIDTH = 56;
+const ICON_BAR_WIDTH = 48;
 
 export default function DashboardLayout({
   children,
@@ -387,15 +387,6 @@ function SidebarIconButton({
       >
         <section.icon className="h-[18px] w-[18px]" />
       </button>
-      <span
-        className={`text-[9px] mt-0.5 leading-none transition-colors ${
-          sectionHasActive
-            ? "text-sidebar-primary font-medium"
-            : "text-sidebar-foreground/40"
-        }`}
-      >
-        {section.label}
-      </span>
     </div>
   );
 }
