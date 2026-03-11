@@ -10,6 +10,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 
 export default function MeetingMinutes() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -22,6 +23,7 @@ export default function MeetingMinutes() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioFileName, setAudioFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
 
   const uploadAudio = trpc.meeting.uploadAudio.useMutation();
   const transcribeMutation = trpc.meeting.transcribe.useMutation();
@@ -111,6 +113,14 @@ export default function MeetingMinutes() {
               <CardTitle className="text-base font-medium">会议信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Import project info */}
+              <ImportProjectInfo
+                selectedProjectId={importedProjectId}
+                onImport={(ctx: ProjectContext) => {
+                  setImportedProjectId(ctx.project.id);
+                  if (ctx.project.name) setProjectName(ctx.project.name);
+                }}
+              />
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>项目名称</Label>

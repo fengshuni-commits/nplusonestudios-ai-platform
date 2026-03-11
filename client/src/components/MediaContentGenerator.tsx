@@ -8,6 +8,7 @@ import { Loader2, Sparkles, Download, Upload, X, Copy, Check, ImageIcon } from "
 import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 
 type Platform = "xiaohongshu" | "wechat" | "instagram";
 
@@ -40,6 +41,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
   const generateMutation = trpc.media.generate.useMutation({
@@ -284,6 +286,25 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Panel */}
         <div className="space-y-4">
+          {/* Import Project Info */}
+          <ImportProjectInfo
+            selectedProjectId={importedProjectId}
+            onImport={(ctx: ProjectContext) => {
+              setImportedProjectId(ctx.project.id);
+              if (ctx.project.name) setProjectName(ctx.project.name);
+              // Build topic hint from project info
+              const parts: string[] = [];
+              if (ctx.project.projectOverview) parts.push(ctx.project.projectOverview);
+              if (ctx.project.businessGoal) parts.push(ctx.project.businessGoal);
+              ctx.customFields.forEach(cf => {
+                if (cf.fieldValue) parts.push(`${cf.fieldName}：${cf.fieldValue}`);
+              });
+              if (parts.length > 0 && !topic.trim()) {
+                setTopic(parts.join("\n"));
+              }
+            }}
+          />
+
           {/* Reference Image */}
           <div>
             <Label className="text-sm font-medium mb-2 block">参考图片（可选）</Label>

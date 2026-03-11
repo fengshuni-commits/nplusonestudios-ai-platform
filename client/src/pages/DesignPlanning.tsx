@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw } from "lucide-react";
+import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
@@ -31,6 +32,7 @@ export default function DesignPlanning() {
     requirements: "",
     referenceCount: 5,
   });
+  const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
   const [report, setReport] = useState<string>("");
   const [reportHistoryId, setReportHistoryId] = useState<number | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -243,6 +245,30 @@ export default function DesignPlanning() {
                 <CardTitle className="text-base font-medium">调研参数</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Import project info button */}
+                <ImportProjectInfo
+                  selectedProjectId={importedProjectId}
+                  onImport={(ctx: ProjectContext) => {
+                    setImportedProjectId(ctx.project.id);
+                    const newForm = { ...form };
+                    if (ctx.project.name) newForm.projectName = ctx.project.name;
+                    // Map project overview / business goal to requirements
+                    const reqParts: string[] = [];
+                    if (ctx.project.companyProfile) reqParts.push(`公司概况：${ctx.project.companyProfile}`);
+                    if (ctx.project.businessGoal) reqParts.push(`业务目标：${ctx.project.businessGoal}`);
+                    if (ctx.project.clientProfile) reqParts.push(`客户情况：${ctx.project.clientProfile}`);
+                    if (ctx.project.projectOverview) reqParts.push(`项目概况：${ctx.project.projectOverview}`);
+                    // Append custom fields
+                    ctx.customFields.forEach(cf => {
+                      if (cf.fieldValue) reqParts.push(`${cf.fieldName}：${cf.fieldValue}`);
+                    });
+                    if (reqParts.length > 0) {
+                      newForm.requirements = reqParts.join("\n");
+                    }
+                    setForm(newForm);
+                  }}
+                />
+
                 <div className="space-y-2">
                   <Label>项目名称 *</Label>
                   <Input

@@ -18,6 +18,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 
 export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -60,6 +61,9 @@ export default function DesignTools() {
 
   // Store the display-resolution mask canvas data URL for preview overlay on the base image
   const [maskPreviewUrl, setMaskPreviewUrl] = useState<string | null>(null);
+
+  // Project import state
+  const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
   const createAssetMutation = trpc.assets.create.useMutation();
@@ -404,6 +408,25 @@ export default function DesignTools() {
             <CardTitle className="text-base font-medium">生成参数</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* ── Import Project Info ── */}
+            <ImportProjectInfo
+              selectedProjectId={importedProjectId}
+              onImport={(ctx: ProjectContext) => {
+                setImportedProjectId(ctx.project.id);
+                // Build a prompt prefix from project info
+                const parts: string[] = [];
+                if (ctx.project.name) parts.push(ctx.project.name);
+                if (ctx.project.projectOverview) parts.push(ctx.project.projectOverview);
+                if (ctx.project.businessGoal) parts.push(ctx.project.businessGoal);
+                ctx.customFields.forEach(cf => {
+                  if (cf.fieldValue) parts.push(`${cf.fieldName}：${cf.fieldValue}`);
+                });
+                if (parts.length > 0 && !prompt.trim()) {
+                  setPrompt(parts.join("，"));
+                }
+              }}
+            />
+
             {/* ── Base Image ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">

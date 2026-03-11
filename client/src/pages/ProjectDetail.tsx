@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft, Plus, Calendar, Save, X, Trash2,
-  Compass, Ruler, FileText, Megaphone, Copy, Check,
+  Compass, Ruler, FileText, Megaphone,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
-  ExternalLink,
+  ExternalLink, Check,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
@@ -47,9 +47,8 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState("info");
 
   const { data: project, isLoading: projectLoading } = trpc.projects.getById.useQuery({ id: projectId });
-  const { data: customFields, isLoading: fieldsLoading } = trpc.projects.listCustomFields.useQuery({ projectId });
+  const { data: customFields } = trpc.projects.listCustomFields.useQuery({ projectId });
   const { data: generationHistory } = trpc.projects.listGenerationHistory.useQuery({ projectId });
-  const utils = trpc.useUtils();
 
   if (projectLoading || !project) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">加载中...</div>;
@@ -107,7 +106,7 @@ export default function ProjectDetail() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ProjectInfoTab: Editable project info + custom fields + AI import
+// ProjectInfoTab: Editable project info + custom fields (no AI import buttons)
 // ═══════════════════════════════════════════════════════════
 
 function ProjectInfoTab({
@@ -119,11 +118,9 @@ function ProjectInfoTab({
   customFields: any[];
   projectId: number;
 }) {
-  const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState(false);
 
   // New custom field dialog
   const [addFieldOpen, setAddFieldOpen] = useState(false);
@@ -189,38 +186,6 @@ function ProjectInfoTab({
     updateProject.mutate(payload as any);
   };
 
-  // Build context text for AI import
-  const buildContextText = useCallback(() => {
-    const lines: string[] = [];
-    builtInFields.forEach((f) => {
-      const val = (project as any)[f.key];
-      if (val) lines.push(`${f.label}：${val}`);
-    });
-    customFields.forEach((cf) => {
-      if (cf.fieldValue) lines.push(`${cf.fieldName}：${cf.fieldValue}`);
-    });
-    return lines.join("\n");
-  }, [project, customFields]);
-
-  const handleCopyContext = () => {
-    const text = buildContextText();
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      toast.success("项目信息已复制到剪贴板，可粘贴到任意 AI 模块");
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const handleImportToModule = (path: string) => {
-    const text = buildContextText();
-    // Store in sessionStorage for the target module to pick up
-    sessionStorage.setItem("projectContext", text);
-    sessionStorage.setItem("projectContextId", String(projectId));
-    sessionStorage.setItem("projectContextName", project.name);
-    setLocation(path);
-    toast.success(`已导入项目信息到模块，请在目标页面查看`);
-  };
-
   return (
     <div className="space-y-6">
       {/* Action buttons */}
@@ -232,7 +197,6 @@ function ProjectInfoTab({
             </Button>
             <Button size="sm" variant="outline" onClick={() => {
               setEditing(false);
-              // Reset form
               const initial: Record<string, string> = {};
               builtInFields.forEach((f) => { initial[f.key] = (project as any)[f.key] || ""; });
               setForm(initial);
@@ -245,14 +209,6 @@ function ProjectInfoTab({
             编辑项目信息
           </Button>
         )}
-
-        <div className="flex-1" />
-
-        {/* AI Import dropdown */}
-        <Button size="sm" variant="outline" onClick={handleCopyContext}>
-          {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-          {copied ? "已复制" : "复制项目信息"}
-        </Button>
       </div>
 
       {/* Built-in fields */}
@@ -272,7 +228,7 @@ function ProjectInfoTab({
                   <Textarea
                     value={form[field.key] || ""}
                     onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
-                    rows={2}
+                    rows={3}
                     className="text-sm"
                   />
                 ) : (
@@ -290,7 +246,7 @@ function ProjectInfoTab({
             </div>
           ))}
 
-          {/* Status & Phase (always shown, editable) */}
+          {/* Status */}
           <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
             <Label className="text-sm text-muted-foreground pt-2">项目状态</Label>
             {editing ? (
@@ -399,36 +355,6 @@ function ProjectInfoTab({
           ) : (
             <p className="text-sm text-muted-foreground text-center py-4">暂无自定义信息，点击上方按钮添加</p>
           )}
-        </CardContent>
-      </Card>
-
-      {/* AI Module Import Buttons */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">一键导入 AI 模块</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">将项目信息作为背景资料导入到 AI 功能模块</p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: "项目策划", icon: Compass, path: "/design/planning" },
-              { label: "设计工具", icon: Ruler, path: "/design/tools" },
-              { label: "会议纪要", icon: FileText, path: "/meeting" },
-              { label: "小红书", icon: BookMarked, path: "/media/xiaohongshu" },
-              { label: "公众号", icon: MessageCircle, path: "/media/wechat" },
-              { label: "Instagram", icon: Camera, path: "/media/instagram" },
-            ].map((mod) => (
-              <Button
-                key={mod.path}
-                variant="outline"
-                className="h-auto py-3 flex flex-col gap-1.5 items-center"
-                onClick={() => handleImportToModule(mod.path)}
-              >
-                <mod.icon className="h-5 w-5" />
-                <span className="text-xs">{mod.label}</span>
-              </Button>
-            ))}
-          </div>
         </CardContent>
       </Card>
     </div>
@@ -554,7 +480,7 @@ function ProjectDocumentsTab({
 }
 
 // ═══════════════════════════════════════════════════════════
-// TaskKanbanTab: Task kanban board (preserved from original)
+// TaskKanbanTab: Task kanban board
 // ═══════════════════════════════════════════════════════════
 
 const statusColumns = [

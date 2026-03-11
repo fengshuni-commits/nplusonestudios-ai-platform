@@ -1,0 +1,210 @@
+{
+  "query": "SELECT id, name FROM projects ORDER BY id LIMIT 50;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT id, name FROM projects ORDER BY id LIMIT 50;",
+  "rows": [
+    {
+      "id": "2",
+      "name": "GetById Test 1773068866727"
+    },
+    {
+      "id": "3",
+      "name": "Updated Name"
+    },
+    {
+      "id": "5",
+      "name": "Task Test Project 1773068869553"
+    },
+    {
+      "id": "6",
+      "name": "Task Test Project 1773068870025"
+    },
+    {
+      "id": "7",
+      "name": "Task Test Project 1773068870517"
+    },
+    {
+      "id": "8",
+      "name": "Task Test Project 1773068870757"
+    },
+    {
+      "id": "9",
+      "name": "Task Test Project 1773068871487"
+    },
+    {
+      "id": "10",
+      "name": "Doc Test Project 1773068872439"
+    },
+    {
+      "id": "11",
+      "name": "Doc Test Project 1773068872916"
+    },
+    {
+      "id": "12",
+      "name": "Doc Test Project 1773068873413"
+    },
+    {
+      "id": "14",
+      "name": "GetById Test 1773070380495"
+    },
+    {
+      "id": "15",
+      "name": "Updated Name"
+    },
+    {
+      "id": "17",
+      "name": "Task Test Project 1773070383282"
+    },
+    {
+      "id": "18",
+      "name": "Task Test Project 1773070383755"
+    },
+    {
+      "id": "19",
+      "name": "Task Test Project 1773070384231"
+    },
+    {
+      "id": "20",
+      "name": "Task Test Project 1773070384470"
+    },
+    {
+      "id": "21",
+      "name": "Task Test Project 1773070385183"
+    },
+    {
+      "id": "22",
+      "name": "Doc Test Project 1773070386131"
+    },
+    {
+      "id": "23",
+      "name": "Doc Test Project 1773070386599"
+    },
+    {
+      "id": "24",
+      "name": "Doc Test Project 1773070387073"
+    },
+    {
+      "id": "26",
+      "name": "GetById Test 1773070536096"
+    },
+    {
+      "id": "27",
+      "name": "Updated Name"
+    },
+    {
+      "id": "29",
+      "name": "Task Test Project 1773070539011"
+    },
+    {
+      "id": "30",
+      "name": "Task Test Project 1773070539496"
+    },
+    {
+      "id": "31",
+      "name": "Task Test Project 1773070539989"
+    },
+    {
+      "id": "32",
+      "name": "Task Test Project 1773070540237"
+    },
+    {
+      "id": "33",
+      "name": "Task Test Project 1773070540974"
+    },
+    {
+      "id": "34",
+      "name": "Doc Test Project 1773070541951"
+    },
+    {
+      "id": "35",
+      "name": "Doc Test Project 1773070542435"
+    },
+    {
+      "id": "36",
+      "name": "Doc Test Project 1773070542930"
+    },
+    {
+      "id": "38",
+      "name": "GetById Test 1773072459758"
+    },
+    {
+      "id": "39",
+      "name": "Updated Name"
+    },
+    {
+      "id": "41",
+      "name": "Task Test Project 1773072462667"
+    },
+    {
+      "id": "42",
+      "name": "Task Test Project 1773072463151"
+    },
+    {
+      "id": "43",
+      "name": "Task Test Project 1773072463646"
+    },
+    {
+      "id": "44",
+      "name": "Task Test Project 1773072463895"
+    },
+    {
+      "id": "45",
+      "name": "Task Test Project 1773072464636"
+    },
+    {
+      "id": "46",
+      "name": "Doc Test Project 1773072465625"
+    },
+    {
+      "id": "47",
+      "name": "Doc Test Project 1773072466114"
+    },
+    {
+      "id": "48",
+      "name": "Doc Test Project 1773072466625"
+    },
+    {
+      "id": "50",
+      "name": "GetById Test 1773072529990"
+    },
+    {
+      "id": "51",
+      "name": "Updated Name"
+    },
+    {
+      "id": "53",
+      "name": "Task Test Project 1773072532779"
+    },
+    {
+      "id": "54",
+      "name": "Task Test Project 1773072533246"
+    },
+    {
+      "id": "55",
+      "name": "Task Test Project 1773072533760"
+    },
+    {
+      "id": "56",
+      "name": "Task Test Project 1773072533999"
+    },
+    {
+      "id": "57",
+      "name": "Task Test Project 1773072534710"
+    },
+    {
+      "id": "58",
+      "name": "Doc Test Project 1773072535650"
+    },
+    {
+      "id": "59",
+      "name": "Doc Test Project 1773072536117"
+    },
+    {
+      "id": "60",
+      "name": "Doc Test Project 1773072536596"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\n2\tGetById Test 1773068866727\n3\tUpdated Name\n5\tTask Test Project 1773068869553\n6\tTask Test Project 1773068870025\n7\tTask Test Project 1773068870517\n8\tTask Test Project 1773068870757\n9\tTask Test Project 1773068871487\n10\tDoc Test Project 1773068872439\n11\tDoc Test Project 1773068872916\n12\tDoc Test Project 1773068873413\n14\tGetById Test 1773070380495\n15\tUpdated Name\n17\tTask Test Project 1773070383282\n18\tTask Test Project 1773070383755\n19\tTask Test Project 1773070384231\n20\tTask Test Project 1773070384470\n21\tTask Test Project 1773070385183\n22\tDoc Test Project 1773070386131\n23\tDoc Test Project 1773070386599\n24\tDoc Test Project 1773070387073\n26\tGetById Test 1773070536096\n27\tUpdated Name\n29\tTask Test Project 1773070539011\n30\tTask Test Project 1773070539496\n31\tTask Test Project 1773070539989\n32\tTask Test Project 1773070540237\n33\tTask Test Project 1773070540974\n34\tDoc Test Project 1773070541951\n35\tDoc Test Project 1773070542435\n36\tDoc Test Project 1773070542930\n38\tGetById Test 1773072459758\n39\tUpdated Name\n41\tTask Test Project 1773072462667\n42\tTask Test Project 1773072463151\n43\tTask Test Project 1773072463646\n44\tTask Test Project 1773072463895\n45\tTask Test Project 1773072464636\n46\tDoc Test Project 1773072465625\n47\tDoc Test Project 1773072466114\n48\tDoc Test Project 1773072466625\n50\tGetById Test 1773072529990\n51\tUpdated Name\n53\tTask Test Project 1773072532779\n54\tTask Test Project 1773072533246\n55\tTask Test Project 1773072533760\n56\tTask Test Project 1773072533999\n57\tTask Test Project 1773072534710\n58\tDoc Test Project 1773072535650\n59\tDoc Test Project 1773072536117\n60\tDoc Test Project 1773072536596\n",
+  "stderr": "",
+  "execution_time_ms": 1601
+}

@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, name FROM projects WHERE name LIKE '%Sample%' OR name LIKE '%Placeholder%' OR name LIKE '%示例%' OR description IS NULL OR description = '' LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT id, name FROM projects WHERE name LIKE '%Sample%' OR name LIKE '%Placeholder%' OR name LIKE '%示例%' OR description IS NULL OR description = '' LIMIT 20;",
+  "rows": [
+    {
+      "id": "2",
+      "name": "GetById Test 1773068866727"
+    },
+    {
+      "id": "3",
+      "name": "Updated Name"
+    },
+    {
+      "id": "5",
+      "name": "Task Test Project 1773068869553"
+    },
+    {
+      "id": "6",
+      "name": "Task Test Project 1773068870025"
+    },
+    {
+      "id": "7",
+      "name": "Task Test Project 1773068870517"
+    },
+    {
+      "id": "8",
+      "name": "Task Test Project 1773068870757"
+    },
+    {
+      "id": "9",
+      "name": "Task Test Project 1773068871487"
+    },
+    {
+      "id": "10",
+      "name": "Doc Test Project 1773068872439"
+    },
+    {
+      "id": "11",
+      "name": "Doc Test Project 1773068872916"
+    },
+    {
+      "id": "12",
+      "name": "Doc Test Project 1773068873413"
+    },
+    {
+      "id": "14",
+      "name": "GetById Test 1773070380495"
+    },
+    {
+      "id": "15",
+      "name": "Updated Name"
+    },
+    {
+      "id": "17",
+      "name": "Task Test Project 1773070383282"
+    },
+    {
+      "id": "18",
+      "name": "Task Test Project 1773070383755"
+    },
+    {
+      "id": "19",
+      "name": "Task Test Project 1773070384231"
+    },
+    {
+      "id": "20",
+      "name": "Task Test Project 1773070384470"
+    },
+    {
+      "id": "21",
+      "name": "Task Test Project 1773070385183"
+    },
+    {
+      "id": "22",
+      "name": "Doc Test Project 1773070386131"
+    },
+    {
+      "id": "23",
+      "name": "Doc Test Project 1773070386599"
+    },
+    {
+      "id": "24",
+      "name": "Doc Test Project 1773070387073"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\n2\tGetById Test 1773068866727\n3\tUpdated Name\n5\tTask Test Project 1773068869553\n6\tTask Test Project 1773068870025\n7\tTask Test Project 1773068870517\n8\tTask Test Project 1773068870757\n9\tTask Test Project 1773068871487\n10\tDoc Test Project 1773068872439\n11\tDoc Test Project 1773068872916\n12\tDoc Test Project 1773068873413\n14\tGetById Test 1773070380495\n15\tUpdated Name\n17\tTask Test Project 1773070383282\n18\tTask Test Project 1773070383755\n19\tTask Test Project 1773070384231\n20\tTask Test Project 1773070384470\n21\tTask Test Project 1773070385183\n22\tDoc Test Project 1773070386131\n23\tDoc Test Project 1773070386599\n24\tDoc Test Project 1773070387073\n",
+  "stderr": "",
+  "execution_time_ms": 1725
+}

@@ -1,0 +1,70 @@
+{
+  "query": "SELECT id, name FROM projects ORDER BY id DESC LIMIT 15;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT id, name FROM projects ORDER BY id DESC LIMIT 15;",
+  "rows": [
+    {
+      "id": "180001",
+      "name": "JPT总部办公室内设计"
+    },
+    {
+      "id": "150062",
+      "name": "Doc Test Project 1773205172472"
+    },
+    {
+      "id": "150061",
+      "name": "Doc Test Project 1773205172004"
+    },
+    {
+      "id": "150060",
+      "name": "Doc Test Project 1773205171545"
+    },
+    {
+      "id": "150059",
+      "name": "Task Test Project 1773205170618"
+    },
+    {
+      "id": "150058",
+      "name": "Task Test Project 1773205169921"
+    },
+    {
+      "id": "150057",
+      "name": "Task Test Project 1773205169687"
+    },
+    {
+      "id": "150056",
+      "name": "Task Test Project 1773205169223"
+    },
+    {
+      "id": "150055",
+      "name": "Task Test Project 1773205168766"
+    },
+    {
+      "id": "150053",
+      "name": "Updated Name"
+    },
+    {
+      "id": "150052",
+      "name": "GetById Test 1773205165801"
+    },
+    {
+      "id": "150049",
+      "name": "JPT总部办公"
+    },
+    {
+      "id": "150048",
+      "name": "Doc Test Project 1773202791459"
+    },
+    {
+      "id": "150047",
+      "name": "Doc Test Project 1773202790994"
+    },
+    {
+      "id": "150046",
+      "name": "Doc Test Project 1773202790540"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\n180001\tJPT总部办公室内设计\n150062\tDoc Test Project 1773205172472\n150061\tDoc Test Project 1773205172004\n150060\tDoc Test Project 1773205171545\n150059\tTask Test Project 1773205170618\n150058\tTask Test Project 1773205169921\n150057\tTask Test Project 1773205169687\n150056\tTask Test Project 1773205169223\n150055\tTask Test Project 1773205168766\n150053\tUpdated Name\n150052\tGetById Test 1773205165801\n150049\tJPT总部办公\n150048\tDoc Test Project 1773202791459\n150047\tDoc Test Project 1773202790994\n150046\tDoc Test Project 1773202790540\n",
+  "stderr": "",
+  "execution_time_ms": 1594
+}

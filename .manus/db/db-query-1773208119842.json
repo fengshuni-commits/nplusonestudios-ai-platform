@@ -1,0 +1,226 @@
+{
+  "query": "SELECT id, name, code, clientName FROM projects WHERE name NOT LIKE '%vitest%' AND name NOT LIKE '%测试%' AND name NOT LIKE '%Test%' AND name != '' AND name IS NOT NULL ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT id, name, code, clientName FROM projects WHERE name NOT LIKE '%vitest%' AND name NOT LIKE '%测试%' AND name NOT LIKE '%Test%' AND name != '' AND name IS NOT NULL ORDER BY id;",
+  "rows": [
+    {
+      "id": "3",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "15",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "27",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "39",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "51",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "63",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30003",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30015",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30027",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30039",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30051",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30063",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30075",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30085",
+      "name": "JPT总部办公",
+      "code": "NP200601",
+      "clientName": "JPT"
+    },
+    {
+      "id": "30088",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30100",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30112",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30124",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30136",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "30148",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "60003",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "60015",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "60027",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "60039",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "90003",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "120003",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "120015",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "120027",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "120039",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "150003",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "150015",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "150027",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "150039",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "150049",
+      "name": "JPT总部办公",
+      "code": "NP-2006-001",
+      "clientName": "杰普特JPT"
+    },
+    {
+      "id": "150053",
+      "name": "Updated Name",
+      "code": "NULL",
+      "clientName": "NULL"
+    },
+    {
+      "id": "180001",
+      "name": "JPT总部办公室内设计",
+      "code": "NP-2006-001",
+      "clientName": "JPT杰普特"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tcode\tclientName\n3\tUpdated Name\tNULL\tNULL\n15\tUpdated Name\tNULL\tNULL\n27\tUpdated Name\tNULL\tNULL\n39\tUpdated Name\tNULL\tNULL\n51\tUpdated Name\tNULL\tNULL\n63\tUpdated Name\tNULL\tNULL\n30003\tUpdated Name\tNULL\tNULL\n30015\tUpdated Name\tNULL\tNULL\n30027\tUpdated Name\tNULL\tNULL\n30039\tUpdated Name\tNULL\tNULL\n30051\tUpdated Name\tNULL\tNULL\n30063\tUpdated Name\tNULL\tNULL\n30075\tUpdated Name\tNULL\tNULL\n30085\tJPT总部办公\tNP200601\tJPT\n30088\tUpdated Name\tNULL\tNULL\n30100\tUpdated Name\tNULL\tNULL\n30112\tUpdated Name\tNULL\tNULL\n30124\tUpdated Name\tNULL\tNULL\n30136\tUpdated Name\tNULL\tNULL\n30148\tUpdated Name\tNULL\tNULL\n60003\tUpdated Name\tNULL\tNULL\n60015\tUpdated Name\tNULL\tNULL\n60027\tUpdated Name\tNULL\tNULL\n60039\tUpdated Name\tNULL\tNULL\n90003\tUpdated Name\tNULL\tNULL\n120003\tUpdated Name\tNULL\tNULL\n120015\tUpdated Name\tNULL\tNULL\n120027\tUpdated Name\tNULL\tNULL\n120039\tUpdated Name\tNULL\tNULL\n150003\tUpdated Name\tNULL\tNULL\n150015\tUpdated Name\tNULL\tNULL\n150027\tUpdated Name\tNULL\tNULL\n150039\tUpdated Name\tNULL\tNULL\n150049\tJPT总部办公\tNP-2006-001\t杰普特JPT\n150053\tUpdated Name\tNULL\tNULL\n180001\tJPT总部办公室内设计\tNP-2006-001\tJPT杰普特\n",
+  "stderr": "",
+  "execution_time_ms": 1543
+}

@@ -1,0 +1,154 @@
+{
+  "query": "SELECT id, name FROM projects WHERE name NOT LIKE '%vitest%' AND name NOT LIKE '%测试%' AND name NOT LIKE '%Test%' AND name != '' AND name IS NOT NULL ORDER BY id LIMIT 50;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT id, name FROM projects WHERE name NOT LIKE '%vitest%' AND name NOT LIKE '%测试%' AND name NOT LIKE '%Test%' AND name != '' AND name IS NOT NULL ORDER BY id LIMIT 50;",
+  "rows": [
+    {
+      "id": "3",
+      "name": "Updated Name"
+    },
+    {
+      "id": "15",
+      "name": "Updated Name"
+    },
+    {
+      "id": "27",
+      "name": "Updated Name"
+    },
+    {
+      "id": "39",
+      "name": "Updated Name"
+    },
+    {
+      "id": "51",
+      "name": "Updated Name"
+    },
+    {
+      "id": "63",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30003",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30015",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30027",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30039",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30051",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30063",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30075",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30085",
+      "name": "JPT总部办公"
+    },
+    {
+      "id": "30088",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30100",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30112",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30124",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30136",
+      "name": "Updated Name"
+    },
+    {
+      "id": "30148",
+      "name": "Updated Name"
+    },
+    {
+      "id": "60003",
+      "name": "Updated Name"
+    },
+    {
+      "id": "60015",
+      "name": "Updated Name"
+    },
+    {
+      "id": "60027",
+      "name": "Updated Name"
+    },
+    {
+      "id": "60039",
+      "name": "Updated Name"
+    },
+    {
+      "id": "90003",
+      "name": "Updated Name"
+    },
+    {
+      "id": "120003",
+      "name": "Updated Name"
+    },
+    {
+      "id": "120015",
+      "name": "Updated Name"
+    },
+    {
+      "id": "120027",
+      "name": "Updated Name"
+    },
+    {
+      "id": "120039",
+      "name": "Updated Name"
+    },
+    {
+      "id": "150003",
+      "name": "Updated Name"
+    },
+    {
+      "id": "150015",
+      "name": "Updated Name"
+    },
+    {
+      "id": "150027",
+      "name": "Updated Name"
+    },
+    {
+      "id": "150039",
+      "name": "Updated Name"
+    },
+    {
+      "id": "150049",
+      "name": "JPT总部办公"
+    },
+    {
+      "id": "150053",
+      "name": "Updated Name"
+    },
+    {
+      "id": "180001",
+      "name": "JPT总部办公室内设计"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\n3\tUpdated Name\n15\tUpdated Name\n27\tUpdated Name\n39\tUpdated Name\n51\tUpdated Name\n63\tUpdated Name\n30003\tUpdated Name\n30015\tUpdated Name\n30027\tUpdated Name\n30039\tUpdated Name\n30051\tUpdated Name\n30063\tUpdated Name\n30075\tUpdated Name\n30085\tJPT总部办公\n30088\tUpdated Name\n30100\tUpdated Name\n30112\tUpdated Name\n30124\tUpdated Name\n30136\tUpdated Name\n30148\tUpdated Name\n60003\tUpdated Name\n60015\tUpdated Name\n60027\tUpdated Name\n60039\tUpdated Name\n90003\tUpdated Name\n120003\tUpdated Name\n120015\tUpdated Name\n120027\tUpdated Name\n120039\tUpdated Name\n150003\tUpdated Name\n150015\tUpdated Name\n150027\tUpdated Name\n150039\tUpdated Name\n150049\tJPT总部办公\n150053\tUpdated Name\n180001\tJPT总部办公室内设计\n",
+  "stderr": "",
+  "execution_time_ms": 1679
+}
