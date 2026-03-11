@@ -140,3 +140,7 @@
 - [x] getFeedbackTrend SQL 查询报错：DATE_SUB INTERVAL 参数绑定失败（改用 sql.raw 内联天数值）
 - [x] 标注功能不能用：修复 ref 绑定和尺寸读取时序问题（双 rAF + setTimeout 回退）
 - [x] 比例调整加黑边：有参考图时不传 size 参数避免黑边，纯文生图时才传 size
+
+## 设计工具改进（第三轮）
+- [x] 实现真正的局部重绘（inpainting）：mask 合成到原图上（红色半透明高亮），prompt 指导 AI 只修改标记区域
+- [x] 彻底修复图片比例：有参考图时用 sharp 裁切到目标比例后再传入 API，始终传递 size 参数

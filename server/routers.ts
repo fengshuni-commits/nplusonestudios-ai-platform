@@ -9,6 +9,7 @@ import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
+import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
 import { nanoid } from "nanoid";
 import crypto from "crypto";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
@@ -1102,26 +1103,47 @@ const renderingRouter = router({
 
         // Collect original images: reference + optional material
         const originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
-        if (input.referenceImageUrl) {
-          originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
+
+        // Handle inpainting: composite mask onto original image
+        if (input.referenceImageUrl && input.maskImageData) {
+          // Inpainting mode: merge mask with original image as visual guide
+          try {
+            const composite = await compositeMaskOnImage(input.referenceImageUrl, input.maskImageData);
+            originalImages.push({ b64Json: composite.b64, mimeType: composite.mimeType });
+            // Enhance prompt to instruct AI about the marked region
+            fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${fullPrompt}`;
+          } catch (maskErr) {
+            // Fallback: send original image + mask separately
+            console.error("Mask composite failed, falling back:", maskErr);
+            originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
+          }
+        } else if (input.referenceImageUrl) {
+          // Normal image-to-image: crop reference to target aspect ratio if needed
+          if (imageSize && ratioEntry) {
+            try {
+              const targetRatio = ratioEntry[0] / ratioEntry[1];
+              const cropped = await cropToAspectRatio(input.referenceImageUrl, targetRatio);
+              const croppedB64 = cropped.buffer.toString("base64");
+              originalImages.push({ b64Json: croppedB64, mimeType: cropped.mimeType });
+            } catch (cropErr) {
+              console.error("Crop failed, using original:", cropErr);
+              originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
+            }
+          } else {
+            originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
+          }
         }
+
         if (input.materialImageUrl) {
           originalImages.push({ url: input.materialImageUrl, mimeType: "image/png" });
         }
-        // If mask data is provided, include it as a base64 image
-        if (input.maskImageData) {
-          const maskBase64 = input.maskImageData.replace(/^data:image\/\w+;base64,/, "");
-          originalImages.push({ b64Json: maskBase64, mimeType: "image/png" });
-        }
+
         if (originalImages.length > 0) {
           genOpts.originalImages = originalImages;
         }
 
-        // Only pass size for pure text-to-image (no reference image).
-        // When editing an existing image, the API may add black bars to
-        // pad the reference to the target size, so we rely on the prompt
-        // to guide the aspect ratio instead.
-        if (imageSize && !input.referenceImageUrl) {
+        // Always pass size when aspect ratio is specified
+        if (imageSize) {
           genOpts.size = imageSize;
         }
 
