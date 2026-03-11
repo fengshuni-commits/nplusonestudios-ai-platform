@@ -8,7 +8,7 @@ interface ImageMaskEditorProps {
   displayHeight: number;
   naturalWidth: number;
   naturalHeight: number;
-  onSave: (maskDataUrl: string) => void;
+  onSave: (maskDataUrl: string, displayDataUrl?: string) => void;
   onCancel: () => void;
 }
 
@@ -173,7 +173,9 @@ export default function ImageMaskEditor({
       }
     }
     mctx.putImageData(dst, 0, 0);
-    onSave(maskCanvas.toDataURL("image/png"));
+    // Also export the display-resolution canvas for preview overlay on the base image
+    const displayDataUrl = canvas.toDataURL("image/png");
+    onSave(maskCanvas.toDataURL("image/png"), displayDataUrl);
   }, [naturalWidth, naturalHeight, onSave]);
 
   return (

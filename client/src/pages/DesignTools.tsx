@@ -58,6 +58,9 @@ export default function DesignTools() {
   // Track reference image natural dimensions for adaptive display
   const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);
 
+  // Store the display-resolution mask canvas data URL for preview overlay on the base image
+  const [maskPreviewUrl, setMaskPreviewUrl] = useState<string | null>(null);
+
   const uploadMutation = trpc.upload.file.useMutation();
   const createAssetMutation = trpc.assets.create.useMutation();
   const assetsUploadMutation = trpc.assets.upload.useMutation();
@@ -151,6 +154,7 @@ export default function DesignTools() {
     setReferenceName(null);
     setParentHistoryId(undefined);
     setMaskDataUrl(null);
+    setMaskPreviewUrl(null);
     setEditingImageIdx(null);
     setRefImgDimensions(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -212,7 +216,8 @@ export default function DesignTools() {
     setEditingImageIdx(null);
     if (historyId) setParentHistoryId(historyId);
     if (!prompt.trim()) setPrompt(imagePrompt);
-    toast.success("已将图片设为参考图，修改描述后再次生成");
+    setMaskPreviewUrl(null);
+    toast.success("已将图片设为基础图，修改描述后再次生成");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [prompt]);
 
@@ -228,6 +233,7 @@ export default function DesignTools() {
       setReferencePreview(img.url);
       setReferenceFile(null);
       setReferenceName("标注编辑中");
+      setMaskPreviewUrl(null);
       if (img.historyId) setParentHistoryId(img.historyId);
     }
     // Use double rAF to ensure React has committed the DOM update
@@ -248,8 +254,9 @@ export default function DesignTools() {
     setTimeout(readDims, 100);
   }, [generatedImages]);
 
-  const handleMaskSave = useCallback((dataUrl: string) => {
+  const handleMaskSave = useCallback((dataUrl: string, displayDataUrl?: string) => {
     setMaskDataUrl(dataUrl);
+    if (displayDataUrl) setMaskPreviewUrl(displayDataUrl);
     toast.success("标注区域已保存，修改描述后点击「局部重绘」");
   }, []);
 
@@ -257,6 +264,7 @@ export default function DesignTools() {
     setEditingImageIdx(null);
     setEditImgDims(null);
     setMaskDataUrl(null);
+    setMaskPreviewUrl(null);
   }, []);
 
   // Track result image load for mask overlay dimensions
@@ -371,15 +379,12 @@ export default function DesignTools() {
     { value: "ultra", label: "超高清 (2048px)" },
   ];
 
-  // Compute reference image display style (adaptive)
+  // Compute reference image display style (adaptive aspect ratio)
   const refDisplayStyle = (() => {
     if (!refImgDimensions) return {};
     const ratio = refImgDimensions.w / refImgDimensions.h;
-    if (ratio > 2) return { maxHeight: "120px" };
-    if (ratio > 1.2) return { maxHeight: "200px" };
-    if (ratio < 0.6) return { maxHeight: "280px" };
-    if (ratio < 0.9) return { maxHeight: "240px" };
-    return { maxHeight: "220px" };
+    // Use aspect-ratio CSS to match the actual image proportions
+    return { aspectRatio: `${ratio}`, maxHeight: "300px" };
   })();
 
   return (
@@ -399,11 +404,11 @@ export default function DesignTools() {
             <CardTitle className="text-base font-medium">生成参数</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* ── Reference Image ── */}
+            {/* ── Base Image ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <ImagePlus className="h-3.5 w-3.5" />
-                参考图片
+                基础图片
                 <span className="text-xs text-muted-foreground font-normal">（可选）</span>
               </Label>
 
@@ -411,19 +416,27 @@ export default function DesignTools() {
                 <div className="relative group rounded-lg overflow-hidden border border-border bg-muted">
                   <img
                     src={referencePreview}
-                    alt="参考图片"
+                    alt="基础图片"
                     className="w-full object-contain bg-black/5"
                     style={refDisplayStyle}
                     onLoad={handleRefImageLoad}
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
+                  {/* Mask preview overlay on the base image */}
+                  {maskPreviewUrl && (
+                    <img
+                      src={maskPreviewUrl}
+                      alt="标注范围"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors z-20" />
                   {maskDataUrl && (
-                    <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full">
+                    <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full z-30">
                       <Paintbrush className="h-2.5 w-2.5" />
                       已标注区域
                     </div>
                   )}
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-30">
                     <button
                       type="button"
                       onClick={handleRemoveReference}
@@ -432,8 +445,8 @@ export default function DesignTools() {
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
-                    <p className="text-xs text-white/90 truncate">{referenceName || "参考图片"}</p>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2 z-20">
+                    <p className="text-xs text-white/90 truncate">{referenceName || "基础图片"}</p>
                   </div>
                 </div>
               ) : (
@@ -445,9 +458,9 @@ export default function DesignTools() {
                 >
                   <Upload className="h-5 w-5 text-muted-foreground/60" />
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">点击或拖拽上传参考图片</p>
+                    <p className="text-xs text-muted-foreground">点击或拖拽上传基础图片</p>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                      也可点击右侧生成结果中的图片直接作为参考
+                      也可点击右侧生成结果中的图片直接作为基础图
                     </p>
                   </div>
                 </div>
@@ -583,9 +596,9 @@ export default function DesignTools() {
                 {maskDataUrl
                   ? "将只修改标注区域，保持其余部分不变"
                   : materialPreview && hasReference
-                    ? "将结合参考图与素材图片共同生成新图像"
+                    ? "将结合基础图与素材图片共同生成新图像"
                     : hasReference
-                      ? "将基于参考图片和描述共同生成新图像"
+                      ? "将基于基础图片和描述共同生成新图像"
                       : "将基于描述生成新图像"}
               </p>
             )}
@@ -609,7 +622,7 @@ export default function DesignTools() {
                         alt={img.prompt}
                         className={`w-full h-auto ${editingImageIdx === idx ? "" : "cursor-pointer"} transition-transform`}
                         onClick={editingImageIdx === idx ? undefined : () => handleUseAsReference(img.url, img.prompt, img.historyId)}
-                        title={editingImageIdx === idx ? undefined : "点击将此图片作为参考图"}
+                        title={editingImageIdx === idx ? undefined : "点击将此图片作为基础图"}
                         onLoad={editingImageIdx === idx ? handleEditImgLoad : undefined}
                       />
 
@@ -675,7 +688,7 @@ export default function DesignTools() {
                 <ImageIcon className="h-12 w-12 mb-3 opacity-20" />
                 <p className="text-sm">输入场景描述后，点击生成图像</p>
                 <p className="text-xs mt-1 opacity-60">
-                  生成后可点击结果图片作为参考图，或使用「局部标注」进行精细编辑
+                  生成后可点击结果图片作为基础图，或使用「局部标注」进行精细编辑
                 </p>
               </div>
             )}
