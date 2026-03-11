@@ -144,3 +144,7 @@
 ## 设计工具改进（第三轮）
 - [x] 实现真正的局部重绘（inpainting）：mask 合成到原图上（红色半透明高亮），prompt 指导 AI 只修改标记区域
 - [x] 彻底修复图片比例：有参考图时用 sharp 裁切到目标比例后再传入 API，始终传递 size 参数
+
+## Bug 修复：设计工具（第四轮）
+- [x] 笔刷不连续：改用 lineTo 连续线段绘制，跟踪 lastPos 确保平滑连接
+- [x] 图片比例无效：在 imageGeneration.ts 中增加 enforceAspectRatio 后处理，用 sharp 强制裁切到目标比例

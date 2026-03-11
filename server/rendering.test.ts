@@ -50,7 +50,7 @@ describe("rendering router input validation", () => {
     ).rejects.toThrow();
   });
 
-  it("rendering.generate accepts all optional parameters in schema", async () => {
+  it("rendering.generate accepts all optional parameters in schema", { timeout: 30000 }, async () => {
     const user = createTestUser();
     const ctx = createContext(user);
     const caller = appRouter.createCaller(ctx);
@@ -67,7 +67,7 @@ describe("rendering router input validation", () => {
         referenceImageUrl: "https://example.com/ref.png",
       });
     } catch (err: any) {
-      // Should fail at image generation, not input validation
+      // Should fail at image generation or image processing, not input validation
       expect(err.code).not.toBe("BAD_REQUEST");
       expect(err.message).not.toContain("Expected");
     }

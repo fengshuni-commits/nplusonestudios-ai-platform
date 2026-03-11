@@ -32,6 +32,60 @@ export type GenerateImageResponse = {
   url?: string;
 };
 
+/**
+ * Post-process the generated image to enforce the target aspect ratio.
+ * If the API ignores the size parameter, we crop the result to match.
+ */
+async function enforceAspectRatio(
+  buffer: Buffer,
+  targetSize: string
+): Promise<Buffer> {
+  const [targetW, targetH] = targetSize.split("x").map(Number);
+  if (!targetW || !targetH) return buffer;
+
+  const targetRatio = targetW / targetH;
+
+  try {
+    const sharp = (await import("sharp")).default;
+    const metadata = await sharp(buffer).metadata();
+    const actualW = metadata.width || 0;
+    const actualH = metadata.height || 0;
+    if (!actualW || !actualH) return buffer;
+
+    const actualRatio = actualW / actualH;
+    // If ratio is already close enough (within 5%), no need to crop
+    if (Math.abs(actualRatio - targetRatio) / targetRatio < 0.05) {
+      return buffer;
+    }
+
+    // Center-crop to target ratio
+    let cropW: number, cropH: number;
+    if (actualRatio > targetRatio) {
+      // Image is wider than target — crop width
+      cropH = actualH;
+      cropW = Math.round(actualH * targetRatio);
+    } else {
+      // Image is taller than target — crop height
+      cropW = actualW;
+      cropH = Math.round(actualW / targetRatio);
+    }
+
+    const left = Math.round((actualW - cropW) / 2);
+    const top = Math.round((actualH - cropH) / 2);
+
+    const cropped = await sharp(buffer)
+      .extract({ left, top, width: cropW, height: cropH })
+      .resize(targetW, targetH, { fit: "fill" })
+      .png()
+      .toBuffer();
+
+    return cropped;
+  } catch (err) {
+    console.error("enforceAspectRatio failed, returning original:", err);
+    return buffer;
+  }
+}
+
 export async function generateImage(
   options: GenerateImageOptions
 ): Promise<GenerateImageResponse> {
@@ -94,7 +148,12 @@ export async function generateImage(
     };
   };
   const base64Data = result.image.b64Json;
-  const buffer = Buffer.from(base64Data, "base64");
+  let buffer: Buffer = Buffer.from(base64Data, "base64");
+
+  // Post-process: enforce target aspect ratio if the API ignored the size parameter
+  if (options.size) {
+    buffer = await enforceAspectRatio(buffer, options.size) as Buffer;
+  }
 
   // Save to S3
   const { url } = await storagePut(

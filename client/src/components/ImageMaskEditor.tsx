@@ -4,26 +4,14 @@ import { Slider } from "@/components/ui/slider";
 import { Paintbrush, Eraser, RotateCcw, Check, X } from "lucide-react";
 
 interface ImageMaskEditorProps {
-  /**
-   * Width and height of the image as displayed on screen.
-   * The canvas overlay will match these dimensions exactly.
-   */
   displayWidth: number;
   displayHeight: number;
-  /** Natural (original) width of the image for high-res mask output */
   naturalWidth: number;
-  /** Natural (original) height of the image for high-res mask output */
   naturalHeight: number;
-  /** Called with the mask data URL (black/white PNG) when user confirms */
   onSave: (maskDataUrl: string) => void;
-  /** Called when user cancels */
   onCancel: () => void;
 }
 
-/**
- * Inline mask editor that renders as an absolute-positioned canvas overlay.
- * Must be placed inside a `position: relative` container that also holds the image.
- */
 export default function ImageMaskEditor({
   displayWidth,
   displayHeight,
@@ -33,6 +21,7 @@ export default function ImageMaskEditor({
   onCancel,
 }: ImageMaskEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [tool, setTool] = useState<"brush" | "eraser">("brush");
@@ -61,17 +50,36 @@ export default function ImageMaskEditor({
     []
   );
 
-  const draw = useCallback(
+  /** Draw a continuous stroke from lastPos to (x,y) using lineTo */
+  const drawStroke = useCallback(
     (x: number, y: number) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
+
       ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
-      ctx.beginPath();
-      ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = brushSize;
+      ctx.strokeStyle = tool === "eraser" ? "rgba(0,0,0,1)" : "rgba(255,80,50,0.45)";
       ctx.fillStyle = tool === "eraser" ? "rgba(0,0,0,1)" : "rgba(255,80,50,0.45)";
-      ctx.fill();
+
+      const last = lastPosRef.current;
+      if (last) {
+        // Draw a line from last position to current position
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      } else {
+        // First point: draw a dot
+        ctx.beginPath();
+        ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      lastPosRef.current = { x, y };
       setHasDrawn(true);
     },
     [brushSize, tool]
@@ -81,39 +89,47 @@ export default function ImageMaskEditor({
   const onDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault();
+      lastPosRef.current = null; // Reset last position for new stroke
       setIsDrawing(true);
       const c = getCoords(e);
-      draw(c.x, c.y);
+      drawStroke(c.x, c.y);
     },
-    [getCoords, draw]
+    [getCoords, drawStroke]
   );
+
   const onMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       const c = getCoords(e);
-      draw(c.x, c.y);
+      drawStroke(c.x, c.y);
     },
-    [isDrawing, getCoords, draw]
+    [isDrawing, getCoords, drawStroke]
   );
-  const onUp = useCallback(() => setIsDrawing(false), []);
+
+  const onUp = useCallback(() => {
+    setIsDrawing(false);
+    lastPosRef.current = null;
+  }, []);
 
   const onTouchDown = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
       e.preventDefault();
+      lastPosRef.current = null;
       setIsDrawing(true);
       const c = getCoords(e);
-      draw(c.x, c.y);
+      drawStroke(c.x, c.y);
     },
-    [getCoords, draw]
+    [getCoords, drawStroke]
   );
+
   const onTouchMove = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
       if (!isDrawing) return;
       e.preventDefault();
       const c = getCoords(e);
-      draw(c.x, c.y);
+      drawStroke(c.x, c.y);
     },
-    [isDrawing, getCoords, draw]
+    [isDrawing, getCoords, drawStroke]
   );
 
   const handleClear = useCallback(() => {
@@ -122,6 +138,7 @@ export default function ImageMaskEditor({
     const ctx = canvas.getContext("2d");
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasDrawn(false);
+    lastPosRef.current = null;
   }, []);
 
   const handleSave = useCallback(() => {
