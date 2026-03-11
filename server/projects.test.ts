@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterAll } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -33,6 +33,18 @@ describe("projects router", () => {
   const ctx = createAuthContext();
   const caller = appRouter.createCaller(ctx);
   let createdProjectId: number;
+  let customFieldId: number;
+
+  // Cleanup: delete the test project after all tests
+  afterAll(async () => {
+    if (createdProjectId) {
+      try {
+        await caller.projects.delete({ id: createdProjectId });
+      } catch {
+        // ignore if already deleted
+      }
+    }
+  });
 
   it("creates a project with extended fields", async () => {
     const result = await caller.projects.create({
@@ -81,8 +93,6 @@ describe("projects router", () => {
 
   // ─── Custom Fields ─────────────────────────────────────
 
-  let customFieldId: number;
-
   it("creates a custom field", async () => {
     const result = await caller.projects.createCustomField({
       projectId: createdProjectId,
@@ -112,9 +122,6 @@ describe("projects router", () => {
     expect(found!.fieldValue).toBe("5000平米");
   });
 
-  // Note: we intentionally do NOT delete custom fields or projects here
-  // to avoid removing user data from the shared database.
-
   // ─── Project Context ───────────────────────────────────
 
   it("gets project context for AI import", async () => {
@@ -133,5 +140,5 @@ describe("projects router", () => {
     expect(Array.isArray(history)).toBe(true);
   });
 
-  // No cleanup / deletion — keep test data to avoid removing user projects
+  // afterAll handles cleanup — test project will be deleted
 });

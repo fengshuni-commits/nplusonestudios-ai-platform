@@ -352,6 +352,7 @@ export default function DesignTools() {
         materialImageUrl, maskImageData,
         aspectRatio: aspectRatio !== "auto" ? aspectRatio : undefined,
         resolution: resolution !== "standard" ? resolution : undefined,
+        projectId: importedProjectId || undefined,
       });
     } catch { setIsGenerating(false); setIsUploading(false); }
   };

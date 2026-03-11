@@ -117,6 +117,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
       projectName: projectName.trim() || undefined,
       additionalNotes: additionalNotes.trim() || undefined,
       referenceImageUrl,
+      projectId: importedProjectId || undefined,
     });
   };
 

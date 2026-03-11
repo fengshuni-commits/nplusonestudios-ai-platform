@@ -87,7 +87,7 @@ export default function MeetingMinutes() {
       return;
     }
     setIsGenerating(true);
-    generateMutation.mutate({ transcript, projectName, meetingDate, toolId });
+    generateMutation.mutate({ transcript, projectName, meetingDate, toolId, projectId: importedProjectId || undefined });
   };
 
   const handleCopy = () => {

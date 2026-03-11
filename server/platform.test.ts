@@ -1,10 +1,13 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, afterAll } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
 // ─── Test Helpers ───────────────────────────────────────────
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
+
+// Track all project IDs created during tests for cleanup
+const createdProjectIds: number[] = [];
 
 function createTestUser(overrides?: Partial<AuthenticatedUser>): AuthenticatedUser {
   return {
@@ -54,6 +57,27 @@ function createPublicCaller() {
   const ctx = createContext(null);
   return appRouter.createCaller(ctx);
 }
+
+/** Helper: create a project and track its ID for cleanup */
+async function createTrackedProject(caller: ReturnType<typeof createAuthCaller>, name: string) {
+  const result = await caller.projects.create({ name });
+  createdProjectIds.push(result.id);
+  return result;
+}
+
+// ─── Global Cleanup ────────────────────────────────────────
+// Delete all test-created projects after ALL tests finish
+
+afterAll(async () => {
+  const caller = createAuthCaller();
+  for (const id of createdProjectIds) {
+    try {
+      await caller.projects.delete({ id });
+    } catch {
+      // Project may already be deleted by delete test — ignore
+    }
+  }
+});
 
 // ─── Auth Tests ─────────────────────────────────────────────
 
@@ -131,12 +155,7 @@ describe("projects", () => {
 
   it("projects.create creates a project and returns id", async () => {
     const caller = createAuthCaller();
-    const result = await caller.projects.create({
-      name: "Test Project " + Date.now(),
-      code: "TP-001",
-      description: "A test project",
-      clientName: "Test Client",
-    });
+    const result = await createTrackedProject(caller, "__vitest_platform_create_" + Date.now());
     expect(result).toBeDefined();
     expect(typeof result.id).toBe("number");
   });
@@ -148,12 +167,10 @@ describe("projects", () => {
 
   it("projects.getById returns project after creation", async () => {
     const caller = createAuthCaller();
-    const created = await caller.projects.create({
-      name: "GetById Test " + Date.now(),
-    });
+    const created = await createTrackedProject(caller, "__vitest_platform_getById_" + Date.now());
     const project = await caller.projects.getById({ id: created.id });
     expect(project).toBeDefined();
-    expect(project.name).toContain("GetById Test");
+    expect(project.name).toContain("__vitest_platform_getById_");
   });
 
   it("projects.getById throws for non-existent project", async () => {
@@ -163,26 +180,29 @@ describe("projects", () => {
 
   it("projects.update modifies project fields", async () => {
     const caller = createAuthCaller();
-    const created = await caller.projects.create({ name: "Update Test " + Date.now() });
+    const created = await createTrackedProject(caller, "__vitest_platform_update_" + Date.now());
     const result = await caller.projects.update({
       id: created.id,
-      name: "Updated Name",
+      name: "__vitest_platform_updated_" + Date.now(),
       status: "design",
     });
     expect(result).toEqual({ success: true });
 
     const updated = await caller.projects.getById({ id: created.id });
-    expect(updated.name).toBe("Updated Name");
+    expect(updated.name).toContain("__vitest_platform_updated_");
     expect(updated.status).toBe("design");
   });
 
   it("projects.delete removes a project", async () => {
     const caller = createAuthCaller();
-    const created = await caller.projects.create({ name: "Delete Test " + Date.now() });
+    const created = await createTrackedProject(caller, "__vitest_platform_delete_" + Date.now());
     const result = await caller.projects.delete({ id: created.id });
     expect(result).toEqual({ success: true });
 
     await expect(caller.projects.getById({ id: created.id })).rejects.toThrow();
+    // Already deleted, remove from tracking
+    const idx = createdProjectIds.indexOf(created.id);
+    if (idx !== -1) createdProjectIds.splice(idx, 1);
   });
 });
 
@@ -191,9 +211,10 @@ describe("projects", () => {
 describe("tasks", () => {
   let projectId: number;
 
-  beforeEach(async () => {
+  // Create ONE shared project for all task tests
+  it("setup: create project for task tests", async () => {
     const caller = createAuthCaller();
-    const project = await caller.projects.create({ name: "Task Test Project " + Date.now() });
+    const project = await createTrackedProject(caller, "__vitest_platform_tasks_" + Date.now());
     projectId = project.id;
   });
 
@@ -244,9 +265,10 @@ describe("tasks", () => {
 describe("documents", () => {
   let projectId: number;
 
-  beforeEach(async () => {
+  // Create ONE shared project for all document tests
+  it("setup: create project for document tests", async () => {
     const caller = createAuthCaller();
-    const project = await caller.projects.create({ name: "Doc Test Project " + Date.now() });
+    const project = await createTrackedProject(caller, "__vitest_platform_docs_" + Date.now());
     projectId = project.id;
   });
 
@@ -452,7 +474,6 @@ describe("benchmark", () => {
 
   it("benchmark.generate validates referenceCount max", async () => {
     const caller = createAuthCaller();
-    // referenceCount max is 10, passing 20 should fail at Zod validation
     await expect(
       caller.benchmark.generate({
         projectName: "Test",
@@ -500,7 +521,7 @@ describe("benchmark", () => {
         projectName: "Test",
         projectType: "office",
         requirements: "Test",
-        referenceCount: 0, // Min is 1
+        referenceCount: 0,
       })
     ).rejects.toThrow();
   });

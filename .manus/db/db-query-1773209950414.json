@@ -1,0 +1,70 @@
+{
+  "query": "SELECT DISTINCT name FROM projects WHERE name LIKE '%vitest%' OR name LIKE '%Sample%' OR name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%测试%' LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT DISTINCT name FROM projects WHERE name LIKE '%vitest%' OR name LIKE '%Sample%' OR name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%测试%' LIMIT 20;",
+  "rows": [
+    {
+      "name": "Task Test Project 1773106463959"
+    },
+    {
+      "name": "GetById Test 1773111936527"
+    },
+    {
+      "name": "Doc Test Project 1773193612488"
+    },
+    {
+      "name": "Doc Test Project 1773074292014"
+    },
+    {
+      "name": "Doc Test Project 1773200006329"
+    },
+    {
+      "name": "Task Test Project 1773105942247"
+    },
+    {
+      "name": "Doc Test Project 1773199898446"
+    },
+    {
+      "name": "Task Test Project 1773074290373"
+    },
+    {
+      "name": "Doc Test Project 1773111942852"
+    },
+    {
+      "name": "Task Test Project 1773074289210"
+    },
+    {
+      "name": "Task Test Project 1773158815077"
+    },
+    {
+      "name": "Doc Test Project 1773112696487"
+    },
+    {
+      "name": "Doc Test Project 1773162932613"
+    },
+    {
+      "name": "Task Test Project 1773192618666"
+    },
+    {
+      "name": "Doc Test Project 1773205171545"
+    },
+    {
+      "name": "Doc Test Project 1773072466625"
+    },
+    {
+      "name": "Task Test Project 1773104639404"
+    },
+    {
+      "name": "Task Test Project 1773070385183"
+    },
+    {
+      "name": "Task Test Project 1773194824796"
+    },
+    {
+      "name": "Task Test Project 1773072533999"
+    }
+  ],
+  "messages": [],
+  "stdout": "name\nTask Test Project 1773106463959\nGetById Test 1773111936527\nDoc Test Project 1773193612488\nDoc Test Project 1773074292014\nDoc Test Project 1773200006329\nTask Test Project 1773105942247\nDoc Test Project 1773199898446\nTask Test Project 1773074290373\nDoc Test Project 1773111942852\nTask Test Project 1773074289210\nTask Test Project 1773158815077\nDoc Test Project 1773112696487\nDoc Test Project 1773162932613\nTask Test Project 1773192618666\nDoc Test Project 1773205171545\nDoc Test Project 1773072466625\nTask Test Project 1773104639404\nTask Test Project 1773070385183\nTask Test Project 1773194824796\nTask Test Project 1773072533999\n",
+  "stderr": "",
+  "execution_time_ms": 1535
+}

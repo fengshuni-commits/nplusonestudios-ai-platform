@@ -163,7 +163,7 @@ export default function DesignPlanning() {
     setPptProgress(0);
     setPptJobId(null);
     setPptResult(null);
-    generateMutation.mutate({ ...form, toolId });
+    generateMutation.mutate({ ...form, toolId, projectId: importedProjectId || undefined });
   };
 
   const handleExportPpt = () => {

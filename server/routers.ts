@@ -966,6 +966,7 @@ const benchmarkRouter = router({
       requirements: z.string(),
       referenceCount: z.number().min(1).max(10).optional(),
       toolId: z.number().optional(),
+      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1031,6 +1032,7 @@ ${siteUrls}
           inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
           status: "success",
           durationMs: Date.now() - startTime,
+          projectId: input.projectId || null,
         }).catch(() => ({ id: 0 }));
 
         return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
@@ -1115,6 +1117,7 @@ const renderingRouter = router({
       maskImageData: z.string().optional(),
       aspectRatio: z.string().optional(),
       resolution: z.string().optional(),
+      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1256,6 +1259,7 @@ const renderingRouter = router({
           status: "success",
           durationMs: Date.now() - startTime,
           parentId: input.parentHistoryId || null,
+          projectId: input.projectId || null,
         }).catch(() => ({ id: 0 }));
 
         return { url: result.url, prompt: fullPrompt, historyId: historyResult.id };
@@ -1336,6 +1340,7 @@ const meetingRouter = router({
       projectName: z.string().optional(),
       meetingDate: z.string().optional(),
       toolId: z.number().optional(),
+      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1386,6 +1391,7 @@ const meetingRouter = router({
           inputParams: { projectName: input.projectName, meetingDate: input.meetingDate },
           status: "success",
           durationMs: Date.now() - startTime,
+          projectId: input.projectId || null,
         }).catch(() => ({ id: 0 }));
 
         return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
@@ -1575,6 +1581,7 @@ const mediaRouter = router({
       style: z.string().optional(),
       referenceImageUrl: z.string().url().optional(),
       additionalNotes: z.string().optional(),
+      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1705,6 +1712,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           outputUrl: coverImageUrl,
           status: "success",
           durationMs: Date.now() - startTime,
+          projectId: input.projectId || null,
         }).catch(() => ({ id: 0 }));
 
         return {
@@ -1723,6 +1731,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           inputParams: { platform: input.platform, topic: input.topic },
           status: "failed",
           durationMs: Date.now() - startTime,
+          projectId: input.projectId || null,
         }).catch(() => {});
 
         throw new TRPCError({

@@ -1,0 +1,34 @@
+{
+  "query": "SELECT id, name, code, clientName FROM projects ORDER BY id ASC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute SELECT id, name, code, clientName FROM projects ORDER BY id ASC;",
+  "rows": [
+    {
+      "id": "30085",
+      "name": "JPT总部办公",
+      "code": "NP200601",
+      "clientName": "JPT"
+    },
+    {
+      "id": "150049",
+      "name": "JPT总部办公",
+      "code": "NP-2006-001",
+      "clientName": "杰普特JPT"
+    },
+    {
+      "id": "180001",
+      "name": "JPT总部办公室内设计",
+      "code": "NP-2006-001",
+      "clientName": "JPT杰普特"
+    },
+    {
+      "id": "180015",
+      "name": "JPT",
+      "code": "NULL",
+      "clientName": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tcode\tclientName\n30085\tJPT总部办公\tNP200601\tJPT\n150049\tJPT总部办公\tNP-2006-001\t杰普特JPT\n180001\tJPT总部办公室内设计\tNP-2006-001\tJPT杰普特\n180015\tJPT\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1662
+}
