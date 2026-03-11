@@ -17,6 +17,7 @@ import {
   workflowTemplates, InsertWorkflowTemplate,
   workflowInstances,
   feedback, InsertFeedback,
+  projectCustomFields, InsertProjectCustomField,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -114,10 +115,50 @@ export async function updateProject(id: number, data: Partial<InsertProject>) {
 export async function deleteProject(id: number) {
   const db = await getDb();
   if (!db) return;
+  await db.delete(projectCustomFields).where(eq(projectCustomFields.projectId, id));
   await db.delete(tasks).where(eq(tasks.projectId, id));
   await db.delete(documents).where(eq(documents.projectId, id));
   await db.delete(projectMembers).where(eq(projectMembers.projectId, id));
   await db.delete(projects).where(eq(projects.id, id));
+}
+
+// ─── Project Custom Fields ─────────────────────────────
+
+export async function listProjectCustomFields(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(projectCustomFields)
+    .where(eq(projectCustomFields.projectId, projectId))
+    .orderBy(projectCustomFields.sortOrder, projectCustomFields.createdAt);
+}
+
+export async function createProjectCustomField(data: InsertProjectCustomField) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(projectCustomFields).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function updateProjectCustomField(id: number, data: Partial<InsertProjectCustomField>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(projectCustomFields).set(data).where(eq(projectCustomFields.id, id));
+}
+
+export async function deleteProjectCustomField(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(projectCustomFields).where(eq(projectCustomFields.id, id));
+}
+
+// ─── Project Generation History (by projectId) ────────
+
+export async function listProjectGenerationHistory(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(generationHistory)
+    .where(eq(generationHistory.projectId, projectId))
+    .orderBy(desc(generationHistory.createdAt));
 }
 
 // ─── Tasks ───────────────────────────────────────────────

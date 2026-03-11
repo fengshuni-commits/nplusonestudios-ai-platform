@@ -80,7 +80,7 @@ const menuSections: MenuSection[] = [
     label: "项目管理",
     icon: ClipboardList,
     items: [
-      { icon: FolderKanban, label: "项目管理", path: "/projects" },
+      { icon: FolderKanban, label: "项目看板", path: "/projects" },
       { icon: FileText, label: "会议纪要", path: "/meeting" },
     ],
   },

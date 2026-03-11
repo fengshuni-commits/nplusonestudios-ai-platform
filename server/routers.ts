@@ -609,6 +609,10 @@ const projectsRouter = router({
       code: z.string().optional(),
       description: z.string().optional(),
       clientName: z.string().optional(),
+      companyProfile: z.string().optional(),
+      businessGoal: z.string().optional(),
+      clientProfile: z.string().optional(),
+      projectOverview: z.string().optional(),
       status: z.enum(["planning", "design", "construction", "completed", "archived"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -622,6 +626,10 @@ const projectsRouter = router({
       code: z.string().optional(),
       description: z.string().optional(),
       clientName: z.string().optional(),
+      companyProfile: z.string().optional(),
+      businessGoal: z.string().optional(),
+      clientProfile: z.string().optional(),
+      projectOverview: z.string().optional(),
       status: z.enum(["planning", "design", "construction", "completed", "archived"]).optional(),
       phase: z.enum(["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"]).optional(),
     }))
@@ -636,6 +644,74 @@ const projectsRouter = router({
     .mutation(async ({ input }) => {
       await db.deleteProject(input.id);
       return { success: true };
+    }),
+
+  // ─── Custom Fields ──────────────────────────────────
+  listCustomFields: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      return db.listProjectCustomFields(input.projectId);
+    }),
+
+  createCustomField: protectedProcedure
+    .input(z.object({
+      projectId: z.number(),
+      fieldName: z.string().min(1),
+      fieldValue: z.string().optional(),
+      sortOrder: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return db.createProjectCustomField(input);
+    }),
+
+  updateCustomField: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      fieldName: z.string().optional(),
+      fieldValue: z.string().optional(),
+      sortOrder: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateProjectCustomField(id, data);
+      return { success: true };
+    }),
+
+  deleteCustomField: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.deleteProjectCustomField(input.id);
+      return { success: true };
+    }),
+
+  // ─── Project Generation History ────────────────────
+  listGenerationHistory: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      return db.listProjectGenerationHistory(input.projectId);
+    }),
+
+  // ─── Export project info as context for AI modules ────
+  getProjectContext: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const project = await db.getProjectById(input.id);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "项目不存在" });
+      const customFields = await db.listProjectCustomFields(input.id);
+      // Build a structured context string for AI modules
+      const lines: string[] = [];
+      if (project.name) lines.push(`项目名称：${project.name}`);
+      if (project.code) lines.push(`项目编号：${project.code}`);
+      if (project.clientName) lines.push(`甲方名称：${project.clientName}`);
+      if (project.companyProfile) lines.push(`公司概况：${project.companyProfile}`);
+      if (project.businessGoal) lines.push(`业务目标：${project.businessGoal}`);
+      if (project.clientProfile) lines.push(`客户情况：${project.clientProfile}`);
+      if (project.projectOverview) lines.push(`项目概况：${project.projectOverview}`);
+      if (project.description) lines.push(`项目描述：${project.description}`);
+      for (const cf of customFields) {
+        if (cf.fieldValue) lines.push(`${cf.fieldName}：${cf.fieldValue}`);
+      }
+      return { context: lines.join("\n"), project, customFields };
     }),
 });
 

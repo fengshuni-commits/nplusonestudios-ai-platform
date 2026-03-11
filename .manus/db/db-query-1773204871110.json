@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `project_custom_fields` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`projectId` int NOT NULL,\n\t`fieldName` varchar(256) NOT NULL,\n\t`fieldValue` text,\n\t`sortOrder` int DEFAULT 0,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `project_custom_fields_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `generation_history` ADD `projectId` int;\nALTER TABLE `projects` ADD `companyProfile` text;\nALTER TABLE `projects` ADD `businessGoal` text;\nALTER TABLE `projects` ADD `clientProfile` text;\nALTER TABLE `projects` ADD `projectOverview` text;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute CREATE TABLE `project_custom_fields` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`projectId` int NOT NULL,\n\t`fieldName` varchar(256) NOT NULL,\n\t`fieldValue` text,\n\t`sortOrder` int DEFAULT 0,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `project_custom_fields_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `generation_history` ADD `projectId` int;\nALTER TABLE `projects` ADD `companyProfile` text;\nALTER TABLE `projects` ADD `businessGoal` text;\nALTER TABLE `projects` ADD `clientProfile` text;\nALTER TABLE `projects` ADD `projectOverview` text;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 5939
+}

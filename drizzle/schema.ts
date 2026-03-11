@@ -27,6 +27,10 @@ export const projects = mysqlTable("projects", {
   clientName: varchar("clientName", { length: 256 }),
   status: mysqlEnum("status", ["planning", "design", "construction", "completed", "archived"]).default("planning").notNull(),
   phase: mysqlEnum("phase", ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"]).default("concept").notNull(),
+  companyProfile: text("companyProfile"),
+  businessGoal: text("businessGoal"),
+  clientProfile: text("clientProfile"),
+  projectOverview: text("projectOverview"),
   coverImage: text("coverImage"),
   startDate: timestamp("startDate"),
   endDate: timestamp("endDate"),
@@ -37,6 +41,20 @@ export const projects = mysqlTable("projects", {
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = typeof projects.$inferInsert;
+
+// ─── Project Custom Fields (自定义项目信息条) ────────────
+export const projectCustomFields = mysqlTable("project_custom_fields", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  fieldName: varchar("fieldName", { length: 256 }).notNull(),
+  fieldValue: text("fieldValue"),
+  sortOrder: int("sortOrder").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProjectCustomField = typeof projectCustomFields.$inferSelect;
+export type InsertProjectCustomField = typeof projectCustomFields.$inferInsert;
 
 // ─── Project Members ─────────────────────────────────────
 export const projectMembers = mysqlTable("project_members", {
@@ -318,6 +336,8 @@ export const generationHistory = mysqlTable("generation_history", {
   durationMs: int("durationMs"),
   /** Parent history ID for edit chain (null = root/first generation) */
   parentId: int("parentId"),
+  /** Associated project ID (optional) */
+  projectId: int("projectId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type GenerationHistory = typeof generationHistory.$inferSelect;
