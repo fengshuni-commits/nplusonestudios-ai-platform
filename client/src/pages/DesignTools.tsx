@@ -608,7 +608,9 @@ export default function DesignTools() {
         {/* ─── Output Panel ────────────────────────────── */}
         <Card className="lg:col-span-3">
           <CardHeader className="pb-4">
-            <CardTitle className="text-base font-medium">生成结果</CardTitle>
+            <CardTitle className="text-base font-medium">
+              {generatedImages.length > 0 ? "生成结果" : referencePreview ? "基础图片预览" : "工作区"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {generatedImages.length > 0 ? (
@@ -683,12 +685,117 @@ export default function DesignTools() {
                   </div>
                 ))}
               </div>
+            ) : referencePreview ? (
+              /* ── Base image enlarged preview with mask editing support ── */
+              <div className="space-y-3">
+                <div className="relative group rounded-lg overflow-hidden bg-muted">
+                  <img
+                    ref={(el) => { (editImgRef as React.MutableRefObject<HTMLImageElement | null>).current = el; }}
+                    src={referencePreview}
+                    alt="基础图片放大预览"
+                    className="w-full h-auto"
+                    onLoad={(e) => {
+                      const img = e.currentTarget;
+                      if (editingImageIdx === -1) {
+                        setEditImgDims({
+                          dw: img.clientWidth,
+                          dh: img.clientHeight,
+                          nw: img.naturalWidth || img.clientWidth,
+                          nh: img.naturalHeight || img.clientHeight,
+                        });
+                      }
+                    }}
+                  />
+
+                  {/* Mask editor overlay on the base image preview */}
+                  {editingImageIdx === -1 && editImgDims && (
+                    <ImageMaskEditor
+                      displayWidth={editImgDims.dw}
+                      displayHeight={editImgDims.dh}
+                      naturalWidth={editImgDims.nw}
+                      naturalHeight={editImgDims.nh}
+                      onSave={handleMaskSave}
+                      onCancel={handleMaskCancel}
+                    />
+                  )}
+
+                  {/* Mask preview overlay */}
+                  {maskPreviewUrl && editingImageIdx !== -1 && (
+                    <img
+                      src={maskPreviewUrl}
+                      alt="标注范围"
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
+                    />
+                  )}
+
+                  {/* Hover actions (hidden during mask editing) */}
+                  {editingImageIdx !== -1 && (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
+                      <div className="flex gap-2 pointer-events-auto">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setEditingImageIdx(-1);
+                            setMaskDataUrl(null);
+                            setMaskPreviewUrl(null);
+                            setEditImgDims(null);
+                            // Read dims after React commit
+                            requestAnimationFrame(() => requestAnimationFrame(() => {
+                              const imgEl = editImgRef.current;
+                              if (imgEl && imgEl.clientWidth > 0) {
+                                setEditImgDims({
+                                  dw: imgEl.clientWidth,
+                                  dh: imgEl.clientHeight,
+                                  nw: imgEl.naturalWidth || imgEl.clientWidth,
+                                  nh: imgEl.naturalHeight || imgEl.clientHeight,
+                                });
+                              }
+                            }));
+                            setTimeout(() => {
+                              const imgEl = editImgRef.current;
+                              if (imgEl && imgEl.clientWidth > 0) {
+                                setEditImgDims({
+                                  dw: imgEl.clientWidth,
+                                  dh: imgEl.clientHeight,
+                                  nw: imgEl.naturalWidth || imgEl.clientWidth,
+                                  nh: imgEl.naturalHeight || imgEl.clientHeight,
+                                });
+                              }
+                            }, 100);
+                          }}
+                        >
+                          <Paintbrush className="h-3.5 w-3.5 mr-1.5" />
+                          局部标注
+                        </Button>
+                        <Button variant="secondary" size="sm" asChild>
+                          <a href={referencePreview} download target="_blank" rel="noopener noreferrer">
+                            <Download className="h-3.5 w-3.5 mr-1.5" />
+                            下载
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mask saved indicator */}
+                  {maskDataUrl && editingImageIdx !== -1 && (
+                    <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full z-30">
+                      <Paintbrush className="h-2.5 w-2.5" />
+                      已标注 · 修改描述后点击局部重绘
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  悬停图片可使用「局部标注」工具圈出需要修改的区域
+                </p>
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <ImageIcon className="h-12 w-12 mb-3 opacity-20" />
-                <p className="text-sm">输入场景描述后，点击生成图像</p>
+                <p className="text-sm">上传基础图片或输入场景描述后，点击生成图像</p>
                 <p className="text-xs mt-1 opacity-60">
-                  生成后可点击结果图片作为基础图，或使用「局部标注」进行精细编辑
+                  上传基础图片后可在此处放大预览，并使用「局部标注」进行精细编辑
                 </p>
               </div>
             )}
