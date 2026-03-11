@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Search, FolderKanban, Calendar, Users } from "lucide-react";
+import { Plus, Search, FolderKanban, Calendar, Users, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -19,6 +20,8 @@ export default function Projects() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: projects, isLoading } = trpc.projects.list.useQuery({ search, status: statusFilter === "all" ? undefined : statusFilter });
   const utils = trpc.useUtils();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+
   const createProject = trpc.projects.create.useMutation({
     onSuccess: (result) => {
       utils.projects.list.invalidate();
@@ -26,11 +29,20 @@ export default function Projects() {
       setDialogOpen(false);
       resetForm();
       toast.success("项目创建成功");
-      // Navigate to the new project detail page
       if (result?.id) {
         setLocation(`/projects/${result.id}`);
       }
     },
+  });
+
+  const deleteProject = trpc.projects.delete.useMutation({
+    onSuccess: () => {
+      utils.projects.list.invalidate();
+      utils.dashboard.stats.invalidate();
+      setDeleteTarget(null);
+      toast.success("项目已删除");
+    },
+    onError: () => toast.error("删除失败，请重试"),
   });
 
   const initialForm = {
@@ -140,7 +152,7 @@ export default function Projects() {
           {projects.map((project: any) => (
             <Card
               key={project.id}
-              className="hover:shadow-md transition-shadow cursor-pointer group"
+              className="hover:shadow-md transition-shadow cursor-pointer group relative"
               onClick={() => setLocation(`/projects/${project.id}`)}
             >
               <CardContent className="p-5">
@@ -148,7 +160,20 @@ export default function Projects() {
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                     <FolderKanban className="h-5 w-5 text-primary" />
                   </div>
-                  <Badge variant="outline" className="text-xs">{statusLabel(project.status)}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-xs">{statusLabel(project.status)}</Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget({ id: project.id, name: project.name });
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
                 <h3 className="font-medium text-sm group-hover:text-primary transition-colors">{project.name}</h3>
                 {project.code && <p className="text-xs text-muted-foreground mt-0.5">{project.code}</p>}
@@ -174,6 +199,28 @@ export default function Projects() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除项目</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除项目「{deleteTarget?.name}」吗？删除后该项目的所有任务、文档和自定义信息将一并移除，此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && deleteProject.mutate({ id: deleteTarget.id })}
+              disabled={deleteProject.isPending}
+            >
+              {deleteProject.isPending ? "删除中..." : "确认删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

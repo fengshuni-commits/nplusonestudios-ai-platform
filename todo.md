@@ -186,3 +186,6 @@
 - [x] 后端改造：各 AI 生成 API（benchmark、ai_render、meeting、media）支持 projectId 参数
 - [x] 前端改造：各 AI 模块导入项目信息后，生成时自动传递 projectId
 - [x] 项目看板文档 Tab：展示关联该项目的所有 AI 生成记录，按模块分类筛选
+
+## 项目看板 - 删除项目功能
+- [x] 项目看板列表页增加删除项目按钮（带确认对话框）
