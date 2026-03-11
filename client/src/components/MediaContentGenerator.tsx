@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { Loader2, Sparkles, Download, Upload, X, Copy, Check, ImageIcon } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 type Platform = "xiaohongshu" | "wechat" | "instagram";
 
@@ -30,6 +31,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [resultHistoryId, setResultHistoryId] = useState<number | undefined>(undefined);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
   const generateMutation = trpc.media.generate.useMutation({
     onSuccess: (data) => {
       setResult(data.textContent);
+      setResultHistoryId(data.historyId || undefined);
       setCoverImageUrl(data.coverImageUrl);
       setIsGenerating(false);
       toast.success(`${config.name}内容生成完成`);
@@ -414,24 +417,29 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
 
           {/* Copy All Button */}
           {result && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                let fullText = "";
-                if (config.platform === "xiaohongshu") {
-                  fullText = `${result.title}\n\n${result.content}\n\n${result.tags?.map((t: string) => `#${t}`).join(" ") || ""}`;
-                } else if (config.platform === "wechat") {
-                  fullText = `${result.title}\n\n${result.summary}\n\n${result.content}`;
-                } else {
-                  fullText = `${result.caption}\n\n${result.hashtags?.join(" ") || ""}`;
-                }
-                copyToClipboard(fullText, "all");
-              }}
-            >
-              {copiedField === "all" ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-              复制全部内容
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  let fullText = "";
+                  if (config.platform === "xiaohongshu") {
+                    fullText = `${result.title}\n\n${result.content}\n\n${result.tags?.map((t: string) => `#${t}`).join(" ") || ""}`;
+                  } else if (config.platform === "wechat") {
+                    fullText = `${result.title}\n\n${result.summary}\n\n${result.content}`;
+                  } else {
+                    fullText = `${result.caption}\n\n${result.hashtags?.join(" ") || ""}`;
+                  }
+                  copyToClipboard(fullText, "all");
+                }}
+              >
+                {copiedField === "all" ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                复制全部内容
+              </Button>
+              <div className="mt-4 pt-4 border-t">
+                <FeedbackButtons module={`media_${config.platform}`} historyId={resultHistoryId} />
+              </div>
+            </>
           )}
         </div>
       </div>

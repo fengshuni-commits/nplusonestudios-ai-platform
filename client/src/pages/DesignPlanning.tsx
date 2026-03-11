@@ -12,6 +12,7 @@ import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 type PptStage = "idle" | "structuring" | "generating_images" | "building_pptx" | "done";
 
@@ -31,6 +32,7 @@ export default function DesignPlanning() {
     referenceCount: 5,
   });
   const [report, setReport] = useState<string>("");
+  const [reportHistoryId, setReportHistoryId] = useState<number | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
   const [pptStage, setPptStage] = useState<PptStage>("idle");
   const [pptProgress, setPptProgress] = useState(0);
@@ -41,6 +43,7 @@ export default function DesignPlanning() {
   const generateMutation = trpc.benchmark.generate.useMutation({
     onSuccess: (data) => {
       setReport(data.content);
+      setReportHistoryId(data.historyId || undefined);
       setIsGenerating(false);
       toast.success("调研报告生成完成");
     },
@@ -297,9 +300,16 @@ export default function DesignPlanning() {
                 </CardHeader>
                 <CardContent>
                   {report ? (
-                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                      <Streamdown>{cleanedReport}</Streamdown>
-                    </div>
+                    <>
+                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                        <Streamdown>{cleanedReport}</Streamdown>
+                      </div>
+                      {!isGenerating && (
+                        <div className="mt-6 pt-4 border-t">
+                          <FeedbackButtons module="benchmark_report" historyId={reportHistoryId} />
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                       <Compass className="h-12 w-12 mb-3 opacity-20" />

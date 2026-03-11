@@ -322,3 +322,23 @@ export const generationHistory = mysqlTable("generation_history", {
 });
 export type GenerationHistory = typeof generationHistory.$inferSelect;
 export type InsertGenerationHistory = typeof generationHistory.$inferInsert;
+
+// ─── Feedback (满意度反馈) ─────────────────────────────
+export const feedback = mysqlTable("feedback", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** Module: benchmark_report, benchmark_ppt, ai_render, meeting_minutes, media_xiaohongshu, media_wechat, media_instagram */
+  module: varchar("module", { length: 64 }).notNull(),
+  /** Related generation history ID (optional) */
+  historyId: int("historyId"),
+  /** Rating: satisfied or unsatisfied */
+  rating: mysqlEnum("rating", ["satisfied", "unsatisfied"]).notNull(),
+  /** Optional text feedback for improvement suggestions */
+  comment: text("comment"),
+  /** Snapshot of input params for context */
+  contextJson: json("contextJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Feedback = typeof feedback.$inferSelect;
+export type InsertFeedback = typeof feedback.$inferInsert;

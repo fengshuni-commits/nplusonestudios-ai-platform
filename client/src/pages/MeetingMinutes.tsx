@@ -9,6 +9,7 @@ import { FileText, Loader2, Sparkles, Upload, Mic, Copy, Download } from "lucide
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 export default function MeetingMinutes() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -16,6 +17,7 @@ export default function MeetingMinutes() {
   const [projectName, setProjectName] = useState("");
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split("T")[0]);
   const [minutes, setMinutes] = useState("");
+  const [minutesHistoryId, setMinutesHistoryId] = useState<number | undefined>(undefined);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioFileName, setAudioFileName] = useState("");
@@ -26,6 +28,7 @@ export default function MeetingMinutes() {
   const generateMutation = trpc.meeting.generateMinutes.useMutation({
     onSuccess: (data) => {
       setMinutes(data.content);
+      setMinutesHistoryId(data.historyId || undefined);
       setIsGenerating(false);
       toast.success("会议纪要生成完成");
     },
@@ -191,9 +194,16 @@ export default function MeetingMinutes() {
           </CardHeader>
           <CardContent>
             {minutes ? (
-              <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                <Streamdown>{minutes}</Streamdown>
-              </div>
+              <>
+                <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                  <Streamdown>{minutes}</Streamdown>
+                </div>
+                {!isGenerating && (
+                  <div className="mt-6 pt-4 border-t">
+                    <FeedbackButtons module="meeting_minutes" historyId={minutesHistoryId} />
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <Mic className="h-12 w-12 mb-3 opacity-20" />

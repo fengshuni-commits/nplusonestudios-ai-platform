@@ -17,6 +17,7 @@ import {
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -645,6 +646,9 @@ export default function DesignTools() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">{img.prompt}</p>
+                    {img.historyId && (
+                      <FeedbackButtons module="ai_render" historyId={img.historyId} compact />
+                    )}
                   </div>
                 ))}
               </div>

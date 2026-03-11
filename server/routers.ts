@@ -946,7 +946,7 @@ ${siteUrls}
         });
 
         // Record in generation history
-        await db.createGenerationHistory({
+        const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,
           module: "benchmark_report",
           title: `${input.projectName} - 对标调研报告`,
@@ -954,9 +954,9 @@ ${siteUrls}
           inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
           status: "success",
           durationMs: Date.now() - startTime,
-        }).catch(() => {});
+        }).catch(() => ({ id: 0 }));
 
-        return { content, generatedAt: new Date().toISOString() };
+        return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
       } catch (error) {
         await db.createAiToolLog({
           toolId: input.toolId || 0,
@@ -1274,7 +1274,18 @@ const meetingRouter = router({
           durationMs: Date.now() - startTime,
         });
 
-        return { content, generatedAt: new Date().toISOString() };
+        // Record in generation history
+        const historyResult = await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "meeting_minutes",
+          title: `${input.projectName || "会议"} - 会议纪要`,
+          summary: `${input.meetingDate || "今日"} | ${content.substring(0, 100)}`,
+          inputParams: { projectName: input.projectName, meetingDate: input.meetingDate },
+          status: "success",
+          durationMs: Date.now() - startTime,
+        }).catch(() => ({ id: 0 }));
+
+        return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
       } catch (error) {
         await db.createAiToolLog({
           toolId: input.toolId || 0,
@@ -1582,7 +1593,7 @@ Note: Instagram content should be visually driven, use professional English, inc
         }
 
         // Step 3: Record in history
-        await db.createGenerationHistory({
+        const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,
           module: `media_${input.platform}`,
           title: `${config.name} - ${input.topic.substring(0, 40)}`,
@@ -1591,13 +1602,14 @@ Note: Instagram content should be visually driven, use professional English, inc
           outputUrl: coverImageUrl,
           status: "success",
           durationMs: Date.now() - startTime,
-        }).catch(() => {});
+        }).catch(() => ({ id: 0 }));
 
         return {
           platform: input.platform,
           textContent,
           coverImageUrl,
           durationMs: Date.now() - startTime,
+          historyId: historyResult.id,
         };
       } catch (error: any) {
         await db.createGenerationHistory({
@@ -1661,6 +1673,77 @@ const historyRouter = router({
     }),
 });
 
+// ─── Feedback (满意度反馈) ───────────────────────────────────
+
+const feedbackRouter = router({
+  /** Submit or update feedback for a generation result */
+  submit: protectedProcedure
+    .input(z.object({
+      module: z.string().min(1),
+      historyId: z.number().optional(),
+      rating: z.enum(["satisfied", "unsatisfied"]),
+      comment: z.string().optional(),
+      contextJson: z.any().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Check if feedback already exists for this history item
+      if (input.historyId) {
+        const existing = await db.getFeedbackByHistoryId(input.historyId, ctx.user.id);
+        if (existing) {
+          // Update existing feedback
+          await db.updateFeedback(existing.id, {
+            rating: input.rating,
+            comment: input.comment || undefined,
+          });
+          return { id: existing.id, updated: true };
+        }
+      }
+      const result = await db.createFeedback({
+        userId: ctx.user.id,
+        module: input.module,
+        historyId: input.historyId,
+        rating: input.rating,
+        comment: input.comment,
+        contextJson: input.contextJson,
+      });
+      return { id: result.id, updated: false };
+    }),
+
+  /** Get feedback for a specific history item */
+  getByHistoryId: protectedProcedure
+    .input(z.object({ historyId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return db.getFeedbackByHistoryId(input.historyId, ctx.user.id);
+    }),
+
+  /** Get feedback statistics (admin only) */
+  stats: adminProcedure
+    .input(z.object({ module: z.string().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.getFeedbackStats(input?.module);
+    }),
+
+  /** Get feedback trend over time (admin only) */
+  trend: adminProcedure
+    .input(z.object({
+      days: z.number().min(1).max(365).optional(),
+      module: z.string().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      return db.getFeedbackTrend(input?.days || 30, input?.module);
+    }),
+
+  /** Get recent feedback entries (admin only) */
+  recent: adminProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(100).optional(),
+      module: z.string().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      return db.getRecentFeedback(input?.limit || 20, input?.module);
+    }),
+});
+
 // ─── Main Router ─────────────────────────────────────────
 
 export const appRouter = router({
@@ -1687,6 +1770,7 @@ export const appRouter = router({
   upload: uploadRouter,
   media: mediaRouter,
   history: historyRouter,
+  feedback: feedbackRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -35,6 +35,7 @@ import {
   BookMarked,
   MessageCircle,
   Camera,
+  BarChart3,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useLocation } from "wouter";
@@ -107,6 +108,7 @@ const menuSections: MenuSection[] = [
       { icon: Users, label: "团队管理", path: "/admin/team" },
       { icon: Key, label: "API 密钥", path: "/admin/api-keys" },
       { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
+      { icon: BarChart3, label: "反馈分析", path: "/admin/feedback" },
     ],
   },
   {

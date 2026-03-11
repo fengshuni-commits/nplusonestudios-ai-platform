@@ -20,6 +20,7 @@ import AdminTeam from "./pages/AdminTeam";
 import AdminApiKeys from "./pages/AdminApiKeys";
 import AdminSettings from "./pages/AdminSettings";
 import AdminCaseSources from "./pages/AdminCaseSources";
+import AdminFeedback from "./pages/AdminFeedback";
 import MeetingMinutes from "./pages/MeetingMinutes";
 import HistoryPage from "./pages/History";
 import MediaXiaohongshu from "./pages/MediaXiaohongshu";
@@ -66,6 +67,7 @@ function Router() {
         <Route path="/admin/api-keys" component={AdminApiKeys} />
         <Route path="/admin/case-sources" component={AdminCaseSources} />
         <Route path="/admin/settings" component={AdminSettings} />
+        <Route path="/admin/feedback" component={AdminFeedback} />
 
         <Route component={NotFound} />
       </Switch>

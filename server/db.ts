@@ -16,6 +16,7 @@ import {
   apiKeys, InsertApiKey,
   workflowTemplates, InsertWorkflowTemplate,
   workflowInstances,
+  feedback, InsertFeedback,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -665,4 +666,143 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   }));
 
   return { items: enrichedItems, total: countResult[0]?.count || 0 };
+}
+
+
+// ─── Feedback Helpers ──────────────────────────────────
+export async function createFeedback(data: InsertFeedback) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(feedback).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function getFeedbackByHistoryId(historyId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(feedback)
+    .where(and(eq(feedback.historyId, historyId), eq(feedback.userId, userId)))
+    .limit(1);
+  return rows[0] || null;
+}
+
+export async function updateFeedback(id: number, data: { rating?: "satisfied" | "unsatisfied"; comment?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(feedback).set(data).where(eq(feedback.id, id));
+}
+
+export async function getFeedbackStats(moduleFilter?: string) {
+  const db = await getDb();
+  if (!db) return { modules: [], total: { satisfied: 0, unsatisfied: 0, total: 0 } };
+  
+  const conditions = moduleFilter ? [eq(feedback.module, moduleFilter)] : [];
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
+  // Per-module stats
+  const moduleStats = await db.select({
+    module: feedback.module,
+    rating: feedback.rating,
+    count: sql<number>`count(*)`,
+  }).from(feedback)
+    .where(where)
+    .groupBy(feedback.module, feedback.rating);
+  
+  // Aggregate into a structured result
+  const moduleMap: Record<string, { satisfied: number; unsatisfied: number; total: number }> = {};
+  let totalSatisfied = 0;
+  let totalUnsatisfied = 0;
+  
+  for (const row of moduleStats) {
+    if (!moduleMap[row.module]) {
+      moduleMap[row.module] = { satisfied: 0, unsatisfied: 0, total: 0 };
+    }
+    if (row.rating === "satisfied") {
+      moduleMap[row.module].satisfied = row.count;
+      totalSatisfied += row.count;
+    } else {
+      moduleMap[row.module].unsatisfied = row.count;
+      totalUnsatisfied += row.count;
+    }
+    moduleMap[row.module].total += row.count;
+  }
+  
+  const modules = Object.entries(moduleMap).map(([module, stats]) => ({
+    module,
+    ...stats,
+    satisfactionRate: stats.total > 0 ? Math.round((stats.satisfied / stats.total) * 100) : 0,
+  }));
+  
+  return {
+    modules,
+    total: {
+      satisfied: totalSatisfied,
+      unsatisfied: totalUnsatisfied,
+      total: totalSatisfied + totalUnsatisfied,
+      satisfactionRate: (totalSatisfied + totalUnsatisfied) > 0
+        ? Math.round((totalSatisfied / (totalSatisfied + totalUnsatisfied)) * 100) : 0,
+    },
+  };
+}
+
+export async function getFeedbackTrend(days: number = 30, moduleFilter?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = [
+    sql`${feedback.createdAt} >= DATE_SUB(NOW(), INTERVAL ${days} DAY)`,
+  ];
+  if (moduleFilter) {
+    conditions.push(eq(feedback.module, moduleFilter));
+  }
+  
+  const rows = await db.select({
+    date: sql<string>`DATE(${feedback.createdAt})`,
+    rating: feedback.rating,
+    count: sql<number>`count(*)`,
+  }).from(feedback)
+    .where(and(...conditions))
+    .groupBy(sql`DATE(${feedback.createdAt})`, feedback.rating)
+    .orderBy(sql`DATE(${feedback.createdAt})`);
+  
+  // Group by date
+  const dateMap: Record<string, { date: string; satisfied: number; unsatisfied: number }> = {};
+  for (const row of rows) {
+    const dateStr = String(row.date);
+    if (!dateMap[dateStr]) {
+      dateMap[dateStr] = { date: dateStr, satisfied: 0, unsatisfied: 0 };
+    }
+    if (row.rating === "satisfied") {
+      dateMap[dateStr].satisfied = row.count;
+    } else {
+      dateMap[dateStr].unsatisfied = row.count;
+    }
+  }
+  
+  return Object.values(dateMap);
+}
+
+export async function getRecentFeedback(limit: number = 20, moduleFilter?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = moduleFilter ? [eq(feedback.module, moduleFilter)] : [];
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
+  const rows = await db.select({
+    id: feedback.id,
+    userId: feedback.userId,
+    module: feedback.module,
+    historyId: feedback.historyId,
+    rating: feedback.rating,
+    comment: feedback.comment,
+    createdAt: feedback.createdAt,
+    userName: users.name,
+  }).from(feedback)
+    .leftJoin(users, eq(feedback.userId, users.id))
+    .where(where)
+    .orderBy(desc(feedback.createdAt))
+    .limit(limit);
+  
+  return rows;
 }
