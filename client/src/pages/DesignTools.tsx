@@ -220,6 +220,7 @@ export default function DesignTools() {
   const handleStartMaskEdit = useCallback((idx: number) => {
     setEditingImageIdx(idx);
     setMaskDataUrl(null);
+    setEditImgDims(null);
     // Also set this image as reference
     const img = generatedImages[idx];
     if (img) {
@@ -229,6 +230,22 @@ export default function DesignTools() {
       setReferenceName("标注编辑中");
       if (img.historyId) setParentHistoryId(img.historyId);
     }
+    // Use double rAF to ensure React has committed the DOM update
+    const readDims = () => {
+      const imgEl = editImgRef.current;
+      if (imgEl && imgEl.clientWidth > 0) {
+        setEditImgDims({
+          dw: imgEl.clientWidth,
+          dh: imgEl.clientHeight,
+          nw: imgEl.naturalWidth || imgEl.clientWidth,
+          nh: imgEl.naturalHeight || imgEl.clientHeight,
+        });
+      }
+    };
+    // Double rAF to wait for React commit + browser paint
+    requestAnimationFrame(() => requestAnimationFrame(readDims));
+    // Also try after a short delay as fallback
+    setTimeout(readDims, 100);
   }, [generatedImages]);
 
   const handleMaskSave = useCallback((dataUrl: string) => {
@@ -238,6 +255,7 @@ export default function DesignTools() {
 
   const handleMaskCancel = useCallback(() => {
     setEditingImageIdx(null);
+    setEditImgDims(null);
     setMaskDataUrl(null);
   }, []);
 
@@ -586,7 +604,7 @@ export default function DesignTools() {
                   <div key={idx} className="space-y-2">
                     <div className="relative group rounded-lg overflow-hidden bg-muted">
                       <img
-                        ref={editingImageIdx === idx ? editImgRef : undefined}
+                        ref={(el) => { if (idx === 0 || editingImageIdx === idx) (editImgRef as React.MutableRefObject<HTMLImageElement | null>).current = el; }}
                         src={img.url}
                         alt={img.prompt}
                         className={`w-full h-auto ${editingImageIdx === idx ? "" : "cursor-pointer"} transition-transform`}

@@ -749,8 +749,9 @@ export async function getFeedbackTrend(days: number = 30, moduleFilter?: string)
   const db = await getDb();
   if (!db) return [];
   
+  const safeDays = Math.max(1, Math.min(365, Math.floor(days)));
   const conditions = [
-    sql`${feedback.createdAt} >= DATE_SUB(NOW(), INTERVAL ${days} DAY)`,
+    sql`${feedback.createdAt} >= DATE_SUB(NOW(), INTERVAL ${sql.raw(String(safeDays))} DAY)`,
   ];
   if (moduleFilter) {
     conditions.push(eq(feedback.module, moduleFilter));

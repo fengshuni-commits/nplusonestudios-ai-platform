@@ -135,3 +135,8 @@
 - [x] 媒体模块（小红书/公众号/Instagram）：生成结果后显示满意/不满意按钮
 - [x] 可复用反馈组件：FeedbackButtons 组件
 - [x] 后台反馈汇总分析页面：各模块满意度统计、趋势图表
+
+## Bug 修复：反馈系统
+- [x] getFeedbackTrend SQL 查询报错：DATE_SUB INTERVAL 参数绑定失败（改用 sql.raw 内联天数值）
+- [x] 标注功能不能用：修复 ref 绑定和尺寸读取时序问题（双 rAF + setTimeout 回退）
+- [x] 比例调整加黑边：有参考图时不传 size 参数避免黑边，纯文生图时才传 size

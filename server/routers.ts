@@ -1099,9 +1099,6 @@ const renderingRouter = router({
 
       try {
         const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
-        if (imageSize) {
-          genOpts.size = imageSize;
-        }
 
         // Collect original images: reference + optional material
         const originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
@@ -1118,6 +1115,14 @@ const renderingRouter = router({
         }
         if (originalImages.length > 0) {
           genOpts.originalImages = originalImages;
+        }
+
+        // Only pass size for pure text-to-image (no reference image).
+        // When editing an existing image, the API may add black bars to
+        // pad the reference to the target size, so we rely on the prompt
+        // to guide the aspect ratio instead.
+        if (imageSize && !input.referenceImageUrl) {
+          genOpts.size = imageSize;
         }
 
         const result = await generateImage(genOpts);
