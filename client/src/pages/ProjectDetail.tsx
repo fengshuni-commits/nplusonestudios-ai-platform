@@ -12,9 +12,10 @@ import {
   ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Compass, Ruler, FileText, Megaphone,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
-  ExternalLink, Check,
+  ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
+  Presentation,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 
@@ -362,8 +363,23 @@ function ProjectInfoTab({
 }
 
 // ═══════════════════════════════════════════════════════════
-// ProjectDocumentsTab: View AI-generated outputs grouped by module
+// ProjectDocumentsTab: View AI-generated outputs grouped by TYPE
+// - Design outputs (ai_render): thumbnail grid → click to open edit chain dialog
+// - Document outputs (benchmark, meeting): list with actions
+// - Media outputs (xiaohongshu, wechat, instagram): list with actions
 // ═══════════════════════════════════════════════════════════
+
+// Category definitions for grouping modules
+const CATEGORY_DESIGN = ["ai_render"];
+const CATEGORY_DOCUMENT = ["benchmark_report", "benchmark_ppt", "meeting_minutes"];
+const CATEGORY_MEDIA = ["media_xiaohongshu", "media_wechat", "media_instagram"];
+
+function formatDocTime(dateStr: string | Date): string {
+  const date = new Date(dateStr);
+  return date.toLocaleString("zh-CN", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
 
 function ProjectDocumentsTab({
   projectId,
@@ -372,109 +388,370 @@ function ProjectDocumentsTab({
   projectId: number;
   generationHistory: any[];
 }) {
-  const [selectedModule, setSelectedModule] = useState<string | null>(null);
+  const [, navigate] = useLocation();
   const { data: documents } = trpc.documents.listByProject.useQuery({ projectId });
 
-  // Group generation history by module
-  const grouped = generationHistory.reduce((acc: Record<string, any[]>, item: any) => {
-    const mod = item.module || "other";
-    if (!acc[mod]) acc[mod] = [];
-    acc[mod].push(item);
-    return acc;
-  }, {});
+  // Edit chain dialog state
+  const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
-  const moduleKeys = Object.keys(grouped);
+  const chainQuery = trpc.history.getEditChain.useQuery(
+    { rootId: selectedRootId! },
+    { enabled: !!selectedRootId && detailOpen }
+  );
+
+  // Group by category
+  const { designItems, documentItems, mediaItems } = useMemo(() => {
+    const design: any[] = [];
+    const doc: any[] = [];
+    const media: any[] = [];
+    for (const item of generationHistory) {
+      const mod = item.module || "other";
+      if (CATEGORY_DESIGN.includes(mod)) design.push(item);
+      else if (CATEGORY_DOCUMENT.includes(mod)) doc.push(item);
+      else if (CATEGORY_MEDIA.includes(mod)) media.push(item);
+      else doc.push(item); // fallback to document
+    }
+    return { designItems: design, documentItems: doc, mediaItems: media };
+  }, [generationHistory]);
+
+  // Group document items by module
+  const documentGrouped = useMemo(() => {
+    const grouped: Record<string, any[]> = {};
+    for (const item of documentItems) {
+      const mod = item.module || "other";
+      if (!grouped[mod]) grouped[mod] = [];
+      grouped[mod].push(item);
+    }
+    return grouped;
+  }, [documentItems]);
+
+  // Group media items by module
+  const mediaGrouped = useMemo(() => {
+    const grouped: Record<string, any[]> = {};
+    for (const item of mediaItems) {
+      const mod = item.module || "other";
+      if (!grouped[mod]) grouped[mod] = [];
+      grouped[mod].push(item);
+    }
+    return grouped;
+  }, [mediaItems]);
+
+  const handleContinueEdit = useCallback((imageUrl: string, historyId: number) => {
+    navigate(`/design/tools?ref=${encodeURIComponent(imageUrl)}&historyId=${historyId}`);
+  }, [navigate]);
+
+  const handleCopyPrompt = useCallback((prompt: string) => {
+    navigator.clipboard.writeText(prompt).then(() => {
+      toast.success("提示词已复制到剪贴板");
+    }).catch(() => toast.error("复制失败"));
+  }, []);
+
+  if (generationHistory.length === 0 && (!documents || documents.length === 0)) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
+          <p className="text-muted-foreground text-sm">暂无生成记录</p>
+          <p className="text-xs text-muted-foreground mt-1">在 AI 模块中导入此项目信息并生成内容后，记录将显示在这里</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Module filter buttons */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant={selectedModule === null ? "default" : "outline"}
-          onClick={() => setSelectedModule(null)}
-        >
-          全部
-        </Button>
-        {moduleKeys.map((mod) => {
-          const info = moduleLabels[mod] || { label: mod, color: "bg-gray-100 text-gray-700" };
-          return (
-            <Button
-              key={mod}
-              size="sm"
-              variant={selectedModule === mod ? "default" : "outline"}
-              onClick={() => setSelectedModule(mod)}
-            >
-              {info.label} ({grouped[mod].length})
-            </Button>
-          );
-        })}
-      </div>
+    <div className="space-y-6">
+      {/* ─── Design Outputs: Thumbnail Grid ─── */}
+      {designItems.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-md flex items-center justify-center bg-violet-100 text-violet-700">
+              <ImageIcon className="h-3.5 w-3.5" />
+            </div>
+            <h3 className="text-sm font-medium">设计辅助</h3>
+            <span className="text-xs text-muted-foreground">{designItems.length} 张</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {designItems.map((item: any) => (
+              <div
+                key={item.id}
+                className="group relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer border border-border/40 hover:border-primary/50 transition-all hover:shadow-md"
+                onClick={() => {
+                  setSelectedRootId(item.id);
+                  setDetailOpen(true);
+                }}
+              >
+                {item.outputUrl ? (
+                  <img
+                    src={item.outputUrl}
+                    alt={item.title}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
+                  </div>
+                )}
+                {/* Hover overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute bottom-0 left-0 right-0 p-2">
+                    <p className="text-[11px] text-white/90 line-clamp-2 leading-tight">
+                      {item.title}
+                    </p>
+                    <p className="text-[10px] text-white/60 mt-0.5">
+                      {formatDocTime(item.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Generation history items */}
-      {generationHistory.length > 0 ? (
-        <div className="space-y-2">
-          {generationHistory
-            .filter((item: any) => !selectedModule || item.module === selectedModule)
-            .map((item: any) => {
-              const info = moduleLabels[item.module] || { label: item.module, icon: FileText, color: "bg-gray-100 text-gray-700" };
+      {/* ─── Document Outputs: Grouped List ─── */}
+      {Object.keys(documentGrouped).length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-md flex items-center justify-center bg-blue-100 text-blue-700">
+              <FileText className="h-3.5 w-3.5" />
+            </div>
+            <h3 className="text-sm font-medium">项目文档</h3>
+            <span className="text-xs text-muted-foreground">{documentItems.length} 份</span>
+          </div>
+          <div className="space-y-4">
+            {Object.entries(documentGrouped).map(([mod, items]) => {
+              const info = moduleLabels[mod] || { label: mod, icon: FileText, color: "bg-gray-100 text-gray-700" };
               const Icon = info.icon;
               return (
-                <Card key={item.id} className="hover:shadow-sm transition-shadow">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${info.color}`}>
-                      <Icon className="h-4 w-4" />
+                <Card key={mod}>
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-6 w-6 rounded flex items-center justify-center ${info.color}`}>
+                        <Icon className="h-3 w-3" />
+                      </div>
+                      <CardTitle className="text-sm">{info.label}</CardTitle>
+                      <span className="text-xs text-muted-foreground">{items.length} 份</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(item.createdAt).toLocaleString("zh-CN")}
-                      </p>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="space-y-1.5">
+                      {items.map((item: any) => (
+                        <div key={item.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{item.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{formatDocTime(item.createdAt)}</p>
+                          </div>
+                          {item.outputUrl && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => window.open(item.outputUrl!, "_blank")}
+                              title={mod === "benchmark_ppt" ? "下载" : "查看"}
+                            >
+                              {mod === "benchmark_ppt" ? <Download className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <Badge variant="secondary" className="text-xs shrink-0">{info.label}</Badge>
-                    {item.outputUrl && (
-                      <a href={item.outputUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                        <Button size="icon" variant="ghost" className="h-8 w-8">
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </a>
-                    )}
                   </CardContent>
                 </Card>
               );
             })}
+          </div>
         </div>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground text-sm">暂无生成记录</p>
-            <p className="text-xs text-muted-foreground mt-1">在 AI 模块中导入此项目信息并生成内容后，记录将显示在这里</p>
-          </CardContent>
-        </Card>
       )}
 
-      {/* Traditional documents */}
-      {documents && documents.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">项目文档</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {documents.map((doc: any) => (
-                <div key={doc.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-accent/50">
-                  <div>
-                    <p className="text-sm font-medium">{doc.title}</p>
-                    <p className="text-xs text-muted-foreground">v{doc.version} · {new Date(doc.updatedAt).toLocaleDateString("zh-CN")}</p>
-                  </div>
-                  <Badge variant="outline" className="text-xs">{docTypeLabel(doc.type)}</Badge>
-                </div>
-              ))}
+      {/* ─── Media Outputs: Grouped List ─── */}
+      {Object.keys(mediaGrouped).length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-md flex items-center justify-center bg-pink-100 text-pink-700">
+              <Megaphone className="h-3.5 w-3.5" />
             </div>
-          </CardContent>
-        </Card>
+            <h3 className="text-sm font-medium">媒体传播</h3>
+            <span className="text-xs text-muted-foreground">{mediaItems.length} 篇</span>
+          </div>
+          <div className="space-y-4">
+            {Object.entries(mediaGrouped).map(([mod, items]) => {
+              const info = moduleLabels[mod] || { label: mod, icon: FileText, color: "bg-gray-100 text-gray-700" };
+              const Icon = info.icon;
+              return (
+                <Card key={mod}>
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-6 w-6 rounded flex items-center justify-center ${info.color}`}>
+                        <Icon className="h-3 w-3" />
+                      </div>
+                      <CardTitle className="text-sm">{info.label}</CardTitle>
+                      <span className="text-xs text-muted-foreground">{items.length} 篇</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="space-y-1.5">
+                      {items.map((item: any) => (
+                        <div key={item.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{item.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{formatDocTime(item.createdAt)}</p>
+                          </div>
+                          {item.outputUrl && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => window.open(item.outputUrl!, "_blank")}
+                              title="查看"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
+
+      {/* ─── Traditional documents ─── */}
+      {documents && documents.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-7 w-7 rounded-md flex items-center justify-center bg-gray-100 text-gray-700">
+              <FileText className="h-3.5 w-3.5" />
+            </div>
+            <h3 className="text-sm font-medium">其他文档</h3>
+          </div>
+          <Card>
+            <CardContent className="p-4">
+              <div className="space-y-1.5">
+                {documents.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent/50">
+                    <div>
+                      <p className="text-sm font-medium">{doc.title}</p>
+                      <p className="text-xs text-muted-foreground">v{doc.version} · {new Date(doc.updatedAt).toLocaleDateString("zh-CN")}</p>
+                    </div>
+                    <Badge variant="outline" className="text-xs">{docTypeLabel(doc.type)}</Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ─── Edit Chain Dialog for AI Render ─── */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle className="text-base font-medium flex items-center gap-2">
+              <ImageIcon className="h-4 w-4 text-violet-600" />
+              编辑历史
+            </DialogTitle>
+          </DialogHeader>
+
+          {chainQuery.isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : chainQuery.data && chainQuery.data.length > 0 ? (
+            <div className="px-6 pb-6">
+              <div className="space-y-0">
+                {chainQuery.data.map((chainItem: any, idx: number) => {
+                  const isFirst = idx === 0;
+                  const isLast = idx === chainQuery.data!.length - 1;
+                  const inputParams = chainItem.inputParams as any;
+                  const promptText = inputParams?.prompt || chainItem.summary || "";
+
+                  return (
+                    <div key={chainItem.id} className="relative">
+                      {!isLast && (
+                        <div className="absolute left-[23px] top-[calc(100%-8px)] w-px h-8 bg-border z-0" />
+                      )}
+                      <div className={`relative flex gap-4 ${!isFirst ? "pt-4" : ""} ${!isLast ? "pb-4" : ""}`}>
+                        <div className="flex flex-col items-center shrink-0 z-10">
+                          <div className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 ${isLast ? "border-violet-500" : "border-border"}`}>
+                            {chainItem.outputUrl ? (
+                              <img src={chainItem.outputUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-muted flex items-center justify-center">
+                                <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"}`}>
+                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次编辑`}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground/60">
+                                  {formatDocTime(chainItem.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
+                              {inputParams?.style && (
+                                <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-1">
+                                  风格: {inputParams.style}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground" onClick={() => handleCopyPrompt(promptText)} title="复制提示词">
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                              {chainItem.outputUrl && (
+                                <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setDetailOpen(false); handleContinueEdit(chainItem.outputUrl!, chainItem.id); }} title="使用此图片继续生成">
+                                  <RefreshCw className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          {chainItem.outputUrl && (
+                            <div className="mt-2 rounded-lg overflow-hidden border border-border/50 bg-muted">
+                              <img src={chainItem.outputUrl} alt={chainItem.title} className="w-full h-auto max-h-[300px] object-contain" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {!isLast && (
+                        <div className="flex items-center justify-center py-1 pl-[23px]">
+                          <ArrowRight className="h-3 w-3 text-muted-foreground/40 rotate-90" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">共 {chainQuery.data.length} 次生成</p>
+                <Button size="sm" className="h-8" onClick={() => {
+                  const lastItem = chainQuery.data![chainQuery.data!.length - 1];
+                  if (lastItem?.outputUrl) {
+                    setDetailOpen(false);
+                    handleContinueEdit(lastItem.outputUrl, lastItem.id);
+                  }
+                }}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />继续编辑最新版本
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <ImageIcon className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">暂无编辑记录</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
