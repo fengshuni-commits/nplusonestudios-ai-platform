@@ -293,3 +293,7 @@
 - [x] 上传基础图片后，在生图按钒下方显示「增强上传图片画质」按钒
 - [x] 支持对上传的原图直接进行增强（本地文件自动上传 S3 后增强）
 - [x] 新增 enhance.submitUrl 和 enhance.pollTaskId 接口，不依赖 historyId
+
+## Bug 修复：enhance.submitUrl 路由未找到
+- [x] 检查 enhanceRouter 中 submitUrl 和 pollTaskId 是否正确注册（代码正确，是服务器旧缓存导致）
+- [x] 修复并验证（重启服务器后路由正常工作）
