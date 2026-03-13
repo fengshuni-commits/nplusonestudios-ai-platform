@@ -1913,7 +1913,7 @@ const historyRouter = router({
   listGrouped: protectedProcedure
     .input(z.object({
       module: z.string().optional(),
-      limit: z.number().min(1).max(100).optional(),
+      limit: z.number().min(1).max(500).optional(),
       offset: z.number().min(0).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
