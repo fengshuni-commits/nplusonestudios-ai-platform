@@ -35,6 +35,9 @@ import {
   ArrowRight,
   X,
   Trash2,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -91,6 +94,7 @@ export default function HistoryPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [expandedEnhance, setExpandedEnhance] = useState<Record<number, boolean>>({});
   const [, navigate] = useLocation();
 
   const queryInput = useMemo(() => ({
@@ -222,6 +226,12 @@ export default function HistoryPage() {
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <Image className="h-8 w-8 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      {/* Enhanced badge */}
+                      {item.latestEnhancedImageUrl && (
+                        <div className="absolute top-1.5 left-1.5 flex items-center gap-0.5 bg-emerald-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                          <Sparkles className="h-2.5 w-2.5" />
                         </div>
                       )}
                       {/* Chain badge */}
@@ -459,12 +469,73 @@ export default function HistoryPage() {
 
                           {/* Large preview for the image */}
                           {chainItem.outputUrl && (
-                            <div className="mt-2 rounded-lg overflow-hidden border border-border/50 bg-muted">
-                              <img
-                                src={chainItem.outputUrl}
-                                alt={chainItem.title}
-                                className="w-full h-auto max-h-[300px] object-contain"
-                              />
+                            <div className="mt-2 space-y-2">
+                              <div className="rounded-lg overflow-hidden border border-border/50 bg-muted">
+                                <img
+                                  src={chainItem.outputUrl}
+                                  alt={chainItem.title}
+                                  className="w-full h-auto max-h-[300px] object-contain"
+                                />
+                              </div>
+                              {/* Enhanced image section */}
+                              {chainItem.enhancedImageUrl && (
+                                <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/30 overflow-hidden">
+                                  <button
+                                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50/50 transition-colors"
+                                    onClick={() => setExpandedEnhance(prev => ({ ...prev, [chainItem.id]: !prev[chainItem.id] }))}
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      <Sparkles className="h-3 w-3" />
+                                      Magnific 增强版
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <a
+                                        href={chainItem.enhancedImageUrl}
+                                        download
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-800 bg-emerald-100/60 hover:bg-emerald-100 px-2 py-0.5 rounded-full transition-colors"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Download className="h-2.5 w-2.5" />
+                                        下载
+                                      </a>
+                                      {expandedEnhance[chainItem.id] ? (
+                                        <ChevronUp className="h-3 w-3" />
+                                      ) : (
+                                        <ChevronDown className="h-3 w-3" />
+                                      )}
+                                    </div>
+                                  </button>
+                                  {expandedEnhance[chainItem.id] && (
+                                    <div className="px-3 pb-3">
+                                      {/* Side-by-side comparison */}
+                                      <div className="grid grid-cols-2 gap-2 mb-2">
+                                        <div>
+                                          <p className="text-[10px] text-muted-foreground mb-1 text-center">原图</p>
+                                          <div className="rounded overflow-hidden border border-border/40 bg-muted">
+                                            <img
+                                              src={chainItem.outputUrl}
+                                              alt="原图"
+                                              className="w-full h-auto max-h-[200px] object-contain"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <p className="text-[10px] text-emerald-600 mb-1 text-center font-medium">增强后</p>
+                                          <div className="rounded overflow-hidden border border-emerald-200 bg-muted">
+                                            <img
+                                              src={chainItem.enhancedImageUrl}
+                                              alt="增强版"
+                                              className="w-full h-auto max-h-[200px] object-contain"
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

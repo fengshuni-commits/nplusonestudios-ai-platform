@@ -793,6 +793,7 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
         chainLength: chainItems.length,
         latestOutputUrl: latestItem?.outputUrl || root.outputUrl,
         latestTitle: latestItem?.title || root.title,
+        latestEnhancedImageUrl: latestItem?.enhancedImageUrl || null,
       };
     }));
 
@@ -825,9 +826,10 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
         chainLength: chainItems.length,
         latestOutputUrl: latestItem?.outputUrl || item.outputUrl,
         latestTitle: latestItem?.title || item.title,
+        latestEnhancedImageUrl: latestItem?.enhancedImageUrl || null,
       };
     }
-    return { ...item, chainLength: 1, latestOutputUrl: item.outputUrl, latestTitle: item.title };
+    return { ...item, chainLength: 1, latestOutputUrl: item.outputUrl, latestTitle: item.title, latestEnhancedImageUrl: item.enhancedImageUrl || null };
   }));
 
   return { items: enrichedItems, total: countResult[0]?.count || 0 };
