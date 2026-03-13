@@ -1,0 +1,90 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1773062939995,
+      "tag": "0000_violet_lorna_dane",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1773063161134,
+      "tag": "0001_sad_impossible_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773071452263,
+      "tag": "0002_regular_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1773107711009,
+      "tag": "0003_dashing_rockslide",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1773156162029,
+      "tag": "0004_loud_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1773191443628,
+      "tag": "0005_hot_butterfly",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1773204855146,
+      "tag": "0006_open_ender_wiggin",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1773360578613,
+      "tag": "0007_marvelous_the_santerians",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1773362210788,
+      "tag": "0008_green_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1773365183891,
+      "tag": "0009_dusty_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1773367292915,
+      "tag": "0010_lyrical_vertigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1773389913001,
+      "tag": "0011_lucky_molly_hayes",
+      "breakpoints": true
+    }
+  ]
+}
