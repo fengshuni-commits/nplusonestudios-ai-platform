@@ -13,7 +13,6 @@ import ConstructionDocs from "./pages/ConstructionDocs";
 import Procurement from "./pages/Procurement";
 import Assets from "./pages/Assets";
 import Standards from "./pages/Standards";
-import AiTools from "./pages/AiTools";
 import Integrations from "./pages/Integrations";
 import Workflows from "./pages/Workflows";
 import AdminTeam from "./pages/AdminTeam";
@@ -67,7 +66,6 @@ function Router() {
         {/* 管理板块（管理员） */}
         <Route path="/standards" component={Standards} />
         <Route path="/assets" component={Assets} />
-        <Route path="/ai-tools" component={AiTools} />
         <Route path="/integrations" component={Integrations} />
         <Route path="/workflows" component={Workflows} />
         <Route path="/admin/team" component={AdminTeam} />

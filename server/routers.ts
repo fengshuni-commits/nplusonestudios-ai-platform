@@ -10,6 +10,7 @@ import { generateImage } from "./_core/imageGeneration";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
+import { submitEnhanceTask, getEnhanceTaskStatus } from "./magnific";
 import { nanoid } from "nanoid";
 import crypto from "crypto";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
@@ -936,9 +937,18 @@ const standardsRouter = router({
 
 const aiToolsRouter = router({
   list: protectedProcedure
-    .input(z.object({ category: z.string().optional(), activeOnly: z.boolean().optional() }).optional())
+    .input(z.object({ category: z.string().optional(), capability: z.string().optional(), activeOnly: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
-      return db.listAiTools(input);
+      const tools = await db.listAiTools({ activeOnly: input?.activeOnly });
+      if (!input?.capability && !input?.category) return tools;
+      // 按 capability 过滤（优先），否则回落 category 匹配
+      return tools.filter((t: any) => {
+        if (input.capability) {
+          const caps: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
+          return caps.includes(input.capability);
+        }
+        return t.category === input.category;
+      });
     }),
 
   getById: protectedProcedure
@@ -953,15 +963,20 @@ const aiToolsRouter = router({
     .input(z.object({
       name: z.string().min(1),
       description: z.string().optional(),
-      category: z.enum(["rendering", "document", "image", "video", "layout", "analysis", "other"]),
-      provider: z.string().optional(),
       apiEndpoint: z.string().optional(),
       apiKeyName: z.string().optional(),
       configJson: z.any().optional(),
-      iconUrl: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      return db.createAiTool({ ...input, createdBy: ctx.user.id });
+      const { inferCapabilities } = await import("../shared/toolCapabilities");
+      const capabilities = inferCapabilities(input.name, input.apiEndpoint);
+      // 保持 category 字段兼容旧逻辑，根据第一个能力映射
+      const capToCategory: Record<string, string> = {
+        rendering: "rendering", image: "image", video: "video",
+        document: "document", analysis: "analysis", layout: "layout", media: "other",
+      };
+      const category = (capToCategory[capabilities[0]] || "other") as any;
+      return db.createAiTool({ ...input, category, capabilities, createdBy: ctx.user.id });
     }),
 
   update: adminProcedure
@@ -975,11 +990,24 @@ const aiToolsRouter = router({
       apiKeyName: z.string().optional(),
       configJson: z.any().optional(),
       isActive: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
       iconUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
+      // 如果设置为默认，先清除其他工具的默认状态
+      if (data.isDefault === true) {
+        await db.clearDefaultAiTool();
+      }
       await db.updateAiTool(id, data);
+      return { success: true };
+    }),
+
+  setDefault: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.clearDefaultAiTool();
+      await db.updateAiTool(input.id, { isDefault: true });
       return { success: true };
     }),
 
@@ -1930,10 +1958,104 @@ const feedbackRouter = router({
     }),
 });
 
-// ─── Main Router ─────────────────────────────────────────
+// ─── Image Enhancement (Magnific/Freepik) ──────────────────────────────────
+const enhanceRouter = router({
+  /** Submit an image enhancement task via Freepik/Magnific API */
+  submit: protectedProcedure
+    .input(z.object({
+      historyId: z.number(),
+      scale: z.enum(["x2", "x4", "x8", "x16"]).default("x2"),
+      optimizedFor: z.enum([
+        "default", "art_and_illustrations", "videogames", "portraits",
+        "landscapes", "architecture", "3d_renders", "science_fiction",
+        "anime", "photography",
+      ]).default("3d_renders"),
+      prompt: z.string().optional(),
+      creativity: z.number().min(-10).max(10).optional(),
+      detail: z.number().min(-10).max(10).optional(),
+      resemblance: z.number().min(-10).max(10).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await db.getGenerationHistoryById(input.historyId, ctx.user.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "生成记录不存在" });
+      if (!item.outputUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "该记录没有可增强的图片" });
 
-export const appRouter = router({
-  system: systemRouter,
+      const { taskId } = await submitEnhanceTask({
+        imageUrl: item.outputUrl,
+        scale: input.scale,
+        optimizedFor: input.optimizedFor,
+        prompt: input.prompt,
+        creativity: input.creativity,
+        detail: input.detail,
+        resemblance: input.resemblance,
+      });
+
+      await db.updateEnhanceStatus(input.historyId, {
+        enhanceTaskId: taskId,
+        enhanceStatus: "processing",
+        enhanceParams: {
+          scale: input.scale,
+          optimizedFor: input.optimizedFor,
+          prompt: input.prompt,
+          creativity: input.creativity,
+          detail: input.detail,
+          resemblance: input.resemblance,
+        },
+      });
+
+      return { taskId, status: "processing" as const };
+    }),
+
+  /** Poll the status of an enhancement task */
+  status: protectedProcedure
+    .input(z.object({ historyId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const item = await db.getGenerationHistoryById(input.historyId, ctx.user.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "生成记录不存在" });
+
+      if (!item.enhanceTaskId || item.enhanceStatus === "idle" || item.enhanceStatus === null) {
+        return { status: (item.enhanceStatus ?? "idle") as string, enhancedImageUrl: item.enhancedImageUrl ?? null };
+      }
+
+      if (item.enhanceStatus === "done" || item.enhanceStatus === "failed") {
+        return { status: item.enhanceStatus as string, enhancedImageUrl: item.enhancedImageUrl ?? null };
+      }
+
+      // Poll Freepik API
+      const result = await getEnhanceTaskStatus(item.enhanceTaskId);
+
+      if (result.status === "done" && result.outputUrl) {
+        await db.updateEnhanceStatus(input.historyId, {
+          enhanceStatus: "done",
+          enhancedImageUrl: result.outputUrl,
+        });
+        return { status: "done" as string, enhancedImageUrl: result.outputUrl };
+      } else if (result.status === "failed") {
+        await db.updateEnhanceStatus(input.historyId, { enhanceStatus: "failed" });
+        return { status: "failed" as string, enhancedImageUrl: null };
+      }
+
+      return { status: "processing" as string, enhancedImageUrl: null };
+    }),
+
+  /** Reset enhancement so user can re-enhance */
+  reset: protectedProcedure
+    .input(z.object({ historyId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await db.getGenerationHistoryById(input.historyId, ctx.user.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "生成记录不存在" });
+      await db.updateEnhanceStatus(input.historyId, {
+        enhanceStatus: "idle",
+        enhanceTaskId: null,
+        enhancedImageUrl: null,
+      });
+      return { success: true };
+    }),
+});
+
+// ─── Main Router ─────────────────────────────────────────────────────────
+
+export const appRouter = router({system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -1957,6 +2079,7 @@ export const appRouter = router({
   media: mediaRouter,
   history: historyRouter,
   feedback: feedbackRouter,
+  enhance: enhanceRouter,
 });
 
 export type AppRouter = typeof appRouter;

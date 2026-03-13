@@ -427,7 +427,13 @@ export async function updateAiTool(id: number, data: Partial<InsertAiTool>) {
 export async function deleteAiTool(id: number) {
   const db = await getDb();
   if (!db) return;
-  await db.update(aiTools).set({ isActive: false }).where(eq(aiTools.id, id));
+  await db.delete(aiTools).where(eq(aiTools.id, id));
+}
+
+export async function clearDefaultAiTool() {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(aiTools).set({ isDefault: false });
 }
 
 // ─── AI Tool Logs ────────────────────────────────────────
@@ -965,4 +971,30 @@ export async function getRecentFeedback(limit: number = 20, moduleFilter?: strin
     .limit(limit);
   
   return rows;
+}
+
+// ─── Image Enhancement (Magnific) ────────────────────────────────────
+export async function updateEnhanceStatus(
+  historyId: number,
+  updates: {
+    enhanceTaskId?: string | null;
+    enhanceStatus?: "idle" | "processing" | "done" | "failed";
+    enhancedImageUrl?: string | null;
+    enhanceParams?: Record<string, unknown>;
+  }
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  const setValues: Record<string, unknown> = {};
+  if (updates.enhanceTaskId !== undefined) setValues.enhanceTaskId = updates.enhanceTaskId;
+  if (updates.enhanceStatus !== undefined) setValues.enhanceStatus = updates.enhanceStatus;
+  if (updates.enhancedImageUrl !== undefined) setValues.enhancedImageUrl = updates.enhancedImageUrl;
+  if (updates.enhanceParams !== undefined) setValues.enhanceParams = updates.enhanceParams;
+
+  if (Object.keys(setValues).length === 0) return;
+
+  await db.update(generationHistory)
+    .set(setValues)
+    .where(eq(generationHistory.id, historyId));
 }

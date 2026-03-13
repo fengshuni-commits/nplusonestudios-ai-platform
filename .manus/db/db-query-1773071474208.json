@@ -1,9 +1,0 @@
-{
-  "query": "CREATE TABLE `case_sources` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`name` varchar(256) NOT NULL,\n\t`baseUrl` text NOT NULL,\n\t`description` text,\n\t`imageSelector` varchar(512),\n\t`titleSelector` varchar(512),\n\t`descSelector` varchar(512),\n\t`imageDomain` varchar(256),\n\t`preferredSize` varchar(64),\n\t`isActive` boolean DEFAULT true,\n\t`sortOrder` int DEFAULT 0,\n\t`createdBy` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `case_sources_id` PRIMARY KEY(`id`)\n);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute CREATE TABLE `case_sources` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`name` varchar(256) NOT NULL,\n\t`baseUrl` text NOT NULL,\n\t`description` text,\n\t`imageSelector` varchar(512),\n\t`titleSelector` varchar(512),\n\t`descSelector` varchar(512),\n\t`imageDomain` varchar(256),\n\t`preferredSize` varchar(64),\n\t`isActive` boolean DEFAULT true,\n\t`sortOrder` int DEFAULT 0,\n\t`createdBy` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `case_sources_id` PRIMARY KEY(`id`)\n);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1825
-}

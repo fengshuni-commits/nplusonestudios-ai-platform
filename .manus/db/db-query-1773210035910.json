@@ -1,9 +1,0 @@
-{
-  "query": "DELETE FROM project_custom_fields WHERE projectId NOT IN (30085, 150049, 180001, 180015);\nDELETE FROM tasks WHERE projectId NOT IN (30085, 150049, 180001, 180015);\nDELETE FROM documents WHERE projectId NOT IN (30085, 150049, 180001, 180015);\nDELETE FROM projects WHERE id NOT IN (30085, 150049, 180001, 180015);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute DELETE FROM project_custom_fields WHERE projectId NOT IN (30085, 150049, 180001, 180015);\nDELETE FROM tasks WHERE projectId NOT IN (30085, 150049, 180001, 180015);\nDELETE FROM documents WHERE projectId NOT IN (30085, 150049, 180001, 180015);\nDELETE FROM projects WHERE id NOT IN (30085, 150049, 180001, 180015);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 2326
-}

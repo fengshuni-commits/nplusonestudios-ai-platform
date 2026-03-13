@@ -1,9 +1,0 @@
-{
-  "query": "CREATE TABLE `generation_history` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`module` varchar(64) NOT NULL,\n\t`title` varchar(512) NOT NULL,\n\t`summary` text,\n\t`inputParams` json,\n\t`outputUrl` text,\n\t`outputContent` text,\n\t`status` enum('success','failed','processing') NOT NULL DEFAULT 'success',\n\t`durationMs` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `generation_history_id` PRIMARY KEY(`id`)\n);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 33Tk1DtnuVXRkg9.f5fe13a67640 --database fRco6A2SeYp4EEqicyDKLT --execute CREATE TABLE `generation_history` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`module` varchar(64) NOT NULL,\n\t`title` varchar(512) NOT NULL,\n\t`summary` text,\n\t`inputParams` json,\n\t`outputUrl` text,\n\t`outputContent` text,\n\t`status` enum('success','failed','processing') NOT NULL DEFAULT 'success',\n\t`durationMs` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `generation_history_id` PRIMARY KEY(`id`)\n);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1754
-}

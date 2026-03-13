@@ -202,6 +202,10 @@
 - [x] 前端：管理板块"团队管理"页面改造为成员管理，显示已审批/待审批成员列表，支持审批/撤销
 - [x] 前端：未审批用户登录后看到等待审批提示页面
 
+## 清除虚拟占位数据
+- [x] 将侧边栏和页面标题“设计工具”改名为“AI效果图”
+- [x] 删除数据库中所有虚拟测试 API 密钥（42 条 Test Key）
+
 ## 项目权限管理与成果共享
 - [x] 数据库：新建 project_members 表（projectId, userId, addedAt, addedBy）
 - [x] 数据库：generationHistory 表增加 createdBy 字段（userId）
@@ -213,3 +217,61 @@
 - [x] 前端：项目看板文档 Tab 成果显示创建者信息
 - [x] 前端：项目看板文档 Tab 管理员可删除任意成员成果
 - [x] 前端：生成记录页成员可删除自己的历史成果
+
+## AI 工具管理改进
+- [x] 彻底清空数据库中所有虚拟测试 API 密钥（含 ai_tools 表中的测试数据）
+- [x] 简化“添加AI工具”表单：去掉类别选择，只保留名称、API端点、API Key、描述
+- [x] 后端：根据模型名称/API端点内置规则自动判断工具能力（支持多模态则出现在多个功能模块选择中）
+- [x] 前端：AiToolSelector 组件按内置能力规则过滤，而非依赖 category 字段
+
+## AI 工具中心删除 & 默认工具设置
+- [x] 删除 AI 工具中心功能模块（页面、路由、导航入口）
+- [x] 后端：ai_tools 表增加 isDefault 字段，同一时间只能有一个默认工具
+- [x] 后端：aiTools.setDefault API（设为默认，自动取消其他工具的默认状态）
+- [x] 前端：API 密钥管理页面每个工具增加“设为默认”按鈕
+- [x] 前端：默认工具显示明显标识（Badge）
+
+## 默认工具联动修复
+- [x] AiToolSelector：无已选工具时自动采用 isDefault 工具，而非空选
+- [x] 设为默认时清除所有用户的 localStorage 缓存，确保各功能模块自动采用新默认工具
+- [x] 验证 AI 效果图等模块正确采用默认工具
+
+## AI 效果图功能完善
+- [ ] 添加项目关联功能：生成结果可直接关联到项目看板
+- [ ] 优化反馈功能：确保"喜欢/不喜欢"按钮位置明显，易于使用
+- [ ] 更新使用说明文档：修正项目关联步骤，添加反馈功能说明
+
+## 工具选择每次打开重置为默认
+- [x] 修改 AiToolSelector 组件，移除 localStorage 持久化逻辑
+- [x] 每次打开功能模块都重置为默认工具，不保留用户上次的选择
+- [x] 验证所有功能模块的工具选择都能正常重置
+
+## 使用指南集成
+- [x] 在顶部导航栏最右侧添加帮助按锕
+- [x] 创建 HelpGuide 组件显示使用指南
+- [x] 集成 HTML 使用指南内容到平台内
+
+## 紧急：OAuth 登录流程修复
+- [x] 检查 OAuth 回调处理逻辑
+- [x] 修复 AdminApiKeys.tsx 的导入路径问题（@shared 别名）
+- [x] 验证 session 设置是否正常
+
+## 紧急：OAuth 登录彻底修复
+- [x] 检查 OAuth 回调后端代码
+- [x] 检查网络请求日志找到失败原因
+- [x] 修复登录流程（从 state 解析 origin，使用绝对 URL 重定向）
+
+## Magnific 图片增强功能集成
+- [x] 配置 Freepik API Key 并验证连通性
+- [x] 数据库：generationHistory 表增加 enhancedImageUrl、enhanceStatus、enhanceTaskId 字段
+- [x] 后端：enhance.submit tRPC procedure（提交增强任务，调用 Freepik Magnific API）
+- [x] 后端：enhance.status tRPC procedure（查询增强任务状态，自动轮询）
+- [x] 后端：enhance.reset tRPC procedure（重置增强状态，允许重新增强）
+- [x] 前端：AI 效果图生成结果下方新增「增强画质」按钮和参数面板
+- [x] 前端：参数面板支持放大倍数（2x/4x）、优化场景、创意度/细节度/相似度三个滑块
+- [x] 前端：异步轮询增强状态（3s 间隔），完成后展示增强结果图片
+- [x] 前端：增强完成后显示「下载增强版」按钮
+- [x] 编写 Vitest 测试（140 项全部通过）
+
+## 更新使用说明书
+- [x] 在 HelpGuide 中加入 Magnific 图片增强功能说明

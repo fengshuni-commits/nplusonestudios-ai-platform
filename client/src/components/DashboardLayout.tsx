@@ -13,7 +13,6 @@ import {
   PenTool,
   HardHat,
   FolderKanban,
-  Sparkles,
   Image,
   BookOpen,
   Webhook,
@@ -36,8 +35,10 @@ import {
   MessageCircle,
   Camera,
   BarChart3,
+  HelpCircle,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
+import { HelpGuide } from "./HelpGuide";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
@@ -63,7 +64,7 @@ const menuSections: MenuSection[] = [
     icon: PenTool,
     items: [
       { icon: Compass, label: "项目策划", path: "/design/planning" },
-      { icon: Ruler, label: "设计工具", path: "/design/tools" },
+      { icon: Ruler, label: "AI效果图", path: "/design/tools" },
     ],
   },
   {
@@ -102,7 +103,6 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: BookOpen, label: "出品标准", path: "/standards" },
       { icon: Image, label: "素材库", path: "/assets" },
-      { icon: Sparkles, label: "AI 工具中心", path: "/ai-tools" },
       { icon: Webhook, label: "API 与 Webhook", path: "/integrations" },
       { icon: Workflow, label: "工作流", path: "/workflows" },
       { icon: Users, label: "团队管理", path: "/admin/team" },
@@ -182,6 +182,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
       return false;
     }
   });
+  const [helpOpen, setHelpOpen] = useState(false);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -381,6 +382,9 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
+      {/* Help Guide Modal */}
+      <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} />
+
       {/* Hover Popover - Sub menu (only in collapsed mode) */}
       {!expanded && hoveredSectionData && hoveredSectionData.items.length > 1 && (
         <HoverPopover
@@ -397,7 +401,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar with Logo */}
-        <header className="h-12 border-b border-border flex items-center px-5 shrink-0 bg-background/95 backdrop-blur">
+        <header className="h-12 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm tracking-tight text-foreground">
               N+1 STUDIOS
@@ -406,14 +410,23 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
               AI 工作平台
             </span>
           </div>
-          {activeMenuItem && (
-            <>
-              <span className="mx-3 text-border">/</span>
-              <span className="text-sm text-muted-foreground">
-                {activeMenuItem.label}
-              </span>
-            </>
-          )}
+          <div className="flex items-center gap-2">
+            {activeMenuItem && (
+              <>
+                <span className="mx-1 text-border">/</span>
+                <span className="text-sm text-muted-foreground">
+                  {activeMenuItem.label}
+                </span>
+              </>
+            )}
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors ml-auto"
+              title="查看使用指南"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
         {/* Page Content */}

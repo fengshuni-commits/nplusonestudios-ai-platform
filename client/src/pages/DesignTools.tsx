@@ -10,9 +10,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import AiToolSelector from "@/components/AiToolSelector";
 import ImageMaskEditor from "@/components/ImageMaskEditor";
 import { trpc } from "@/lib/trpc";
+import { Slider } from "@/components/ui/slider";
 import {
   Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus,
   RefreshCw, Paintbrush, RatioIcon, MonitorIcon, FolderOpen, Search, Check,
+  Wand2, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -55,6 +57,61 @@ export default function DesignTools() {
 
   // Edit chain tracking
   const [parentHistoryId, setParentHistoryId] = useState<number | undefined>(undefined);
+
+  // ─── Magnific enhancement state ───────────────────────
+  const [enhancingId, setEnhancingId] = useState<number | null>(null);
+  const [showEnhancePanel, setShowEnhancePanel] = useState<number | null>(null);
+  const [enhanceScale, setEnhanceScale] = useState<"x2" | "x4">("x2");
+  const [enhanceOptimizedFor, setEnhanceOptimizedFor] = useState("3d_renders");
+  const [enhanceCreativity, setEnhanceCreativity] = useState(0);
+  const [enhanceDetail, setEnhanceDetail] = useState(0);
+  const [enhanceResemblance, setEnhanceResemblance] = useState(0);
+  const [enhancedResults, setEnhancedResults] = useState<Record<number, { status: string; url?: string }>>({});
+  const enhanceMutation = trpc.enhance.submit.useMutation();
+  const enhanceStatusQuery = trpc.enhance.status.useQuery(
+    { historyId: enhancingId! },
+    {
+      enabled: enhancingId !== null,
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return 3000;
+        return data.status === "processing" ? 3000 : false;
+      },
+    }
+  );
+  useEffect(() => {
+    if (!enhancingId || !enhanceStatusQuery.data) return;
+    const { status, enhancedImageUrl } = enhanceStatusQuery.data;
+    if (status === "done" && enhancedImageUrl) {
+      setEnhancedResults(prev => ({ ...prev, [enhancingId]: { status: "done", url: enhancedImageUrl } }));
+      setEnhancingId(null);
+      toast.success("画质增强完成！");
+    } else if (status === "failed") {
+      setEnhancedResults(prev => ({ ...prev, [enhancingId]: { status: "failed" } }));
+      setEnhancingId(null);
+      toast.error("画质增强失败，请重试");
+    }
+  }, [enhancingId, enhanceStatusQuery.data]);
+
+  const handleEnhanceSubmit = useCallback(async (historyId: number) => {
+    setEnhancingId(historyId);
+    setEnhancedResults(prev => ({ ...prev, [historyId]: { status: "processing" } }));
+    setShowEnhancePanel(null);
+    try {
+      await enhanceMutation.mutateAsync({
+        historyId,
+        scale: enhanceScale,
+        optimizedFor: enhanceOptimizedFor as any,
+        creativity: enhanceCreativity,
+        detail: enhanceDetail,
+        resemblance: enhanceResemblance,
+      });
+    } catch (err: any) {
+      setEnhancingId(null);
+      setEnhancedResults(prev => ({ ...prev, [historyId]: { status: "failed" } }));
+      toast.error(err?.message || "提交增强任务失败");
+    }
+  }, [enhanceMutation, enhanceScale, enhanceOptimizedFor, enhanceCreativity, enhanceDetail, enhanceResemblance]);
 
   // Track reference image natural dimensions for adaptive display
   const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);
@@ -336,7 +393,7 @@ export default function DesignTools() {
             fileSize: materialFile.size,
             thumbnailUrl: uploadResult.url,
             category: "image",
-            tags: "素材,设计工具上传",
+            tags: "素材,AI效果图上传",
           });
           toast.success("素材已同步到素材库");
           refetchAssets();
@@ -396,7 +453,7 @@ export default function DesignTools() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">设计工具</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">AI效果图</h1>
           <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代与局部调整</p>
         </div>
         <AiToolSelector category="rendering" value={toolId} onChange={setToolId} label="AI 工具" />
@@ -703,8 +760,139 @@ export default function DesignTools() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">{img.prompt}</p>
-                    {img.historyId && (
-                      <FeedbackButtons module="ai_render" historyId={img.historyId} compact />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {img.historyId && (
+                        <FeedbackButtons module="ai_render" historyId={img.historyId} compact />
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          if (img.historyId) {
+                            setParentHistoryId(img.historyId);
+                            setImportedProjectId(null);
+                          }
+                        }}
+                      >
+                        <FolderOpen className="h-3 w-3 mr-1" />
+                        关联项目
+                      </Button>
+                      {/* Magnific enhance button */}
+                      {img.historyId && (() => {
+                        const hid = img.historyId!;
+                        const eResult = enhancedResults[hid];
+                        const isThisEnhancing = enhancingId === hid;
+                        if (eResult?.status === "done" && eResult.url) {
+                          return (
+                            <Button variant="outline" size="sm" className="h-7 text-xs border-emerald-500/50 text-emerald-600" asChild>
+                              <a href={eResult.url} download target="_blank" rel="noopener noreferrer">
+                                <Download className="h-3 w-3 mr-1" />
+                                下载增强版
+                              </a>
+                            </Button>
+                          );
+                        }
+                        if (isThisEnhancing || eResult?.status === "processing") {
+                          return (
+                            <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              增强中...
+                            </Button>
+                          );
+                        }
+                        return (
+                          <div className="relative">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => setShowEnhancePanel(showEnhancePanel === hid ? null : hid)}
+                            >
+                              <Wand2 className="h-3 w-3" />
+                              增强画质
+                              {showEnhancePanel === hid ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {/* Magnific enhance panel */}
+                    {img.historyId && showEnhancePanel === img.historyId && (
+                      <div className="mt-2 p-3 rounded-lg border border-border bg-muted/50 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium flex items-center gap-1.5">
+                            <Wand2 className="h-3.5 w-3.5 text-primary" />
+                            Magnific AI 画质增强
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Powered by Magnific</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">放大倍数</Label>
+                            <Select value={enhanceScale} onValueChange={(v) => setEnhanceScale(v as "x2" | "x4")}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="x2">2倍 (2x)</SelectItem>
+                                <SelectItem value="x4">4倍 (4x)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px]">优化场景</Label>
+                            <Select value={enhanceOptimizedFor} onValueChange={setEnhanceOptimizedFor}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="3d_renders">3D渲染</SelectItem>
+                                <SelectItem value="architecture">建筑</SelectItem>
+                                <SelectItem value="photography">摄影</SelectItem>
+                                <SelectItem value="default">通用</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-[11px]">创意度 {enhanceCreativity > 0 ? "+" : ""}{enhanceCreativity}</Label>
+                            <span className="text-[10px] text-muted-foreground">AI 补全细节程度</span>
+                          </div>
+                          <Slider value={[enhanceCreativity]} onValueChange={([v]) => setEnhanceCreativity(v)} min={-5} max={5} step={1} className="w-full" />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-[11px]">细节度 {enhanceDetail > 0 ? "+" : ""}{enhanceDetail}</Label>
+                            <span className="text-[10px] text-muted-foreground">纹理清晰度</span>
+                          </div>
+                          <Slider value={[enhanceDetail]} onValueChange={([v]) => setEnhanceDetail(v)} min={-5} max={5} step={1} className="w-full" />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-[11px]">相似度 {enhanceResemblance > 0 ? "+" : ""}{enhanceResemblance}</Label>
+                            <span className="text-[10px] text-muted-foreground">与原图接近程度</span>
+                          </div>
+                          <Slider value={[enhanceResemblance]} onValueChange={([v]) => setEnhanceResemblance(v)} min={-5} max={5} step={1} className="w-full" />
+                        </div>
+                        <Button
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          onClick={() => handleEnhanceSubmit(img.historyId!)}
+                        >
+                          <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                          开始增强
+                        </Button>
+                      </div>
+                    )}
+                    {/* Show enhanced image if done */}
+                    {img.historyId && enhancedResults[img.historyId]?.status === "done" && enhancedResults[img.historyId]?.url && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                          <Check className="h-3 w-3" />
+                          增强完成
+                        </p>
+                        <div className="rounded-lg overflow-hidden border border-emerald-500/30">
+                          <img src={enhancedResults[img.historyId!].url} alt="增强后效果图" className="w-full h-auto" />
+                        </div>
+                      </div>
                     )}
                   </div>
                 ))}

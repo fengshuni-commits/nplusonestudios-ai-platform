@@ -5,7 +5,10 @@ import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type AiToolSelectorProps = {
-  category: string;
+  /** @deprecated 使用 capability 代替；保留用于向后兼容 */
+  category?: string;
+  /** 按能力标签过滤工具（如 "rendering"、"document"、"analysis"） */
+  capability?: string;
   value?: number;
   onChange: (toolId: number | undefined) => void;
   label?: string;
@@ -14,26 +17,43 @@ type AiToolSelectorProps = {
 
 const BUILTIN_TOOL_ID = -1;
 
-export default function AiToolSelector({ category, value, onChange, label, showBuiltIn = true }: AiToolSelectorProps) {
-  const { data: tools } = trpc.aiTools.list.useQuery({ category, activeOnly: true });
-  const [storageKey] = useState(`ai-tool-pref-${category}`);
+export default function AiToolSelector({ category, capability, value, onChange, label, showBuiltIn = true }: AiToolSelectorProps) {
+  const filterKey = capability || category;
+  const { data: tools } = trpc.aiTools.list.useQuery(
+    filterKey ? { capability: filterKey, activeOnly: true } : { activeOnly: true }
+  );
+  const [selectedValue, setSelectedValue] = useState<number | undefined>(value);
 
+  // 初始化：使用外部传入的 value，或自动选中 isDefault 工具
   useEffect(() => {
-    if (value === undefined) {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        onChange(parseInt(saved));
-      }
+    // 如果外部传入了 value，使用外部值
+    if (value !== undefined) {
+      setSelectedValue(value);
+      return;
     }
-  }, []);
+
+    // 等待工具列表加载完成
+    if (!tools) return;
+
+    // 自动选中 isDefault 工具，每次打开都重置为默认（不使用 localStorage）
+    const defaultTool = tools.find((t: any) => t.isDefault);
+    if (defaultTool) {
+      setSelectedValue(defaultTool.id);
+      onChange(defaultTool.id);
+    } else {
+      // 没有默认工具时，保持内置 AI（selectedValue 保持 undefined）
+      setSelectedValue(undefined);
+    }
+  }, [tools, value]);
 
   const handleChange = (val: string) => {
     const id = parseInt(val);
-    localStorage.setItem(storageKey, val);
+    // 注意：不保存到 localStorage，只在当前会话中保持选择
+    setSelectedValue(id === BUILTIN_TOOL_ID ? undefined : id);
     onChange(id === BUILTIN_TOOL_ID ? undefined : id);
   };
 
-  const currentValue = value?.toString() || BUILTIN_TOOL_ID.toString();
+  const currentValue = selectedValue?.toString() || BUILTIN_TOOL_ID.toString();
 
   return (
     <div className="flex items-center gap-2">
@@ -50,7 +70,7 @@ export default function AiToolSelector({ category, value, onChange, label, showB
             <SelectItem value={BUILTIN_TOOL_ID.toString()}>
               <div className="flex items-center gap-2">
                 <span>内置 AI</span>
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">默认</Badge>
+                <Badge variant="secondary" className="text-[10px] h-4 px-1">内置</Badge>
               </div>
             </SelectItem>
           )}
@@ -58,7 +78,10 @@ export default function AiToolSelector({ category, value, onChange, label, showB
             <SelectItem key={tool.id} value={tool.id.toString()}>
               <div className="flex items-center gap-2">
                 <span>{tool.name}</span>
-                {tool.provider && (
+                {tool.isDefault && (
+                  <Badge className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-primary/20">默认</Badge>
+                )}
+                {tool.provider && !tool.isDefault && (
                   <span className="text-[10px] text-muted-foreground">{tool.provider}</span>
                 )}
               </div>

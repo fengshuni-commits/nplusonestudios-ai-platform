@@ -157,7 +157,9 @@ export const aiTools = mysqlTable("ai_tools", {
   apiEndpoint: text("apiEndpoint"),
   apiKeyName: varchar("apiKeyName", { length: 128 }),
   configJson: json("configJson"),
+  capabilities: json("capabilities").$type<string[]>(),
   isActive: boolean("isActive").default(true),
+  isDefault: boolean("isDefault").default(false),
   iconUrl: text("iconUrl"),
   sortOrder: int("sortOrder").default(0),
   createdBy: int("createdBy"),
@@ -342,6 +344,14 @@ export const generationHistory = mysqlTable("generation_history", {
   projectId: int("projectId"),
   /** Creator name (denormalized for display, from users.name at creation time) */
   createdByName: varchar("createdByName", { length: 256 }),
+  /** Enhanced image URL after Magnific upscaling */
+  enhancedImageUrl: text("enhancedImageUrl"),
+  /** Magnific/Freepik task ID for polling */
+  enhanceTaskId: varchar("enhanceTaskId", { length: 128 }),
+  /** Enhancement status: idle, processing, done, failed */
+  enhanceStatus: mysqlEnum("enhanceStatus", ["idle", "processing", "done", "failed"]).default("idle"),
+  /** Enhancement params (JSON: scale, optimized_for, creativity, detail, resemblance) */
+  enhanceParams: json("enhanceParams"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type GenerationHistory = typeof generationHistory.$inferSelect;
