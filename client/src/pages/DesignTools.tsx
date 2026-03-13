@@ -103,7 +103,7 @@ export default function DesignTools() {
         scale: enhanceScale,
         optimizedFor: enhanceOptimizedFor as any,
         creativity: enhanceCreativity,
-        detail: enhanceDetail,
+        hdr: enhanceDetail,
         resemblance: enhanceResemblance,
       });
     } catch (err: any) {

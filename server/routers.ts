@@ -1966,13 +1966,13 @@ const enhanceRouter = router({
       historyId: z.number(),
       scale: z.enum(["x2", "x4", "x8", "x16"]).default("x2"),
       optimizedFor: z.enum([
-        "default", "art_and_illustrations", "videogames", "portraits",
-        "landscapes", "architecture", "3d_renders", "science_fiction",
-        "anime", "photography",
+        "standard", "art_n_illustration", "videogame_assets", "soft_portraits",
+        "hard_portraits", "nature_n_landscapes", "films_n_photography",
+        "3d_renders", "science_fiction_n_horror",
       ]).default("3d_renders"),
       prompt: z.string().optional(),
       creativity: z.number().min(-10).max(10).optional(),
-      detail: z.number().min(-10).max(10).optional(),
+      hdr: z.number().min(-10).max(10).optional(),
       resemblance: z.number().min(-10).max(10).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -1986,7 +1986,7 @@ const enhanceRouter = router({
         optimizedFor: input.optimizedFor,
         prompt: input.prompt,
         creativity: input.creativity,
-        detail: input.detail,
+        hdr: input.hdr,
         resemblance: input.resemblance,
       });
 
@@ -1998,7 +1998,7 @@ const enhanceRouter = router({
           optimizedFor: input.optimizedFor,
           prompt: input.prompt,
           creativity: input.creativity,
-          detail: input.detail,
+          hdr: input.hdr,
           resemblance: input.resemblance,
         },
       });

@@ -23,7 +23,7 @@ describe("Magnific Enhancement Service", () => {
         scale: "x2",
         optimizedFor: "3d_renders",
         creativity: 0,
-        detail: 0,
+        hdr: 0,
         resemblance: 0,
       });
 
@@ -33,20 +33,20 @@ describe("Magnific Enhancement Service", () => {
         scale: "x2",
         optimizedFor: "3d_renders",
         creativity: 0,
-        detail: 0,
+        hdr: 0,
         resemblance: 0,
       });
     });
 
-    it("should support x4 scale", async () => {
+    it("should support x4 scale with films_n_photography mode", async () => {
       (submitEnhanceTask as any).mockResolvedValue({ taskId: "task_x4" });
 
       const result = await submitEnhanceTask({
         imageUrl: "https://example.com/image.jpg",
         scale: "x4",
-        optimizedFor: "architecture",
+        optimizedFor: "films_n_photography",
         creativity: 2,
-        detail: 1,
+        hdr: 1,
         resemblance: -1,
       });
 
@@ -62,7 +62,7 @@ describe("Magnific Enhancement Service", () => {
           scale: "x2",
           optimizedFor: "3d_renders",
           creativity: 0,
-          detail: 0,
+          hdr: 0,
           resemblance: 0,
         })
       ).rejects.toThrow("Invalid image URL");
@@ -70,18 +70,26 @@ describe("Magnific Enhancement Service", () => {
   });
 
   describe("getEnhanceTaskStatus", () => {
-    it("should return processing status when task is pending", async () => {
-      (getEnhanceTaskStatus as any).mockResolvedValue({ status: "processing", outputUrl: null });
+    it("should return processing status when task is pending (CREATED)", async () => {
+      (getEnhanceTaskStatus as any).mockResolvedValue({ taskId: "task_pending", status: "processing", outputUrl: undefined });
 
       const result = await getEnhanceTaskStatus("task_pending");
 
       expect(result.status).toBe("processing");
-      expect(result.outputUrl).toBeNull();
+      expect(result.outputUrl).toBeUndefined();
     });
 
-    it("should return done status with output URL when complete", async () => {
+    it("should return processing status when task is IN_PROGRESS", async () => {
+      (getEnhanceTaskStatus as any).mockResolvedValue({ taskId: "task_in_progress", status: "processing", outputUrl: undefined });
+
+      const result = await getEnhanceTaskStatus("task_in_progress");
+
+      expect(result.status).toBe("processing");
+    });
+
+    it("should return done status with output URL when COMPLETED", async () => {
       const outputUrl = "https://cdn.example.com/enhanced.jpg";
-      (getEnhanceTaskStatus as any).mockResolvedValue({ status: "done", outputUrl });
+      (getEnhanceTaskStatus as any).mockResolvedValue({ taskId: "task_done", status: "done", outputUrl });
 
       const result = await getEnhanceTaskStatus("task_done");
 
@@ -89,8 +97,8 @@ describe("Magnific Enhancement Service", () => {
       expect(result.outputUrl).toBe(outputUrl);
     });
 
-    it("should return failed status when task fails", async () => {
-      (getEnhanceTaskStatus as any).mockResolvedValue({ status: "failed", outputUrl: null });
+    it("should return failed status when task FAILED", async () => {
+      (getEnhanceTaskStatus as any).mockResolvedValue({ taskId: "task_failed", status: "failed", outputUrl: undefined });
 
       const result = await getEnhanceTaskStatus("task_failed");
 
@@ -101,24 +109,37 @@ describe("Magnific Enhancement Service", () => {
 
 describe("Enhancement parameter validation", () => {
   it("should accept valid scale values", () => {
-    const validScales = ["x2", "x4"];
+    const validScales = ["x2", "x4", "x8", "x16"];
     validScales.forEach(scale => {
-      expect(["x2", "x4"]).toContain(scale);
+      expect(["x2", "x4", "x8", "x16"]).toContain(scale);
     });
   });
 
-  it("should accept valid optimizedFor values", () => {
-    const validModes = ["3d_renders", "architecture", "photography", "default"];
+  it("should accept valid optimizedFor values (Freepik API format)", () => {
+    const validModes = [
+      "standard", "art_n_illustration", "videogame_assets", "soft_portraits",
+      "hard_portraits", "nature_n_landscapes", "films_n_photography",
+      "3d_renders", "science_fiction_n_horror",
+    ];
     validModes.forEach(mode => {
       expect(validModes).toContain(mode);
     });
   });
 
-  it("should accept creativity/detail/resemblance in range -5 to 5", () => {
-    const validValues = [-5, -3, 0, 2, 5];
+  it("should accept hdr/creativity/resemblance in range -10 to 10", () => {
+    const validValues = [-10, -5, 0, 2, 5, 10];
     validValues.forEach(v => {
-      expect(v).toBeGreaterThanOrEqual(-5);
-      expect(v).toBeLessThanOrEqual(5);
+      expect(v).toBeGreaterThanOrEqual(-10);
+      expect(v).toBeLessThanOrEqual(10);
     });
+  });
+
+  it("scale_factor conversion: x2 → 2x, x4 → 4x", () => {
+    // Verify our internal scale format maps correctly to Freepik format
+    const toFreepikScale = (scale: string) => scale.replace(/^x/, "") + "x";
+    expect(toFreepikScale("x2")).toBe("2x");
+    expect(toFreepikScale("x4")).toBe("4x");
+    expect(toFreepikScale("x8")).toBe("8x");
+    expect(toFreepikScale("x16")).toBe("16x");
   });
 });

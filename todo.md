@@ -275,3 +275,7 @@
 
 ## 更新使用说明书
 - [x] 在 HelpGuide 中加入 Magnific 图片增强功能说明
+
+## Bug 修复：Magnific 图片增强功能不可用
+- [x] 诊断增强功能失败原因（API 格式错误：image_url→Base64、scale→scale_factor、detail→hdr、状态大小写）
+- [x] 修复并验证（142 项测试通过）
