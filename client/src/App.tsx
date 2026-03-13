@@ -26,9 +26,16 @@ import HistoryPage from "./pages/History";
 import MediaXiaohongshu from "./pages/MediaXiaohongshu";
 import MediaWechat from "./pages/MediaWechat";
 import MediaInstagram from "./pages/MediaInstagram";
+import PendingApproval from "./pages/PendingApproval";
 
 function Router() {
   return (
+    <Switch>
+      {/* 等待审批页面（不需要 DashboardLayout） */}
+      <Route path="/pending-approval" component={PendingApproval} />
+
+      {/* 主应用（带 DashboardLayout） */}
+      <Route>
     <DashboardLayout>
       <Switch>
         {/* Default redirect to design planning */}
@@ -72,6 +79,8 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>
+      </Route>
+    </Switch>
   );
 }
 

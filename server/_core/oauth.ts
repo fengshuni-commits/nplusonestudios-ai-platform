@@ -36,6 +36,21 @@ export function registerOAuthRoutes(app: Express) {
         lastSignedIn: new Date(),
       });
 
+      // Check if user is approved to access the platform
+      const user = await db.getUserByOpenId(userInfo.openId);
+      if (!user?.approved) {
+        // Not approved: still create session so they can see the pending page,
+        // but redirect to the pending-approval page instead of the app
+        const sessionToken = await sdk.createSessionToken(userInfo.openId, {
+          name: userInfo.name || "",
+          expiresInMs: ONE_YEAR_MS,
+        });
+        const cookieOptions = getSessionCookieOptions(req);
+        res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        res.redirect(302, "/pending-approval");
+        return;
+      }
+
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,

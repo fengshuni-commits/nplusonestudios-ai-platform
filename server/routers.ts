@@ -1437,6 +1437,24 @@ const adminRouter = router({
       return { success: true };
     }),
 
+  listPendingUsers: adminProcedure.query(async () => {
+    return db.listPendingUsers();
+  }),
+
+  approveUser: adminProcedure
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.approveUser(input.userId);
+      return { success: true };
+    }),
+
+  revokeUser: adminProcedure
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.revokeUser(input.userId);
+      return { success: true };
+    }),
+
   // API Keys management
   listApiKeys: adminProcedure.query(async () => {
     return db.listApiKeys();

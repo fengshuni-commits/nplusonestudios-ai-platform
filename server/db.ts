@@ -57,9 +57,29 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
   if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
   else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
+  // Owner is always approved
+  if (user.openId === ENV.ownerOpenId) { values.approved = true; }
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
   await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+}
+
+export async function approveUser(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ approved: true }).where(eq(users.id, userId));
+}
+
+export async function revokeUser(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ approved: false }).where(eq(users.id, userId));
+}
+
+export async function listPendingUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).where(eq(users.approved, false)).orderBy(desc(users.createdAt));
 }
 
 export async function getUserByOpenId(openId: string) {
