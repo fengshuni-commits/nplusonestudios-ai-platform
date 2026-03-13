@@ -171,14 +171,112 @@ export async function deleteProjectCustomField(id: number) {
   await db.delete(projectCustomFields).where(eq(projectCustomFields.id, id));
 }
 
-// ─── Project Generation History (by projectId) ────────
+/// ─── Project Members ─────────────────────────────────────
+
+export async function listProjectMembers(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  // Join with users to get member info
+  return db.select({
+    id: projectMembers.id,
+    projectId: projectMembers.projectId,
+    userId: projectMembers.userId,
+    role: projectMembers.role,
+    addedBy: projectMembers.addedBy,
+    joinedAt: projectMembers.joinedAt,
+    userName: users.name,
+    userEmail: users.email,
+    userAvatar: users.avatar,
+    userDepartment: users.department,
+  }).from(projectMembers)
+    .leftJoin(users, eq(projectMembers.userId, users.id))
+    .where(eq(projectMembers.projectId, projectId))
+    .orderBy(projectMembers.joinedAt);
+}
+
+export async function addProjectMember(data: { projectId: number; userId: number; role?: string; addedBy?: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Check if already a member
+  const existing = await db.select().from(projectMembers)
+    .where(and(eq(projectMembers.projectId, data.projectId), eq(projectMembers.userId, data.userId)))
+    .limit(1);
+  if (existing.length > 0) return { id: existing[0].id };
+  const result = await db.insert(projectMembers).values({
+    projectId: data.projectId,
+    userId: data.userId,
+    role: (data.role || "designer") as any,
+    addedBy: data.addedBy,
+  });
+  return { id: result[0].insertId };
+}
+
+export async function removeProjectMember(projectId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
+}
+
+export async function updateProjectMemberRole(projectId: number, userId: number, role: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(projectMembers)
+    .set({ role: role as any })
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
+}
+
+export async function isProjectMember(projectId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select({ id: projectMembers.id }).from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+    .limit(1);
+  return result.length > 0;
+}
+
+// ─── Project Generation History (by projectId) ────
 
 export async function listProjectGenerationHistory(projectId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(generationHistory)
+  // Return records with user info for display
+  return db.select({
+    id: generationHistory.id,
+    userId: generationHistory.userId,
+    module: generationHistory.module,
+    title: generationHistory.title,
+    summary: generationHistory.summary,
+    outputUrl: generationHistory.outputUrl,
+    outputContent: generationHistory.outputContent,
+    status: generationHistory.status,
+    parentId: generationHistory.parentId,
+    projectId: generationHistory.projectId,
+    createdByName: generationHistory.createdByName,
+    createdAt: generationHistory.createdAt,
+    // Join user info
+    userName: users.name,
+    userAvatar: users.avatar,
+  }).from(generationHistory)
+    .leftJoin(users, eq(generationHistory.userId, users.id))
     .where(eq(generationHistory.projectId, projectId))
     .orderBy(desc(generationHistory.createdAt));
+}
+
+export async function deleteGenerationHistory(id: number, userId: number, isAdmin: boolean) {
+  const db = await getDb();
+  if (!db) return;
+  // Admin can delete any record; regular user can only delete their own
+  const conditions = isAdmin
+    ? [eq(generationHistory.id, id)]
+    : [eq(generationHistory.id, id), eq(generationHistory.userId, userId)];
+  // Also delete children in the edit chain
+  const children = await db.select({ id: generationHistory.id }).from(generationHistory)
+    .where(eq(generationHistory.parentId, id));
+  for (const child of children) {
+    await deleteGenerationHistory(child.id, userId, isAdmin);
+  }
+  await db.delete(generationHistory).where(and(...conditions));
 }
 
 // ─── Tasks ───────────────────────────────────────────────

@@ -8,16 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import {
-  ArrowLeft, Plus, Calendar, Save, X, Trash2,
+import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Compass, Ruler, FileText, Megaphone,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
-  Presentation,
+  Presentation, Users, UserPlus, UserMinus, Crown, User,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // ─── Module labels for generation history ───────────────
 const moduleLabels: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -46,6 +48,9 @@ export default function ProjectDetail() {
   const projectId = parseInt(params.id || "0");
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("info");
+
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
 
   const { data: project, isLoading: projectLoading } = trpc.projects.getById.useQuery({ id: projectId });
   const { data: customFields } = trpc.projects.listCustomFields.useQuery({ projectId });
@@ -77,6 +82,7 @@ export default function ProjectDetail() {
         <TabsList>
           <TabsTrigger value="info">项目信息</TabsTrigger>
           <TabsTrigger value="documents">项目文档</TabsTrigger>
+          <TabsTrigger value="members">项目成员</TabsTrigger>
           <TabsTrigger value="tasks">任务看板</TabsTrigger>
         </TabsList>
 
@@ -95,6 +101,11 @@ export default function ProjectDetail() {
             projectId={projectId}
             generationHistory={generationHistory || []}
           />
+        </TabsContent>
+
+        {/* ═══ Tab: 项目成员 ═══ */}
+        <TabsContent value="members" className="mt-4">
+          <ProjectMembersTab projectId={projectId} isAdmin={isAdmin} currentUserId={currentUser?.id} />
         </TabsContent>
 
         {/* ═══ Tab: 任务看板 ═══ */}
@@ -389,7 +400,36 @@ function ProjectDocumentsTab({
   generationHistory: any[];
 }) {
   const [, navigate] = useLocation();
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+  const utils = trpc.useUtils();
   const { data: documents } = trpc.documents.listByProject.useQuery({ projectId });
+
+  const deleteHistory = trpc.history.delete.useMutation({
+    onSuccess: () => {
+      utils.projects.listGenerationHistory.invalidate({ projectId });
+      toast.success("成果已删除");
+    },
+    onError: () => toast.error("删除失败，您可能没有权限删除此条记录"),
+  });
+
+  const adminDeleteHistory = trpc.history.adminDelete.useMutation({
+    onSuccess: () => {
+      utils.projects.listGenerationHistory.invalidate({ projectId });
+      toast.success("成果已删除");
+    },
+    onError: () => toast.error("删除失败"),
+  });
+
+  const handleDelete = (id: number, ownerId: number) => {
+    if (isAdmin) {
+      adminDeleteHistory.mutate({ id });
+    } else if (currentUser?.id === ownerId) {
+      deleteHistory.mutate({ id });
+    } else {
+      toast.error("您只能删除自己创建的成果");
+    }
+  };
 
   // Edit chain dialog state
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
@@ -472,37 +512,52 @@ function ProjectDocumentsTab({
             <span className="text-xs text-muted-foreground">{designItems.length} 张</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {designItems.map((item: any) => (
-              <div
-                key={item.id}
-                className="group relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer border border-border/40 hover:border-primary/50 transition-all hover:shadow-md"
-                onClick={() => {
-                  setSelectedRootId(item.id);
-                  setDetailOpen(true);
-                }}
-              >
-                {item.outputUrl ? (
-                  <img
-                    src={item.outputUrl}
-                    alt={item.title}
-                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
-                  </div>
-                )}
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+              {designItems.map((item: any) => (
+              <div key={item.id} className="group relative aspect-square rounded-lg overflow-hidden bg-muted border border-border/40 hover:border-primary/50 transition-all hover:shadow-md">
+                {/* Thumbnail - clickable to open edit chain */}
+                <div
+                  className="absolute inset-0 cursor-pointer"
+                  onClick={() => { setSelectedRootId(item.id); setDetailOpen(true); }}
+                >
+                  {item.outputUrl ? (
+                    <img src={item.outputUrl} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
+                    </div>
+                  )}
+                </div>
+                {/* Hover overlay with creator info */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                   <div className="absolute bottom-0 left-0 right-0 p-2">
-                    <p className="text-[11px] text-white/90 line-clamp-2 leading-tight">
-                      {item.title}
-                    </p>
+                    <p className="text-[11px] text-white/90 line-clamp-1 leading-tight">{item.title}</p>
                     <p className="text-[10px] text-white/60 mt-0.5">
-                      {formatDocTime(item.createdAt)}
+                      {item.userName || item.createdByName || "未知"} · {formatDocTime(item.createdAt)}
                     </p>
                   </div>
                 </div>
+                {/* Delete button - only visible on hover for authorized users */}
+                {(isAdmin || currentUser?.id === item.userId) && (
+                  <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="icon" variant="destructive" className="h-6 w-6 rounded-full" onClick={(e) => e.stopPropagation()}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>确认删除</AlertDialogTitle>
+                          <AlertDialogDescription>将删除此条生成记录及其全部编辑历史，不可恢复。</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>取消</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(item.id, item.userId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">删除</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -537,22 +592,40 @@ function ProjectDocumentsTab({
                   <CardContent className="px-4 pb-3">
                     <div className="space-y-1.5">
                       {items.map((item: any) => (
-                        <div key={item.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                        <div key={item.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors group">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{item.title}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{formatDocTime(item.createdAt)}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              <span className="font-medium">{item.userName || item.createdByName || "未知"}</span>
+                              {" · "}{formatDocTime(item.createdAt)}
+                            </p>
                           </div>
-                          {item.outputUrl && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 shrink-0"
-                              onClick={() => window.open(item.outputUrl!, "_blank")}
-                              title={mod === "benchmark_ppt" ? "下载" : "查看"}
-                            >
-                              {mod === "benchmark_ppt" ? <Download className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {item.outputUrl && (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(item.outputUrl!, "_blank")} title={mod === "benchmark_ppt" ? "下载" : "查看"}>
+                                {mod === "benchmark_ppt" ? <Download className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                              </Button>
+                            )}
+                            {(isAdmin || currentUser?.id === item.userId) && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                    <AlertDialogDescription>将删除此条生成记录，不可恢复。</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(item.id, item.userId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">删除</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -592,22 +665,40 @@ function ProjectDocumentsTab({
                   <CardContent className="px-4 pb-3">
                     <div className="space-y-1.5">
                       {items.map((item: any) => (
-                        <div key={item.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                        <div key={item.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors group">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{item.title}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{formatDocTime(item.createdAt)}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              <span className="font-medium">{item.userName || item.createdByName || "未知"}</span>
+                              {" · "}{formatDocTime(item.createdAt)}
+                            </p>
                           </div>
-                          {item.outputUrl && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 shrink-0"
-                              onClick={() => window.open(item.outputUrl!, "_blank")}
-                              title="查看"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {item.outputUrl && (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(item.outputUrl!, "_blank")} title="查看">
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {(isAdmin || currentUser?.id === item.userId) && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                    <AlertDialogDescription>将删除此条生成记录，不可恢复。</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(item.id, item.userId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">删除</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -903,4 +994,182 @@ function statusLabel(s: string) {
 function docTypeLabel(s: string) {
   const m: Record<string, string> = { brief: "任务书", report: "报告", minutes: "会议纪要", specification: "规范", checklist: "检查清单", schedule: "排期", other: "其他" };
   return m[s] || s;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ProjectMembersTab: Project member management
+// ═══════════════════════════════════════════════════════════
+
+function ProjectMembersTab({
+  projectId,
+  isAdmin,
+  currentUserId,
+}: {
+  projectId: number;
+  isAdmin: boolean;
+  currentUserId?: number;
+}) {
+  const utils = trpc.useUtils();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Get project members
+  const { data: members, isLoading } = trpc.projects.listMembers.useQuery({ projectId });
+
+  // Get all approved users (for admin to add)
+  const { data: allUsers } = trpc.admin.listUsers.useQuery(undefined, { enabled: isAdmin });
+
+  const addMember = trpc.projects.addMember.useMutation({
+    onSuccess: () => {
+      utils.projects.listMembers.invalidate({ projectId });
+      toast.success("成员已添加");
+      setSearchOpen(false);
+    },
+    onError: (e) => toast.error(e.message || "添加失败"),
+  });
+
+  const removeMember = trpc.projects.removeMember.useMutation({
+    onSuccess: () => {
+      utils.projects.listMembers.invalidate({ projectId });
+      toast.success("成员已移除");
+    },
+    onError: (e) => toast.error(e.message || "移除失败"),
+  });
+
+  // Users not yet in project
+  const memberIds = new Set((members || []).map((m: any) => m.userId));
+  const availableUsers = (allUsers || []).filter((u: any) => !memberIds.has(u.id));
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />加载中...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">{members?.length || 0} 位项目成员</span>
+        </div>
+        {isAdmin && (
+          <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <UserPlus className="h-4 w-4 mr-1.5" />添加成员
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>添加项目成员</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 pt-2">
+                {availableUsers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    所有已批准的成员都已加入此项目
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {availableUsers.map((user: any) => (
+                      <div key={user.id} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors">
+              <Avatar className="h-9 w-9">
+                <AvatarImage src={user.avatar} />
+                <AvatarFallback className="text-xs">
+                  {(user.name || user.email || "?").charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{user.name || user.email}</p>
+                <p className="text-xs text-muted-foreground">{user.role === "admin" ? "管理员" : "成员"}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addMember.mutate({ projectId, userId: user.id })}
+                          disabled={addMember.isPending}
+                        >
+                          添加
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      {/* Member list */}
+      {!members || members.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Users className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm text-muted-foreground">暂无项目成员</p>
+            {isAdmin && (
+              <p className="text-xs text-muted-foreground mt-1">点击"添加成员"为此项目分配团队成员</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {members.map((member: any) => (
+            <div key={member.userId} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+              <Avatar className="h-9 w-9">
+                <AvatarImage src={member.userAvatar} />
+                <AvatarFallback className="text-xs">
+                  {(member.userName || member.userEmail || "?").charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium truncate">{member.userName || member.userEmail || "未知用户"}</p>
+                  {member.role === "admin" && (
+                    <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                      <Crown className="h-2.5 w-2.5" />管理员
+                    </span>
+                  )}
+                  {member.userId === currentUserId && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">我</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  加入于 {new Date(member.joinedAt).toLocaleDateString("zh-CN")}
+                </p>
+              </div>
+              {isAdmin && member.userId !== currentUserId && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>移除项目成员</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        将 {member.userName || "此成员"} 从项目中移除后，他们将无法访问此项目信息，但其历史生成成果仍然保留。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => removeMember.mutate({ projectId, userId: member.userId })}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        移除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

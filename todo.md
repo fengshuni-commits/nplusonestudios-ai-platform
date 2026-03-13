@@ -201,3 +201,15 @@
 - [x] 后端 admin API：listPendingUsers（待审批）、approveUser、revokeUser
 - [x] 前端：管理板块"团队管理"页面改造为成员管理，显示已审批/待审批成员列表，支持审批/撤销
 - [x] 前端：未审批用户登录后看到等待审批提示页面
+
+## 项目权限管理与成果共享
+- [x] 数据库：新建 project_members 表（projectId, userId, addedAt, addedBy）
+- [x] 数据库：generationHistory 表增加 createdBy 字段（userId）
+- [x] 后端：项目成员 CRUD API（addMember, removeMember, listMembers）
+- [x] 后端：项目查询带权限过滤（只有项目成员和管理员可见）
+- [x] 后端：成果查询带 createdBy 用户信息
+- [x] 后端：成果删除权限控制（本人或管理员可删除）
+- [x] 前端：项目详情页增加"成员"Tab，管理员可添加/移除项目成员
+- [x] 前端：项目看板文档 Tab 成果显示创建者信息
+- [x] 前端：项目看板文档 Tab 管理员可删除任意成员成果
+- [x] 前端：生成记录页成员可删除自己的历史成果

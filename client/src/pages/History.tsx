@@ -34,7 +34,19 @@ import {
   Layers,
   ArrowRight,
   X,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -117,6 +129,15 @@ export default function HistoryPage() {
       setDetailOpen(true);
     }
   }, []);
+
+  const utils = trpc.useUtils();
+  const deleteMutation = trpc.history.delete.useMutation({
+    onSuccess: () => {
+      utils.history.listGrouped.invalidate();
+      toast.success("已删除记录");
+    },
+    onError: (e) => toast.error(e.message || "删除失败"),
+  });
 
   // Separate render items and non-render items
   const renderItems = items.filter((i: any) => i.module === "ai_render");
@@ -220,6 +241,29 @@ export default function HistoryPage() {
                             {formatTime(item.createdAt)}
                           </p>
                         </div>
+                        {/* Delete button */}
+                        <div className="absolute top-1.5 left-1.5" onClick={(e) => e.stopPropagation()}>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/80 hover:bg-red-500/80 hover:text-white transition-colors">
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                <AlertDialogDescription>将删除此条生成记录，不可恢复。</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate({ id: item.id })}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >删除</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
                     </div>
                   );
@@ -279,6 +323,30 @@ export default function HistoryPage() {
                               )}
                             </Button>
                           )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                <AlertDialogDescription>将删除此条生成记录，不可恢复。</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate({ id: item.id })}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >删除</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </CardContent>
                     </Card>

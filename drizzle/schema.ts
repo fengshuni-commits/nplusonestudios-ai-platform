@@ -63,6 +63,7 @@ export const projectMembers = mysqlTable("project_members", {
   projectId: int("projectId").notNull(),
   userId: int("userId").notNull(),
   role: mysqlEnum("role", ["lead", "designer", "engineer", "viewer"]).default("designer").notNull(),
+  addedBy: int("addedBy"),
   joinedAt: timestamp("joinedAt").defaultNow().notNull(),
 });
 
@@ -339,6 +340,8 @@ export const generationHistory = mysqlTable("generation_history", {
   parentId: int("parentId"),
   /** Associated project ID (optional) */
   projectId: int("projectId"),
+  /** Creator name (denormalized for display, from users.name at creation time) */
+  createdByName: varchar("createdByName", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type GenerationHistory = typeof generationHistory.$inferSelect;

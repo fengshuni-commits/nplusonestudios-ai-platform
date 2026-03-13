@@ -691,6 +691,41 @@ const projectsRouter = router({
       return db.listProjectGenerationHistory(input.projectId);
     }),
 
+  // ─── Project Members ──────────────────────────────────
+  listMembers: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      return db.listProjectMembers(input.projectId);
+    }),
+
+  addMember: adminProcedure
+    .input(z.object({
+      projectId: z.number(),
+      userId: z.number(),
+      role: z.enum(["lead", "designer", "engineer", "viewer"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      return db.addProjectMember({ ...input, addedBy: ctx.user.id });
+    }),
+
+  removeMember: adminProcedure
+    .input(z.object({ projectId: z.number(), userId: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.removeProjectMember(input.projectId, input.userId);
+      return { success: true };
+    }),
+
+  updateMemberRole: adminProcedure
+    .input(z.object({
+      projectId: z.number(),
+      userId: z.number(),
+      role: z.enum(["lead", "designer", "engineer", "viewer"]),
+    }))
+    .mutation(async ({ input }) => {
+      await db.updateProjectMemberRole(input.projectId, input.userId, input.role);
+      return { success: true };
+    }),
+
   // ─── Export project info as context for AI modules ────
   getProjectContext: protectedProcedure
     .input(z.object({ id: z.number() }))
@@ -1033,6 +1068,7 @@ ${siteUrls}
           status: "success",
           durationMs: Date.now() - startTime,
           projectId: input.projectId || null,
+          createdByName: ctx.user.name || null,
         }).catch(() => ({ id: 0 }));
 
         return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
@@ -1260,6 +1296,7 @@ const renderingRouter = router({
           durationMs: Date.now() - startTime,
           parentId: input.parentHistoryId || null,
           projectId: input.projectId || null,
+          createdByName: ctx.user.name || null,
         }).catch(() => ({ id: 0 }));
 
         return { url: result.url, prompt: fullPrompt, historyId: historyResult.id };
@@ -1392,6 +1429,7 @@ const meetingRouter = router({
           status: "success",
           durationMs: Date.now() - startTime,
           projectId: input.projectId || null,
+          createdByName: ctx.user.name || null,
         }).catch(() => ({ id: 0 }));
 
         return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
@@ -1731,6 +1769,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           status: "success",
           durationMs: Date.now() - startTime,
           projectId: input.projectId || null,
+          createdByName: ctx.user.name || null,
         }).catch(() => ({ id: 0 }));
 
         return {
@@ -1800,6 +1839,23 @@ const historyRouter = router({
         limit: input?.limit || 50,
         offset: input?.offset || 0,
       });
+    }),
+
+  /** Delete a generation history item (own records for members, any record for admin) */
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const isAdmin = ctx.user.role === "admin";
+      await db.deleteGenerationHistory(input.id, ctx.user.id, isAdmin);
+      return { success: true };
+    }),
+
+  /** Admin delete a generation history item by project (for project document management) */
+  adminDelete: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await db.deleteGenerationHistory(input.id, ctx.user.id, true);
+      return { success: true };
     }),
 });
 
