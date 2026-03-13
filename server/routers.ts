@@ -582,8 +582,63 @@ async function generatePptInBackground(
 // ─── Dashboard ───────────────────────────────────────────
 
 const dashboardRouter = router({
-  stats: protectedProcedure.query(async () => {
-    return db.getDashboardStats();
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    return db.getDashboardStats(ctx.user.id);
+  }),
+
+  /** AI-generated personalized greeting based on user recent activity */
+  greeting: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id;
+    const userName = ctx.user.name || "设计师";
+    const recentHistory = await db.listRecentHistoryForGreeting(userId, 10);
+    const hour = new Date().getHours();
+    const timeOfDay = hour < 6 ? "深夜" : hour < 12 ? "早上" : hour < 14 ? "中午" : hour < 18 ? "下午" : "晚上";
+    const moduleLabel: Record<string, string> = {
+      ai_render: "AI效果图",
+      benchmark_report: "对标调研报告",
+      benchmark_ppt: "调研PPT",
+      meeting_minutes: "会议纪要",
+      media_xiaohongshu: "小红书内容",
+      media_wechat: "公众号文章",
+      media_instagram: "Instagram帖子",
+    };
+    const historyContext = recentHistory.length > 0
+      ? recentHistory.map((h: any) => {
+          const label = moduleLabel[h.module] || h.module;
+          return label + "：" + h.title;
+        }).join("\n")
+      : "暂无使用记录";
+    const systemPrompt = [
+      "你是 N+1 STUDIOS 建筑设计事务所 AI 工作平台的助手。请根据用户的最近使用记录，生成一句简短、自然、有温度的中文问候语。",
+      "要求：",
+      "- 一句话，20-40字",
+      "- 结合用户最近的工作内容（如果有），给出有针对性的关怀或鼓励",
+      "- 语气专业但亲切，像一个了解你工作状态的同事",
+      '- 不要过于正式，不要用\"您\"，用\"你\"',
+      "- 不要重复用户名字",
+      '- 可以提到具体的工作内容（如\"效果图\"\"调研报告\"等）',
+      "- 如果没有使用记录，给一句温暖的欢迎语",
+      "- 只输出问候语本身，不要加引号或其他格式",
+    ].join("\n");
+    const userPrompt = "用户名：" + userName + "\n当前时间：" + timeOfDay + "\n最近使用记录：\n" + historyContext;
+    try {
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+      const greeting = (typeof response?.choices?.[0]?.message?.content === "string" ? response.choices[0].message.content.trim() : "") || (timeOfDay + "好，" + userName + "！");
+      return { greeting, timeOfDay };
+    } catch {
+      return { greeting: timeOfDay + "好，" + userName + "！欢迎回到工作平台。", timeOfDay };
+    }
+  }),
+
+
+  /** Recent AI generations for homepage thumbnail display */
+  recentGenerations: protectedProcedure.query(async ({ ctx }) => {
+    return db.listRecentHistoryForGreeting(ctx.user.id, 8);
   }),
 });
 

@@ -26,6 +26,7 @@ import MediaXiaohongshu from "./pages/MediaXiaohongshu";
 import MediaWechat from "./pages/MediaWechat";
 import MediaInstagram from "./pages/MediaInstagram";
 import PendingApproval from "./pages/PendingApproval";
+import Home from "./pages/Home";
 
 function Router() {
   return (
@@ -37,10 +38,8 @@ function Router() {
       <Route>
     <DashboardLayout>
       <Switch>
-        {/* Default redirect to design planning */}
-        <Route path="/">
-          <Redirect to="/design/planning" />
-        </Route>
+        {/* Home dashboard */}
+        <Route path="/" component={Home} />
 
         {/* 设计板块 */}
         <Route path="/design/planning" component={DesignPlanning} />

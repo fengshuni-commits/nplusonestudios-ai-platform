@@ -18,6 +18,8 @@ import {
   workflowInstances,
   feedback, InsertFeedback,
   projectCustomFields, InsertProjectCustomField,
+  generationHistory,
+  InsertGenerationHistory,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -557,7 +559,7 @@ export async function deleteApiKey(id: number) {
 
 // ─── Dashboard Stats ─────────────────────────────────────
 
-export async function getDashboardStats() {
+export async function getDashboardStats(userId?: number) {
   const db = await getDb();
   if (!db) return { activeProjects: 0, pendingTasks: 0, completedThisWeek: 0, aiToolCalls: 0, recentProjects: [], recentTasks: [] };
 
@@ -577,7 +579,11 @@ export async function getDashboardStats() {
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const aiCalls = await getAiToolCallCount(monthAgo);
 
-  const recentProjects = await db.select().from(projects).orderBy(desc(projects.updatedAt)).limit(5);
+  const recentProjects = userId
+    ? await db.select().from(projects).where(
+        sql`(${projects.id} IN (SELECT projectId FROM project_members WHERE userId = ${userId}) OR ${projects.createdBy} = ${userId})`
+      ).orderBy(desc(projects.updatedAt)).limit(5)
+    : await db.select().from(projects).orderBy(desc(projects.updatedAt)).limit(5);
   const recentTasks = await db.select().from(tasks).where(inArray(tasks.status, ["todo", "in_progress"])).orderBy(desc(tasks.createdAt)).limit(5);
 
   return {
@@ -588,6 +594,25 @@ export async function getDashboardStats() {
     recentProjects,
     recentTasks,
   };
+}
+
+// ─── Recent History for Greeting ────────────────────────
+export async function listRecentHistoryForGreeting(userId: number, limit: number = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  const items = await db.select({
+    id: generationHistory.id,
+    module: generationHistory.module,
+    title: generationHistory.title,
+    outputUrl: generationHistory.outputUrl,
+    createdAt: generationHistory.createdAt,
+    status: generationHistory.status,
+  })
+  .from(generationHistory)
+  .where(and(eq(generationHistory.userId, userId), eq(generationHistory.status, "success")))
+  .orderBy(desc(generationHistory.createdAt))
+  .limit(limit);
+  return items;
 }
 
 // ─── Workflow Templates ──────────────────────────────────
@@ -643,8 +668,6 @@ export async function deleteCaseSource(id: number) {
 }
 
 // ─── Generation History ─────────────────────────────────
-import { generationHistory, InsertGenerationHistory } from "../drizzle/schema";
-
 export async function listGenerationHistory(userId: number, opts?: { module?: string; limit?: number; offset?: number }) {
   const db = await getDb();
   if (!db) return { items: [], total: 0 };

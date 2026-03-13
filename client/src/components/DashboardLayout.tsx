@@ -36,6 +36,7 @@ import {
   Camera,
   BarChart3,
   HelpCircle,
+  LayoutDashboard,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { HelpGuide } from "./HelpGuide";
@@ -56,6 +57,8 @@ type MenuSection = {
   items: MenuItem[];
   adminOnly?: boolean;
 };
+
+const homeItem: MenuItem = { icon: LayoutDashboard, label: "工作台", path: "/" };
 
 const menuSections: MenuSection[] = [
   {
@@ -285,6 +288,34 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
 
         {/* Top: Main section icons/items */}
         <div className={`flex flex-col ${expanded ? "px-2" : "items-center"} gap-0.5 flex-1 pt-1`}>
+          {/* Home item */}
+          {expanded ? (
+            <button
+              key="home"
+              onClick={() => setLocation("/")}
+              className={`flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm transition-colors ${
+                location === "/"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4 shrink-0" />
+              <span>工作台</span>
+            </button>
+          ) : (
+            <button
+              key="home"
+              onClick={() => setLocation("/")}
+              title="工作台"
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+                location === "/"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+            </button>
+          )}
           {mainSections.map((section) => (
             expanded ? (
               <ExpandedSection
