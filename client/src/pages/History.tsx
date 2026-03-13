@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,10 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RotateCcw,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -90,11 +94,205 @@ function formatFullTime(dateStr: string | Date): string {
   });
 }
 
+// ─── Image Lightbox ─────────────────────────────────────────────────────────
+
+interface LightboxProps {
+  src: string;
+  alt?: string;
+  label?: string;
+  onClose: () => void;
+}
+
+function Lightbox({ src, alt, label, onClose }: LightboxProps) {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+
+  // Wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setScale(prev => {
+      const next = prev * (e.deltaY < 0 ? 1.15 : 0.87);
+      return Math.min(Math.max(next, 0.2), 8);
+    });
+  }, []);
+
+  // Drag pan
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
+  }, [offset]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging || !dragStart.current) return;
+    setOffset({
+      x: dragStart.current.ox + e.clientX - dragStart.current.x,
+      y: dragStart.current.oy + e.clientY - dragStart.current.y,
+    });
+  }, [dragging]);
+
+  const handleMouseUp = useCallback(() => {
+    setDragging(false);
+    dragStart.current = null;
+  }, []);
+
+  // Touch support
+  const lastTouch = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      lastTouch.current = { x: t.clientX, y: t.clientY, ox: offset.x, oy: offset.y };
+    }
+  }, [offset]);
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1 && lastTouch.current) {
+      const t = e.touches[0];
+      setOffset({
+        x: lastTouch.current.ox + t.clientX - lastTouch.current.x,
+        y: lastTouch.current.oy + t.clientY - lastTouch.current.y,
+      });
+    }
+  }, []);
+
+  const resetView = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
+
+  // Download helper
+  const handleDownload = useCallback(async () => {
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const ext = blob.type.includes("png") ? "png" : "jpg";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${label || "image"}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(src, "_blank");
+    }
+  }, [src, label]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Top toolbar */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10 pointer-events-none">
+        <span className="text-white/80 text-sm font-medium pointer-events-auto">
+          {label || alt || "图片预览"}
+        </span>
+        <div className="flex items-center gap-1 pointer-events-auto">
+          <button
+            className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={() => setScale(s => Math.min(s * 1.25, 8))}
+            title="放大"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={() => setScale(s => Math.max(s * 0.8, 0.2))}
+            title="缩小"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={resetView}
+            title="重置视图"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+          <button
+            className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={handleDownload}
+            title="下载图片"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+          <button
+            className="h-8 w-8 rounded-full bg-white/10 hover:bg-red-500/60 flex items-center justify-center text-white transition-colors ml-1"
+            onClick={onClose}
+            title="关闭"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Scale indicator */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white/70 text-xs px-3 py-1 rounded-full pointer-events-none">
+        {Math.round(scale * 100)}% · 滚轮缩放 · 拖拽平移
+      </div>
+
+      {/* Image canvas */}
+      <div
+        className="w-full h-full overflow-hidden flex items-center justify-center"
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => { lastTouch.current = null; }}
+      >
+        <img
+          src={src}
+          alt={alt}
+          draggable={false}
+          style={{
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+            transformOrigin: "center center",
+            transition: dragging ? "none" : "transform 0.1s ease",
+            maxWidth: "90vw",
+            maxHeight: "90vh",
+            userSelect: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Download helper (inline, no lightbox) ──────────────────────────────────
+
+async function downloadImage(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const ext = blob.type.includes("png") ? "png" : "jpg";
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = `${filename}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, "_blank");
+  }
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
 export default function HistoryPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [expandedEnhance, setExpandedEnhance] = useState<Record<number, boolean>>({});
+  const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
   const [, navigate] = useLocation();
 
   const queryInput = useMemo(() => ({
@@ -112,7 +310,6 @@ export default function HistoryPage() {
   );
 
   const items = data?.items || [];
-  const total = data?.total || 0;
 
   // Navigate to design tools with reference image URL
   const handleContinueEdit = useCallback((imageUrl: string, historyId: number) => {
@@ -262,7 +459,7 @@ export default function HistoryPage() {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                <AlertDialogDescription>将删除此条生成记录，不可恢复。</AlertDialogDescription>
+                                <AlertDialogDescription>将删除此条生成记录及其所有编辑历史，不可恢复。</AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>取消</AlertDialogCancel>
@@ -370,11 +567,16 @@ export default function HistoryPage() {
 
       {/* Detail Dialog for AI Render Edit Chain */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-0">
-          <DialogHeader className="px-6 pt-6 pb-2">
+        <DialogContent className="max-w-3xl w-[90vw] max-h-[88vh] overflow-y-auto p-0 resize">
+          <DialogHeader className="px-6 pt-6 pb-2 sticky top-0 bg-background z-10 border-b border-border/40">
             <DialogTitle className="text-base font-medium flex items-center gap-2">
               <Image className="h-4 w-4 text-emerald-600" />
               编辑历史
+              {chainQuery.data && (
+                <span className="text-xs font-normal text-muted-foreground ml-1">
+                  共 {chainQuery.data.length} 次生成
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -385,12 +587,13 @@ export default function HistoryPage() {
           ) : chainQuery.data && chainQuery.data.length > 0 ? (
             <div className="px-6 pb-6">
               {/* Edit chain timeline */}
-              <div className="space-y-0">
+              <div className="space-y-0 pt-4">
                 {chainQuery.data.map((chainItem: any, idx: number) => {
                   const isFirst = idx === 0;
                   const isLast = idx === chainQuery.data!.length - 1;
                   const inputParams = chainItem.inputParams as any;
                   const promptText = inputParams?.prompt || chainItem.summary || "";
+                  const itemTitle = chainItem.title || `第 ${idx + 1} 次生成`;
 
                   return (
                     <div key={chainItem.id} className="relative">
@@ -400,9 +603,13 @@ export default function HistoryPage() {
                       )}
 
                       <div className={`relative flex gap-4 ${!isFirst ? "pt-4" : ""} ${!isLast ? "pb-4" : ""}`}>
-                        {/* Timeline dot */}
+                        {/* Timeline thumbnail */}
                         <div className="flex flex-col items-center shrink-0 z-10">
-                          <div className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 ${isLast ? "border-emerald-500" : "border-border"}`}>
+                          <div
+                            className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 cursor-pointer hover:opacity-80 transition-opacity ${isLast ? "border-emerald-500" : "border-border"}`}
+                            onClick={() => chainItem.outputUrl && setLightbox({ src: chainItem.outputUrl, label: itemTitle })}
+                            title="点击放大查看"
+                          >
                             {chainItem.outputUrl ? (
                               <img
                                 src={chainItem.outputUrl}
@@ -451,18 +658,38 @@ export default function HistoryPage() {
                                 <Copy className="h-3 w-3" />
                               </Button>
                               {chainItem.outputUrl && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                                  onClick={() => {
-                                    setDetailOpen(false);
-                                    handleContinueEdit(chainItem.outputUrl!, chainItem.id);
-                                  }}
-                                  title="使用此图片继续生成"
-                                >
-                                  <RefreshCw className="h-3 w-3" />
-                                </Button>
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                    onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}
+                                    title="放大查看"
+                                  >
+                                    <Maximize2 className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                    onClick={() => downloadImage(chainItem.outputUrl!, itemTitle)}
+                                    title="下载原图"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      setDetailOpen(false);
+                                      handleContinueEdit(chainItem.outputUrl!, chainItem.id);
+                                    }}
+                                    title="使用此图片继续生成"
+                                  >
+                                    <RefreshCw className="h-3 w-3" />
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -470,13 +697,24 @@ export default function HistoryPage() {
                           {/* Large preview for the image */}
                           {chainItem.outputUrl && (
                             <div className="mt-2 space-y-2">
-                              <div className="rounded-lg overflow-hidden border border-border/50 bg-muted">
+                              <div
+                                className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
+                                onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}
+                              >
                                 <img
                                   src={chainItem.outputUrl}
                                   alt={chainItem.title}
-                                  className="w-full h-auto max-h-[300px] object-contain"
+                                  className="w-full h-auto max-h-[320px] object-contain"
                                 />
+                                {/* Hover hint */}
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/20">
+                                  <div className="bg-black/60 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                                    <Maximize2 className="h-3 w-3" />
+                                    点击放大
+                                  </div>
+                                </div>
                               </div>
+
                               {/* Enhanced image section */}
                               {chainItem.enhancedImageUrl && (
                                 <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/30 overflow-hidden">
@@ -489,17 +727,28 @@ export default function HistoryPage() {
                                       Magnific 增强版
                                     </span>
                                     <div className="flex items-center gap-2">
-                                      <a
-                                        href={chainItem.enhancedImageUrl}
-                                        download
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                      <button
                                         className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-800 bg-emerald-100/60 hover:bg-emerald-100 px-2 py-0.5 rounded-full transition-colors"
-                                        onClick={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setLightbox({ src: chainItem.enhancedImageUrl!, label: `${itemTitle}（增强版）` });
+                                        }}
+                                        title="放大查看增强版"
+                                      >
+                                        <Maximize2 className="h-2.5 w-2.5" />
+                                        放大
+                                      </button>
+                                      <button
+                                        className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-800 bg-emerald-100/60 hover:bg-emerald-100 px-2 py-0.5 rounded-full transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          downloadImage(chainItem.enhancedImageUrl!, `${itemTitle}-增强版`);
+                                        }}
+                                        title="下载增强版"
                                       >
                                         <Download className="h-2.5 w-2.5" />
                                         下载
-                                      </a>
+                                      </button>
                                       {expandedEnhance[chainItem.id] ? (
                                         <ChevronUp className="h-3 w-3" />
                                       ) : (
@@ -513,23 +762,43 @@ export default function HistoryPage() {
                                       <div className="grid grid-cols-2 gap-2 mb-2">
                                         <div>
                                           <p className="text-[10px] text-muted-foreground mb-1 text-center">原图</p>
-                                          <div className="rounded overflow-hidden border border-border/40 bg-muted">
+                                          <div
+                                            className="rounded overflow-hidden border border-border/40 bg-muted cursor-zoom-in"
+                                            onClick={() => setLightbox({ src: chainItem.outputUrl!, label: `${itemTitle}（原图）` })}
+                                          >
                                             <img
                                               src={chainItem.outputUrl}
                                               alt="原图"
                                               className="w-full h-auto max-h-[200px] object-contain"
                                             />
                                           </div>
+                                          <button
+                                            className="w-full mt-1 flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground py-0.5"
+                                            onClick={() => downloadImage(chainItem.outputUrl!, `${itemTitle}-原图`)}
+                                          >
+                                            <Download className="h-2.5 w-2.5" />
+                                            下载原图
+                                          </button>
                                         </div>
                                         <div>
                                           <p className="text-[10px] text-emerald-600 mb-1 text-center font-medium">增强后</p>
-                                          <div className="rounded overflow-hidden border border-emerald-200 bg-muted">
+                                          <div
+                                            className="rounded overflow-hidden border border-emerald-200 bg-muted cursor-zoom-in"
+                                            onClick={() => setLightbox({ src: chainItem.enhancedImageUrl!, label: `${itemTitle}（增强版）` })}
+                                          >
                                             <img
                                               src={chainItem.enhancedImageUrl}
                                               alt="增强版"
                                               className="w-full h-auto max-h-[200px] object-contain"
                                             />
                                           </div>
+                                          <button
+                                            className="w-full mt-1 flex items-center justify-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-800 py-0.5"
+                                            onClick={() => downloadImage(chainItem.enhancedImageUrl!, `${itemTitle}-增强版`)}
+                                          >
+                                            <Download className="h-2.5 w-2.5" />
+                                            下载增强版
+                                          </button>
                                         </div>
                                       </div>
                                     </div>
@@ -581,6 +850,15 @@ export default function HistoryPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox overlay */}
+      {lightbox && (
+        <Lightbox
+          src={lightbox.src}
+          label={lightbox.label}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }
