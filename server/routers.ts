@@ -2044,6 +2044,52 @@ const enhanceRouter = router({
       return { status: "processing" as string, enhancedImageUrl: null };
     }),
 
+  /** Submit enhancement for an arbitrary image URL (no historyId needed) */
+  submitUrl: protectedProcedure
+    .input(z.object({
+      imageUrl: z.string().url(),
+      scale: z.enum(["x2", "x4", "x8", "x16"]).default("x2"),
+      optimizedFor: z.enum([
+        "standard", "art_n_illustration", "videogame_assets", "soft_portraits",
+        "hard_portraits", "nature_n_landscapes", "films_n_photography",
+        "3d_renders", "science_fiction_n_horror",
+      ]).default("3d_renders"),
+      prompt: z.string().optional(),
+      creativity: z.number().min(-10).max(10).optional(),
+      hdr: z.number().min(-10).max(10).optional(),
+      resemblance: z.number().min(-10).max(10).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { taskId } = await submitEnhanceTask({
+        imageUrl: input.imageUrl,
+        scale: input.scale,
+        optimizedFor: input.optimizedFor,
+        prompt: input.prompt,
+        creativity: input.creativity,
+        hdr: input.hdr,
+        resemblance: input.resemblance,
+      });
+      return { taskId, status: "processing" as const };
+    }),
+  /** Poll enhancement status by taskId (no historyId needed) */
+  pollTaskId: protectedProcedure
+    .input(z.object({ taskId: z.string() }))
+    .query(async ({ input }) => {
+      const result = await getEnhanceTaskStatus(input.taskId);
+      if (result.status === "done" && result.outputUrl) {
+        // Store to S3 for permanent URL
+        let permanentUrl = result.outputUrl;
+        try {
+          permanentUrl = await downloadAndStoreEnhancedImage(result.outputUrl, Date.now());
+        } catch (err) {
+          console.error("[enhance.pollTaskId] S3 store failed, using Freepik URL:", err);
+        }
+        return { status: "done" as const, enhancedImageUrl: permanentUrl };
+      } else if (result.status === "failed") {
+        return { status: "failed" as const, enhancedImageUrl: null };
+      }
+      return { status: "processing" as const, enhancedImageUrl: null };
+    }),
   /** Reset enhancement so user can re-enhance */
   reset: protectedProcedure
     .input(z.object({ historyId: z.number() }))

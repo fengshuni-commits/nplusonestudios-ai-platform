@@ -67,7 +67,13 @@ export default function DesignTools() {
   const [enhanceDetail, setEnhanceDetail] = useState(0);
   const [enhanceResemblance, setEnhanceResemblance] = useState(0);
   const [enhancedResults, setEnhancedResults] = useState<Record<number, { status: string; url?: string }>>({});
+  // ─── Direct URL enhancement (for uploaded reference images) ───
+  const [directEnhanceTaskId, setDirectEnhanceTaskId] = useState<string | null>(null);
+  const [directEnhanceStatus, setDirectEnhanceStatus] = useState<"idle" | "processing" | "done" | "failed">("idle");
+  const [directEnhancedUrl, setDirectEnhancedUrl] = useState<string | null>(null);
+  const [showDirectEnhancePanel, setShowDirectEnhancePanel] = useState(false);
   const enhanceMutation = trpc.enhance.submit.useMutation();
+  const enhanceUrlMutation = trpc.enhance.submitUrl.useMutation();
   const utils = trpc.useUtils();
   const enhanceStatusQuery = trpc.enhance.status.useQuery(
     { historyId: enhancingId! },
@@ -120,6 +126,66 @@ export default function DesignTools() {
       toast.error(err?.message || "提交增强任务失败");
     }
   }, [enhanceMutation, enhanceScale, enhanceOptimizedFor, enhanceCreativity, enhanceDetail, enhanceResemblance, utils]);
+
+  // ─── Direct URL enhance polling ───
+  const directEnhancePollQuery = trpc.enhance.pollTaskId.useQuery(
+    { taskId: directEnhanceTaskId! },
+    {
+      enabled: directEnhanceTaskId !== null && directEnhanceStatus === "processing",
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return 3000;
+        if (data.status === "done" || data.status === "failed") return false;
+        return 3000;
+      },
+      staleTime: 0,
+    }
+  );
+  useEffect(() => {
+    if (!directEnhanceTaskId || !directEnhancePollQuery.data) return;
+    const { status, enhancedImageUrl } = directEnhancePollQuery.data;
+    if (status === "done" && enhancedImageUrl) {
+      setDirectEnhancedUrl(enhancedImageUrl);
+      setDirectEnhanceStatus("done");
+      toast.success("画质增强完成！");
+    } else if (status === "failed") {
+      setDirectEnhanceStatus("failed");
+      toast.error("画质增强失败，请重试");
+    }
+  }, [directEnhanceTaskId, directEnhancePollQuery.data]);
+
+  const handleDirectEnhanceSubmit = useCallback(async () => {
+    setDirectEnhanceStatus("processing");
+    setDirectEnhancedUrl(null);
+    setShowDirectEnhancePanel(false);
+    try {
+      // Resolve image URL: use referenceUrl directly, or upload local file first
+      let imageUrl = referenceUrl;
+      if (!imageUrl && referenceFile) {
+        const base64 = await fileToBase64(referenceFile);
+        const uploadResult = await uploadMutation.mutateAsync({
+          fileName: referenceFile.name, fileData: base64, contentType: referenceFile.type, folder: "reference-images",
+        });
+        imageUrl = uploadResult.url;
+        // Cache the URL so we don’t re-upload on retry
+        setReferenceUrl(imageUrl);
+      }
+      if (!imageUrl) { toast.error("请先上传图片"); setDirectEnhanceStatus("idle"); return; }
+      const result = await enhanceUrlMutation.mutateAsync({
+        imageUrl,
+        scale: enhanceScale,
+        optimizedFor: enhanceOptimizedFor as any,
+        creativity: enhanceCreativity,
+        hdr: enhanceDetail,
+        resemblance: enhanceResemblance,
+      });
+      setDirectEnhanceTaskId(result.taskId);
+    } catch (err: any) {
+      setDirectEnhanceStatus("failed");
+      toast.error(err?.message || "提交增强任务失败");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enhanceUrlMutation, enhanceScale, enhanceOptimizedFor, enhanceCreativity, enhanceDetail, enhanceResemblance, referenceUrl, referenceFile, setReferenceUrl]);
 
   // Track reference image natural dimensions for adaptive display
   const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);
@@ -690,6 +756,98 @@ export default function DesignTools() {
                       ? "将基于基础图片和描述共同生成新图像"
                       : "将基于描述生成新图像"}
               </p>
+            )}
+            {/* ── Direct Enhance Button (shown when reference image is uploaded) ── */}
+            {hasReference && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">或</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full text-sm"
+                  onClick={() => setShowDirectEnhancePanel(v => !v)}
+                  disabled={directEnhanceStatus === "processing"}
+                >
+                  {directEnhanceStatus === "processing" ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />增强中...</>
+                  ) : (
+                    <><Wand2 className="h-4 w-4 mr-2" />增强上传图片画质</>
+                  )}
+                </Button>
+                {showDirectEnhancePanel && directEnhanceStatus !== "processing" && (
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">放大倍数</Label>
+                        <Select value={enhanceScale} onValueChange={(v) => setEnhanceScale(v as "x2" | "x4")}>
+                          <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="x2">2x</SelectItem>
+                            <SelectItem value="x4">4x</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">优化场景</Label>
+                        <Select value={enhanceOptimizedFor} onValueChange={setEnhanceOptimizedFor}>
+                          <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="3d_renders">3D渲染</SelectItem>
+                            <SelectItem value="standard">通用</SelectItem>
+                            <SelectItem value="films_n_photography">摄影</SelectItem>
+                            <SelectItem value="nature_n_landscapes">建筑</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <Label className="text-xs">创意度</Label>
+                          <span className="text-xs text-muted-foreground">{enhanceCreativity > 0 ? `+${enhanceCreativity}` : enhanceCreativity}</span>
+                        </div>
+                        <Slider min={-5} max={5} step={1} value={[enhanceCreativity]} onValueChange={([v]) => setEnhanceCreativity(v)} className="h-4" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <Label className="text-xs">细节度</Label>
+                          <span className="text-xs text-muted-foreground">{enhanceDetail > 0 ? `+${enhanceDetail}` : enhanceDetail}</span>
+                        </div>
+                        <Slider min={-5} max={5} step={1} value={[enhanceDetail]} onValueChange={([v]) => setEnhanceDetail(v)} className="h-4" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <Label className="text-xs">相似度</Label>
+                          <span className="text-xs text-muted-foreground">{enhanceResemblance > 0 ? `+${enhanceResemblance}` : enhanceResemblance}</span>
+                        </div>
+                        <Slider min={-5} max={5} step={1} value={[enhanceResemblance]} onValueChange={([v]) => setEnhanceResemblance(v)} className="h-4" />
+                      </div>
+                    </div>
+                    <Button size="sm" className="w-full" onClick={() => handleDirectEnhanceSubmit()}>
+                      <Wand2 className="h-3 w-3 mr-1" />开始增强
+                    </Button>
+                  </div>
+                )}
+                {directEnhanceStatus === "done" && directEnhancedUrl && (
+                  <div className="rounded-lg border overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b">
+                      <span className="text-xs font-medium text-green-600">✦ 增强完成</span>
+                      <a href={directEnhancedUrl} download="enhanced.jpg" target="_blank" rel="noopener noreferrer">
+                        <Button size="sm" variant="ghost" className="h-6 text-xs px-2">
+                          <Download className="h-3 w-3 mr-1" />下载
+                        </Button>
+                      </a>
+                    </div>
+                    <img src={directEnhancedUrl} alt="增强结果" className="w-full object-contain max-h-48" />
+                  </div>
+                )}
+                {directEnhanceStatus === "failed" && (
+                  <p className="text-xs text-destructive text-center">增强失败，请重试</p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
