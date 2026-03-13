@@ -396,6 +396,7 @@ export default function HistoryPage() {
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [contentItem, setContentItem] = useState<any | null>(null);
+  const [contentItemId, setContentItemId] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
   const [, navigate] = useLocation();
 
@@ -465,14 +466,32 @@ export default function HistoryPage() {
     navigator.clipboard.writeText(prompt).then(() => toast.success("提示词已复制到剪贴板")).catch(() => toast.error("复制失败"));
   }, []);
 
+  // Query full content for text-based modules (in case listGrouped truncates large fields)
+  const contentDetailQuery = trpc.history.getById.useQuery(
+    { id: contentItemId! },
+    { enabled: !!contentItemId }
+  );
+
   const handleOpenDetail = useCallback((item: any) => {
     if (item.module === "ai_render") {
       setSelectedRootId(item.id);
       setDetailOpen(true);
-    } else if (item.outputContent || item.outputUrl) {
-      setContentItem(item);
+    } else {
+      // Open content viewer for all non-render modules
+      setContentItem(item); // show immediately with cached data
+      setContentItemId(item.id); // trigger full fetch in background
     }
   }, []);
+
+  // Merge full content when getById returns
+  const displayContentItem = useMemo(() => {
+    if (!contentItem) return null;
+    const full = contentDetailQuery.data;
+    if (full && full.id === contentItem.id) {
+      return { ...contentItem, ...full };
+    }
+    return contentItem;
+  }, [contentItem, contentDetailQuery.data]);
 
   const utils = trpc.useUtils();
   const deleteMutation = trpc.history.delete.useMutation({
@@ -702,35 +721,37 @@ export default function HistoryPage() {
       </Dialog>
 
       {/* Content Viewer Dialog for text-based modules */}
-      <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) setContentItem(null); }}>
+      <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) { setContentItem(null); setContentItemId(null); } }}>
         <DialogContent className="max-w-2xl w-[90vw] max-h-[88vh] overflow-hidden flex flex-col p-0">
           <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  {contentItem && (() => {
-                    const cfg = MODULE_MAP[contentItem.module];
+                  {displayContentItem && (() => {
+                    const cfg = MODULE_MAP[displayContentItem.module];
                     const Icon = cfg?.icon || FileText;
                     return <Icon className={`h-4 w-4 shrink-0 ${cfg?.iconColor || "text-muted-foreground"}`} />;
                   })()}
-                  <span className="text-xs text-muted-foreground">{contentItem && MODULE_MAP[contentItem.module]?.label}</span>
+                  <span className="text-xs text-muted-foreground">{displayContentItem && MODULE_MAP[displayContentItem.module]?.label}</span>
                   <span className="text-xs text-muted-foreground/50">·</span>
-                  <span className="text-xs text-muted-foreground/50">{contentItem && formatFullTime(contentItem.createdAt)}</span>
+                  <span className="text-xs text-muted-foreground/50">{displayContentItem && formatFullTime(displayContentItem.createdAt)}</span>
                 </div>
-                <DialogTitle className="text-base font-medium leading-snug">{contentItem?.title}</DialogTitle>
+                <DialogTitle className="text-base font-medium leading-snug">{displayContentItem?.title}</DialogTitle>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-                  onClick={() => {
-                    const text = contentItem?.outputContent || contentItem?.summary || "";
-                    navigator.clipboard.writeText(text).then(() => toast.success("内容已复制")).catch(() => toast.error("复制失败"));
-                  }}>
-                  <Copy className="h-3 w-3 mr-1" />
-                  复制
-                </Button>
-                {contentItem?.outputUrl && (
+                {displayContentItem?.outputContent && (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-                    onClick={() => window.open(contentItem.outputUrl, "_blank")}>
+                    onClick={() => {
+                      const text = displayContentItem?.outputContent || "";
+                      navigator.clipboard.writeText(text).then(() => toast.success("内容已复制")).catch(() => toast.error("复制失败"));
+                    }}>
+                    <Copy className="h-3 w-3 mr-1" />
+                    复制
+                  </Button>
+                )}
+                {displayContentItem?.outputUrl && (
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                    onClick={() => window.open(displayContentItem.outputUrl, "_blank")}>
                     <Download className="h-3 w-3 mr-1" />
                     下载
                   </Button>
@@ -739,14 +760,22 @@ export default function HistoryPage() {
             </div>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4">
-            {contentItem?.outputContent ? (
+            {contentDetailQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                加载中…
+              </div>
+            ) : displayContentItem?.outputContent ? (
               <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground/90 bg-transparent p-0 border-0">
-                  {contentItem.outputContent}
+                  {displayContentItem.outputContent}
                 </pre>
               </div>
-            ) : contentItem?.summary ? (
-              <p className="text-sm text-foreground/80 leading-relaxed">{contentItem.summary}</p>
+            ) : displayContentItem?.summary ? (
+              <div className="space-y-3">
+                <p className="text-sm text-foreground/80 leading-relaxed">{displayContentItem.summary}</p>
+                <p className="text-xs text-muted-foreground/60 border-t border-border/30 pt-3">此记录的完整内容未保存，仅显示摘要。重新生成可查看完整内容。</p>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">暂无内容</p>
             )}

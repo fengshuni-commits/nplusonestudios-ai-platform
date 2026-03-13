@@ -324,3 +324,8 @@
 ## Bug 修复：文字类记录点击无法查看
 - [x] 修复小红书、对标调研报告等文字类卡片点击后无法查看内容的 bug
 - [x] 添加文字类内容查看弹窗（显示 outputContent 或 outputUrl）
+
+## Bug 修复：文字类记录点击仍无法查看（二次排查）
+- [x] 深入排查 listGrouped 是否实际返回 outputContent 字段
+- [x] 检查 TileCard 点击事件是否被 delete 按钮阻止冒泡
+- [x] 彻底修复文字类记录点击查看
