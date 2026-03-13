@@ -307,3 +307,11 @@
 - [x] 后端：dashboard.recentGenerations 接口（最近 AI 生成缩略图）
 - [x] 前端：修复 / 路由，改回指向 Home 工作台页面
 - [x] 前端：重写 Home.tsx（问候语+统计+最近项目+最近生成+快捷入口）
+
+## Bug 修复：生成记录 ai_render 不显示
+- [ ] 修复 listGroupedHistory "全部"视图下 ai_render 记录不返回的 bug
+
+## 生成记录修复与优化
+- [x] 清理数据库中重复的媒体模块测试数据
+- [x] 历史记录页面添加「加载更多」分页功能（每次加载 20 条，点击展开更多）
+- [x] 修复 listGroupedHistory "全部"视图下 ai_render 记录不返回的 bug

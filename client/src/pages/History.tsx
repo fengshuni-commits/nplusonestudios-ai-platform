@@ -294,22 +294,32 @@ export default function HistoryPage() {
   const [expandedEnhance, setExpandedEnhance] = useState<Record<number, boolean>>({});
   const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
   const [, navigate] = useLocation();
+  // Pagination
+  const PAGE_SIZE = 20;
+  const [loadedCount, setLoadedCount] = useState(PAGE_SIZE);
 
   const queryInput = useMemo(() => ({
     module: moduleFilter === "all" ? undefined : moduleFilter,
-    limit: 50,
+    limit: 200,
     offset: 0,
   }), [moduleFilter]);
 
-  const { data, isLoading } = trpc.history.listGrouped.useQuery(queryInput);
+  // Reset pagination when filter changes
+  const handleModuleFilterChange = useCallback((val: string) => {
+    setModuleFilter(val);
+    setLoadedCount(PAGE_SIZE);
+  }, []);
 
+  const { data, isLoading } = trpc.history.listGrouped.useQuery(queryInput);
   // Fetch edit chain when a render item is selected
   const chainQuery = trpc.history.getEditChain.useQuery(
     { rootId: selectedRootId! },
     { enabled: !!selectedRootId && detailOpen }
   );
 
-  const items = data?.items || [];
+  const allItems = data?.items || [];
+  const items = allItems.slice(0, loadedCount);
+  const hasMore = allItems.length > loadedCount;
 
   // Navigate to design tools with reference image URL
   const handleContinueEdit = useCallback((imageUrl: string, historyId: number) => {
@@ -356,7 +366,7 @@ export default function HistoryPage() {
         </div>
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={moduleFilter} onValueChange={setModuleFilter}>
+          <Select value={moduleFilter} onValueChange={handleModuleFilterChange}>
             <SelectTrigger className="w-[160px] h-9 text-sm">
               <SelectValue placeholder="筛选模块" />
             </SelectTrigger>
@@ -562,9 +572,31 @@ export default function HistoryPage() {
               </div>
             </div>
           )}
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="flex flex-col items-center gap-2 pt-2 pb-4">
+              <p className="text-xs text-muted-foreground">
+                已显示 {items.length} / {allItems.length} 条记录
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-6 text-sm"
+                onClick={() => setLoadedCount(c => c + PAGE_SIZE)}
+              >
+                <ChevronDown className="h-3.5 w-3.5 mr-1.5" />
+                加载更多
+              </Button>
+            </div>
+          )}
+          {!hasMore && allItems.length > PAGE_SIZE && (
+            <p className="text-center text-xs text-muted-foreground py-4">
+              已显示全部 {allItems.length} 条记录
+            </p>
+          )}
         </div>
       )}
-
       {/* Detail Dialog for AI Render Edit Chain */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-3xl w-[90vw] max-h-[88vh] overflow-y-auto p-0 resize">
