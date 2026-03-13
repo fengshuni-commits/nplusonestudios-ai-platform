@@ -68,15 +68,19 @@ export default function DesignTools() {
   const [enhanceResemblance, setEnhanceResemblance] = useState(0);
   const [enhancedResults, setEnhancedResults] = useState<Record<number, { status: string; url?: string }>>({});
   const enhanceMutation = trpc.enhance.submit.useMutation();
+  const utils = trpc.useUtils();
   const enhanceStatusQuery = trpc.enhance.status.useQuery(
     { historyId: enhancingId! },
     {
       enabled: enhancingId !== null,
+      // Keep polling until done or failed (including idle/processing/no-data)
       refetchInterval: (query) => {
         const data = query.state.data;
         if (!data) return 3000;
-        return data.status === "processing" ? 3000 : false;
+        if (data.status === "done" || data.status === "failed") return false;
+        return 3000;
       },
+      staleTime: 0, // always refetch fresh data
     }
   );
   useEffect(() => {
@@ -94,10 +98,12 @@ export default function DesignTools() {
   }, [enhancingId, enhanceStatusQuery.data]);
 
   const handleEnhanceSubmit = useCallback(async (historyId: number) => {
-    setEnhancingId(historyId);
     setEnhancedResults(prev => ({ ...prev, [historyId]: { status: "processing" } }));
     setShowEnhancePanel(null);
     try {
+      // Submit first, THEN start polling to avoid race condition
+      // (if we set enhancingId before submit, the first status query may return
+      //  "idle" from DB and stop the refetchInterval)
       await enhanceMutation.mutateAsync({
         historyId,
         scale: enhanceScale,
@@ -106,12 +112,14 @@ export default function DesignTools() {
         hdr: enhanceDetail,
         resemblance: enhanceResemblance,
       });
+      // Invalidate any stale cached status, then enable polling
+      await utils.enhance.status.invalidate({ historyId });
+      setEnhancingId(historyId);
     } catch (err: any) {
-      setEnhancingId(null);
       setEnhancedResults(prev => ({ ...prev, [historyId]: { status: "failed" } }));
       toast.error(err?.message || "提交增强任务失败");
     }
-  }, [enhanceMutation, enhanceScale, enhanceOptimizedFor, enhanceCreativity, enhanceDetail, enhanceResemblance]);
+  }, [enhanceMutation, enhanceScale, enhanceOptimizedFor, enhanceCreativity, enhanceDetail, enhanceResemblance, utils]);
 
   // Track reference image natural dimensions for adaptive display
   const [refImgDimensions, setRefImgDimensions] = useState<{ w: number; h: number } | null>(null);

@@ -10,7 +10,7 @@ import { generateImage } from "./_core/imageGeneration";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
-import { submitEnhanceTask, getEnhanceTaskStatus } from "./magnific";
+import { submitEnhanceTask, getEnhanceTaskStatus, downloadAndStoreEnhancedImage } from "./magnific";
 import { nanoid } from "nanoid";
 import crypto from "crypto";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
@@ -2023,13 +2023,19 @@ const enhanceRouter = router({
 
       // Poll Freepik API
       const result = await getEnhanceTaskStatus(item.enhanceTaskId);
-
       if (result.status === "done" && result.outputUrl) {
+        // Download from Freepik CDN (has expiring token) and re-upload to our S3 for permanent URL
+        let permanentUrl = result.outputUrl;
+        try {
+          permanentUrl = await downloadAndStoreEnhancedImage(result.outputUrl, input.historyId);
+        } catch (storageErr) {
+          console.error("[enhance] Failed to store enhanced image to S3, using Freepik URL as fallback:", storageErr);
+        }
         await db.updateEnhanceStatus(input.historyId, {
           enhanceStatus: "done",
-          enhancedImageUrl: result.outputUrl,
+          enhancedImageUrl: permanentUrl,
         });
-        return { status: "done" as string, enhancedImageUrl: result.outputUrl };
+        return { status: "done" as string, enhancedImageUrl: permanentUrl };
       } else if (result.status === "failed") {
         await db.updateEnhanceStatus(input.historyId, { enhanceStatus: "failed" });
         return { status: "failed" as string, enhancedImageUrl: null };

@@ -13,6 +13,8 @@
  * - On completion, `generated` is an array of URL strings
  */
 
+import { storagePut } from "./storage";
+
 const FREEPIK_API_BASE = "https://api.freepik.com/v1/ai";
 
 export type MagnificScale = "x2" | "x4" | "x8" | "x16";
@@ -127,6 +129,25 @@ export async function submitEnhanceTask(
   }
 
   return { taskId };
+}
+
+/**
+ * Download an enhanced image from Freepik CDN (which has expiring tokens)
+ * and re-upload it to our own S3 storage for permanent access.
+ */
+export async function downloadAndStoreEnhancedImage(
+  freepikUrl: string,
+  historyId: number
+): Promise<string> {
+  const response = await fetch(freepikUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download enhanced image: HTTP ${response.status}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const key = `enhanced/${historyId}-${Date.now()}.png`;
+  const { url } = await storagePut(key, buffer, "image/png");
+  return url;
 }
 
 /**
