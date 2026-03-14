@@ -12,6 +12,7 @@ import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
 import { submitEnhanceTask, getEnhanceTaskStatus, downloadAndStoreEnhancedImage } from "./magnific";
 import { nanoid } from "nanoid";
+import { searchCaseStudies } from "./tavily";
 import crypto from "crypto";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
 import { createRequire } from "module";
@@ -1115,20 +1116,63 @@ async function generateBenchmarkInBackground(
   const startTime = Date.now();
   try {
     await db.updateBenchmarkJob(jobId, { status: "processing" });
-    const caseSrcList = await db.listCaseSources(true);
-    const siteUrls = caseSrcList.map(s => `${s.name} (${s.baseUrl})`).join('\n');
+
+    // === Phase 1: Generate case study names only ===
+    const phase1Response = await invokeLLMWithUserTool({
+      messages: [
+        {
+          role: "system",
+          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息，列出 ${input.referenceCount || 5} 个最相关的对标案例名称。
+
+**要求**：
+- 只返回案例名称列表，每行一个，无需其他内容
+- 案例必须是真实存在的建筑项目，优先选择在 ArchDaily、谷德设计等主流建筑媒体上有详细介绍的项目
+- 案例名称要具体，包含项目地点和类型，例如"北京某科技公司总部办公楼"或"上海某展厅设计"
+- 不要包含任何链接或额外说明
+
+直接输出案例名称列表，每行一个。`
+        },
+        {
+          role: "user",
+          content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n项目需求：${input.requirements}`
+        }
+      ],
+    }, userId);
+
+    const caseNamesRaw = typeof phase1Response.choices[0]?.message?.content === 'string'
+      ? phase1Response.choices[0].message.content : '';
+    const caseNames = caseNamesRaw
+      .split('\n')
+      .map(line => line.replace(/^[-*\d.\s]+/, '').trim())
+      .filter(line => line.length > 2)
+      .slice(0, input.referenceCount || 5);
+
+    console.log(`[Benchmark] Phase 1 done: ${caseNames.length} case names extracted`);
+
+    // === Phase 2: Search real URLs for each case using Tavily ===
+    const caseUrlMap = await searchCaseStudies(caseNames);
+    console.log(`[Benchmark] Phase 2 done: searched URLs for ${Object.keys(caseUrlMap).length} cases`);
+
+    // Build case reference context with real URLs
+    const caseRefs = caseNames.map(name => {
+      const url = caseUrlMap[name];
+      return url ? `- ${name}: ${url}` : `- ${name}: (URL 未找到)`;
+    }).join('\n');
+
+    // === Phase 3: Generate full report with real URLs ===
     const response = await invokeLLMWithUserTool({
       messages: [
         {
           role: "system",
-          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息，生成一份专业的对标调研报告。
+          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息和以下对标案例列表，生成一份专业的对标调研报告。
+
+**对标案例及真实链接**：
+${caseRefs}
 
 **重要要求**：
-- 所有对标案例必须是真实存在的建筑项目
-- 每个案例必须标注信息来源 URL（优先使用以下网站的真实项目页面链接）：
-${siteUrls}
-- 来源 URL 格式：在每个案例标题后用 Markdown 链接标注，例如 [来源](https://www.archdaily.com/xxx)
-- 如果无法确定精确 URL，请提供该网站上可搜索到该项目的搜索链接
+- 严格使用上面提供的案例名称和链接，不要自行编造 URL
+- 如果某个案例标注了“URL 未找到”，则展示案例信息时不要添加链接
+- 每个案例标题后用 Markdown 链接标注来源，例如 [来源](https://www.archdaily.com/xxx)
 
 报告结构：
 1. **项目概述与调研目标**
@@ -1142,7 +1186,7 @@ ${siteUrls}
 4. **材料与工艺参考**
 5. **总结与建议**
 
-请以 Markdown 格式输出，结构清晰，内容专业。每个案例的来源链接必须清晰可见。`
+请以 Markdown 格式输出，结构清晰，内容专业。`
         },
         {
           role: "user",

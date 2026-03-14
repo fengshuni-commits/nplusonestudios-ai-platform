@@ -365,3 +365,9 @@
 - [x] 数据库新增 benchmark_jobs 表（存储异步任务状态）
 - [x] 后端改为异步模式：提交请求立即返回 jobId，后台线程继续生成
 - [x] 前端改为轮询模式，每 3s 轮询一次，计时器持续运行显示已用时秒数
+
+## 接入 Tavily 搜索 API 为对标案例提供真实链接
+- [x] 存储 Tavily API Key 到环境变量
+- [x] 创建 server/tavily.ts 搜索工具函数（搜索 ArchDaily、谷德等建筑网站）
+- [x] 修改 benchmark 生成逻辑：三阶段生成（生成案例名 → Tavily 搜索真实 URL → 带真实链接生成完整报告）
+- [x] Tavily API Key 验证测试通过（2 项测试，5.4s）
