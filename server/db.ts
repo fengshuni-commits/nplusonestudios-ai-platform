@@ -1071,3 +1071,20 @@ export async function updateBenchmarkJob(id: string, updates: {
   if (Object.keys(set).length === 0) return;
   await db.update(benchmarkJobs).set(set).where(eq(benchmarkJobs.id, id));
 }
+
+// ─── Greeting cache (in-memory, 2-hour TTL) ──────────────────────────────────────────────────────
+const greetingCache = new Map<number, { text: string; expiresAt: number }>();
+
+export function getCachedGreeting(userId: number): string | null {
+  const entry = greetingCache.get(userId);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    greetingCache.delete(userId);
+    return null;
+  }
+  return entry.text;
+}
+
+export function setCachedGreeting(userId: number, text: string): void {
+  greetingCache.set(userId, { text, expiresAt: Date.now() + 2 * 60 * 60 * 1000 });
+}
