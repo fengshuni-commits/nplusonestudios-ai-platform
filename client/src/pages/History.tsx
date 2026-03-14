@@ -68,30 +68,30 @@ const MODULE_MAP: Record<string, {
   benchmark_report: {
     label: "对标调研报告",
     icon: FileText,
-    gradient: "from-blue-950 to-blue-800",
-    iconColor: "text-blue-300",
-    accentColor: "bg-blue-500/20 text-blue-300",
+    gradient: "from-stone-900 to-stone-700",
+    iconColor: "text-stone-300",
+    accentColor: "bg-stone-500/20 text-stone-300",
   },
   benchmark_ppt: {
     label: "调研 PPT",
     icon: Presentation,
-    gradient: "from-violet-950 to-violet-800",
-    iconColor: "text-violet-300",
-    accentColor: "bg-violet-500/20 text-violet-300",
+    gradient: "from-neutral-900 to-neutral-700",
+    iconColor: "text-neutral-300",
+    accentColor: "bg-neutral-500/20 text-neutral-300",
   },
   ai_render: {
     label: "AI 效果图",
     icon: Image,
-    gradient: "from-emerald-950 to-emerald-800",
-    iconColor: "text-emerald-300",
-    accentColor: "bg-emerald-500/20 text-emerald-300",
+    gradient: "from-zinc-900 to-zinc-700",
+    iconColor: "text-zinc-300",
+    accentColor: "bg-zinc-500/20 text-zinc-300",
   },
   meeting_minutes: {
     label: "会议纪要",
     icon: MessageSquare,
-    gradient: "from-amber-950 to-amber-800",
-    iconColor: "text-amber-300",
-    accentColor: "bg-amber-500/20 text-amber-300",
+    gradient: "from-stone-800 to-stone-600",
+    iconColor: "text-stone-200",
+    accentColor: "bg-stone-400/20 text-stone-200",
   },
   media_xiaohongshu: {
     label: "小红书",
@@ -103,16 +103,16 @@ const MODULE_MAP: Record<string, {
   media_wechat: {
     label: "公众号",
     icon: Megaphone,
-    gradient: "from-green-950 to-green-800",
-    iconColor: "text-green-300",
-    accentColor: "bg-green-500/20 text-green-300",
+    gradient: "from-neutral-800 to-neutral-600",
+    iconColor: "text-neutral-200",
+    accentColor: "bg-neutral-400/20 text-neutral-200",
   },
   media_instagram: {
     label: "Instagram",
     icon: Instagram,
-    gradient: "from-pink-950 to-pink-800",
-    iconColor: "text-pink-300",
-    accentColor: "bg-pink-500/20 text-pink-300",
+    gradient: "from-rose-900 to-rose-700",
+    iconColor: "text-rose-200",
+    accentColor: "bg-rose-400/20 text-rose-200",
   },
 };
 
@@ -279,7 +279,7 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
   const [expanded, setExpanded] = useState(false);
   const preview = content.slice(0, 200).replace(/#+\s/g, '').replace(/\*\*/g, '');
   return (
-    <div className={`mt-2 rounded-lg border text-xs ${isLast ? 'border-emerald-500/30 bg-emerald-50/30' : 'border-border/40 bg-muted/30'}`}>
+    <div className={`mt-2 rounded-lg border text-xs ${isLast ? 'border-primary/20 bg-primary/5' : 'border-border/40 bg-muted/30'}`}>
       <div
         className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg"
         onClick={() => setExpanded(v => !v)}>
@@ -353,7 +353,7 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: Tile
           </div>
           <div className="flex items-center gap-1">
             {item.latestEnhancedImageUrl && (
-              <div className="flex items-center gap-0.5 bg-emerald-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-full backdrop-blur-sm">
+              <div className="flex items-center gap-0.5 bg-primary/80 text-white text-[10px] px-1.5 py-0.5 rounded-full backdrop-blur-sm">
                 <Sparkles className="h-2.5 w-2.5" />
               </div>
             )}
@@ -725,7 +725,7 @@ export default function HistoryPage() {
             <DialogTitle className="text-base font-medium flex items-center gap-2">
               {selectedItem?.module === 'benchmark_report'
                 ? <FileText className="h-4 w-4 text-amber-600" />
-                : <Image className="h-4 w-4 text-emerald-600" />}
+                : <Image className="h-4 w-4 text-primary" />}
               {selectedItem?.module === 'benchmark_report' ? '报告修改历史' : '编辑历史'}
               {chainQuery.data && (
                 <span className="text-xs font-normal text-muted-foreground ml-1">共 {chainQuery.data.length} 个版本</span>
@@ -757,7 +757,7 @@ export default function HistoryPage() {
                         {/* Timeline icon */}
                         <div className="flex flex-col items-center shrink-0 z-10">
                           <div
-                            className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 ${isLast ? "border-emerald-500" : "border-border"} ${!isBenchmark ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+                            className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 ${isLast ? "border-primary" : "border-border"} ${!isBenchmark ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
                             onClick={() => !isBenchmark && chainItem.outputUrl && setLightbox({ src: chainItem.outputUrl, label: itemTitle })}
                             title={!isBenchmark ? "点击放大查看" : ""}>
                             {!isBenchmark && chainItem.outputUrl ? (
@@ -777,7 +777,7 @@ export default function HistoryPage() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"}`}>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                                   {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
                                 </span>
                                 <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
@@ -856,9 +856,9 @@ export default function HistoryPage() {
                                 </div>
                               </div>
                               {chainItem.enhancedImageUrl && (
-                                <div className="rounded-lg overflow-hidden border border-emerald-500/30 bg-muted cursor-zoom-in group/enh relative"
+                                <div className="rounded-lg overflow-hidden border border-primary/20 bg-muted cursor-zoom-in group/enh relative"
                                   onClick={() => setLightbox({ src: chainItem.enhancedImageUrl!, label: `${itemTitle} (增强版)` })}>
-                                  <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-emerald-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                                  <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-primary/80 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                                     <Sparkles className="h-2.5 w-2.5" />
                                     增强版
                                   </div>

@@ -22,22 +22,22 @@ import {
 import { useLocation } from "wouter";
 
 const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  ai_render: { label: "AI 效果图", icon: <ImageIcon className="h-3.5 w-3.5" />, color: "text-violet-600 bg-violet-50" },
-  benchmark_report: { label: "对标调研", icon: <FileText className="h-3.5 w-3.5" />, color: "text-blue-600 bg-blue-50" },
-  benchmark_ppt: { label: "调研 PPT", icon: <FileText className="h-3.5 w-3.5" />, color: "text-indigo-600 bg-indigo-50" },
-  meeting_minutes: { label: "会议纪要", icon: <MessageSquare className="h-3.5 w-3.5" />, color: "text-emerald-600 bg-emerald-50" },
+  ai_render: { label: "AI 效果图", icon: <ImageIcon className="h-3.5 w-3.5" />, color: "text-primary bg-primary/10" },
+  benchmark_report: { label: "对标调研", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
+  benchmark_ppt: { label: "调研 PPT", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
+  meeting_minutes: { label: "会议纪要", icon: <MessageSquare className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-secondary" },
   media_xiaohongshu: { label: "小红书", icon: <Newspaper className="h-3.5 w-3.5" />, color: "text-rose-600 bg-rose-50" },
-  media_wechat: { label: "公众号", icon: <Newspaper className="h-3.5 w-3.5" />, color: "text-green-600 bg-green-50" },
-  media_instagram: { label: "Instagram", icon: <Newspaper className="h-3.5 w-3.5" />, color: "text-pink-600 bg-pink-50" },
+  media_wechat: { label: "公众号", icon: <Newspaper className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-secondary" },
+  media_instagram: { label: "Instagram", icon: <Newspaper className="h-3.5 w-3.5" />, color: "text-rose-600 bg-rose-50" },
 };
 
 const QUICK_ACTIONS = [
-  { icon: PenTool, label: "案例调研", desc: "AI 生成对标案例分析报告", path: "/design/planning", accent: "from-violet-500/10 to-violet-500/5 border-violet-200/60", iconColor: "text-violet-600" },
-  { icon: Sparkles, label: "AI 效果图", desc: "一键渲染空间效果图", path: "/design/tools", accent: "from-amber-500/10 to-amber-500/5 border-amber-200/60", iconColor: "text-amber-600" },
-  { icon: MessageSquare, label: "会议纪要", desc: "语音转文字自动整理", path: "/meeting", accent: "from-emerald-500/10 to-emerald-500/5 border-emerald-200/60", iconColor: "text-emerald-600" },
+  { icon: PenTool, label: "案例调研", desc: "AI 生成对标案例分析报告", path: "/design/planning", accent: "from-primary/10 to-primary/5 border-primary/20", iconColor: "text-primary" },
+  { icon: Sparkles, label: "AI 效果图", desc: "一键渲染空间效果图", path: "/design/tools", accent: "from-primary/8 to-primary/3 border-primary/15", iconColor: "text-primary/80" },
+  { icon: MessageSquare, label: "会议纪要", desc: "语音转文字自动整理", path: "/meeting", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/70" },
   { icon: Newspaper, label: "内容创作", desc: "小红书 / 公众号推文", path: "/media/xiaohongshu", accent: "from-rose-500/10 to-rose-500/5 border-rose-200/60", iconColor: "text-rose-600" },
-  { icon: FolderKanban, label: "项目管理", desc: "查看所有在建项目", path: "/projects", accent: "from-blue-500/10 to-blue-500/5 border-blue-200/60", iconColor: "text-blue-600" },
-  { icon: HardHat, label: "施工管理", desc: "图纸文档与采购", path: "/construction/docs", accent: "from-orange-500/10 to-orange-500/5 border-orange-200/60", iconColor: "text-orange-600" },
+  { icon: FolderKanban, label: "项目管理", desc: "查看所有在建项目", path: "/projects", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/60" },
+  { icon: HardHat, label: "施工管理", desc: "图纸文档与采购", path: "/construction/docs", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/60" },
 ];
 
 export default function Home() {
@@ -230,7 +230,7 @@ function StatCard({ title, value, icon, unit, onClick }: { title: string; value:
 }
 
 function PriorityDot({ priority }: { priority: string }) {
-  const colors: Record<string, string> = { urgent: "bg-red-500", high: "bg-orange-500", medium: "bg-blue-400", low: "bg-gray-300" };
+  const colors: Record<string, string> = { urgent: "bg-primary", high: "bg-primary/70", medium: "bg-muted-foreground/40", low: "bg-muted-foreground/20" };
   return <div className={`h-2 w-2 rounded-full shrink-0 ${colors[priority] || colors.medium}`} />;
 }
 

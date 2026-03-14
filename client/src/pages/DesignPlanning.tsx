@@ -570,7 +570,7 @@ export default function DesignPlanning() {
 
               {/* PPT Generation Section */}
               {report && (
-                <Card className={`border-2 border-dashed ${pptStage === "done" ? "border-green-500/30 bg-green-50/50 dark:bg-green-950/10" : "border-accent/30 bg-accent/5"}`}>
+                <Card className={`border-2 border-dashed ${pptStage === "done" ? "border-primary/30 bg-primary/5" : "border-accent/30 bg-accent/5"}`}>
                   <CardContent className="py-6">
                     {pptStage === "idle" && !pptResult ? (
                       <div className="flex flex-col items-center gap-4">
@@ -597,9 +597,9 @@ export default function DesignPlanning() {
                     ) : pptStage === "done" || pptResult ? (
                       /* Done state - persistent with download button */
                       <div className="flex flex-col items-center gap-4">
-                        <CheckCircle2 className="h-10 w-10 text-green-500" />
+                        <CheckCircle2 className="h-10 w-10 text-primary" />
                         <div className="text-center">
-                          <p className="font-medium text-green-700 dark:text-green-400">PPT 生成完成</p>
+                          <p className="font-medium text-primary">PPT 生成完成</p>
                           {pptResult && (
                             <p className="text-sm text-muted-foreground mt-1">
                               共 {pptResult.slideCount} 页，含 {pptResult.imageCount} 张配图
@@ -610,7 +610,7 @@ export default function DesignPlanning() {
                           <Button
                             onClick={handleRedownload}
                             size="lg"
-                            className="bg-green-600 hover:bg-green-700 text-white px-6"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
                           >
                             <Download className="h-4 w-4 mr-2" />
                             下载 PPT

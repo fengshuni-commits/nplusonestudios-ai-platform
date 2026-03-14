@@ -834,7 +834,7 @@ export default function DesignTools() {
                 {directEnhanceStatus === "done" && directEnhancedUrl && (
                   <div className="rounded-lg border overflow-hidden">
                     <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b">
-                      <span className="text-xs font-medium text-green-600">✦ 增强完成</span>
+                      <span className="text-xs font-medium text-primary">❆ 增强完成</span>
                       <a href={directEnhancedUrl} download="enhanced.jpg" target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="ghost" className="h-6 text-xs px-2">
                           <Download className="h-3 w-3 mr-1" />下载
@@ -951,7 +951,7 @@ export default function DesignTools() {
                         const isThisEnhancing = enhancingId === hid;
                         if (eResult?.status === "done" && eResult.url) {
                           return (
-                            <Button variant="outline" size="sm" className="h-7 text-xs border-emerald-500/50 text-emerald-600" asChild>
+                            <Button variant="outline" size="sm" className="h-7 text-xs border-primary/50 text-primary" asChild>
                               <a href={eResult.url} download target="_blank" rel="noopener noreferrer">
                                 <Download className="h-3 w-3 mr-1" />
                                 下载增强版
@@ -1051,11 +1051,11 @@ export default function DesignTools() {
                     {/* Show enhanced image if done */}
                     {img.historyId && enhancedResults[img.historyId]?.status === "done" && enhancedResults[img.historyId]?.url && (
                       <div className="mt-2 space-y-1">
-                        <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                        <p className="text-[11px] text-primary font-medium flex items-center gap-1">
                           <Check className="h-3 w-3" />
                           增强完成
                         </p>
-                        <div className="rounded-lg overflow-hidden border border-emerald-500/30">
+                        <div className="rounded-lg overflow-hidden border border-primary/20">
                           <img src={enhancedResults[img.historyId!].url} alt="增强后效果图" className="w-full h-auto" />
                         </div>
                       </div>

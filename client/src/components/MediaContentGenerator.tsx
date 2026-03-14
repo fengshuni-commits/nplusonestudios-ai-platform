@@ -197,7 +197,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
       return (
         <div className="space-y-4">
           {/* Title */}
-          <Card className="border-green-200 bg-green-50/30">
+          <Card className="border-border bg-muted/20">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-xs text-muted-foreground font-medium">文章标题</Label>
@@ -242,7 +242,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
     return (
       <div className="space-y-4">
         {/* Caption */}
-        <Card className="border-purple-200 bg-purple-50/30">
+        <Card className="border-border bg-secondary/30">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Label className="text-xs text-muted-foreground font-medium">Caption</Label>
@@ -265,7 +265,7 @@ export default function MediaContentGenerator({ config }: MediaContentGeneratorP
             </div>
             <div className="flex flex-wrap gap-2">
               {result.hashtags?.map((tag: string, i: number) => (
-                <span key={i} className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">{tag}</span>
+                  <span key={i} className="px-2 py-1 bg-muted text-foreground/70 rounded-full text-xs font-medium">{tag}</span>
               ))}
             </div>
           </CardContent>

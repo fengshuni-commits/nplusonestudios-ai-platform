@@ -76,12 +76,12 @@
   --sidebar-border: oklch(0.28 0.01 60);
   --sidebar-ring: oklch(0.55 0.14 25);
 
-  /* Charts */
-  --chart-1: oklch(0.55 0.14 25);
-  --chart-2: oklch(0.6 0.1 160);
-  --chart-3: oklch(0.55 0.12 250);
-  --chart-4: oklch(0.65 0.1 80);
-  --chart-5: oklch(0.5 0.1 300);
+  /* Charts — warm copper-gray palette only */
+  --chart-1: oklch(0.55 0.14 25);   /* copper red — primary */
+  --chart-2: oklch(0.42 0.10 25);   /* deep rust */
+  --chart-3: oklch(0.68 0.08 40);   /* warm amber-brown */
+  --chart-4: oklch(0.78 0.04 60);   /* warm sand */
+  --chart-5: oklch(0.35 0.06 25);   /* dark charcoal-red */
 }
 
 @layer base {
