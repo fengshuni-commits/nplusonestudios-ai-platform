@@ -37,7 +37,9 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Minimize2,
   RotateCcw,
+  ExternalLink,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -429,6 +431,7 @@ export default function HistoryPage() {
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [isDetailFullscreen, setIsDetailFullscreen] = useState(false);
   const [contentItem, setContentItem] = useState<any | null>(null);
   const [contentItemId, setContentItemId] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
@@ -719,17 +722,28 @@ export default function HistoryPage() {
       )}
 
       {/* Detail Dialog for AI Render / Benchmark Report Edit Chain */}
-      <Dialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) { setChatHistory([]); setCurrentReportContent(null); setRefineFeedback(""); } }}>
-        <DialogContent className={`${selectedItem?.module === 'benchmark_report' ? 'max-w-4xl' : 'max-w-3xl'} w-[90vw] max-h-[90vh] overflow-y-auto p-0`}>
+      <Dialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) { setChatHistory([]); setCurrentReportContent(null); setRefineFeedback(""); setIsDetailFullscreen(false); } }}>
+        <DialogContent className={`${
+          isDetailFullscreen
+            ? 'fixed inset-4 max-w-none w-auto h-auto'
+            : selectedItem?.module === 'benchmark_report' ? 'max-w-4xl w-[90vw]' : 'max-w-3xl w-[90vw]'
+        } max-h-[90vh] overflow-y-auto p-0 transition-all duration-200`}>
           <DialogHeader className="px-6 pt-6 pb-2 sticky top-0 bg-background z-10 border-b border-border/40">
             <DialogTitle className="text-base font-medium flex items-center gap-2">
               {selectedItem?.module === 'benchmark_report'
-                ? <FileText className="h-4 w-4 text-amber-600" />
+                ? <FileText className="h-4 w-4 text-primary" />
                 : <Image className="h-4 w-4 text-primary" />}
               {selectedItem?.module === 'benchmark_report' ? '报告修改历史' : '编辑历史'}
               {chainQuery.data && (
                 <span className="text-xs font-normal text-muted-foreground ml-1">共 {chainQuery.data.length} 个版本</span>
               )}
+              <div className="ml-auto flex items-center gap-1">
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => setIsDetailFullscreen(v => !v)}
+                  title={isDetailFullscreen ? "缩小" : "放大"}>
+                  {isDetailFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
@@ -799,16 +813,22 @@ export default function HistoryPage() {
                                     }} title="复制报告内容">
                                     <Copy className="h-3 w-3" />
                                   </Button>
-                                  {isLast && (
-                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                      onClick={() => {
-                                        setCurrentReportContent(chainItem.outputContent || "");
-                                        toast.success("已加载此版本，可在下方继续修改");
-                                      }} title="基于此版本继续修改">
-                                      <RefreshCw className="h-3 w-3 mr-1" />
-                                      继续修改
-                                    </Button>
-                                  )}
+                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      setCurrentReportContent(chainItem.outputContent || "");
+                                      toast.success("已加载此版本，可在下方继续修改");
+                                    }} title="基于此版本继续修改">
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    继续修改
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary/80"
+                                    onClick={() => {
+                                      setDetailOpen(false);
+                                      navigate(`/design/planning?historyId=${chainItem.id}`);
+                                    }} title="跳转到案例调研页面编辑此版本">
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    编辑此版本
+                                  </Button>
                                 </>
                               ) : (
                                 <>

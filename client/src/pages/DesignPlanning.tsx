@@ -507,15 +507,7 @@ export default function DesignPlanning() {
                                   ) : (
                                     <div className="w-full rounded-lg border bg-muted/30 overflow-hidden">
                                       <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
-                                        <span className="text-xs font-medium text-foreground/60">修订版报告</span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 text-xs px-2"
-                                          onClick={() => setReport(msg.content)}
-                                        >
-                                          采用此版本
-                                        </Button>
+                                        <span className="text-xs font-medium text-foreground/60">修订版报告（已自动保存到生成历史）</span>
                                       </div>
                                       <div className="p-3 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 max-h-96 overflow-y-auto">
                                         <Streamdown>{msg.content}</Streamdown>
@@ -554,7 +546,7 @@ export default function DesignPlanning() {
                               {isRefining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             </Button>
                           </div>
-                          <p className="text-xs text-muted-foreground">按 Enter 发送，Shift+Enter 换行。修订版报告生成后可点「采用此版本」替换上方报告。</p>
+                          <p className="text-xs text-muted-foreground">按 Enter 发送，Shift+Enter 换行。每次修改生成后将自动保存到生成历史，可在历史记录中查看各版本。</p>
                         </div>
                       )}
                     </>
