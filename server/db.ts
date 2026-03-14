@@ -1045,8 +1045,21 @@ export async function createBenchmarkJob(data: {
 export async function getBenchmarkJob(id: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(benchmarkJobs).where(eq(benchmarkJobs.id, id)).limit(1);
-  return result[0];
+  // Use raw SQL to bypass any ORM-level caching / REPEATABLE READ isolation issues
+  const result = await db.execute(sql`SELECT id, userId, status, result, error, historyId, createdAt, updatedAt FROM benchmark_jobs WHERE id = ${id} LIMIT 1`);
+  const rows = result[0] as unknown as any[];
+  if (!rows || rows.length === 0) return undefined;
+  const row = rows[0];
+  return {
+    id: row.id as string,
+    userId: row.userId as number,
+    status: row.status as "pending" | "processing" | "done" | "failed",
+    result: row.result as string | null,
+    error: row.error as string | null,
+    historyId: row.historyId as number | null,
+    createdAt: row.createdAt as Date,
+    updatedAt: row.updatedAt as Date,
+  };
 }
 
 export async function updateBenchmarkJob(id: string, updates: {

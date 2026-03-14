@@ -396,3 +396,7 @@
 - [x] 加入相关性评分算法，过滤搜索列表页/标签页
 - [x] 搜索失败时自动提供 ArchDaily 搜索页作为备用链接，不再留空
 - [x] 分批并行搜索（每批 3 个），避免请求频率限制
+
+## Bug 修复：案例调研报告轮询永远返回 processing
+- [x] 诊断原因：drizzle ORM 单连接 REPEATABLE READ 隔离级别导致读取旧数据
+- [x] 修复 getBenchmarkJob：改用原生 SQL 查询绕过 ORM 缓存层
