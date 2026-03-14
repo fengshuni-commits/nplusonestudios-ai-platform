@@ -7,13 +7,53 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Loader2, Sparkles, Send, MessageSquare, ChevronDown } from "lucide-react";
+import { Compass, FileText, Loader2, Sparkles, Send, MessageSquare, ChevronDown, Copy, Check } from "lucide-react";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+
+// 复制到飞书按钮组件
+function CopyToFeishuButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      toast.success("已复制到剪贴板，在飞书文档中粘贴即可");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // 降级方案
+      const el = document.createElement("textarea");
+      el.value = content;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      toast.success("已复制到剪贴板，在飞书文档中粘贴即可");
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleCopy}
+      className="gap-1.5 text-xs"
+    >
+      {copied ? (
+        <><Check className="h-3.5 w-3.5 text-primary" />已复制</>
+      ) : (
+        <><Copy className="h-3.5 w-3.5" />复制到飞书</>
+      )}
+    </Button>
+  );
+}
 
 export default function DesignPlanning() {
   const [location] = useLocation();
@@ -370,8 +410,9 @@ export default function DesignPlanning() {
                         )}
                       </div>
                       {!isGenerating && (
-                        <div className="mt-4 pt-4 border-t">
+                        <div className="mt-4 pt-4 border-t flex items-center justify-between">
                           <FeedbackButtons module="benchmark_report" historyId={reportHistoryId} />
+                          <CopyToFeishuButton content={chatHistory.filter(m => m.role === "assistant").length > 0 ? chatHistory.filter(m => m.role === "assistant").at(-1)!.content : report} />
                         </div>
                       )}
 

@@ -446,3 +446,7 @@
 - [ ] 后端：presentation 路由（图片上传 S3、视觉分析、异步生成 PPT HTML、轮询状态）
 - [ ] 前端：Presentation.tsx 页面（文字输入+图片上传+进度轮询+PPT 预览+导出 PDF）
 - [x] 更新导航、路由、首页快捷入口（设计板块新增演示文稿占位页面）
+
+## 案例调研报告导出飞书文档
+- [x] DesignPlanning.tsx：报告区增加「复制到飞书」按钮（复制 Markdown 到剪贴板）
+- [x] History.tsx：弹窗每个版本增加「复制到飞书」按钮

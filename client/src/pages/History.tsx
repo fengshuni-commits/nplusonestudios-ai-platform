@@ -808,12 +808,13 @@ export default function HistoryPage() {
                             <div className="flex items-center gap-1 shrink-0">
                               {isBenchmark ? (
                                 <>
-                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                     onClick={() => {
                                       const content = chainItem.outputContent || "";
-                                      navigator.clipboard.writeText(content).then(() => toast.success("内容已复制")).catch(() => toast.error("复制失败"));
-                                    }} title="复制报告内容">
-                                    <Copy className="h-3 w-3" />
+                                      navigator.clipboard.writeText(content).then(() => toast.success("已复制到剪贴板，在飞书文档中粘贴即可")).catch(() => toast.error("复制失败"));
+                                    }} title="复制到飞书">
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    复制到飞书
                                   </Button>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                     onClick={() => {
