@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Newspaper,
   RefreshCw,
+  Presentation,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -34,6 +35,7 @@ const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color:
 const QUICK_ACTIONS = [
   { icon: PenTool, label: "案例调研", desc: "AI 生成对标案例分析报告", path: "/design/planning", accent: "from-primary/10 to-primary/5 border-primary/20", iconColor: "text-primary" },
   { icon: Sparkles, label: "AI 效果图", desc: "一键渲染空间效果图", path: "/design/tools", accent: "from-primary/8 to-primary/3 border-primary/15", iconColor: "text-primary/80" },
+  { icon: Presentation, label: "演示文稿", desc: "AI 生成图文并茂演示文稿", path: "/design/presentation", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/70" },
   { icon: MessageSquare, label: "会议纪要", desc: "语音转文字自动整理", path: "/meeting", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/70" },
   { icon: Newspaper, label: "内容创作", desc: "小红书 / 公众号推文", path: "/media/xiaohongshu", accent: "from-rose-500/10 to-rose-500/5 border-rose-200/60", iconColor: "text-rose-600" },
   { icon: FolderKanban, label: "项目管理", desc: "查看所有在建项目", path: "/projects", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/60" },

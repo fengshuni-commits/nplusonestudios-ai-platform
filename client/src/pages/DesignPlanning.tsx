@@ -5,25 +5,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw, Send, MessageSquare, ChevronDown } from "lucide-react";
+import { Compass, FileText, Loader2, Sparkles, Send, MessageSquare, ChevronDown } from "lucide-react";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
-
-type PptStage = "idle" | "structuring" | "generating_images" | "building_pptx" | "done";
-
-interface PptResult {
-  url: string;
-  title: string;
-  slideCount: number;
-  imageCount: number;
-}
 
 export default function DesignPlanning() {
   const [location] = useLocation();
@@ -42,12 +32,6 @@ export default function DesignPlanning() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateElapsed, setGenerateElapsed] = useState(0);
   const generateTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [pptStage, setPptStage] = useState<PptStage>("idle");
-  const [pptProgress, setPptProgress] = useState(0);
-  const [pptJobId, setPptJobId] = useState<string | null>(null);
-  const [pptResult, setPptResult] = useState<PptResult | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const [benchmarkJobId, setBenchmarkJobId] = useState<string | null>(null);
   const benchmarkPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -225,101 +209,7 @@ export default function DesignPlanning() {
     };
   }, [refineJobId, pollRefineStatus]);
 
-  const startExportMutation = trpc.benchmark.startExportPpt.useMutation({
-    onSuccess: (data) => {
-      setPptJobId(data.jobId);
-    },
-    onError: () => {
-      setPptStage("idle");
-      setPptProgress(0);
-      toast.error("PPT 生成启动失败，请重试");
-    },
-  });
 
-  // Poll for PPT job status
-  const pollJobStatus = useCallback(async (jobId: string) => {
-    try {
-      const result = await utils.benchmark.exportPptStatus.fetch({ jobId });
-      if (result.status === "done") {
-        setPptStage("done");
-        setPptProgress(100);
-        const pptData: PptResult = {
-          url: result.url!,
-          title: result.title || form.projectName,
-          slideCount: result.slideCount || 0,
-          imageCount: result.imageCount || 0,
-        };
-        setPptResult(pptData);
-        toast.success(`PPT 已生成（${pptData.slideCount} 页，含 ${pptData.imageCount} 张配图）`);
-        // Auto-trigger download
-        triggerDownload(pptData.url, pptData.title);
-        return true; // Stop polling
-      } else if (result.status === "failed") {
-        setPptStage("idle");
-        setPptProgress(0);
-        setPptJobId(null);
-        toast.error(result.error || "PPT 生成失败，请重试");
-        return true;
-      } else if (result.status === "not_found") {
-        setPptStage("idle");
-        setPptProgress(0);
-        setPptJobId(null);
-        toast.error("PPT 任务未找到，请重试");
-        return true;
-      } else {
-        setPptProgress(result.progress || 0);
-        const stage = result.stage as PptStage;
-        if (stage && stage !== "idle" && stage !== "done") {
-          setPptStage(stage);
-        }
-        return false;
-      }
-    } catch (err) {
-      console.error("[PPT Poll] Error:", err);
-      return false;
-    }
-  }, [utils, form.projectName]);
-
-  // Start/stop polling when jobId changes
-  useEffect(() => {
-    if (!pptJobId) {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-      return;
-    }
-
-    const poll = async () => {
-      const shouldStop = await pollJobStatus(pptJobId);
-      if (shouldStop && pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-    };
-
-    const initialTimeout = setTimeout(poll, 1500);
-    pollTimerRef.current = setInterval(poll, 3000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-    };
-  }, [pptJobId, pollJobStatus]);
-
-  const triggerDownload = (url: string, title: string) => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title}-对标调研.pptx`;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
 
   const handleGenerate = () => {
     if (!form.projectName.trim()) { toast.error("请输入项目名称"); return; }
@@ -330,34 +220,7 @@ export default function DesignPlanning() {
     setGenerateElapsed(0);
     if (generateTimerRef.current) clearInterval(generateTimerRef.current);
     generateTimerRef.current = setInterval(() => setGenerateElapsed(s => s + 1), 1000);
-    // Reset PPT state when generating a new report
-    setPptStage("idle");
-    setPptProgress(0);
-    setPptJobId(null);
-    setPptResult(null);
     generateMutation.mutate({ ...form, toolId, projectId: importedProjectId || undefined });
-  };
-
-  const handleExportPpt = () => {
-    if (!report) { toast.error("请先生成调研报告"); return; }
-    setPptStage("structuring");
-    setPptProgress(5);
-    setPptResult(null);
-    startExportMutation.mutate({ content: report, title: form.projectName, projectType: form.projectType });
-  };
-
-  const handleRedownload = () => {
-    if (pptResult) {
-      triggerDownload(pptResult.url, pptResult.title);
-      toast.success("正在重新下载 PPT");
-    }
-  };
-
-  const handleRegeneratePpt = () => {
-    setPptStage("idle");
-    setPptProgress(0);
-    setPptJobId(null);
-    setPptResult(null);
   };
 
   const projectTypes = [
@@ -369,16 +232,6 @@ export default function DesignPlanning() {
     { value: "cultural", label: "文化空间" },
     { value: "other", label: "其他" },
   ];
-
-  const pptStageLabels: Record<PptStage, string> = {
-    idle: "",
-    structuring: "正在分析报告结构，规划 PPT 页面...",
-    generating_images: "正在从 Pexels 获取高质量建筑设计配图...",
-    building_pptx: "正在组装 PPT 文件并上传...",
-    done: "PPT 生成完成！",
-  };
-
-  const isPptGenerating = pptStage !== "idle" && pptStage !== "done";
 
   // Clean report: remove empty source links like [来源]() or [来源](#)
   const cleanedReport = useMemo(() => {
@@ -611,100 +464,7 @@ export default function DesignPlanning() {
                 </CardContent>
               </Card>
 
-              {/* PPT Generation Section */}
-              {report && (
-                <Card className={`border-2 border-dashed ${pptStage === "done" ? "border-primary/30 bg-primary/5" : "border-accent/30 bg-accent/5"}`}>
-                  <CardContent className="py-6">
-                    {pptStage === "idle" && !pptResult ? (
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="flex items-center gap-3 text-center">
-                          <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center">
-                            <Presentation className="h-6 w-6 text-accent" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-medium text-foreground">生成对标案例 PPT</h3>
-                            <p className="text-sm text-muted-foreground">
-                              约 10-15 页图文并茂的 PPTX，含高质量建筑设计配图
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={handleExportPpt}
-                          size="lg"
-                          className="bg-accent hover:bg-accent/90 text-white px-8"
-                        >
-                          <Presentation className="h-4 w-4 mr-2" />
-                          生成 PPT
-                        </Button>
-                      </div>
-                    ) : pptStage === "done" || pptResult ? (
-                      /* Done state - persistent with download button */
-                      <div className="flex flex-col items-center gap-4">
-                        <CheckCircle2 className="h-10 w-10 text-primary" />
-                        <div className="text-center">
-                          <p className="font-medium text-primary">PPT 生成完成</p>
-                          {pptResult && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              共 {pptResult.slideCount} 页，含 {pptResult.imageCount} 张配图
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            onClick={handleRedownload}
-                            size="lg"
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            下载 PPT
-                          </Button>
-                          <Button
-                            onClick={handleRegeneratePpt}
-                            variant="outline"
-                            size="lg"
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            重新生成
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Processing state with progress */
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">{pptStageLabels[pptStage]}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {pptStage === "generating_images" && (
-                                <span className="flex items-center gap-1">
-                                  <ImageIcon className="h-3 w-3" />
-                                  正在从 Pexels 获取高质量建筑与设计照片...
-                                </span>
-                              )}
-                              {pptStage === "structuring" && "分析报告内容，规划封面、目录、案例分析、总结等页面"}
-                              {pptStage === "building_pptx" && "将文字和图片组装为 PPTX 文件并上传"}
-                            </p>
-                          </div>
-                          <span className="text-sm font-mono text-muted-foreground">{pptProgress}%</span>
-                        </div>
-                        <Progress value={pptProgress} className="h-2" />
-                        <div className="flex justify-center gap-6 text-xs text-muted-foreground">
-                          <span className={pptStage === "structuring" ? "text-accent font-medium" : pptProgress > 25 ? "text-foreground" : ""}>
-                            ① 结构化
-                          </span>
-                          <span className={pptStage === "generating_images" ? "text-accent font-medium" : pptProgress > 65 ? "text-foreground" : ""}>
-                            ② 获取照片
-                          </span>
-                          <span className={pptStage === "building_pptx" ? "text-accent font-medium" : pptProgress > 90 ? "text-foreground" : ""}>
-                            ③ 组装导出
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+
             </div>
           </div>
       </div>
