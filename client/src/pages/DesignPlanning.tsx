@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw, Send, MessageSquare } from "lucide-react";
+import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw, Send, MessageSquare, ChevronDown } from "lucide-react";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
@@ -58,6 +58,9 @@ export default function DesignPlanning() {
   const [refineJobId, setRefineJobId] = useState<string | null>(null);
   const refinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  // Track which assistant messages are collapsed (by index); original report collapse
+  const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
+  const [isReportCollapsed, setIsReportCollapsed] = useState(false);
 
   const stopBenchmarkTimer = () => {
     if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
@@ -172,11 +175,24 @@ export default function DesignPlanning() {
       const result = await utils.benchmark.pollStatus.fetch({ jobId });
       if (result.status === "done") {
         const content = (result as any).content || "";
-        // Append to chat history only - user can click "采用此版本" to replace the main report
-        setChatHistory(prev => [...prev, { role: "assistant", content }]);
+        // Append new assistant message and auto-collapse all previous assistant messages + original report
+        setChatHistory(prev => {
+          const newHistory = [...prev, { role: "assistant" as const, content }];
+          // Collapse all previous assistant messages (all except the last one we just added)
+          const newCollapsed = new Set<number>();
+          newHistory.forEach((msg, idx) => {
+            if (msg.role === "assistant" && idx < newHistory.length - 1) {
+              newCollapsed.add(idx);
+            }
+          });
+          setCollapsedMessages(newCollapsed);
+          return newHistory;
+        });
+        // Also collapse the original report when first revision appears
+        setIsReportCollapsed(true);
         setIsRefining(false);
         setRefineJobId(null);
-        toast.success("修订版报告已生成，请查看对话框下方");
+        toast.success("修订版报告已生成，已自动保存到生成历史");
         return true;
       } else if (result.status === "failed") {
         setIsRefining(false);
@@ -478,18 +494,37 @@ export default function DesignPlanning() {
                 <CardContent>
                   {report ? (
                     <>
-                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                        <Streamdown>{cleanedReport}</Streamdown>
+                      {/* Original report - collapsible when revisions exist */}
+                      <div className="rounded-lg border overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b cursor-pointer hover:bg-muted/60 transition-colors"
+                          onClick={() => setIsReportCollapsed(v => !v)}
+                        >
+                          <span className="text-xs font-medium text-foreground/60">
+                            {chatHistory.some(m => m.role === "assistant") ? "原始报告" : "调研报告"}
+                          </span>
+                          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isReportCollapsed ? '' : 'rotate-180'}`} />
+                        </div>
+                        {!isReportCollapsed && (
+                          <div className="p-4 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                            <Streamdown>{cleanedReport}</Streamdown>
+                          </div>
+                        )}
+                        {isReportCollapsed && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground/60 italic">
+                            {cleanedReport.slice(0, 120).replace(/#+\s/g, '').replace(/\*\*/g, '')}…
+                          </div>
+                        )}
                       </div>
                       {!isGenerating && (
-                        <div className="mt-6 pt-4 border-t">
+                        <div className="mt-4 pt-4 border-t">
                           <FeedbackButtons module="benchmark_report" historyId={reportHistoryId} />
                         </div>
                       )}
 
                       {/* Conversation refinement area */}
                       {!isGenerating && (
-                        <div className="mt-6 pt-4 border-t space-y-4">
+                        <div className="mt-4 pt-4 border-t space-y-4">
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground/70">
                             <MessageSquare className="h-4 w-4" />
                             对话调整报告
@@ -497,7 +532,7 @@ export default function DesignPlanning() {
 
                           {/* Chat messages */}
                           {chatHistory.length > 0 && (
-                            <div className="space-y-4 pr-1">
+                            <div className="space-y-3 pr-1">
                               {chatHistory.map((msg, i) => (
                                 <div key={i} className={`flex flex-col ${ msg.role === "user" ? "items-end" : "items-start" } gap-1`}>
                                   {msg.role === "user" ? (
@@ -506,12 +541,28 @@ export default function DesignPlanning() {
                                     </div>
                                   ) : (
                                     <div className="w-full rounded-lg border bg-muted/30 overflow-hidden">
-                                      <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
-                                        <span className="text-xs font-medium text-foreground/60">修订版报告（已自动保存到生成历史）</span>
+                                      <div
+                                        className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b cursor-pointer hover:bg-muted/60 transition-colors"
+                                        onClick={() => setCollapsedMessages(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(i)) next.delete(i); else next.add(i);
+                                          return next;
+                                        })}
+                                      >
+                                        <span className="text-xs font-medium text-foreground/60">
+                                          第 {chatHistory.filter((m, idx) => m.role === "assistant" && idx <= i).length} 次修订版本（已自动保存）
+                                        </span>
+                                        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${collapsedMessages.has(i) ? '' : 'rotate-180'}`} />
                                       </div>
-                                      <div className="p-3 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 max-h-96 overflow-y-auto">
-                                        <Streamdown>{msg.content}</Streamdown>
-                                      </div>
+                                      {!collapsedMessages.has(i) ? (
+                                        <div className="p-4 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                                          <Streamdown>{msg.content}</Streamdown>
+                                        </div>
+                                      ) : (
+                                        <div className="px-3 py-2 text-xs text-muted-foreground/60 italic">
+                                          {msg.content.slice(0, 120).replace(/#+\s/g, '').replace(/\*\*/g, '')}…
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
