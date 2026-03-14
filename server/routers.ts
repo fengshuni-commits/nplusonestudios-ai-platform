@@ -1150,8 +1150,8 @@ async function generateBenchmarkInBackground(
     console.log(`[Benchmark] Phase 1 done: ${caseNames.length} case names extracted`);
 
     // === Phase 2: Search real URLs for each case using Tavily ===
-    const caseUrlMap = await searchCaseStudies(caseNames);
-    console.log(`[Benchmark] Phase 2 done: searched URLs for ${Object.keys(caseUrlMap).length} cases`);
+    const caseUrlMap = await searchCaseStudies(caseNames, input.projectType);
+    console.log(`[Benchmark] Phase 2 done: searched URLs for ${Object.keys(caseUrlMap).length} cases (projectType: ${input.projectType})`);
 
     // Build case reference context with real URLs
     const caseRefs = caseNames.map(name => {

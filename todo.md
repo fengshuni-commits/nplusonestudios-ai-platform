@@ -371,3 +371,7 @@
 - [x] 创建 server/tavily.ts 搜索工具函数（搜索 ArchDaily、谷德等建筑网站）
 - [x] 修改 benchmark 生成逻辑：三阶段生成（生成案例名 → Tavily 搜索真实 URL → 带真实链接生成完整报告）
 - [x] Tavily API Key 验证测试通过（2 项测试，5.4s）
+
+## Tavily 搜索域按项目类型动态调整
+- [x] 修改 tavily.ts：按项目类型返回不同搜索域列表（办公/展厅/商业/住宅/文化空间）
+- [x] 修改 routers.ts：传入 projectType 到搜索函数
