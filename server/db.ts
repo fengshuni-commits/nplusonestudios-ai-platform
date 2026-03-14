@@ -1088,3 +1088,13 @@ export function getCachedGreeting(userId: number): string | null {
 export function setCachedGreeting(userId: number, text: string): void {
   greetingCache.set(userId, { text, expiresAt: Date.now() + 2 * 60 * 60 * 1000 });
 }
+
+
+// ─── Generation History Project Association ──────────────────────────────────────────────────────
+export async function updateGenerationHistoryProject(historyId: number, projectId: number | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(generationHistory)
+    .set({ projectId })
+    .where(eq(generationHistory.id, historyId));
+}

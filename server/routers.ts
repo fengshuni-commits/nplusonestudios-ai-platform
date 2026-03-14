@@ -1118,8 +1118,7 @@ async function refineBenchmarkInBackground(
   input: { currentReport: string; feedback: string; projectName: string; projectType: string; toolId?: number },
   userId: number,
   userName?: string | null,
-  parentHistoryId?: number,
-  projectId?: number
+  parentHistoryId?: number
 ) {
   const startTime = Date.now();
   try {
@@ -1159,7 +1158,7 @@ async function refineBenchmarkInBackground(
         status: "success",
         durationMs,
         parentId: parentHistoryId || undefined,
-        projectId: projectId || undefined,
+        projectId: undefined,
         createdByName: userName || undefined,
         modelName: response.model || null,
       });
@@ -1286,7 +1285,7 @@ ${caseRefs}
       outputContent: content,
       status: "success",
       durationMs: Date.now() - startTime,
-      projectId: input.projectId || null,
+      projectId: null,
       createdByName: userName,
       modelName: response.model || null,
     }).catch(() => ({ id: 0 }));
@@ -1315,7 +1314,6 @@ const benchmarkRouter = router({
       requirements: z.string(),
       referenceCount: z.number().min(1).max(10).optional(),
       toolId: z.number().optional(),
-      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const jobId = nanoid();
@@ -1356,7 +1354,6 @@ const benchmarkRouter = router({
       projectType: z.string(),
       toolId: z.number().optional(),
       parentHistoryId: z.number().optional(), // history record ID of the report being refined
-      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const jobId = nanoid();
@@ -1366,7 +1363,7 @@ const benchmarkRouter = router({
         inputParams: { type: 'refine', ...input } as Record<string, unknown>,
       });
       // Fire-and-forget background refine
-      refineBenchmarkInBackground(jobId, input, ctx.user.id, ctx.user.name, input.parentHistoryId, input.projectId).catch(err => {
+      refineBenchmarkInBackground(jobId, input, ctx.user.id, ctx.user.name, input.parentHistoryId).catch(err => {
         console.error("[Benchmark Refine] Unhandled error:", err);
       });
       return { jobId };
@@ -1440,7 +1437,6 @@ const renderingRouter = router({
       maskImageData: z.string().optional(),
       aspectRatio: z.string().optional(),
       resolution: z.string().optional(),
-      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -1603,7 +1599,7 @@ const renderingRouter = router({
           status: "success",
           durationMs: Date.now() - startTime,
           parentId: input.parentHistoryId || null,
-          projectId: input.projectId || null,
+          projectId: null,
           createdByName: ctx.user.name || null,
           modelName: resolvedModelName,
         }).catch(() => ({ id: 0 }));
@@ -1737,7 +1733,7 @@ const meetingRouter = router({
           inputParams: { projectName: input.projectName, meetingDate: input.meetingDate },
           status: "success",
           durationMs: Date.now() - startTime,
-          projectId: input.projectId || null,
+          projectId: null,
           createdByName: ctx.user.name || null,
           modelName: response.model || null,
         }).catch(() => ({ id: 0 }));
@@ -2079,7 +2075,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           outputContent: typeof textContent === 'string' ? textContent : null,
           status: "success",
           durationMs: Date.now() - startTime,
-          projectId: input.projectId || null,
+          projectId: null,
           createdByName: ctx.user.name || null,
           modelName: llmResponse.model || null,
         }).catch(() => ({ id: 0 }));
@@ -2100,7 +2096,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           inputParams: { platform: input.platform, topic: input.topic },
           status: "failed",
           durationMs: Date.now() - startTime,
-          projectId: input.projectId || null,
+          projectId: null,
         }).catch(() => {});
 
         throw new TRPCError({
@@ -2167,6 +2163,23 @@ const historyRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await db.deleteGenerationHistory(input.id, ctx.user.id, true);
+      return { success: true };
+    }),
+
+  /** Associate or disassociate a generation history item with a project */
+  updateProject: protectedProcedure
+    .input(z.object({
+      historyId: z.number(),
+      projectId: z.number().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await db.getGenerationHistoryById(input.historyId, ctx.user.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "记录不存在" });
+      if (input.projectId !== null) {
+        const project = await db.getProjectById(input.projectId);
+        if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "项目不存在" });
+      }
+      await db.updateGenerationHistoryProject(input.historyId, input.projectId);
       return { success: true };
     }),
 });

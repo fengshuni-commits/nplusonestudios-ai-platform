@@ -632,7 +632,6 @@ export default function HistoryPage() {
       projectName: activeItem.title || "未命名项目",
       projectType: "办公空间",
       parentHistoryId: latestChainItem?.id || activeItem.id,
-      projectId: activeItem.projectId || undefined,
     });
   }, [refineFeedback, currentReportContent, displayContentItem, selectedItem, chainQuery.data, refineMutation, isRefining]);
   const deleteMutation = trpc.history.delete.useMutation({

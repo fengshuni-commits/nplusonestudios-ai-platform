@@ -115,7 +115,6 @@ export default function DesignPlanning() {
       projectType: form.projectType,
       toolId,
       parentHistoryId: reportHistoryId,
-      projectId: importedProjectId || undefined,
     });
   };
 
@@ -260,7 +259,7 @@ export default function DesignPlanning() {
     setGenerateElapsed(0);
     if (generateTimerRef.current) clearInterval(generateTimerRef.current);
     generateTimerRef.current = setInterval(() => setGenerateElapsed(s => s + 1), 1000);
-    generateMutation.mutate({ ...form, toolId, projectId: importedProjectId || undefined });
+    generateMutation.mutate({ ...form, toolId });
   };
 
   const projectTypes = [
