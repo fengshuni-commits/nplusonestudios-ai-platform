@@ -414,6 +414,9 @@ export default function HistoryPage() {
   // Benchmark report refine state
   const [refineFeedback, setRefineFeedback] = useState("");
   const [currentReportContent, setCurrentReportContent] = useState<string | null>(null);
+  const [refineJobId, setRefineJobId] = useState<string | null>(null);
+  const [isRefining, setIsRefining] = useState(false);
+  const refinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const PAGE_SIZE = 30;
   const [loadedCount, setLoadedCount] = useState(PAGE_SIZE);
@@ -517,24 +520,70 @@ export default function HistoryPage() {
 
   const refineMutation = trpc.benchmark.refine.useMutation({
     onSuccess: (data) => {
-      setCurrentReportContent(data.content);
+      // Now returns { jobId } - start polling
+      setRefineJobId(data.jobId);
       setRefineFeedback("");
-      toast.success("报告已根据反馈更新");
     },
-    onError: (e) => toast.error(e.message || "调整失败，请重试"),
+    onError: (e) => {
+      setIsRefining(false);
+      toast.error(e.message || "调整失败，请重试");
+    },
   });
 
+  const utils = trpc.useUtils();
+
+  // Poll refine job status
+  const pollRefineStatus = useCallback(async (jobId: string) => {
+    try {
+      const result = await utils.benchmark.pollStatus.fetch({ jobId });
+      if (result.status === "done") {
+        const content = (result as any).content || "";
+        setCurrentReportContent(content);
+        setIsRefining(false);
+        setRefineJobId(null);
+        toast.success("报告已根据反馈更新");
+        return true;
+      } else if (result.status === "failed") {
+        setIsRefining(false);
+        setRefineJobId(null);
+        toast.error((result as any).error || "调整失败，请重试");
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("[Refine Poll] Error:", err);
+      return false;
+    }
+  }, [utils]);
+
+  // Start/stop refine polling when refineJobId changes
+  useEffect(() => {
+    if (!refineJobId) {
+      if (refinePollRef.current) { clearInterval(refinePollRef.current); refinePollRef.current = null; }
+      return;
+    }
+    const poll = async () => {
+      const shouldStop = await pollRefineStatus(refineJobId);
+      if (shouldStop && refinePollRef.current) { clearInterval(refinePollRef.current); refinePollRef.current = null; }
+    };
+    const t = setTimeout(poll, 2000);
+    refinePollRef.current = setInterval(poll, 3000);
+    return () => {
+      clearTimeout(t);
+      if (refinePollRef.current) { clearInterval(refinePollRef.current); refinePollRef.current = null; }
+    };
+  }, [refineJobId, pollRefineStatus]);
+
   const handleRefine = useCallback(() => {
-    if (!refineFeedback.trim() || !currentReportContent || !displayContentItem) return;
+    if (!refineFeedback.trim() || !currentReportContent || !displayContentItem || isRefining) return;
+    setIsRefining(true);
     refineMutation.mutate({
       currentReport: currentReportContent,
       feedback: refineFeedback,
       projectName: displayContentItem.title || "未命名项目",
       projectType: "办公空间",
     });
-  }, [refineFeedback, currentReportContent, displayContentItem, refineMutation]);
-
-  const utils = trpc.useUtils();
+  }, [refineFeedback, currentReportContent, displayContentItem, refineMutation, isRefining]);
   const deleteMutation = trpc.history.delete.useMutation({
     onSuccess: () => { utils.history.listGrouped.invalidate(); toast.success("已删除记录"); },
     onError: (e) => toast.error(e.message || "删除失败"),
@@ -839,23 +888,23 @@ export default function HistoryPage() {
                       handleRefine();
                     }
                   }}
-                  disabled={refineMutation.isPending}
+                  disabled={isRefining}
                 />
                 <Button
                   size="sm"
                   className="self-end h-9 px-3 shrink-0"
                   onClick={handleRefine}
-                  disabled={!refineFeedback.trim() || refineMutation.isPending}
+                  disabled={!refineFeedback.trim() || isRefining}
                 >
-                  {refineMutation.isPending ? (
+                  {isRefining ? (
                     <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                   ) : (
                     <Send className="h-3.5 w-3.5" />
                   )}
                 </Button>
               </div>
-              {refineMutation.isPending && (
-                <p className="text-xs text-muted-foreground/60 mt-1.5">AI 正在调整报告，请稍候…</p>
+              {isRefining && (
+                <p className="text-xs text-muted-foreground/60 mt-1.5">AI 正在调整报告，请稍候（通常需要 2-3 分钒）…</p>
               )}
             </div>
           )}

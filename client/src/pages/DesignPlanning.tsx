@@ -55,6 +55,8 @@ export default function DesignPlanning() {
   const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+  const [refineJobId, setRefineJobId] = useState<string | null>(null);
+  const refinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const stopBenchmarkTimer = () => {
@@ -64,9 +66,8 @@ export default function DesignPlanning() {
 
   const refineMutation = trpc.benchmark.refine.useMutation({
     onSuccess: (data) => {
-      setReport(data.content);
-      setChatHistory(prev => [...prev, { role: "assistant", content: data.content }]);
-      setIsRefining(false);
+      // Now returns { jobId } - start polling
+      setRefineJobId(data.jobId);
     },
     onError: (err) => {
       setIsRefining(false);
@@ -162,6 +163,49 @@ export default function DesignPlanning() {
       if (benchmarkPollRef.current) { clearInterval(benchmarkPollRef.current); benchmarkPollRef.current = null; }
     };
   }, [benchmarkJobId, pollBenchmarkStatus]);
+
+  // Poll refine job status
+  const pollRefineStatus = useCallback(async (jobId: string) => {
+    try {
+      const result = await utils.benchmark.pollStatus.fetch({ jobId });
+      if (result.status === "done") {
+        const content = (result as any).content || "";
+        setReport(content);
+        setChatHistory(prev => [...prev, { role: "assistant", content }]);
+        setIsRefining(false);
+        setRefineJobId(null);
+        toast.success("报告已根据反馈更新");
+        return true;
+      } else if (result.status === "failed") {
+        setIsRefining(false);
+        setRefineJobId(null);
+        toast.error((result as any).error || "调整失败，请重试");
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("[Refine Poll] Error:", err);
+      return false;
+    }
+  }, [utils]);
+
+  // Start/stop refine polling when refineJobId changes
+  useEffect(() => {
+    if (!refineJobId) {
+      if (refinePollRef.current) { clearInterval(refinePollRef.current); refinePollRef.current = null; }
+      return;
+    }
+    const poll = async () => {
+      const shouldStop = await pollRefineStatus(refineJobId);
+      if (shouldStop && refinePollRef.current) { clearInterval(refinePollRef.current); refinePollRef.current = null; }
+    };
+    const t = setTimeout(poll, 2000);
+    refinePollRef.current = setInterval(poll, 3000);
+    return () => {
+      clearTimeout(t);
+      if (refinePollRef.current) { clearInterval(refinePollRef.current); refinePollRef.current = null; }
+    };
+  }, [refineJobId, pollRefineStatus]);
 
   const startExportMutation = trpc.benchmark.startExportPpt.useMutation({
     onSuccess: (data) => {

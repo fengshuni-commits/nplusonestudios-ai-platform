@@ -1106,6 +1106,44 @@ const aiToolsRouter = router({
 
 // ─── AI Module: Benchmarking Research ────────────────────
 
+/** Background worker: refine an existing report based on user feedback */
+async function refineBenchmarkInBackground(
+  jobId: string,
+  input: { currentReport: string; feedback: string; projectName: string; projectType: string; toolId?: number },
+  userId: number
+) {
+  const startTime = Date.now();
+  try {
+    await db.updateBenchmarkJob(jobId, { status: "processing" });
+    const response = await invokeLLMWithUserTool({
+      messages: [
+        {
+          role: "system",
+          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
+
+**要求**：
+- 保持报告的整体结构和专业性
+- 根据用户反馈精确修改相应部分
+- 不要改动用户没有提到的内容
+- 输出完整的修订后报告（Markdown 格式）`,
+        },
+        {
+          role: "user",
+          content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n\n当前报告：\n${input.currentReport}\n\n用户反馈：${input.feedback}`,
+        },
+      ],
+    }, userId);
+    const content = typeof response.choices[0]?.message?.content === 'string'
+      ? response.choices[0].message.content : '';
+    if (!content) throw new Error('LLM 返回内容为空');
+    await db.updateBenchmarkJob(jobId, { status: "done", result: content });
+    console.log(`[Benchmark Refine] Job ${jobId} done in ${Date.now() - startTime}ms`);
+  } catch (error: any) {
+    console.error("[Benchmark Refine] Background job failed:", error);
+    await db.updateBenchmarkJob(jobId, { status: "failed", error: error?.message || "调整失败" });
+  }
+}
+
 /** Background worker: runs LLM call and saves result to DB */
 async function generateBenchmarkInBackground(
   jobId: string,
@@ -1277,7 +1315,7 @@ const benchmarkRouter = router({
       return { status: job.status as "pending" | "processing" };
     }),
 
-  /** Refine an existing benchmark report based on user feedback */
+  /** Submit async refine job, returns jobId immediately to avoid proxy timeout */
   refine: protectedProcedure
     .input(z.object({
       currentReport: z.string().min(1),
@@ -1287,28 +1325,17 @@ const benchmarkRouter = router({
       toolId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const response = await invokeLLMWithUserTool({
-        messages: [
-          {
-            role: "system",
-            content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
-
-**要求**：
-- 保持报告的整体结构和专业性
-- 根据用户反馈精确修改相应部分
-- 不要改动用户没有提到的内容
-- 输出完整的修订后报告（Markdown 格式）`,
-          },
-          {
-            role: "user",
-            content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n\n当前报告：\n${input.currentReport}\n\n用户反馈：${input.feedback}`,
-          },
-        ],
-      }, ctx.user.id);
-      const content = typeof response.choices[0]?.message?.content === 'string'
-        ? response.choices[0].message.content : '';
-      if (!content) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '调整失败，请重试' });
-      return { content };
+      const jobId = nanoid();
+      await db.createBenchmarkJob({
+        id: jobId,
+        userId: ctx.user.id,
+        inputParams: { type: 'refine', ...input } as Record<string, unknown>,
+      });
+      // Fire-and-forget background refine
+      refineBenchmarkInBackground(jobId, input, ctx.user.id).catch(err => {
+        console.error("[Benchmark Refine] Unhandled error:", err);
+      });
+      return { jobId };
     }),
 
   // List configured case source sites (for admin management)

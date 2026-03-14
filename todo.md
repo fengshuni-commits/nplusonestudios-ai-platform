@@ -404,3 +404,10 @@
 ## Bug 修复：pollStatus 报错 updatedAt.toISOString is not a function
 - [x] 原因：原生 SQL 查询返回的 createdAt/updatedAt 是字符串而非 Date 对象
 - [x] 修复：在 getBenchmarkJob 返回值中显式 new Date(row.updatedAt) 转换
+
+## Bug 修复：对话式编辑（refine）提交后无响应
+- [x] 原因：refine 接口同步调用 LLM，代理层 100s 超时导致 Failed to fetch
+- [x] 修复：将 refine 改为异步 job 模式（同 generate），后端 fire-and-forget 后台处理
+- [x] 新增 refineBenchmarkInBackground 函数，复用 benchmark_jobs 表存储任务状态
+- [x] 前端 DesignPlanning.tsx：refine mutation 改为接收 jobId，新增 refineJobId 状态 + 轮询逻辑
+- [x] 前端 History.tsx：同步更新 refine 逻辑为异步轮询，isRefining 状态控制 UI 禁用
