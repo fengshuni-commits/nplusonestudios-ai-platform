@@ -270,9 +270,10 @@ interface TileCardProps {
   onDelete: (id: number) => void;
   onOpenDetail?: (item: any) => void;
   onLightbox?: (src: string, label: string) => void;
+  onNavigate?: (path: string) => void;
 }
 
-function TileCard({ item, onDelete, onOpenDetail, onLightbox }: TileCardProps) {
+function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: TileCardProps) {
   const cfg = MODULE_MAP[item.module] || {
     label: item.module,
     icon: FileText,
@@ -293,8 +294,11 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox }: TileCardProps) {
     } else if (item.module === "benchmark_ppt" && item.outputUrl) {
       // PPT：直接打开下载链接
       window.open(item.outputUrl, "_blank");
+    } else if (item.module === "benchmark_report" && onNavigate) {
+      // 案例调研报告：跳转到案例调研页面继续编辑
+      onNavigate(`/design/planning?historyId=${item.id}`);
     } else if (!isRender && onOpenDetail) {
-      // 所有其他文字类模块（对标调研报告、小红书、公众号、Instagram、会议纪要等）：打开内容查看弹窗
+      // 所有其他文字类模块（小红书、公众号、Instagram、会议纪要等）：打开内容查看弹窗
       onOpenDetail(item);
     } else if (item.outputUrl && isRender && onLightbox) {
       onLightbox(item.outputUrl, title);
@@ -599,6 +603,7 @@ export default function HistoryPage() {
                       onDelete={(id) => deleteMutation.mutate({ id })}
                       onOpenDetail={handleOpenDetail}
                       onLightbox={(src, label) => setLightbox({ src, label })}
+                      onNavigate={(path) => navigate(path)}
                     />
                   ))}
                 </div>

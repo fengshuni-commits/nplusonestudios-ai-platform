@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw, Send, MessageSquare } from "lucide-react";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
@@ -25,6 +26,9 @@ interface PptResult {
 }
 
 export default function DesignPlanning() {
+  const [location] = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), [location]);
+  const historyIdParam = searchParams.get("historyId");
   const [toolId, setToolId] = useState<number | undefined>(undefined);
   const [form, setForm] = useState({
     projectName: "",
@@ -97,6 +101,23 @@ export default function DesignPlanning() {
   });
 
   const utils = trpc.useUtils();
+
+  // Load history record when historyId param is present
+  const historyQuery = trpc.history.getById.useQuery(
+    { id: Number(historyIdParam) },
+    { enabled: !!historyIdParam && !isNaN(Number(historyIdParam)) }
+  );
+
+  useEffect(() => {
+    if (historyQuery.data && historyQuery.data.outputContent) {
+      const rec = historyQuery.data;
+      setReport(rec.outputContent ?? "");
+      setReportHistoryId(rec.id);
+      // Try to restore form fields from title
+      if (rec.title) setForm(prev => ({ ...prev, projectName: rec.title }));
+      toast.success("已加载历史报告，可继续编辑");
+    }
+  }, [historyQuery.data?.id]);
 
   // Poll benchmark job status
   const pollBenchmarkStatus = useCallback(async (jobId: string) => {
