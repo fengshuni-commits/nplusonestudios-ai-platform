@@ -656,22 +656,9 @@ export default function HistoryPage() {
     onError: (e) => toast.error(e.message || "操作失败"),
   });
 
-  // Get current projectId for the active dialog item
-  const activeHistoryId = contentItem?.id ?? selectedItem?.id ?? null;
-  const activeProjectId = contentItem?.projectId ?? selectedItem?.projectId ?? null;
-  const activeProjectName = allProjects.find((p: any) => p.id === activeProjectId)?.name;
-
   const handleAssociateProject = useCallback((historyId: number, projectId: number | null) => {
     updateProjectMutation.mutate({ historyId, projectId });
-    // Optimistically update local state
-    if (contentItem && contentItem.id === historyId) {
-      setContentItem((prev: any) => prev ? { ...prev, projectId } : prev);
-    }
-    if (selectedItem && selectedItem.id === historyId) {
-      setSelectedItem((prev: any) => prev ? { ...prev, projectId } : prev);
-    }
-    setProjectSelectOpen(false);
-  }, [updateProjectMutation, contentItem, selectedItem]);
+  }, [updateProjectMutation]);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -778,46 +765,6 @@ export default function HistoryPage() {
                 <span className="text-xs font-normal text-muted-foreground ml-1">共 {chainQuery.data.length} 个版本</span>
               )}
               <div className="ml-auto flex items-center gap-2">
-                {/* Project association selector */}
-                {selectedItem && (
-                  <div className="flex items-center gap-1">
-                    {activeProjectId ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] text-muted-foreground/70 flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
-                          <FolderOpen className="h-3 w-3" />
-                          {activeProjectName || '项目'}
-                        </span>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          title="解除项目关联"
-                          disabled={updateProjectMutation.isPending}
-                          onClick={() => handleAssociateProject(selectedItem.id, null)}>
-                          <Link2Off className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : null}
-                    <Select
-                      value={activeProjectId?.toString() || ""}
-                      onValueChange={(val) => {
-                        if (val === "__none__") handleAssociateProject(selectedItem.id, null);
-                        else handleAssociateProject(selectedItem.id, Number(val));
-                      }}
-                    >
-                      <SelectTrigger className="h-6 text-[11px] border-dashed border-muted-foreground/30 bg-transparent w-auto px-2 gap-1 text-muted-foreground hover:text-foreground hover:border-muted-foreground/60">
-                        <Link2 className="h-3 w-3 shrink-0" />
-                        <span>{activeProjectId ? '切换项目' : '关联项目'}</span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeProjectId && <SelectItem value="__none__">解除关联</SelectItem>}
-                        {allProjects.map((p: any) => (
-                          <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                        ))}
-                        {allProjects.length === 0 && (
-                          <div className="px-2 py-3 text-xs text-muted-foreground text-center">暂无项目</div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                   onClick={() => setIsDetailFullscreen(v => !v)}
                   title={isDetailFullscreen ? "缩小" : "放大"}>
@@ -886,7 +833,37 @@ export default function HistoryPage() {
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
+                            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                              {/* Per-version project selector */}
+                              <div className="flex items-center gap-1">
+                                {chainItem.projectId ? (
+                                  <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1 bg-muted px-1.5 py-0.5 rounded-full">
+                                    <FolderOpen className="h-2.5 w-2.5" />
+                                    {allProjects.find((p: any) => p.id === chainItem.projectId)?.name || '项目'}
+                                  </span>
+                                ) : null}
+                                <Select
+                                  value={chainItem.projectId?.toString() || ""}
+                                  onValueChange={(val) => {
+                                    if (val === "__none__") handleAssociateProject(chainItem.id, null);
+                                    else handleAssociateProject(chainItem.id, Number(val));
+                                  }}
+                                >
+                                  <SelectTrigger className="h-6 text-[10px] border-dashed border-muted-foreground/30 bg-transparent w-auto px-1.5 gap-1 text-muted-foreground hover:text-foreground hover:border-muted-foreground/60">
+                                    <Link2 className="h-2.5 w-2.5 shrink-0" />
+                                    <span>{chainItem.projectId ? '切换' : '关联项目'}</span>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {chainItem.projectId && <SelectItem value="__none__">解除关联</SelectItem>}
+                                    {allProjects.map((p: any) => (
+                                      <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                                    ))}
+                                    {allProjects.length === 0 && (
+                                      <div className="px-2 py-3 text-xs text-muted-foreground text-center">暂无项目</div>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                               {isBenchmark ? (
                                 <>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
@@ -1071,45 +1048,49 @@ export default function HistoryPage() {
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {/* Project association selector for content dialog */}
-                {displayContentItem && (
-                  <div className="flex items-center gap-1 mr-1">
-                    {activeProjectId ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] text-muted-foreground/70 flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
-                          <FolderOpen className="h-3 w-3" />
-                          {activeProjectName || '项目'}
-                        </span>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          title="解除项目关联"
-                          disabled={updateProjectMutation.isPending}
-                          onClick={() => handleAssociateProject(displayContentItem.id, null)}>
-                          <Link2Off className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : null}
-                    <Select
-                      value={activeProjectId?.toString() || ""}
-                      onValueChange={(val) => {
-                        if (val === "__none__") handleAssociateProject(displayContentItem.id, null);
-                        else handleAssociateProject(displayContentItem.id, Number(val));
-                      }}
-                    >
-                      <SelectTrigger className="h-6 text-[11px] border-dashed border-muted-foreground/30 bg-transparent w-auto px-2 gap-1 text-muted-foreground hover:text-foreground hover:border-muted-foreground/60">
-                        <Link2 className="h-3 w-3 shrink-0" />
-                        <span>{activeProjectId ? '切换项目' : '关联项目'}</span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeProjectId && <SelectItem value="__none__">解除关联</SelectItem>}
-                        {allProjects.map((p: any) => (
-                          <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                        ))}
-                        {allProjects.length === 0 && (
-                          <div className="px-2 py-3 text-xs text-muted-foreground text-center">暂无项目</div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                {displayContentItem && (() => {
+                  const cProjId = displayContentItem.projectId;
+                  const cProjName = allProjects.find((p: any) => p.id === cProjId)?.name;
+                  return (
+                    <div className="flex items-center gap-1 mr-1">
+                      {cProjId ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-muted-foreground/70 flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
+                            <FolderOpen className="h-3 w-3" />
+                            {cProjName || '项目'}
+                          </span>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                            title="解除项目关联"
+                            disabled={updateProjectMutation.isPending}
+                            onClick={() => handleAssociateProject(displayContentItem.id, null)}>
+                            <Link2Off className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : null}
+                      <Select
+                        value={cProjId?.toString() || ""}
+                        onValueChange={(val) => {
+                          if (val === "__none__") handleAssociateProject(displayContentItem.id, null);
+                          else handleAssociateProject(displayContentItem.id, Number(val));
+                        }}
+                      >
+                        <SelectTrigger className="h-6 text-[11px] border-dashed border-muted-foreground/30 bg-transparent w-auto px-2 gap-1 text-muted-foreground hover:text-foreground hover:border-muted-foreground/60">
+                          <Link2 className="h-3 w-3 shrink-0" />
+                          <span>{cProjId ? '切换项目' : '关联项目'}</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cProjId && <SelectItem value="__none__">解除关联</SelectItem>}
+                          {allProjects.map((p: any) => (
+                            <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                          ))}
+                          {allProjects.length === 0 && (
+                            <div className="px-2 py-3 text-xs text-muted-foreground text-center">暂无项目</div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
                 {displayContentItem?.outputContent && (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
                     onClick={() => {
