@@ -52,6 +52,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { Send } from "lucide-react";
 
 // ─── Module Config ───────────────────────────────────────────────────────────
 
@@ -405,6 +407,10 @@ export default function HistoryPage() {
   const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
   const [, navigate] = useLocation();
 
+  // Benchmark report refine state
+  const [refineFeedback, setRefineFeedback] = useState("");
+  const [currentReportContent, setCurrentReportContent] = useState<string | null>(null);
+
   const PAGE_SIZE = 30;
   const [loadedCount, setLoadedCount] = useState(PAGE_SIZE);
 
@@ -497,6 +503,32 @@ export default function HistoryPage() {
     }
     return contentItem;
   }, [contentItem, contentDetailQuery.data]);
+
+  // Sync currentReportContent when displayContentItem changes
+  useEffect(() => {
+    if (displayContentItem?.module === "benchmark_report" && displayContentItem.outputContent) {
+      setCurrentReportContent(displayContentItem.outputContent);
+    }
+  }, [displayContentItem?.id, displayContentItem?.outputContent]);
+
+  const refineMutation = trpc.benchmark.refine.useMutation({
+    onSuccess: (data) => {
+      setCurrentReportContent(data.content);
+      setRefineFeedback("");
+      toast.success("报告已根据反馈更新");
+    },
+    onError: (e) => toast.error(e.message || "调整失败，请重试"),
+  });
+
+  const handleRefine = useCallback(() => {
+    if (!refineFeedback.trim() || !currentReportContent || !displayContentItem) return;
+    refineMutation.mutate({
+      currentReport: currentReportContent,
+      feedback: refineFeedback,
+      projectName: displayContentItem.title || "未命名项目",
+      projectType: "办公空间",
+    });
+  }, [refineFeedback, currentReportContent, displayContentItem, refineMutation]);
 
   const utils = trpc.useUtils();
   const deleteMutation = trpc.history.delete.useMutation({
@@ -726,7 +758,7 @@ export default function HistoryPage() {
       </Dialog>
 
       {/* Content Viewer Dialog for text-based modules */}
-      <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) { setContentItem(null); setContentItemId(null); } }}>
+      <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) { setContentItem(null); setContentItemId(null); setCurrentReportContent(null); setRefineFeedback(""); } }}>
         <DialogContent className="max-w-2xl w-[90vw] max-h-[88vh] overflow-hidden flex flex-col p-0">
           <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
             <div className="flex items-start justify-between gap-3">
@@ -770,10 +802,10 @@ export default function HistoryPage() {
                 <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 加载中…
               </div>
-            ) : displayContentItem?.outputContent ? (
+            ) : (currentReportContent || displayContentItem?.outputContent) ? (
               <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground/90 bg-transparent p-0 border-0">
-                  {displayContentItem.outputContent}
+                  {currentReportContent || displayContentItem?.outputContent}
                 </pre>
               </div>
             ) : displayContentItem?.summary ? (
@@ -785,6 +817,43 @@ export default function HistoryPage() {
               <p className="text-sm text-muted-foreground">暂无内容</p>
             )}
           </div>
+
+          {/* Refine input for benchmark_report */}
+          {displayContentItem?.module === "benchmark_report" && (currentReportContent || displayContentItem?.outputContent) && (
+            <div className="shrink-0 border-t border-border/40 px-6 py-4 bg-muted/20">
+              <p className="text-xs text-muted-foreground mb-2">对报告提出修改意见，AI 将根据反馈调整报告内容</p>
+              <div className="flex gap-2">
+                <Textarea
+                  value={refineFeedback}
+                  onChange={(e) => setRefineFeedback(e.target.value)}
+                  placeholder="例如：增加更多国内案例、把展厅部分扩充、调整报告结构…"
+                  className="flex-1 min-h-[72px] max-h-[120px] text-sm resize-none"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleRefine();
+                    }
+                  }}
+                  disabled={refineMutation.isPending}
+                />
+                <Button
+                  size="sm"
+                  className="self-end h-9 px-3 shrink-0"
+                  onClick={handleRefine}
+                  disabled={!refineFeedback.trim() || refineMutation.isPending}
+                >
+                  {refineMutation.isPending ? (
+                    <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </div>
+              {refineMutation.isPending && (
+                <p className="text-xs text-muted-foreground/60 mt-1.5">AI 正在调整报告，请稍候…</p>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
