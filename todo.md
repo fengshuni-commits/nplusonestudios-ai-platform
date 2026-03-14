@@ -352,3 +352,8 @@
 - [x] 生成流程接入：读取用户默认工具的加密 Key，替换内置 API 调用（失败时自动回退内置）
 - [x] 修复对标调研报告弹窗 bug（TileCard handleClick 没有处理文字类模块）
 - [x] 迁移旧的明文 API Key 到加密字段（2 条记录已加密：百炼 Coding Plan、Gemini API）
+
+## Bug 修复：对标调研报告生成超时（qwen3.5-plus 推理模型）
+- [x] 延长服务器 HTTP 超时时间至 5 分钟（server.timeout=300000）
+- [x] 用户工具 fetch 调用增加 AbortSignal.timeout(300000)
+- [x] 前端生成按钒显示计时器（已用时 Xs），10s 后显示推理模型提示文案

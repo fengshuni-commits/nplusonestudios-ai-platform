@@ -424,6 +424,7 @@ export async function invokeLLMWithUserTool(
                 authorization: `Bearer ${apiKey}`,
               },
               body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(300000), // 5 minutes for reasoning models
             });
 
             if (response.ok) {

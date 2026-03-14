@@ -31,6 +31,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // Extend timeout for long-running AI inference requests (e.g. reasoning models)
+  server.timeout = 300000; // 5 minutes
+  server.keepAliveTimeout = 305000;
+  server.headersTimeout = 310000;
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

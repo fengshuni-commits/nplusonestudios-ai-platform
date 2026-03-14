@@ -36,6 +36,8 @@ export default function DesignPlanning() {
   const [report, setReport] = useState<string>("");
   const [reportHistoryId, setReportHistoryId] = useState<number | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generateElapsed, setGenerateElapsed] = useState(0);
+  const generateTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [pptStage, setPptStage] = useState<PptStage>("idle");
   const [pptProgress, setPptProgress] = useState(0);
   const [pptJobId, setPptJobId] = useState<string | null>(null);
@@ -47,10 +49,14 @@ export default function DesignPlanning() {
       setReport(data.content);
       setReportHistoryId(data.historyId || undefined);
       setIsGenerating(false);
+      if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
+      setGenerateElapsed(0);
       toast.success("调研报告生成完成");
     },
     onError: (err) => {
       setIsGenerating(false);
+      if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
+      setGenerateElapsed(0);
       toast.error(err.message || "生成失败，请重试");
     },
   });
@@ -158,6 +164,9 @@ export default function DesignPlanning() {
     if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
     setIsGenerating(true);
     setReport("");
+    setGenerateElapsed(0);
+    if (generateTimerRef.current) clearInterval(generateTimerRef.current);
+    generateTimerRef.current = setInterval(() => setGenerateElapsed(s => s + 1), 1000);
     // Reset PPT state when generating a new report
     setPptStage("idle");
     setPptProgress(0);
@@ -310,11 +319,16 @@ export default function DesignPlanning() {
                 </div>
                 <Button onClick={handleGenerate} disabled={isGenerating} className="w-full">
                   {isGenerating ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中...</>
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中… {generateElapsed > 0 && <span className="ml-1 opacity-70">({generateElapsed}s)</span>}</>
                   ) : (
                     <><Sparkles className="h-4 w-4 mr-2" />生成调研报告</>
                   )}
                 </Button>
+                {isGenerating && generateElapsed >= 10 && (
+                  <p className="text-xs text-muted-foreground text-center mt-1">
+                    {generateElapsed < 60 ? '推理模型思考中，请耐心等待…' : `已用时 ${Math.floor(generateElapsed/60)} 分 ${generateElapsed%60} 秒，即将完成`}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
