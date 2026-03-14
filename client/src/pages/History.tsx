@@ -68,7 +68,7 @@ const MODULE_MAP: Record<string, {
   accentColor: string;
 }> = {
   benchmark_report: {
-    label: "对标调研报告",
+    label: "案例调研报告",
     icon: FileText,
     gradient: "from-stone-900 to-stone-700",
     iconColor: "text-stone-300",
@@ -657,7 +657,7 @@ export default function HistoryPage() {
             <SelectContent>
               <SelectItem value="all">全部模块</SelectItem>
               <SelectItem value="ai_render">AI 效果图</SelectItem>
-              <SelectItem value="benchmark_report">对标调研报告</SelectItem>
+              <SelectItem value="benchmark_report">案例调研报告</SelectItem>
               <SelectItem value="benchmark_ppt">调研 PPT</SelectItem>
               <SelectItem value="meeting_minutes">会议纪要</SelectItem>
               <SelectItem value="media_xiaohongshu">小红书</SelectItem>

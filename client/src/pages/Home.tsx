@@ -24,7 +24,7 @@ import { useLocation } from "wouter";
 
 const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   ai_render: { label: "AI 效果图", icon: <ImageIcon className="h-3.5 w-3.5" />, color: "text-primary bg-primary/10" },
-  benchmark_report: { label: "对标调研", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
+  benchmark_report: { label: "案例调研", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
   benchmark_ppt: { label: "调研 PPT", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
   meeting_minutes: { label: "会议纪要", icon: <MessageSquare className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-secondary" },
   media_xiaohongshu: { label: "小红书", icon: <Newspaper className="h-3.5 w-3.5" />, color: "text-rose-600 bg-rose-50" },

@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // ─── Module labels for generation history ───────────────
 const moduleLabels: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
-  benchmark_report: { label: "对标调研", icon: Compass, color: "bg-blue-100 text-blue-700" },
+  benchmark_report: { label: "案例调研", icon: Compass, color: "bg-blue-100 text-blue-700" },
   benchmark_ppt: { label: "调研PPT", icon: Compass, color: "bg-blue-100 text-blue-700" },
   ai_render: { label: "AI 渲染", icon: ImageIcon, color: "bg-violet-100 text-violet-700" },
   meeting_minutes: { label: "会议纪要", icon: FileText, color: "bg-green-100 text-green-700" },

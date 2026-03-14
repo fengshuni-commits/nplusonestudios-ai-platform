@@ -167,7 +167,7 @@ async function generatePptInBackground(
     const pptx = new PptxCtor();
     pptx.author = "N+1 STUDIOS";
     pptx.company = "N+1 STUDIOS";
-    pptx.title = `${input.title} - 对标调研报告`;
+    pptx.title = `${input.title} - 案例调研报告`;
     pptx.layout = "LAYOUT_16x9";
 
     // Professional color palette inspired by architecture firms
@@ -215,7 +215,7 @@ async function generatePptInBackground(
           lineSpacingMultiple: 1.2,
         });
         // Subtitle
-        s.addText(sd.subtitle || "对标调研报告", {
+        s.addText(sd.subtitle || "案例调研报告", {
           x: 1.1, y: 2.4, w: 7.5, h: 0.5,
           fontSize: 16, fontFace: F.body, color: C.copperLight,
         });
@@ -610,7 +610,7 @@ const dashboardRouter = router({
         const recentHistory = await db.listRecentHistoryForGreeting(userId, 10);
         const moduleLabel: Record<string, string> = {
           ai_render: "AI效果图",
-          benchmark_report: "对标调研报告",
+          benchmark_report: "案例调研报告",
           benchmark_ppt: "调研PPT",
           meeting_minutes: "会议纪要",
           media_xiaohongshu: "小红书内容",
@@ -1153,7 +1153,7 @@ async function refineBenchmarkInBackground(
       const histResult = await db.createGenerationHistory({
         userId,
         module: "benchmark_report",
-        title: `${input.projectName} - 对标调研报告（修订版）`,
+        title: `${input.projectName} - 案例调研报告（修订版）`,
         summary: `用户反馈：${input.feedback.slice(0, 100)}${input.feedback.length > 100 ? '…' : ''}`,
         outputContent: content,
         status: "success",
@@ -1280,7 +1280,7 @@ ${caseRefs}
     const historyResult = await db.createGenerationHistory({
       userId,
       module: "benchmark_report",
-      title: `${input.projectName} - 对标调研报告`,
+      title: `${input.projectName} - 案例调研报告`,
       summary: `${input.projectType} | ${input.requirements?.substring(0, 100) || ''}`,
       inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
       outputContent: content,

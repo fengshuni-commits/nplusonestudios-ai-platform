@@ -5,8 +5,8 @@ import { ThumbsUp, ThumbsDown, TrendingUp, MessageSquare, BarChart3, Filter } fr
 import { useState, useMemo } from "react";
 
 const MODULE_LABELS: Record<string, string> = {
-  benchmark_report: "对标调研报告",
-  benchmark_ppt: "对标 PPT",
+  benchmark_report: "案例调研报告",
+  benchmark_ppt: "调研 PPT",
   ai_render: "AI 效果图",
   meeting_minutes: "会议纪要",
   media_xiaohongshu: "小红书内容",
