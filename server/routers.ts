@@ -5,7 +5,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, invokeLLMWithUserTool } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -50,7 +50,7 @@ async function generatePptInBackground(
     // Stage 1: LLM structuring
     pptJobStore.set(jobId, { status: "processing", progress: 10, stage: "structuring" });
 
-    const structureResponse = await invokeLLM({
+    const structureResponse = await invokeLLMWithUserTool({
       messages: [
         {
           role: "system",
@@ -111,7 +111,7 @@ async function generatePptInBackground(
           }
         }
       }
-    });
+    }, userId);
 
     const structureContent = typeof structureResponse.choices[0]?.message?.content === 'string'
       ? structureResponse.choices[0].message.content
@@ -622,12 +622,12 @@ const dashboardRouter = router({
     ].join("\n");
     const userPrompt = "用户名：" + userName + "\n当前时间：" + timeOfDay + "\n最近使用记录：\n" + historyContext;
     try {
-      const response = await invokeLLM({
+      const response = await invokeLLMWithUserTool({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-      });
+      }, ctx.user.id);
       const greeting = (typeof response?.choices?.[0]?.message?.content === "string" ? response.choices[0].message.content.trim() : "") || (timeOfDay + "好，" + userName + "！");
       return { greeting, timeOfDay };
     } catch {
@@ -994,10 +994,22 @@ const aiToolsRouter = router({
   list: protectedProcedure
     .input(z.object({ category: z.string().optional(), capability: z.string().optional(), activeOnly: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
+      const { maskApiKey, decryptApiKey } = await import("./_core/crypto");
       const tools = await db.listAiTools({ activeOnly: input?.activeOnly });
-      if (!input?.capability && !input?.category) return tools;
-      // 按 capability 过滤（优先），否则回落 category 匹配
-      return tools.filter((t: any) => {
+      const sanitized = tools.map((t: any) => {
+        const { apiKeyEncrypted, ...rest } = t;
+        let apiKeyMasked: string | null = null;
+        if (apiKeyEncrypted) {
+          const plain = decryptApiKey(apiKeyEncrypted);
+          apiKeyMasked = plain ? maskApiKey(plain) : null;
+        } else if (t.apiKeyName && t.apiKeyName.startsWith('sk-')) {
+          // Legacy: apiKeyName was used to store plaintext key
+          apiKeyMasked = maskApiKey(t.apiKeyName);
+        }
+        return { ...rest, apiKeyMasked, hasApiKey: !!apiKeyEncrypted || (!!t.apiKeyName && t.apiKeyName.startsWith('sk-')) };
+      });
+      if (!input?.capability && !input?.category) return sanitized;
+      return sanitized.filter((t: any) => {
         if (input.capability) {
           const caps: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
           return caps.includes(input.capability);
@@ -1009,9 +1021,18 @@ const aiToolsRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
+      const { maskApiKey, decryptApiKey } = await import("./_core/crypto");
       const tool = await db.getAiToolById(input.id);
       if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
-      return tool;
+      const { apiKeyEncrypted, ...rest } = tool as any;
+      let apiKeyMasked: string | null = null;
+      if (apiKeyEncrypted) {
+        const plain = decryptApiKey(apiKeyEncrypted);
+        apiKeyMasked = plain ? maskApiKey(plain) : null;
+      } else if ((tool as any).apiKeyName?.startsWith('sk-')) {
+        apiKeyMasked = maskApiKey((tool as any).apiKeyName);
+      }
+      return { ...rest, apiKeyMasked, hasApiKey: !!apiKeyEncrypted || !!(tool as any).apiKeyName?.startsWith('sk-') };
     }),
 
   create: adminProcedure
@@ -1020,18 +1041,21 @@ const aiToolsRouter = router({
       description: z.string().optional(),
       apiEndpoint: z.string().optional(),
       apiKeyName: z.string().optional(),
+      apiKey: z.string().optional(), // plaintext API key, will be encrypted before storage
       configJson: z.any().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const { inferCapabilities } = await import("../shared/toolCapabilities");
+      const { encryptApiKey } = await import("./_core/crypto");
       const capabilities = inferCapabilities(input.name, input.apiEndpoint);
-      // 保持 category 字段兼容旧逻辑，根据第一个能力映射
       const capToCategory: Record<string, string> = {
         rendering: "rendering", image: "image", video: "video",
         document: "document", analysis: "analysis", layout: "layout", media: "other",
       };
       const category = (capToCategory[capabilities[0]] || "other") as any;
-      return db.createAiTool({ ...input, category, capabilities, createdBy: ctx.user.id });
+      const { apiKey, ...rest } = input;
+      const apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : undefined;
+      return db.createAiTool({ ...rest, apiKeyEncrypted, category, capabilities, createdBy: ctx.user.id });
     }),
 
   update: adminProcedure
@@ -1043,18 +1067,23 @@ const aiToolsRouter = router({
       provider: z.string().optional(),
       apiEndpoint: z.string().optional(),
       apiKeyName: z.string().optional(),
+      apiKey: z.string().optional(), // plaintext API key, will be encrypted before storage
       configJson: z.any().optional(),
       isActive: z.boolean().optional(),
       isDefault: z.boolean().optional(),
       iconUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { id, ...data } = input;
-      // 如果设置为默认，先清除其他工具的默认状态
+      const { encryptApiKey } = await import("./_core/crypto");
+      const { id, apiKey, ...data } = input;
       if (data.isDefault === true) {
         await db.clearDefaultAiTool();
       }
-      await db.updateAiTool(id, data);
+      const updateData: any = { ...data };
+      if (apiKey !== undefined) {
+        updateData.apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : null;
+      }
+      await db.updateAiTool(id, updateData);
       return { success: true };
     }),
 
@@ -1093,7 +1122,7 @@ const benchmarkRouter = router({
       const siteNames = caseSrcList.map(s => s.name).join('、');
       const siteUrls = caseSrcList.map(s => `${s.name} (${s.baseUrl})`).join('\n');
       try {
-        const response = await invokeLLM({
+        const response = await invokeLLMWithUserTool({
           messages: [
             {
               role: "system",
@@ -1125,7 +1154,7 @@ ${siteUrls}
               content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n项目需求：${input.requirements}`
             }
           ],
-        });
+        }, ctx.user.id);
 
         const content = typeof response.choices[0]?.message?.content === 'string'
           ? response.choices[0].message.content
@@ -1466,7 +1495,7 @@ const meetingRouter = router({
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
       try {
-        const response = await invokeLLM({
+        const response = await invokeLLMWithUserTool({
           messages: [
             {
               role: "system",
@@ -1487,7 +1516,7 @@ const meetingRouter = router({
               content: `项目：${input.projectName || "未指定"}\n日期：${input.meetingDate || new Date().toLocaleDateString("zh-CN")}\n\n录音转写文本：\n${input.transcript}`
             }
           ],
-        });
+        }, ctx.user.id);
 
         const content = typeof response.choices[0]?.message?.content === 'string'
           ? response.choices[0].message.content
@@ -1779,7 +1808,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           input.additionalNotes ? `补充说明：${input.additionalNotes}` : "",
         ].filter(Boolean).join("\n");
 
-        const llmResponse = await invokeLLM({
+        const llmResponse = await invokeLLMWithUserTool({
           messages: [
             { role: "system", content: config.systemPrompt },
             { role: "user", content: userMessage },
@@ -1821,7 +1850,7 @@ Note: Instagram content should be visually driven, use professional English, inc
               },
             },
           },
-        });
+        }, ctx.user.id);
 
         const rawContent = llmResponse.choices[0].message.content;
         const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);

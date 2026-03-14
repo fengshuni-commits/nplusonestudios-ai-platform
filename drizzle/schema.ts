@@ -156,6 +156,7 @@ export const aiTools = mysqlTable("ai_tools", {
   provider: varchar("provider", { length: 128 }),
   apiEndpoint: text("apiEndpoint"),
   apiKeyName: varchar("apiKeyName", { length: 128 }),
+  apiKeyEncrypted: text("apiKeyEncrypted"),
   configJson: json("configJson"),
   capabilities: json("capabilities").$type<string[]>(),
   isActive: boolean("isActive").default(true),

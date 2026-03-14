@@ -286,9 +286,14 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox }: TileCardProps) {
 
   const handleClick = () => {
     if (isRender && onOpenDetail) {
+      // AI 效果图：打开迭代链详情
       onOpenDetail(item);
-    } else if (item.outputUrl && item.module === "benchmark_ppt") {
+    } else if (item.module === "benchmark_ppt" && item.outputUrl) {
+      // PPT：直接打开下载链接
       window.open(item.outputUrl, "_blank");
+    } else if (!isRender && onOpenDetail) {
+      // 所有其他文字类模块（对标调研报告、小红书、公众号、Instagram、会议纪要等）：打开内容查看弹窗
+      onOpenDetail(item);
     } else if (item.outputUrl && isRender && onLightbox) {
       onLightbox(item.outputUrl, title);
     }

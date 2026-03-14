@@ -330,3 +330,115 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   return (await response.json()) as InvokeResult;
 }
+
+/**
+ * Invoke LLM using the user's configured default AI tool (if available),
+ * falling back to the built-in Forge API.
+ *
+ * @param params - Same as invokeLLM params
+ * @param userId - The user ID to look up their default tool
+ */
+export async function invokeLLMWithUserTool(
+  params: InvokeParams,
+  userId?: number
+): Promise<InvokeResult> {
+  // Try to get user's default tool with an API key
+  if (userId) {
+    try {
+      const { getDb } = await import("../db");
+      const { aiTools } = await import("../../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const { decryptApiKey } = await import("./crypto");
+
+      const db = await getDb();
+      if (db) {
+        // Find the user's default active tool that has an API key
+        const defaultTools = await db
+          .select()
+          .from(aiTools)
+          .where(and(eq(aiTools.isDefault, true), eq(aiTools.isActive, true)))
+          .limit(1);
+
+        if (defaultTools.length > 0) {
+          const tool = defaultTools[0] as any;
+          let apiKey: string | null = null;
+
+          // Try encrypted key first
+          if (tool.apiKeyEncrypted) {
+            apiKey = decryptApiKey(tool.apiKeyEncrypted);
+          } else if (tool.apiKeyName && tool.apiKeyName.startsWith("sk-")) {
+            // Legacy: plaintext key stored in apiKeyName
+            apiKey = tool.apiKeyName;
+          }
+
+          if (apiKey && tool.apiEndpoint) {
+            // Use the user's tool
+            const {
+              messages,
+              tools: toolsParam,
+              toolChoice,
+              tool_choice,
+              outputSchema,
+              output_schema,
+              responseFormat,
+              response_format,
+            } = params;
+
+            const payload: Record<string, unknown> = {
+              model: tool.name || "gpt-4o",
+              messages: messages.map(normalizeMessage),
+            };
+
+            if (toolsParam && toolsParam.length > 0) {
+              payload.tools = toolsParam;
+            }
+
+            const normalizedToolChoice = normalizeToolChoice(
+              toolChoice || tool_choice,
+              toolsParam
+            );
+            if (normalizedToolChoice) {
+              payload.tool_choice = normalizedToolChoice;
+            }
+
+            const normalizedResponseFormat = normalizeResponseFormat({
+              responseFormat,
+              response_format,
+              outputSchema,
+              output_schema,
+            });
+            if (normalizedResponseFormat) {
+              payload.response_format = normalizedResponseFormat;
+            }
+
+            // Normalize endpoint: ensure it ends with /chat/completions
+            let endpoint = tool.apiEndpoint.trim();
+            if (!endpoint.endsWith("/chat/completions")) {
+              endpoint = `${endpoint.replace(/\/$/, "")}/chat/completions`;
+            }
+
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(payload),
+            });
+
+            if (response.ok) {
+              return (await response.json()) as InvokeResult;
+            }
+            // If user's tool fails, fall through to built-in
+            console.warn(`[LLM] User tool "${tool.name}" failed (${response.status}), falling back to built-in API`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[LLM] Failed to load user tool, falling back to built-in API:", err);
+    }
+  }
+
+  // Fallback to built-in API
+  return invokeLLM(params);
+}

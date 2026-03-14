@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shared/toolCapabilities";
@@ -16,13 +16,17 @@ export default function AdminApiKeys() {
   const utils = trpc.useUtils();
   const [toolDialogOpen, setToolDialogOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [showKeyId, setShowKeyId] = useState<number | null>(null);
+  const [editKeyId, setEditKeyId] = useState<number | null>(null);
+  const [editKeyValue, setEditKeyValue] = useState("");
+  const [showNewKey, setShowNewKey] = useState(false);
   const [toolForm, setToolForm] = useState({
     name: "",
     apiEndpoint: "",
     apiKeyName: "",
+    apiKey: "",
     description: "",
   });
+  const [showFormKey, setShowFormKey] = useState(false);
 
   // 实时预览推断能力
   const previewCapabilities = toolForm.name.trim()
@@ -33,7 +37,8 @@ export default function AdminApiKeys() {
     onSuccess: () => {
       utils.aiTools.list.invalidate();
       setToolDialogOpen(false);
-      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", description: "" });
+      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "" });
+      setShowFormKey(false);
       toast.success("AI 工具添加成功");
     },
     onError: (err) => toast.error(err.message),
@@ -42,8 +47,11 @@ export default function AdminApiKeys() {
   const updateTool = trpc.aiTools.update.useMutation({
     onSuccess: () => {
       utils.aiTools.list.invalidate();
-      toast.success("状态已更新");
+      setEditKeyId(null);
+      setEditKeyValue("");
+      toast.success("已更新");
     },
+    onError: (err) => toast.error(err.message),
   });
 
   const deleteTool = trpc.aiTools.delete.useMutation({
@@ -57,7 +65,6 @@ export default function AdminApiKeys() {
   const setDefault = trpc.aiTools.setDefault.useMutation({
     onSuccess: () => {
       utils.aiTools.list.invalidate();
-      // 清除所有功能模块的工具选择缓存，下次打开时自动采用新默认工具
       Object.keys(localStorage)
         .filter(k => k.startsWith("ai-tool-pref-"))
         .forEach(k => localStorage.removeItem(k));
@@ -71,7 +78,7 @@ export default function AdminApiKeys() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI 工具管理</h1>
-          <p className="text-sm text-muted-foreground mt-1">添加外部 AI 模型 API，平台自动判断其适用功能模块</p>
+          <p className="text-sm text-muted-foreground mt-1">添加外部 AI 模型 API，平台自动判断其适用功能模块并接入生成流程</p>
         </div>
         <Dialog open={toolDialogOpen} onOpenChange={setToolDialogOpen}>
           <DialogTrigger asChild>
@@ -86,9 +93,8 @@ export default function AdminApiKeys() {
                 <Input
                   value={toolForm.name}
                   onChange={(e) => setToolForm({ ...toolForm, name: e.target.value })}
-                  placeholder="例：GPT-4o、Gemini 2.0 Flash、Flux.1"
+                  placeholder="例：GPT-4o、Gemini 2.0 Flash、百炼 qwen-max"
                 />
-                {/* 实时预览能力标签 */}
                 {previewCapabilities.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     <span className="text-xs text-muted-foreground">自动识别为：</span>
@@ -111,23 +117,44 @@ export default function AdminApiKeys() {
                 />
               </div>
 
-              {/* API Key 环境变量名 */}
+              {/* API Key（明文输入，加密存储） */}
               <div className="space-y-2">
-                <Label>API Key 环境变量名</Label>
+                <Label className="flex items-center gap-1.5">
+                  <KeyRound className="h-3.5 w-3.5" />
+                  API Key
+                  <span className="text-xs text-muted-foreground font-normal ml-1">（加密存储，不会明文保存）</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showFormKey ? "text" : "password"}
+                    value={toolForm.apiKey}
+                    onChange={(e) => setToolForm({ ...toolForm, apiKey: e.target.value })}
+                    placeholder="sk-..."
+                    className="font-mono text-sm pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowFormKey(!showFormKey)}
+                  >
+                    {showFormKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* 备注名称（可选） */}
+              <div className="space-y-2">
+                <Label>备注名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Input
                   value={toolForm.apiKeyName}
                   onChange={(e) => setToolForm({ ...toolForm, apiKeyName: e.target.value })}
-                  placeholder="例：OPENAI_API_KEY"
-                  className="font-mono text-sm"
+                  placeholder="例：主账号、测试用"
                 />
-                <p className="text-xs text-muted-foreground">
-                  填写服务器端环境变量名称，平台将从该变量读取密钥
-                </p>
               </div>
 
-              {/* 备注（可选） */}
+              {/* 备注说明（可选） */}
               <div className="space-y-2">
-                <Label>备注 <span className="text-muted-foreground text-xs">（可选）</span></Label>
+                <Label>备注说明 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Textarea
                   value={toolForm.description}
                   onChange={(e) => setToolForm({ ...toolForm, description: e.target.value })}
@@ -169,6 +196,7 @@ export default function AdminApiKeys() {
               {tools.map((tool: any) => {
                 const caps: ToolCapability[] = Array.isArray(tool.capabilities) ? tool.capabilities : [];
                 const isExpanded = expandedId === tool.id;
+                const isEditingKey = editKeyId === tool.id;
                 return (
                   <div key={tool.id} className="rounded-lg border border-border overflow-hidden">
                     <div
@@ -184,6 +212,11 @@ export default function AdminApiKeys() {
                             <p className="text-sm font-medium truncate">{tool.name}</p>
                             {tool.isDefault && (
                               <Badge className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-primary/20">默认</Badge>
+                            )}
+                            {tool.hasApiKey ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" aria-label="已配置 API Key" />
+                            ) : (
+                              <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="未配置 API Key" />
                             )}
                           </div>
                           <div className="flex flex-wrap gap-1 mt-0.5">
@@ -228,27 +261,84 @@ export default function AdminApiKeys() {
                             <p className="text-xs font-mono bg-background rounded px-2 py-1 border">{tool.apiEndpoint}</p>
                           </div>
                         )}
-                        {tool.apiKeyName && (
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">API Key 环境变量</p>
+
+                        {/* API Key 展示区域 */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <KeyRound className="h-3 w-3" />API Key
+                          </p>
+                          {isEditingKey ? (
+                            <div className="space-y-2">
+                              <div className="relative">
+                                <Input
+                                  type={showNewKey ? "text" : "password"}
+                                  value={editKeyValue}
+                                  onChange={(e) => setEditKeyValue(e.target.value)}
+                                  placeholder="输入新的 API Key（sk-...）"
+                                  className="font-mono text-xs pr-10 h-8"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                  onClick={() => setShowNewKey(!showNewKey)}
+                                >
+                                  {showNewKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    if (!editKeyValue.trim()) { toast.error("请输入 API Key"); return; }
+                                    updateTool.mutate({ id: tool.id, apiKey: editKeyValue });
+                                  }}
+                                  disabled={updateTool.isPending}
+                                >
+                                  保存
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs"
+                                  onClick={() => { setEditKeyId(null); setEditKeyValue(""); setShowNewKey(false); }}
+                                >
+                                  取消
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
                             <div className="flex items-center gap-2">
-                              <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1">
-                                {showKeyId === tool.id ? tool.apiKeyName : "•".repeat(Math.min(tool.apiKeyName.length, 20))}
+                              <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-muted-foreground">
+                                {tool.apiKeyMasked || "未配置"}
                               </p>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 w-7 p-0"
-                                onClick={() => setShowKeyId(showKeyId === tool.id ? null : tool.id)}
+                                className="h-7 text-xs shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditKeyId(tool.id);
+                                  setEditKeyValue("");
+                                  setShowNewKey(false);
+                                }}
                               >
-                                {showKeyId === tool.id ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                {tool.hasApiKey ? "更换" : "配置"}
                               </Button>
                             </div>
+                          )}
+                        </div>
+
+                        {tool.apiKeyName && !tool.apiKeyName.startsWith('sk-') && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">备注名称</p>
+                            <p className="text-xs text-foreground/80">{tool.apiKeyName}</p>
                           </div>
                         )}
                         {tool.description && (
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1">备注</p>
+                            <p className="text-xs text-muted-foreground mb-1">备注说明</p>
                             <p className="text-xs text-foreground/80">{tool.description}</p>
                           </div>
                         )}

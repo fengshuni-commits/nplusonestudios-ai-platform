@@ -329,3 +329,26 @@
 - [x] 深入排查 listGrouped 是否实际返回 outputContent 字段
 - [x] 检查 TileCard 点击事件是否被 delete 按钮阻止冒泡
 - [x] 彻底修复文字类记录点击查看
+
+## Bug 排查：工作台 AI 调用次数显示为 0
+- [x] 排查 dashboard stats 中 AI 调用次数的数据来源（来自 ai_tool_logs 表，当前显示 101 次，数据正确）
+- [x] 确认生成记录是否通过 AI API 接口生成（是，已验证）
+- [x] 统计逻辑正常，无需修复
+
+## Bug 修复：对标调研报告弹窗无法查看（三次排查）
+- [x] 读取当前 History.tsx 弹窗逻辑，找到对标调研报告点击无效的根本原因
+- [x] 弹窗已可正常打开，旧记录 outputContent 为 NULL 是正常现象（旧数据未保存完整内容）
+
+## API Key 接入生成流程
+- [x] 排查账户设置中 API Key 的存储结构（ai_tools 表， apiKeyEncrypted 字段， AES-256-GCM 加密）
+- [x] 修复对标调研报告弹窗 JSX 语法错误
+- [x] 将用户配置的 API Key 接入各生成模块（通过 invokeLLMWithUserTool 实现）
+
+## API Key 加密存储 + 接入生成流程
+- [x] Schema 改造：新增 apiKeyEncrypted 字段（AES-256-GCM 加密存储）
+- [x] 后端：实现加密/解密工具函数（server/_core/crypto.ts）
+- [x] 后端：更新 CRUD 逻辑（创建/更新时加密，查询时脱敏）
+- [x] 前端：AdminApiKeys 页面输入明文、保存加密、展示脱敏
+- [x] 生成流程接入：读取用户默认工具的加密 Key，替换内置 API 调用（失败时自动回退内置）
+- [x] 修复对标调研报告弹窗 bug（TileCard handleClick 没有处理文字类模块）
+- [x] 迁移旧的明文 API Key 到加密字段（2 条记录已加密：百炼 Coding Plan、Gemini API）
