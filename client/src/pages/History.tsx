@@ -290,7 +290,9 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
       </div>
       {expanded && (
         <div className="px-3 pb-3 border-t border-border/30">
-          <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground/80 bg-transparent pt-2 max-h-[400px] overflow-y-auto">{content}</pre>
+          <div className="pt-2 prose prose-xs prose-neutral max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 text-xs leading-relaxed">
+            <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground/80 bg-transparent">{content}</pre>
+          </div>
         </div>
       )}
     </div>
@@ -723,12 +725,12 @@ export default function HistoryPage() {
 
       {/* Detail Dialog for AI Render / Benchmark Report Edit Chain */}
       <Dialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) { setChatHistory([]); setCurrentReportContent(null); setRefineFeedback(""); setIsDetailFullscreen(false); } }}>
-        <DialogContent className={`${
+        <DialogContent className={`flex flex-col p-0 transition-all duration-200 ${
           isDetailFullscreen
-            ? 'fixed inset-4 max-w-none w-auto h-auto'
-            : selectedItem?.module === 'benchmark_report' ? 'max-w-4xl w-[90vw]' : 'max-w-3xl w-[90vw]'
-        } max-h-[90vh] overflow-y-auto p-0 transition-all duration-200`}>
-          <DialogHeader className="px-6 pt-6 pb-2 sticky top-0 bg-background z-10 border-b border-border/40">
+            ? '!fixed !inset-4 !max-w-none !w-[calc(100vw-2rem)] !h-[calc(100vh-2rem)] !translate-x-0 !translate-y-0 !left-4 !top-4'
+            : selectedItem?.module === 'benchmark_report' ? 'max-w-4xl w-[90vw] max-h-[88vh]' : 'max-w-3xl w-[90vw] max-h-[88vh]'
+        }`}>
+          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 bg-background z-10 border-b border-border/40">
             <DialogTitle className="text-base font-medium flex items-center gap-2">
               {selectedItem?.module === 'benchmark_report'
                 ? <FileText className="h-4 w-4 text-primary" />
@@ -752,7 +754,7 @@ export default function HistoryPage() {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : chainQuery.data && chainQuery.data.length > 0 ? (
-            <div className="px-6 pb-6">
+            <div className="flex-1 overflow-y-auto px-6 pb-6">
               <div className="space-y-0 pt-4">
                 {chainQuery.data.map((chainItem: any, idx: number) => {
                   const isFirst = idx === 0;
@@ -823,8 +825,9 @@ export default function HistoryPage() {
                                   </Button>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary/80"
                                     onClick={() => {
+                                      const targetId = chainItem.id;
                                       setDetailOpen(false);
-                                      navigate(`/design/planning?historyId=${chainItem.id}`);
+                                      setTimeout(() => navigate(`/design/planning?historyId=${targetId}`), 150);
                                     }} title="跳转到案例调研页面编辑此版本">
                                     <ExternalLink className="h-3 w-3 mr-1" />
                                     编辑此版本
