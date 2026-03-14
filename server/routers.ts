@@ -1105,28 +1105,23 @@ const aiToolsRouter = router({
 
 // ─── AI Module: Benchmarking Research ────────────────────
 
-const benchmarkRouter = router({
-  generate: protectedProcedure
-    .input(z.object({
-      projectName: z.string(),
-      projectType: z.string(),
-      requirements: z.string(),
-      referenceCount: z.number().min(1).max(10).optional(),
-      toolId: z.number().optional(),
-      projectId: z.number().optional(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const startTime = Date.now();
-      // Fetch configured case source sites to guide LLM
-      const caseSrcList = await db.listCaseSources(true);
-      const siteNames = caseSrcList.map(s => s.name).join('、');
-      const siteUrls = caseSrcList.map(s => `${s.name} (${s.baseUrl})`).join('\n');
-      try {
-        const response = await invokeLLMWithUserTool({
-          messages: [
-            {
-              role: "system",
-              content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息，生成一份专业的对标调研报告。
+/** Background worker: runs LLM call and saves result to DB */
+async function generateBenchmarkInBackground(
+  jobId: string,
+  input: { projectName: string; projectType: string; requirements: string; referenceCount?: number; toolId?: number; projectId?: number },
+  userId: number,
+  userName: string | null
+) {
+  const startTime = Date.now();
+  try {
+    await db.updateBenchmarkJob(jobId, { status: "processing" });
+    const caseSrcList = await db.listCaseSources(true);
+    const siteUrls = caseSrcList.map(s => `${s.name} (${s.baseUrl})`).join('\n');
+    const response = await invokeLLMWithUserTool({
+      messages: [
+        {
+          role: "system",
+          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息，生成一份专业的对标调研报告。
 
 **重要要求**：
 - 所有对标案例必须是真实存在的建筑项目
@@ -1148,54 +1143,94 @@ ${siteUrls}
 5. **总结与建议**
 
 请以 Markdown 格式输出，结构清晰，内容专业。每个案例的来源链接必须清晰可见。`
-            },
-            {
-              role: "user",
-              content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n项目需求：${input.requirements}`
-            }
-          ],
-        }, ctx.user.id);
+        },
+        {
+          role: "user",
+          content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n项目需求：${input.requirements}`
+        }
+      ],
+    }, userId);
 
-        const content = typeof response.choices[0]?.message?.content === 'string'
-          ? response.choices[0].message.content
-          : '';
+    const content = typeof response.choices[0]?.message?.content === 'string'
+      ? response.choices[0].message.content : '';
 
-        await db.createAiToolLog({
-          toolId: input.toolId || 0,
-          userId: ctx.user.id,
-          action: "benchmark_research",
-          inputSummary: `${input.projectName} - ${input.projectType}`,
-          outputSummary: content.substring(0, 200),
-          status: "success",
-          durationMs: Date.now() - startTime,
-        });
+    await db.createAiToolLog({
+      toolId: input.toolId || 0,
+      userId,
+      action: "benchmark_research",
+      inputSummary: `${input.projectName} - ${input.projectType}`,
+      outputSummary: content.substring(0, 200),
+      status: "success",
+      durationMs: Date.now() - startTime,
+    });
 
-        // Record in generation history
-        const historyResult = await db.createGenerationHistory({
-          userId: ctx.user.id,
-          module: "benchmark_report",
-          title: `${input.projectName} - 对标调研报告`,
-          summary: `${input.projectType} | ${input.requirements?.substring(0, 100) || ''}`,
-          inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
-          outputContent: typeof content === 'string' ? content : JSON.stringify(content),
-          status: "success",
-          durationMs: Date.now() - startTime,
-          projectId: input.projectId || null,
-          createdByName: ctx.user.name || null,
-        }).catch(() => ({ id: 0 }));
+    const historyResult = await db.createGenerationHistory({
+      userId,
+      module: "benchmark_report",
+      title: `${input.projectName} - 对标调研报告`,
+      summary: `${input.projectType} | ${input.requirements?.substring(0, 100) || ''}`,
+      inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
+      outputContent: content,
+      status: "success",
+      durationMs: Date.now() - startTime,
+      projectId: input.projectId || null,
+      createdByName: userName,
+    }).catch(() => ({ id: 0 }));
 
-        return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
-      } catch (error) {
-        await db.createAiToolLog({
-          toolId: input.toolId || 0,
-          userId: ctx.user.id,
-          action: "benchmark_research",
-          inputSummary: `${input.projectName} - ${input.projectType}`,
-          status: "failed",
-          durationMs: Date.now() - startTime,
-        });
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "调研报告生成失败" });
+    await db.updateBenchmarkJob(jobId, { status: "done", result: content, historyId: historyResult.id });
+  } catch (error: any) {
+    console.error("[Benchmark] Background job failed:", error);
+    await db.createAiToolLog({
+      toolId: input.toolId || 0,
+      userId,
+      action: "benchmark_research",
+      inputSummary: `${input.projectName} - ${input.projectType}`,
+      status: "failed",
+      durationMs: Date.now() - startTime,
+    }).catch(() => {});
+    await db.updateBenchmarkJob(jobId, { status: "failed", error: error?.message || "生成失败" });
+  }
+}
+
+const benchmarkRouter = router({
+  /** Submit async benchmark report generation job, returns jobId immediately */
+  generate: protectedProcedure
+    .input(z.object({
+      projectName: z.string(),
+      projectType: z.string(),
+      requirements: z.string(),
+      referenceCount: z.number().min(1).max(10).optional(),
+      toolId: z.number().optional(),
+      projectId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const jobId = nanoid();
+      await db.createBenchmarkJob({
+        id: jobId,
+        userId: ctx.user.id,
+        inputParams: input as Record<string, unknown>,
+      });
+      // Fire-and-forget background generation
+      generateBenchmarkInBackground(jobId, input, ctx.user.id, ctx.user.name || null).catch(err => {
+        console.error("[Benchmark] Unhandled error:", err);
+      });
+      return { jobId };
+    }),
+
+  /** Poll status of a benchmark generation job */
+  pollStatus: protectedProcedure
+    .input(z.object({ jobId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const job = await db.getBenchmarkJob(input.jobId);
+      if (!job) return { status: "not_found" as const };
+      if (job.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (job.status === "done") {
+        return { status: "done" as const, content: job.result || "", historyId: job.historyId, generatedAt: job.updatedAt?.toISOString() };
       }
+      if (job.status === "failed") {
+        return { status: "failed" as const, error: job.error || "生成失败" };
+      }
+      return { status: job.status as "pending" | "processing" };
     }),
 
   // List configured case source sites (for admin management)

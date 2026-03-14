@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, longtext } from "drizzle-orm/mysql-core";
 
 // ─── Users ───────────────────────────────────────────────
 export const users = mysqlTable("users", {
@@ -377,3 +377,22 @@ export const feedback = mysqlTable("feedback", {
 
 export type Feedback = typeof feedback.$inferSelect;
 export type InsertFeedback = typeof feedback.$inferInsert;
+
+// ─── Benchmark Jobs (异步对标调研任务) ─────────────────────
+export const benchmarkJobs = mysqlTable("benchmark_jobs", {
+  id: varchar("id", { length: 64 }).primaryKey(), // UUID job ID
+  userId: int("userId").notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  /** Input params JSON */
+  inputParams: json("inputParams").notNull(),
+  /** Generated report content */
+  result: text("result"),
+  /** Error message if failed */
+  error: text("error"),
+  /** Related generation history ID (set on completion) */
+  historyId: int("historyId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type BenchmarkJob = typeof benchmarkJobs.$inferSelect;
+export type InsertBenchmarkJob = typeof benchmarkJobs.$inferInsert;

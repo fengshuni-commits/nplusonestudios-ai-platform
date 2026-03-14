@@ -44,22 +44,70 @@ export default function DesignPlanning() {
   const [pptResult, setPptResult] = useState<PptResult | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [benchmarkJobId, setBenchmarkJobId] = useState<string | null>(null);
+  const benchmarkPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopBenchmarkTimer = () => {
+    if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
+    setGenerateElapsed(0);
+  };
+
   const generateMutation = trpc.benchmark.generate.useMutation({
     onSuccess: (data) => {
-      setReport(data.content);
-      setReportHistoryId(data.historyId || undefined);
-      setIsGenerating(false);
-      if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
-      setGenerateElapsed(0);
-      toast.success("调研报告生成完成");
+      setBenchmarkJobId(data.jobId);
     },
     onError: (err) => {
       setIsGenerating(false);
-      if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
-      setGenerateElapsed(0);
+      stopBenchmarkTimer();
       toast.error(err.message || "生成失败，请重试");
     },
   });
+
+  const utils = trpc.useUtils();
+
+  // Poll benchmark job status
+  const pollBenchmarkStatus = useCallback(async (jobId: string) => {
+    try {
+      const result = await utils.benchmark.pollStatus.fetch({ jobId });
+      if (result.status === "done") {
+        setReport(result.content || "");
+        setReportHistoryId((result as any).historyId || undefined);
+        setIsGenerating(false);
+        stopBenchmarkTimer();
+        setBenchmarkJobId(null);
+        toast.success("调研报告生成完成");
+        return true;
+      } else if (result.status === "failed") {
+        setIsGenerating(false);
+        stopBenchmarkTimer();
+        setBenchmarkJobId(null);
+        toast.error((result as any).error || "生成失败，请重试");
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("[Benchmark Poll] Error:", err);
+      return false;
+    }
+  }, [utils]);
+
+  // Start/stop polling when benchmarkJobId changes
+  useEffect(() => {
+    if (!benchmarkJobId) {
+      if (benchmarkPollRef.current) { clearInterval(benchmarkPollRef.current); benchmarkPollRef.current = null; }
+      return;
+    }
+    const poll = async () => {
+      const shouldStop = await pollBenchmarkStatus(benchmarkJobId);
+      if (shouldStop && benchmarkPollRef.current) { clearInterval(benchmarkPollRef.current); benchmarkPollRef.current = null; }
+    };
+    const t = setTimeout(poll, 2000);
+    benchmarkPollRef.current = setInterval(poll, 3000);
+    return () => {
+      clearTimeout(t);
+      if (benchmarkPollRef.current) { clearInterval(benchmarkPollRef.current); benchmarkPollRef.current = null; }
+    };
+  }, [benchmarkJobId, pollBenchmarkStatus]);
 
   const startExportMutation = trpc.benchmark.startExportPpt.useMutation({
     onSuccess: (data) => {
@@ -71,8 +119,6 @@ export default function DesignPlanning() {
       toast.error("PPT 生成启动失败，请重试");
     },
   });
-
-  const utils = trpc.useUtils();
 
   // Poll for PPT job status
   const pollJobStatus = useCallback(async (jobId: string) => {

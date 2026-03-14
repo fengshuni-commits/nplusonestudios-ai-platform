@@ -357,3 +357,11 @@
 - [x] 延长服务器 HTTP 超时时间至 5 分钟（server.timeout=300000）
 - [x] 用户工具 fetch 调用增加 AbortSignal.timeout(300000)
 - [x] 前端生成按钒显示计时器（已用时 Xs），10s 后显示推理模型提示文案
+
+## Magnific 增强接入用户自己的 Freepik API Key
+- [x] 确认用户的 Freepik Key 已作为 FREEPIK_API_KEY 环境变量注入，已在使用用户自己的 Key
+
+## Bug 修复：对标调研报告生成超时（代理层 100s 限制）
+- [x] 数据库新增 benchmark_jobs 表（存储异步任务状态）
+- [x] 后端改为异步模式：提交请求立即返回 jobId，后台线程继续生成
+- [x] 前端改为轮询模式，每 3s 轮询一次，计时器持续运行显示已用时秒数

@@ -20,6 +20,7 @@ import {
   projectCustomFields, InsertProjectCustomField,
   generationHistory,
   InsertGenerationHistory,
+  benchmarkJobs,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1022,4 +1023,45 @@ export async function updateEnhanceStatus(
   await db.update(generationHistory)
     .set(setValues)
     .where(eq(generationHistory.id, historyId));
+}
+
+// ─── Benchmark Jobs (异步对标调研任务) ─────────────────────
+
+export async function createBenchmarkJob(data: {
+  id: string;
+  userId: number;
+  inputParams: Record<string, unknown>;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(benchmarkJobs).values({
+    id: data.id,
+    userId: data.userId,
+    status: "pending",
+    inputParams: data.inputParams,
+  });
+}
+
+export async function getBenchmarkJob(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(benchmarkJobs).where(eq(benchmarkJobs.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateBenchmarkJob(id: string, updates: {
+  status?: "pending" | "processing" | "done" | "failed";
+  result?: string | null;
+  error?: string | null;
+  historyId?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  const set: Record<string, unknown> = {};
+  if (updates.status !== undefined) set.status = updates.status;
+  if (updates.result !== undefined) set.result = updates.result;
+  if (updates.error !== undefined) set.error = updates.error;
+  if (updates.historyId !== undefined) set.historyId = updates.historyId;
+  if (Object.keys(set).length === 0) return;
+  await db.update(benchmarkJobs).set(set).where(eq(benchmarkJobs.id, id));
 }
