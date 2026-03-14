@@ -455,3 +455,6 @@
 - [x] 数据库：generationHistory 表增加 modelName 字段（varchar 128，可为空）
 - [x] 后端：各生成 API 在写入历史时记录所用模型名称
 - [x] 前端：历史记录卡片和弹窗中显示模型标注标签
+
+## Bug 修复：AI 效果图模型标注错误
+- [x] 修复 ai_render 模块 modelName 固定写入"内置图像生成"，应记录用户实际选择的工具名称

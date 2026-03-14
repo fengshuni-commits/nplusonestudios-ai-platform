@@ -1500,6 +1500,27 @@ const renderingRouter = router({
         imageSize = `${baseSize}x${baseSize}`;
       }
 
+      // Resolve tool name for modelName annotation
+      let resolvedModelName = "内置图像生成";
+      if (input.toolId) {
+        try {
+          const tool = await db.getAiToolById(input.toolId);
+          if (tool?.name) resolvedModelName = tool.name;
+        } catch { /* ignore */ }
+      } else {
+        // Try to get the default tool name
+        try {
+          const { getDb: _getDb } = await import("./db");
+          const { aiTools: _aiTools } = await import("../drizzle/schema");
+          const { eq: _eq, and: _and } = await import("drizzle-orm");
+          const _db = await _getDb();
+          if (_db) {
+            const defaults = await _db.select().from(_aiTools).where(_and(_eq(_aiTools.isDefault, true), _eq(_aiTools.isActive, true))).limit(1);
+            if (defaults[0]?.name) resolvedModelName = defaults[0].name;
+          }
+        } catch { /* ignore */ }
+      }
+
       try {
         const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
 
@@ -1584,7 +1605,7 @@ const renderingRouter = router({
           parentId: input.parentHistoryId || null,
           projectId: input.projectId || null,
           createdByName: ctx.user.name || null,
-          modelName: "内置图像生成",
+          modelName: resolvedModelName,
         }).catch(() => ({ id: 0 }));
 
         return { url: result.url, prompt: fullPrompt, historyId: historyResult.id };
