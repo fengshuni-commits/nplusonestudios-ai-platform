@@ -400,3 +400,7 @@
 ## Bug 修复：案例调研报告轮询永远返回 processing
 - [x] 诊断原因：drizzle ORM 单连接 REPEATABLE READ 隔离级别导致读取旧数据
 - [x] 修复 getBenchmarkJob：改用原生 SQL 查询绕过 ORM 缓存层
+
+## Bug 修复：pollStatus 报错 updatedAt.toISOString is not a function
+- [x] 原因：原生 SQL 查询返回的 createdAt/updatedAt 是字符串而非 Date 对象
+- [x] 修复：在 getBenchmarkJob 返回值中显式 new Date(row.updatedAt) 转换

@@ -1050,6 +1050,7 @@ export async function getBenchmarkJob(id: string) {
   const rows = result[0] as unknown as any[];
   if (!rows || rows.length === 0) return undefined;
   const row = rows[0];
+  // Raw SQL returns dates as strings; convert them to Date objects
   return {
     id: row.id as string,
     userId: row.userId as number,
@@ -1057,8 +1058,8 @@ export async function getBenchmarkJob(id: string) {
     result: row.result as string | null,
     error: row.error as string | null,
     historyId: row.historyId as number | null,
-    createdAt: row.createdAt as Date,
-    updatedAt: row.updatedAt as Date,
+    createdAt: row.createdAt ? new Date(row.createdAt as string) : new Date(),
+    updatedAt: row.updatedAt ? new Date(row.updatedAt as string) : new Date(),
   };
 }
 
