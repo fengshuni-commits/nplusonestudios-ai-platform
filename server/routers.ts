@@ -1277,6 +1277,40 @@ const benchmarkRouter = router({
       return { status: job.status as "pending" | "processing" };
     }),
 
+  /** Refine an existing benchmark report based on user feedback */
+  refine: protectedProcedure
+    .input(z.object({
+      currentReport: z.string().min(1),
+      feedback: z.string().min(1),
+      projectName: z.string(),
+      projectType: z.string(),
+      toolId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const response = await invokeLLMWithUserTool({
+        messages: [
+          {
+            role: "system",
+            content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
+
+**要求**：
+- 保持报告的整体结构和专业性
+- 根据用户反馈精确修改相应部分
+- 不要改动用户没有提到的内容
+- 输出完整的修订后报告（Markdown 格式）`,
+          },
+          {
+            role: "user",
+            content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n\n当前报告：\n${input.currentReport}\n\n用户反馈：${input.feedback}`,
+          },
+        ],
+      }, ctx.user.id);
+      const content = typeof response.choices[0]?.message?.content === 'string'
+        ? response.choices[0].message.content : '';
+      if (!content) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '调整失败，请重试' });
+      return { content };
+    }),
+
   // List configured case source sites (for admin management)
   listCaseSources: protectedProcedure.query(async () => {
     return db.listCaseSources(true);

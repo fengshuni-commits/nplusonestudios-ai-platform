@@ -32,7 +32,7 @@ const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color:
 };
 
 const QUICK_ACTIONS = [
-  { icon: PenTool, label: "对标调研", desc: "AI 生成竞品分析报告", path: "/design/planning", accent: "from-violet-500/10 to-violet-500/5 border-violet-200/60", iconColor: "text-violet-600" },
+  { icon: PenTool, label: "案例调研", desc: "AI 生成对标案例分析报告", path: "/design/planning", accent: "from-violet-500/10 to-violet-500/5 border-violet-200/60", iconColor: "text-violet-600" },
   { icon: Sparkles, label: "AI 效果图", desc: "一键渲染空间效果图", path: "/design/tools", accent: "from-amber-500/10 to-amber-500/5 border-amber-200/60", iconColor: "text-amber-600" },
   { icon: MessageSquare, label: "会议纪要", desc: "语音转文字自动整理", path: "/meeting", accent: "from-emerald-500/10 to-emerald-500/5 border-emerald-200/60", iconColor: "text-emerald-600" },
   { icon: Newspaper, label: "内容创作", desc: "小红书 / 公众号推文", path: "/media/xiaohongshu", accent: "from-rose-500/10 to-rose-500/5 border-rose-200/60", iconColor: "text-rose-600" },

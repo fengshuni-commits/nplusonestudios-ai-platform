@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw } from "lucide-react";
+import { Compass, FileText, Download, Loader2, Sparkles, Presentation, ImageIcon, CheckCircle2, RefreshCw, Send, MessageSquare } from "lucide-react";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -47,9 +47,42 @@ export default function DesignPlanning() {
   const [benchmarkJobId, setBenchmarkJobId] = useState<string | null>(null);
   const benchmarkPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Conversation / refine state
+  const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
   const stopBenchmarkTimer = () => {
     if (generateTimerRef.current) { clearInterval(generateTimerRef.current); generateTimerRef.current = null; }
     setGenerateElapsed(0);
+  };
+
+  const refineMutation = trpc.benchmark.refine.useMutation({
+    onSuccess: (data) => {
+      setReport(data.content);
+      setChatHistory(prev => [...prev, { role: "assistant", content: data.content }]);
+      setIsRefining(false);
+    },
+    onError: (err) => {
+      setIsRefining(false);
+      toast.error(err.message || "调整失败，请重试");
+    },
+  });
+
+  const handleChatSubmit = () => {
+    if (!chatInput.trim() || isRefining || !report) return;
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
+    setIsRefining(true);
+    refineMutation.mutate({
+      currentReport: report,
+      feedback: userMsg,
+      projectName: form.projectName,
+      projectType: form.projectType,
+      toolId,
+    });
   };
 
   const generateMutation = trpc.benchmark.generate.useMutation({
@@ -210,6 +243,7 @@ export default function DesignPlanning() {
     if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
     setIsGenerating(true);
     setReport("");
+    setChatHistory([]);
     setGenerateElapsed(0);
     if (generateTimerRef.current) clearInterval(generateTimerRef.current);
     generateTimerRef.current = setInterval(() => setGenerateElapsed(s => s + 1), 1000);
@@ -276,23 +310,13 @@ export default function DesignPlanning() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">项目策划</h1>
-          <p className="text-sm text-muted-foreground mt-1">对标调研与设计任务书生成</p>
+          <h1 className="text-2xl font-semibold tracking-tight">案例调研</h1>
+          <p className="text-sm text-muted-foreground mt-1">AI 生成对标案例分析报告</p>
         </div>
         <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" />
       </div>
 
-      <Tabs defaultValue="benchmark">
-        <TabsList>
-          <TabsTrigger value="benchmark">
-            <Compass className="h-4 w-4 mr-1.5" />对标调研
-          </TabsTrigger>
-          <TabsTrigger value="brief">
-            <FileText className="h-4 w-4 mr-1.5" />设计任务书
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="benchmark" className="mt-4">
+      <div className="mt-4">
           <div className="grid lg:grid-cols-5 gap-6">
             {/* Input Panel */}
             <Card className="lg:col-span-2">
@@ -393,6 +417,52 @@ export default function DesignPlanning() {
                       {!isGenerating && (
                         <div className="mt-6 pt-4 border-t">
                           <FeedbackButtons module="benchmark_report" historyId={reportHistoryId} />
+                        </div>
+                      )}
+
+                      {/* Conversation refinement area */}
+                      {!isGenerating && (
+                        <div className="mt-6 pt-4 border-t space-y-3">
+                          <div className="flex items-center gap-2 text-sm font-medium text-foreground/70">
+                            <MessageSquare className="h-4 w-4" />
+                            对话调整报告
+                          </div>
+                          {chatHistory.length > 0 && (
+                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                              {chatHistory.map((msg, i) => (
+                                <div key={i} className={`flex ${ msg.role === "user" ? "justify-end" : "justify-start" }`}>
+                                  <div className={`rounded-lg px-3 py-2 text-sm max-w-[85%] ${
+                                    msg.role === "user"
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted text-foreground"
+                                  }`}>
+                                    {msg.role === "assistant" ? "报告已更新" : msg.content}
+                                  </div>
+                                </div>
+                              ))}
+                              <div ref={chatEndRef} />
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Textarea
+                              value={chatInput}
+                              onChange={(e) => setChatInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleChatSubmit(); } }}
+                              placeholder="描述你的修改意见，例如：增加更多中国本土案例、重点分析材料工艺、调整报告结构…"
+                              className="resize-none text-sm"
+                              rows={2}
+                              disabled={isRefining}
+                            />
+                            <Button
+                              onClick={handleChatSubmit}
+                              disabled={!chatInput.trim() || isRefining}
+                              size="sm"
+                              className="self-end px-3"
+                            >
+                              {isRefining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">按 Enter 发送，Shift+Enter 换行</p>
                         </div>
                       )}
                     </>
@@ -502,20 +572,7 @@ export default function DesignPlanning() {
               )}
             </div>
           </div>
-        </TabsContent>
-
-        <TabsContent value="brief" className="mt-4">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <FileText className="h-12 w-12 text-muted-foreground/20 mb-3" />
-              <h3 className="text-lg font-medium text-foreground/70 mb-1">设计任务书生成</h3>
-              <p className="text-sm text-muted-foreground text-center max-w-md">
-                该功能正在开发中，将支持根据项目信息自动生成标准化设计任务书。
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 }

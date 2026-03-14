@@ -66,7 +66,7 @@ const menuSections: MenuSection[] = [
     label: "设计",
     icon: PenTool,
     items: [
-      { icon: Compass, label: "项目策划", path: "/design/planning" },
+      { icon: Compass, label: "案例调研", path: "/design/planning" },
       { icon: Ruler, label: "AI效果图", path: "/design/tools" },
     ],
   },
@@ -86,6 +86,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: FolderKanban, label: "项目看板", path: "/projects" },
       { icon: FileText, label: "会议纪要", path: "/meeting" },
+      { icon: FileText, label: "设计任务书", path: "/design/brief" },
     ],
   },
   {

@@ -27,6 +27,7 @@ import MediaWechat from "./pages/MediaWechat";
 import MediaInstagram from "./pages/MediaInstagram";
 import PendingApproval from "./pages/PendingApproval";
 import Home from "./pages/Home";
+import DesignBrief from "./pages/DesignBrief";
 
 function Router() {
   return (
@@ -53,6 +54,7 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/projects/:id" component={ProjectDetail} />
         <Route path="/meeting" component={MeetingMinutes} />
+        <Route path="/design/brief" component={DesignBrief} />
 
         {/* 媒体板块 */}
         <Route path="/media/xiaohongshu" component={MediaXiaohongshu} />
