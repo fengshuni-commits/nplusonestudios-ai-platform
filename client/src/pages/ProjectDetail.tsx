@@ -12,7 +12,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Compass, Ruler, FileText, Megaphone,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
-  Presentation, Users, UserPlus, UserMinus, Crown, User,
+  Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
@@ -421,6 +421,14 @@ function ProjectDocumentsTab({
     onError: () => toast.error("删除失败"),
   });
 
+  const unlinkProject = trpc.history.updateProject.useMutation({
+    onSuccess: () => {
+      utils.projects.listGenerationHistory.invalidate({ projectId });
+      toast.success("已解除项目关联");
+    },
+    onError: () => toast.error("操作失败"),
+  });
+
   const handleDelete = (id: number, ownerId: number) => {
     if (isAdmin) {
       adminDeleteHistory.mutate({ id });
@@ -536,9 +544,20 @@ function ProjectDocumentsTab({
                     </p>
                   </div>
                 </div>
-                {/* Delete button - only visible on hover for authorized users */}
-                {(isAdmin || currentUser?.id === item.userId) && (
-                  <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Action buttons - only visible on hover */}
+                <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  {/* Unlink button */}
+                  <Button
+                    size="icon" variant="secondary"
+                    className="h-6 w-6 rounded-full bg-black/60 hover:bg-black/80 text-white border-0"
+                    title="解除项目关联"
+                    disabled={unlinkProject.isPending}
+                    onClick={(e) => { e.stopPropagation(); unlinkProject.mutate({ historyId: item.id, projectId: null }); }}
+                  >
+                    <Link2Off className="h-3 w-3" />
+                  </Button>
+                  {/* Delete button */}
+                  {(isAdmin || currentUser?.id === item.userId) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button size="icon" variant="destructive" className="h-6 w-6 rounded-full" onClick={(e) => e.stopPropagation()}>
@@ -556,8 +575,8 @@ function ProjectDocumentsTab({
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -606,6 +625,16 @@ function ProjectDocumentsTab({
                                 {mod === "benchmark_ppt" ? <Download className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
                               </Button>
                             )}
+                            {/* Unlink button */}
+                            <Button
+                              size="icon" variant="ghost"
+                              className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:text-foreground"
+                              title="解除项目关联"
+                              disabled={unlinkProject.isPending}
+                              onClick={() => unlinkProject.mutate({ historyId: item.id, projectId: null })}
+                            >
+                              <Link2Off className="h-3.5 w-3.5" />
+                            </Button>
                             {(isAdmin || currentUser?.id === item.userId) && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -679,6 +708,16 @@ function ProjectDocumentsTab({
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </Button>
                             )}
+                            {/* Unlink button */}
+                            <Button
+                              size="icon" variant="ghost"
+                              className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:text-foreground"
+                              title="解除项目关联"
+                              disabled={unlinkProject.isPending}
+                              onClick={() => unlinkProject.mutate({ historyId: item.id, projectId: null })}
+                            >
+                              <Link2Off className="h-3.5 w-3.5" />
+                            </Button>
                             {(isAdmin || currentUser?.id === item.userId) && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
