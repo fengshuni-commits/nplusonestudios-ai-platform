@@ -170,11 +170,11 @@ export default function DesignPlanning() {
       const result = await utils.benchmark.pollStatus.fetch({ jobId });
       if (result.status === "done") {
         const content = (result as any).content || "";
-        setReport(content);
+        // Append to chat history only - user can click "采用此版本" to replace the main report
         setChatHistory(prev => [...prev, { role: "assistant", content }]);
         setIsRefining(false);
         setRefineJobId(null);
-        toast.success("报告已根据反馈更新");
+        toast.success("修订版报告已生成，请查看对话框下方");
         return true;
       } else if (result.status === "failed") {
         setIsRefining(false);
@@ -487,25 +487,50 @@ export default function DesignPlanning() {
 
                       {/* Conversation refinement area */}
                       {!isGenerating && (
-                        <div className="mt-6 pt-4 border-t space-y-3">
+                        <div className="mt-6 pt-4 border-t space-y-4">
                           <div className="flex items-center gap-2 text-sm font-medium text-foreground/70">
                             <MessageSquare className="h-4 w-4" />
                             对话调整报告
                           </div>
+
+                          {/* Chat messages */}
                           {chatHistory.length > 0 && (
-                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                            <div className="space-y-4 pr-1">
                               {chatHistory.map((msg, i) => (
-                                <div key={i} className={`flex ${ msg.role === "user" ? "justify-end" : "justify-start" }`}>
-                                  <div className={`rounded-lg px-3 py-2 text-sm max-w-[85%] ${
-                                    msg.role === "user"
-                                      ? "bg-primary text-primary-foreground"
-                                      : "bg-muted text-foreground"
-                                  }`}>
-                                    {msg.role === "assistant" ? "报告已更新" : msg.content}
-                                  </div>
+                                <div key={i} className={`flex flex-col ${ msg.role === "user" ? "items-end" : "items-start" } gap-1`}>
+                                  {msg.role === "user" ? (
+                                    <div className="rounded-lg px-3 py-2 text-sm max-w-[85%] bg-primary text-primary-foreground">
+                                      {msg.content}
+                                    </div>
+                                  ) : (
+                                    <div className="w-full rounded-lg border bg-muted/30 overflow-hidden">
+                                      <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
+                                        <span className="text-xs font-medium text-foreground/60">修订版报告</span>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 text-xs px-2"
+                                          onClick={() => setReport(msg.content)}
+                                        >
+                                          采用此版本
+                                        </Button>
+                                      </div>
+                                      <div className="p-3 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 max-h-96 overflow-y-auto">
+                                        <Streamdown>{msg.content}</Streamdown>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                               <div ref={chatEndRef} />
+                            </div>
+                          )}
+
+                          {/* Input area */}
+                          {isRefining && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              AI 正在根据反馈调整报告，通常需要 2-3 分钒…
                             </div>
                           )}
                           <div className="flex gap-2">
@@ -527,7 +552,7 @@ export default function DesignPlanning() {
                               {isRefining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             </Button>
                           </div>
-                          <p className="text-xs text-muted-foreground">按 Enter 发送，Shift+Enter 换行</p>
+                          <p className="text-xs text-muted-foreground">按 Enter 发送，Shift+Enter 换行。修订版报告生成后可点「采用此版本」替换上方报告。</p>
                         </div>
                       )}
                     </>

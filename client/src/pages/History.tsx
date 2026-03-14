@@ -54,6 +54,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Send } from "lucide-react";
+import { Streamdown } from "streamdown";
 
 // ─── Module Config ───────────────────────────────────────────────────────────
 
@@ -417,6 +418,8 @@ export default function HistoryPage() {
   const [refineJobId, setRefineJobId] = useState<string | null>(null);
   const [isRefining, setIsRefining] = useState(false);
   const refinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const PAGE_SIZE = 30;
   const [loadedCount, setLoadedCount] = useState(PAGE_SIZE);
@@ -538,10 +541,11 @@ export default function HistoryPage() {
       const result = await utils.benchmark.pollStatus.fetch({ jobId });
       if (result.status === "done") {
         const content = (result as any).content || "";
-        setCurrentReportContent(content);
+        // Append to chat history - user can click "采用此版本" to replace the main report
+        setChatHistory(prev => [...prev, { role: "assistant", content }]);
         setIsRefining(false);
         setRefineJobId(null);
-        toast.success("报告已根据反馈更新");
+        toast.success("修订版报告已生成，请查看对话框下方");
         return true;
       } else if (result.status === "failed") {
         setIsRefining(false);
@@ -576,10 +580,13 @@ export default function HistoryPage() {
 
   const handleRefine = useCallback(() => {
     if (!refineFeedback.trim() || !currentReportContent || !displayContentItem || isRefining) return;
+    const userMsg = refineFeedback.trim();
+    setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
+    setRefineFeedback("");
     setIsRefining(true);
     refineMutation.mutate({
       currentReport: currentReportContent,
-      feedback: refineFeedback,
+      feedback: userMsg,
       projectName: displayContentItem.title || "未命名项目",
       projectType: "办公空间",
     });
@@ -874,8 +881,48 @@ export default function HistoryPage() {
 
           {/* Refine input for benchmark_report */}
           {displayContentItem?.module === "benchmark_report" && (currentReportContent || displayContentItem?.outputContent) && (
-            <div className="shrink-0 border-t border-border/40 px-6 py-4 bg-muted/20">
-              <p className="text-xs text-muted-foreground mb-2">对报告提出修改意见，AI 将根据反馈调整报告内容</p>
+            <div className="shrink-0 border-t border-border/40 px-6 py-4 bg-muted/20 space-y-3">
+              {/* Chat history */}
+              {chatHistory.length > 0 && (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                  {chatHistory.map((msg, i) => (
+                    <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"} gap-1`}>
+                      {msg.role === "user" ? (
+                        <div className="rounded-lg px-3 py-2 text-sm max-w-[85%] bg-primary text-primary-foreground">
+                          {msg.content}
+                        </div>
+                      ) : (
+                        <div className="w-full rounded-lg border bg-background overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
+                            <span className="text-xs font-medium text-foreground/60">修订版报告</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs px-2"
+                              onClick={() => setCurrentReportContent(msg.content)}
+                            >
+                              采用此版本
+                            </Button>
+                          </div>
+                          <div className="p-3 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 max-h-80 overflow-y-auto">
+                            <Streamdown>{msg.content}</Streamdown>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
+
+              {/* Input area */}
+              <p className="text-xs text-muted-foreground">对报告提出修改意见，AI 将生成修订版并显示在下方，可点「采用此版本」替换上方报告</p>
+              {isRefining && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  AI 正在调整报告，通常需要 2-3 分钒…
+                </div>
+              )}
               <div className="flex gap-2">
                 <Textarea
                   value={refineFeedback}
@@ -903,9 +950,6 @@ export default function HistoryPage() {
                   )}
                 </Button>
               </div>
-              {isRefining && (
-                <p className="text-xs text-muted-foreground/60 mt-1.5">AI 正在调整报告，请稍候（通常需要 2-3 分钒）…</p>
-              )}
             </div>
           )}
         </DialogContent>

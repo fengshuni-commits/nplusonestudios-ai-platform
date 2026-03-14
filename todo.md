@@ -411,3 +411,8 @@
 - [x] 新增 refineBenchmarkInBackground 函数，复用 benchmark_jobs 表存储任务状态
 - [x] 前端 DesignPlanning.tsx：refine mutation 改为接收 jobId，新增 refineJobId 状态 + 轮询逻辑
 - [x] 前端 History.tsx：同步更新 refine 逻辑为异步轮询，isRefining 状态控制 UI 禁用
+
+## 对话式编辑 UI 改造
+- [x] 新生成的修订报告显示在对话气泡下方（而非替换原报告区域）
+- [x] 对话历史中 assistant 气泡展示完整修订报告内容，可点「采用此版本」替换主报告
+- [x] 同步修改 DesignPlanning.tsx 和 History.tsx
