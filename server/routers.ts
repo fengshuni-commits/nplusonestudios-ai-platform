@@ -561,6 +561,7 @@ async function generatePptInBackground(
         outputUrl: url,
         status: "success",
         durationMs: Date.now() - pptStartTime,
+        modelName: structureResponse.model || null,
       }).catch(() => {});
     }
   } catch (err: any) {
@@ -1160,6 +1161,7 @@ async function refineBenchmarkInBackground(
         parentId: parentHistoryId || undefined,
         projectId: projectId || undefined,
         createdByName: userName || undefined,
+        modelName: response.model || null,
       });
       // Also store the new history id back into the job so frontend can retrieve it
       await db.updateBenchmarkJob(jobId, { historyId: histResult.id });
@@ -1286,6 +1288,7 @@ ${caseRefs}
       durationMs: Date.now() - startTime,
       projectId: input.projectId || null,
       createdByName: userName,
+      modelName: response.model || null,
     }).catch(() => ({ id: 0 }));
 
     await db.updateBenchmarkJob(jobId, { status: "done", result: content, historyId: historyResult.id });
@@ -1581,6 +1584,7 @@ const renderingRouter = router({
           parentId: input.parentHistoryId || null,
           projectId: input.projectId || null,
           createdByName: ctx.user.name || null,
+          modelName: "内置图像生成",
         }).catch(() => ({ id: 0 }));
 
         return { url: result.url, prompt: fullPrompt, historyId: historyResult.id };
@@ -1714,6 +1718,7 @@ const meetingRouter = router({
           durationMs: Date.now() - startTime,
           projectId: input.projectId || null,
           createdByName: ctx.user.name || null,
+          modelName: response.model || null,
         }).catch(() => ({ id: 0 }));
 
         return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
@@ -2055,6 +2060,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           durationMs: Date.now() - startTime,
           projectId: input.projectId || null,
           createdByName: ctx.user.name || null,
+          modelName: llmResponse.model || null,
         }).catch(() => ({ id: 0 }));
 
         return {

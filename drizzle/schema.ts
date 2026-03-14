@@ -353,6 +353,8 @@ export const generationHistory = mysqlTable("generation_history", {
   enhanceStatus: mysqlEnum("enhanceStatus", ["idle", "processing", "done", "failed"]).default("idle"),
   /** Enhancement params (JSON: scale, optimized_for, creativity, detail, resemblance) */
   enhanceParams: json("enhanceParams"),
+  /** Model name used for generation (e.g. qwen-plus, gpt-4o, flux-dev) */
+  modelName: varchar("modelName", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type GenerationHistory = typeof generationHistory.$inferSelect;

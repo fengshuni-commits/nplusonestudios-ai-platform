@@ -381,7 +381,12 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: Tile
         <div className={`${isRender ? "opacity-0 group-hover:opacity-100 transition-opacity" : ""}`}>
           <div className={`rounded-lg p-2 ${isRender ? "bg-gradient-to-t from-black/70 via-black/40 to-transparent -mx-2.5 -mb-2.5 px-2.5 pb-2.5 pt-4" : ""}`}>
             <p className="text-[11px] font-medium text-white leading-tight line-clamp-2">{title}</p>
-            <p className="text-[10px] text-white/50 mt-0.5">{formatTime(item.createdAt)}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <p className="text-[10px] text-white/50">{formatTime(item.createdAt)}</p>
+              {item.modelName && (
+                <span className="text-[9px] text-white/40 bg-white/10 px-1 py-0 rounded truncate max-w-[70px]">{item.modelName}</span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -792,11 +797,14 @@ export default function HistoryPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                                   {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
                                 </span>
                                 <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
+                                {chainItem.modelName && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
+                                )}
                               </div>
                               <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
                               {!isBenchmark && inputParams?.style && (
@@ -979,6 +987,12 @@ export default function HistoryPage() {
                   <span className="text-xs text-muted-foreground">{displayContentItem && MODULE_MAP[displayContentItem.module]?.label}</span>
                   <span className="text-xs text-muted-foreground/50">·</span>
                   <span className="text-xs text-muted-foreground/50">{displayContentItem && formatFullTime(displayContentItem.createdAt)}</span>
+                  {displayContentItem?.modelName && (
+                    <>
+                      <span className="text-xs text-muted-foreground/50">·</span>
+                      <span className="text-xs text-muted-foreground/60 font-mono bg-muted px-1.5 py-0 rounded">{displayContentItem.modelName}</span>
+                    </>
+                  )}
                 </div>
                 <DialogTitle className="text-base font-medium leading-snug">{displayContentItem?.title}</DialogTitle>
               </div>

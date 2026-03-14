@@ -1,0 +1,1 @@
+ALTER TABLE `generation_history` ADD `modelName` varchar(128);

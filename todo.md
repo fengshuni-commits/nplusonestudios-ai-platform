@@ -450,3 +450,8 @@
 ## 案例调研报告导出飞书文档
 - [x] DesignPlanning.tsx：报告区增加「复制到飞书」按钮（复制 Markdown 到剪贴板）
 - [x] History.tsx：弹窗每个版本增加「复制到飞书」按钮
+
+## 生成记录模型标注
+- [x] 数据库：generationHistory 表增加 modelName 字段（varchar 128，可为空）
+- [x] 后端：各生成 API 在写入历史时记录所用模型名称
+- [x] 前端：历史记录卡片和弹窗中显示模型标注标签
