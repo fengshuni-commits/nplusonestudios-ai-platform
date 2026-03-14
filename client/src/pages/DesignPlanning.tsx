@@ -87,6 +87,8 @@ export default function DesignPlanning() {
       projectName: form.projectName,
       projectType: form.projectType,
       toolId,
+      parentHistoryId: reportHistoryId,
+      projectId: importedProjectId || undefined,
     });
   };
 

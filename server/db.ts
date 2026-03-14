@@ -721,11 +721,17 @@ export async function getEditChain(rootId: number, userId: number) {
   }
   const actualRootId = currentId;
 
+  // Determine the module of the root item
+  const rootItem = await db.select().from(generationHistory)
+    .where(and(eq(generationHistory.id, actualRootId), eq(generationHistory.userId, userId)))
+    .limit(1);
+  const rootModule = rootItem[0]?.module || "ai_render";
+
   // Now collect the full chain: root + all descendants
-  // Use iterative approach: collect all items for this user in ai_render module,
+  // Use iterative approach: collect all items for this user in the same module,
   // then build the chain in memory
   const allRenderItems = await db.select().from(generationHistory)
-    .where(and(eq(generationHistory.userId, userId), eq(generationHistory.module, "ai_render")))
+    .where(and(eq(generationHistory.userId, userId), eq(generationHistory.module, rootModule)))
     .orderBy(generationHistory.createdAt);
 
   // Build a map of parentId -> children
@@ -770,21 +776,18 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   const limit = opts?.limit || 50;
   const offset = opts?.offset || 0;
 
-  // If filtering to a specific non-render module, use the simple list
-  if (opts?.module && opts.module !== "ai_render") {
+  // If filtering to a specific non-render, non-benchmark_report module, use the simple list
+  if (opts?.module && opts.module !== "ai_render" && opts.module !== "benchmark_report") {
     return listGenerationHistory(userId, opts);
   }
 
-  // For ai_render or "all" view, we need grouped results
-  // Strategy: get root ai_render items (parentId IS NULL) with chain info,
-  // plus non-render items
-
-  if (opts?.module === "ai_render") {
-    // Only ai_render: get roots with chain metadata
+  // For ai_render or benchmark_report single-module view, get roots with chain metadata
+  if (opts?.module === "ai_render" || opts?.module === "benchmark_report") {
+    const moduleFilter = opts.module;
     const roots = await db.select().from(generationHistory)
       .where(and(
         eq(generationHistory.userId, userId),
-        eq(generationHistory.module, "ai_render"),
+        eq(generationHistory.module, moduleFilter),
         sql`${generationHistory.parentId} IS NULL`
       ))
       .orderBy(desc(generationHistory.createdAt))
@@ -794,24 +797,14 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
     const countResult = await db.select({ count: sql<number>`count(*)` }).from(generationHistory)
       .where(and(
         eq(generationHistory.userId, userId),
-        eq(generationHistory.module, "ai_render"),
+        eq(generationHistory.module, moduleFilter),
         sql`${generationHistory.parentId} IS NULL`
       ));
 
-    // For each root, find the latest descendant and count
+    // For each root, build chain info
     const enrichedItems = await Promise.all(roots.map(async (root) => {
-      const descendants = await db.select().from(generationHistory)
-        .where(and(
-          eq(generationHistory.userId, userId),
-          eq(generationHistory.module, "ai_render"),
-          sql`${generationHistory.parentId} IS NOT NULL`
-        ))
-        .orderBy(desc(generationHistory.createdAt));
-
-      // Build chain count by walking from this root
       const chainItems = await getEditChain(root.id, userId);
       const latestItem = chainItems[chainItems.length - 1];
-
       return {
         ...root,
         chainLength: chainItems.length,
@@ -824,11 +817,10 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
     return { items: enrichedItems, total: countResult[0]?.count || 0 };
   }
 
-  // "all" module view: mix ai_render roots with other module items
-  // Get all non-render items + render roots only
+  // "all" module view: mix grouped modules (ai_render roots, benchmark_report roots) with other items
   const conditions = [
     eq(generationHistory.userId, userId),
-    sql`(${generationHistory.module} != 'ai_render' OR ${generationHistory.parentId} IS NULL)`,
+    sql`((${generationHistory.module} != 'ai_render' AND ${generationHistory.module} != 'benchmark_report') OR ${generationHistory.parentId} IS NULL)`,
   ];
   const where = and(...conditions);
 
@@ -840,9 +832,9 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
 
   const countResult = await db.select({ count: sql<number>`count(*)` }).from(generationHistory).where(where);
 
-  // Enrich ai_render roots with chain info
+  // Enrich chain-capable roots with chain info
   const enrichedItems = await Promise.all(items.map(async (item) => {
-    if (item.module === "ai_render" && !item.parentId) {
+    if ((item.module === "ai_render" || item.module === "benchmark_report") && !item.parentId) {
       const chainItems = await getEditChain(item.id, userId);
       const latestItem = chainItems[chainItems.length - 1];
       return {

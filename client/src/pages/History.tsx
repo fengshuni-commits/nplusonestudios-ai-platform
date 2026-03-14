@@ -274,6 +274,27 @@ interface TileCardProps {
   onNavigate?: (path: string) => void;
 }
 
+/** Expandable content preview for benchmark report chain items */
+function BenchmarkChainItem({ content, isLast }: { content: string; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = content.slice(0, 200).replace(/#+\s/g, '').replace(/\*\*/g, '');
+  return (
+    <div className={`mt-2 rounded-lg border text-xs ${isLast ? 'border-emerald-500/30 bg-emerald-50/30' : 'border-border/40 bg-muted/30'}`}>
+      <div
+        className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg"
+        onClick={() => setExpanded(v => !v)}>
+        <span className="text-muted-foreground truncate flex-1">{preview}{content.length > 200 ? '…' : ''}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </div>
+      {expanded && (
+        <div className="px-3 pb-3 border-t border-border/30">
+          <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground/80 bg-transparent pt-2 max-h-[400px] overflow-y-auto">{content}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: TileCardProps) {
   const cfg = MODULE_MAP[item.module] || {
     label: item.module,
@@ -295,9 +316,9 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: Tile
     } else if (item.module === "benchmark_ppt" && item.outputUrl) {
       // PPT：直接打开下载链接
       window.open(item.outputUrl, "_blank");
-    } else if (item.module === "benchmark_report" && onNavigate) {
-      // 案例调研报告：跳转到案例调研页面继续编辑
-      onNavigate(`/design/planning?historyId=${item.id}`);
+    } else if (item.module === "benchmark_report" && onOpenDetail) {
+      // 案例调研报告：打开编辑链弹窗
+      onOpenDetail(item);
     } else if (!isRender && onOpenDetail) {
       // 所有其他文字类模块（小红书、公众号、Instagram、会议纪要等）：打开内容查看弹窗
       onOpenDetail(item);
@@ -406,6 +427,7 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: Tile
 export default function HistoryPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
+  const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [contentItem, setContentItem] = useState<any | null>(null);
   const [contentItemId, setContentItemId] = useState<number | null>(null);
@@ -494,8 +516,9 @@ export default function HistoryPage() {
   );
 
   const handleOpenDetail = useCallback((item: any) => {
-    if (item.module === "ai_render") {
+    if (item.module === "ai_render" || item.module === "benchmark_report") {
       setSelectedRootId(item.id);
+      setSelectedItem(item);
       setDetailOpen(true);
     } else {
       // Open content viewer for all non-render modules
@@ -545,7 +568,10 @@ export default function HistoryPage() {
         setChatHistory(prev => [...prev, { role: "assistant", content }]);
         setIsRefining(false);
         setRefineJobId(null);
-        toast.success("修订版报告已生成，请查看对话框下方");
+        // Refresh the edit chain to show the new version in history
+        utils.history.getEditChain.invalidate();
+        utils.history.listGrouped.invalidate();
+        toast.success("修订版报告已生成，已保存到历史记录");
         return true;
       } else if (result.status === "failed") {
         setIsRefining(false);
@@ -579,18 +605,26 @@ export default function HistoryPage() {
   }, [refineJobId, pollRefineStatus]);
 
   const handleRefine = useCallback(() => {
-    if (!refineFeedback.trim() || !currentReportContent || !displayContentItem || isRefining) return;
+    // Use selectedItem when in the detail dialog (benchmark_report chain view)
+    const activeItem = selectedItem || displayContentItem;
+    if (!refineFeedback.trim() || !currentReportContent || !activeItem || isRefining) return;
     const userMsg = refineFeedback.trim();
     setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
     setRefineFeedback("");
     setIsRefining(true);
+    // For refine, use the latest chain item as parent if available
+    const latestChainItem = chainQuery.data && chainQuery.data.length > 0
+      ? chainQuery.data[chainQuery.data.length - 1]
+      : null;
     refineMutation.mutate({
       currentReport: currentReportContent,
       feedback: userMsg,
-      projectName: displayContentItem.title || "未命名项目",
+      projectName: activeItem.title || "未命名项目",
       projectType: "办公空间",
+      parentHistoryId: latestChainItem?.id || activeItem.id,
+      projectId: activeItem.projectId || undefined,
     });
-  }, [refineFeedback, currentReportContent, displayContentItem, refineMutation, isRefining]);
+  }, [refineFeedback, currentReportContent, displayContentItem, selectedItem, chainQuery.data, refineMutation, isRefining]);
   const deleteMutation = trpc.history.delete.useMutation({
     onSuccess: () => { utils.history.listGrouped.invalidate(); toast.success("已删除记录"); },
     onError: (e) => toast.error(e.message || "删除失败"),
@@ -684,15 +718,17 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {/* Detail Dialog for AI Render Edit Chain */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl w-[90vw] max-h-[88vh] overflow-y-auto p-0 resize">
+      {/* Detail Dialog for AI Render / Benchmark Report Edit Chain */}
+      <Dialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) { setChatHistory([]); setCurrentReportContent(null); setRefineFeedback(""); } }}>
+        <DialogContent className={`${selectedItem?.module === 'benchmark_report' ? 'max-w-4xl' : 'max-w-3xl'} w-[90vw] max-h-[90vh] overflow-y-auto p-0`}>
           <DialogHeader className="px-6 pt-6 pb-2 sticky top-0 bg-background z-10 border-b border-border/40">
             <DialogTitle className="text-base font-medium flex items-center gap-2">
-              <Image className="h-4 w-4 text-emerald-600" />
-              编辑历史
+              {selectedItem?.module === 'benchmark_report'
+                ? <FileText className="h-4 w-4 text-amber-600" />
+                : <Image className="h-4 w-4 text-emerald-600" />}
+              {selectedItem?.module === 'benchmark_report' ? '报告修改历史' : '编辑历史'}
               {chainQuery.data && (
-                <span className="text-xs font-normal text-muted-foreground ml-1">共 {chainQuery.data.length} 次生成</span>
+                <span className="text-xs font-normal text-muted-foreground ml-1">共 {chainQuery.data.length} 个版本</span>
               )}
             </DialogTitle>
           </DialogHeader>
@@ -708,24 +744,29 @@ export default function HistoryPage() {
                   const isFirst = idx === 0;
                   const isLast = idx === chainQuery.data!.length - 1;
                   const inputParams = chainItem.inputParams as any;
-                  const promptText = inputParams?.prompt || chainItem.summary || "";
+                  const isBenchmark = selectedItem?.module === 'benchmark_report';
+                  const promptText = isBenchmark
+                    ? chainItem.summary || ""
+                    : (inputParams?.prompt || chainItem.summary || "");
                   const itemTitle = chainItem.title || `第 ${idx + 1} 次生成`;
 
                   return (
                     <div key={chainItem.id} className="relative">
                       {!isLast && <div className="absolute left-[23px] top-[calc(100%-8px)] w-px h-8 bg-border z-0" />}
                       <div className={`relative flex gap-4 ${!isFirst ? "pt-4" : ""} ${!isLast ? "pb-4" : ""}`}>
-                        {/* Timeline thumbnail */}
+                        {/* Timeline icon */}
                         <div className="flex flex-col items-center shrink-0 z-10">
                           <div
-                            className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 cursor-pointer hover:opacity-80 transition-opacity ${isLast ? "border-emerald-500" : "border-border"}`}
-                            onClick={() => chainItem.outputUrl && setLightbox({ src: chainItem.outputUrl, label: itemTitle })}
-                            title="点击放大查看">
-                            {chainItem.outputUrl ? (
+                            className={`h-[46px] w-[46px] rounded-lg overflow-hidden border-2 ${isLast ? "border-emerald-500" : "border-border"} ${!isBenchmark ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+                            onClick={() => !isBenchmark && chainItem.outputUrl && setLightbox({ src: chainItem.outputUrl, label: itemTitle })}
+                            title={!isBenchmark ? "点击放大查看" : ""}>
+                            {!isBenchmark && chainItem.outputUrl ? (
                               <img src={chainItem.outputUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full bg-muted flex items-center justify-center">
-                                <Image className="h-4 w-4 text-muted-foreground/40" />
+                                {isBenchmark
+                                  ? <FileText className="h-4 w-4 text-amber-500/60" />
+                                  : <Image className="h-4 w-4 text-muted-foreground/40" />}
                               </div>
                             )}
                           </div>
@@ -737,42 +778,72 @@ export default function HistoryPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"}`}>
-                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次编辑`}
+                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
                                 </span>
                                 <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
                               </div>
                               <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
-                              {inputParams?.style && (
+                              {!isBenchmark && inputParams?.style && (
                                 <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-1">
                                   风格: {inputParams.style}
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                                onClick={() => handleCopyPrompt(promptText)} title="复制提示词">
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                              {chainItem.outputUrl && (
+                              {isBenchmark ? (
                                 <>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                                    onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })} title="放大查看">
-                                    <Maximize2 className="h-3 w-3" />
+                                    onClick={() => {
+                                      const content = chainItem.outputContent || "";
+                                      navigator.clipboard.writeText(content).then(() => toast.success("内容已复制")).catch(() => toast.error("复制失败"));
+                                    }} title="复制报告内容">
+                                    <Copy className="h-3 w-3" />
                                   </Button>
+                                  {isLast && (
+                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                      onClick={() => {
+                                        setCurrentReportContent(chainItem.outputContent || "");
+                                        toast.success("已加载此版本，可在下方继续修改");
+                                      }} title="基于此版本继续修改">
+                                      <RefreshCw className="h-3 w-3 mr-1" />
+                                      继续修改
+                                    </Button>
+                                  )}
+                                </>
+                              ) : (
+                                <>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                                    onClick={() => downloadImage(chainItem.outputUrl!, itemTitle)} title="下载原图">
-                                    <Download className="h-3 w-3" />
+                                    onClick={() => handleCopyPrompt(promptText)} title="复制提示词">
+                                    <Copy className="h-3 w-3" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                                    onClick={() => { setDetailOpen(false); handleContinueEdit(chainItem.outputUrl!, chainItem.id); }} title="使用此图片继续生成">
-                                    <RefreshCw className="h-3 w-3" />
-                                  </Button>
+                                  {chainItem.outputUrl && (
+                                    <>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })} title="放大查看">
+                                        <Maximize2 className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => downloadImage(chainItem.outputUrl!, itemTitle)} title="下载原图">
+                                        <Download className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => { setDetailOpen(false); handleContinueEdit(chainItem.outputUrl!, chainItem.id); }} title="使用此图片继续生成">
+                                        <RefreshCw className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
                           </div>
 
-                          {chainItem.outputUrl && (
+                          {/* Benchmark report: expandable content preview */}
+                          {isBenchmark && chainItem.outputContent && (
+                            <BenchmarkChainItem content={chainItem.outputContent} isLast={isLast} />
+                          )}
+
+                          {/* AI render: image preview */}
+                          {!isBenchmark && chainItem.outputUrl && (
                             <div className="mt-2 space-y-2">
                               <div className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
                                 onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}>
@@ -784,7 +855,6 @@ export default function HistoryPage() {
                                   </div>
                                 </div>
                               </div>
-                              {/* Enhanced image */}
                               {chainItem.enhancedImageUrl && (
                                 <div className="rounded-lg overflow-hidden border border-emerald-500/30 bg-muted cursor-zoom-in group/enh relative"
                                   onClick={() => setLightbox({ src: chainItem.enhancedImageUrl!, label: `${itemTitle} (增强版)` })}>
@@ -809,6 +879,58 @@ export default function HistoryPage() {
                   );
                 })}
               </div>
+
+              {/* Benchmark report: refine input area at bottom of chain */}
+              {selectedItem?.module === 'benchmark_report' && (
+                <div className="mt-6 border-t border-border/40 pt-4">
+                  {/* Chat history */}
+                  {chatHistory.length > 0 && (
+                    <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+                      {chatHistory.map((msg, i) => (
+                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] rounded-lg px-3 py-2 text-xs ${
+                            msg.role === 'user'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-foreground border border-border/40'
+                          }`}>
+                            {msg.role === 'user' ? msg.content : (
+                              <span className="text-muted-foreground italic">修订版已保存到上方历史记录中</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      <div ref={chatEndRef} />
+                    </div>
+                  )}
+                  {/* Input */}
+                  <div className="flex gap-2">
+                    <Textarea
+                      value={refineFeedback}
+                      onChange={(e) => setRefineFeedback(e.target.value)}
+                      placeholder="描述你的修改意见，例如：增加更多国内案例，重点关注制造业办公空间…"
+                      className="flex-1 min-h-[60px] max-h-[120px] text-sm resize-none"
+                      disabled={isRefining}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRefine(); }}
+                    />
+                    <Button
+                      onClick={handleRefine}
+                      disabled={isRefining || !refineFeedback.trim() || !currentReportContent}
+                      className="shrink-0 self-end h-9 px-3"
+                    >
+                      {isRefining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {isRefining && (
+                    <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      AI 正在修改报告，通常需要 2-3 分钟，完成后将自动保存到上方历史记录…
+                    </p>
+                  )}
+                  {!currentReportContent && (
+                    <p className="text-xs text-muted-foreground mt-2">请先点击某个版本的「继续修改」按钮加载内容</p>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-center py-16 text-muted-foreground">

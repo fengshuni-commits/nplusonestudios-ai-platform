@@ -1110,7 +1110,10 @@ const aiToolsRouter = router({
 async function refineBenchmarkInBackground(
   jobId: string,
   input: { currentReport: string; feedback: string; projectName: string; projectType: string; toolId?: number },
-  userId: number
+  userId: number,
+  userName?: string | null,
+  parentHistoryId?: number,
+  projectId?: number
 ) {
   const startTime = Date.now();
   try {
@@ -1137,7 +1140,28 @@ async function refineBenchmarkInBackground(
       ? response.choices[0].message.content : '';
     if (!content) throw new Error('LLM 返回内容为空');
     await db.updateBenchmarkJob(jobId, { status: "done", result: content });
-    console.log(`[Benchmark Refine] Job ${jobId} done in ${Date.now() - startTime}ms`);
+
+    // Save refined report to generation history, linked to parent
+    try {
+      const durationMs = Date.now() - startTime;
+      const histResult = await db.createGenerationHistory({
+        userId,
+        module: "benchmark_report",
+        title: `${input.projectName} - 对标调研报告（修订版）`,
+        summary: `用户反馈：${input.feedback.slice(0, 100)}${input.feedback.length > 100 ? '…' : ''}`,
+        outputContent: content,
+        status: "success",
+        durationMs,
+        parentId: parentHistoryId || undefined,
+        projectId: projectId || undefined,
+        createdByName: userName || undefined,
+      });
+      // Also store the new history id back into the job so frontend can retrieve it
+      await db.updateBenchmarkJob(jobId, { historyId: histResult.id });
+      console.log(`[Benchmark Refine] Job ${jobId} done in ${durationMs}ms, historyId=${histResult.id}`);
+    } catch (histErr) {
+      console.error("[Benchmark Refine] Failed to save history:", histErr);
+    }
   } catch (error: any) {
     console.error("[Benchmark Refine] Background job failed:", error);
     await db.updateBenchmarkJob(jobId, { status: "failed", error: error?.message || "调整失败" });
@@ -1323,6 +1347,8 @@ const benchmarkRouter = router({
       projectName: z.string(),
       projectType: z.string(),
       toolId: z.number().optional(),
+      parentHistoryId: z.number().optional(), // history record ID of the report being refined
+      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const jobId = nanoid();
@@ -1332,7 +1358,7 @@ const benchmarkRouter = router({
         inputParams: { type: 'refine', ...input } as Record<string, unknown>,
       });
       // Fire-and-forget background refine
-      refineBenchmarkInBackground(jobId, input, ctx.user.id).catch(err => {
+      refineBenchmarkInBackground(jobId, input, ctx.user.id, ctx.user.name, input.parentHistoryId, input.projectId).catch(err => {
         console.error("[Benchmark Refine] Unhandled error:", err);
       });
       return { jobId };
