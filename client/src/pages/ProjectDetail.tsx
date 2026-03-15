@@ -195,6 +195,10 @@ function ProjectInfoTab({
     builtInFields.forEach((f) => {
       payload[f.key] = form[f.key] || (f.key === "name" ? project.name : undefined);
     });
+    // 处理状态字段（使用 _status 临时 key 避免与 builtInFields 冲突）
+    if (form._status) {
+      payload.status = form._status;
+    }
     updateProject.mutate(payload as any);
   };
 

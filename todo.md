@@ -504,3 +504,13 @@
 - [x] 找到全局帮助按钮共享组件，理解当前实现
 - [x] 修复案例调研页面帮助弹窗（显示自己的说明）
 - [x] 为 AI 效果图、演示文稿、会议纪要、内容创作各添加独立说明
+
+## Bug 修复：项目信息保存失败
+- [x] 排查项目状态字段更新无效的原因（handleSave 未将 _status 映射为 status）
+- [x] 修复并验证项目信息保存功能
+
+## 演示文稿模块实际功能开发
+- [x] 后端：presentationRouter（复用 pptJobStore，generate + status API）
+- [x] 后端：generatePresentationInBackground（LLM 结构化 → 图片获取 → PPTX 构建 → S3 上传）
+- [x] 前端：Presentation.tsx 完整实现（演示标题+内容输入、项目信息导入、图片上传、进度轮询、下载 PPT、生成历史）
+- [x] 更新 HelpGuide 使用说明与实际功能对应
