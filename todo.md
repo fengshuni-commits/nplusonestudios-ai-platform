@@ -673,3 +673,15 @@
 - [x] 前端：DesignTools.tsx 和 ColorPlan.tsx 的 AiToolSelector 改用 capability="image_generation"
 - [x] 后端：generateImageWithTool.ts 添加 qwen-image (dashscope) 调用分支，自动检测 provider
 - [x] 编写测试并保存检查点，31 项测试全部通过
+
+## 修复 qwen-image-2.0 调用（OpenAI 兼容模式）
+- [ ] 查清 DashScope compatible-mode 图像生成 API 格式
+- [ ] 数据库：更新 qwen-image-2.0 的 apiEndpoint 为 compatible-mode 端点
+- [ ] 后端：generateImageWithTool.ts 添加 openai-compatible 调用分支
+- [ ] 保存检查点
+
+## 修复 qwen-image-2.0 调用（原生异步端点）
+- [x] 确认新 API Key 有效（主账号 sk-763ae...）
+- [x] 改用原生 DashScope 异步端点（提交任务 + 轮询结果）
+- [x] 端到端测试通过（15秒内 SUCCEEDED，返回图片 URL）
+- [x] 保存检查点

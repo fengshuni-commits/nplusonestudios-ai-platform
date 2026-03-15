@@ -232,7 +232,8 @@ export async function generateImageWithTool(
     }
   }
   const config = (tool.configJson as Record<string, string> | null) || {};
-  const modelName = config.modelName || (provider === "qwen" ? "qwen-image-2.0-pro" : "gemini-3-pro-image-preview");
+  // For qwen/dashscope, use imageModel (wanx series) for image generation
+  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3-pro-image-preview");
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 
@@ -240,19 +241,78 @@ export async function generateImageWithTool(
     let imageBuffer: Buffer;
 
     if (provider === "qwen") {
-      // Convert size format from "1024x768" to "1024*768" for DashScope
-      let qwenSize = "1024*1024";
+      // DashScope native async endpoint for wanx image generation
+      // Step 1: Submit task
+      const submitUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
+
+      // wanx size format: "1024*1024"
+      let wanxSize = "1024*1024";
       if (genOpts.size) {
-        qwenSize = genOpts.size.replace("x", "*");
+        wanxSize = genOpts.size.replace("x", "*");
       }
 
-      imageBuffer = await callQwenImageApi({
-        apiKey,
-        modelName,
-        apiEndpoint: tool.apiEndpoint,
-        prompt: genOpts.prompt,
-        size: qwenSize,
+      const submitResp = await fetch(submitUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "X-DashScope-Async": "enable",
+        },
+        body: JSON.stringify({
+          model: modelName,
+          input: { prompt: genOpts.prompt },
+          parameters: { size: wanxSize, n: 1 },
+        }),
+        signal: AbortSignal.timeout(30000),
       });
+
+      if (!submitResp.ok) {
+        const detail = await submitResp.text().catch(() => "");
+        throw new Error(
+          `DashScope task submission failed (${submitResp.status})${detail ? ": " + detail.substring(0, 400) : ""}`
+        );
+      }
+
+      const submitJson = await submitResp.json();
+      const taskId: string | undefined = submitJson?.output?.task_id;
+      if (!taskId) {
+        throw new Error(`DashScope returned no task_id. Response: ${JSON.stringify(submitJson).substring(0, 300)}`);
+      }
+
+      // Step 2: Poll for result (max 120s, every 3s)
+      const taskUrl = `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`;
+      const maxAttempts = 40;
+      let imageUrl: string | undefined;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const pollResp = await fetch(taskUrl, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!pollResp.ok) continue;
+        const pollJson = await pollResp.json();
+        const status: string = pollJson?.output?.task_status || "";
+        if (status === "SUCCEEDED") {
+          imageUrl = pollJson?.output?.results?.[0]?.url;
+          break;
+        } else if (status === "FAILED") {
+          const errMsg = pollJson?.output?.message || "Unknown error";
+          throw new Error(`DashScope task failed: ${errMsg}`);
+        }
+        // PENDING or RUNNING — keep polling
+      }
+
+      if (!imageUrl) {
+        throw new Error("DashScope task timed out or returned no image URL");
+      }
+
+      // Step 3: Download the image
+      const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(60000) });
+      if (!imgResp.ok) {
+        throw new Error(`Failed to download DashScope image (${imgResp.status})`);
+      }
+      imageBuffer = Buffer.from(await imgResp.arrayBuffer());
     } else if (provider === "gemini") {
       // Parse size into aspectRatio and imageSize for Gemini API
       let aspectRatio = config.aspectRatio || "1:1";
