@@ -60,6 +60,7 @@ import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Send } from "lucide-react";
 import { Streamdown } from "streamdown";
+import { ReportMarkdown } from "@/components/ReportMarkdown";
 
 // ─── Module Config ───────────────────────────────────────────────────────────
 
@@ -1117,10 +1118,8 @@ export default function HistoryPage() {
                 加载中…
               </div>
             ) : (currentReportContent || displayContentItem?.outputContent) ? (
-              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground/90 bg-transparent p-0 border-0">
-                  {currentReportContent || displayContentItem?.outputContent}
-                </pre>
+              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                <ReportMarkdown>{currentReportContent || displayContentItem?.outputContent || ""}</ReportMarkdown>
               </div>
             ) : displayContentItem?.summary ? (
               <div className="space-y-3">
@@ -1158,7 +1157,7 @@ export default function HistoryPage() {
                             </Button>
                           </div>
                           <div className="p-3 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 max-h-80 overflow-y-auto">
-                            <Streamdown>{msg.content}</Streamdown>
+                            <ReportMarkdown>{msg.content}</ReportMarkdown>
                           </div>
                         </div>
                       )}

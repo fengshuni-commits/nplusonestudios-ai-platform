@@ -15,6 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { ReportMarkdown } from "@/components/ReportMarkdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 // 复制到飞书按钮组件
@@ -397,7 +398,7 @@ export default function DesignPlanning() {
                         </div>
                         {!isReportCollapsed && (
                           <div className="p-4 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                            <Streamdown>{cleanedReport}</Streamdown>
+                            <ReportMarkdown>{cleanedReport}</ReportMarkdown>
                           </div>
                         )}
                         {isReportCollapsed && (
@@ -448,7 +449,7 @@ export default function DesignPlanning() {
                                       {!collapsedMessages.has(i) ? (
                                         <>
                                           <div className="p-4 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                                            <Streamdown>{msg.content}</Streamdown>
+                                            <ReportMarkdown>{msg.content}</ReportMarkdown>
                                           </div>
                                           <div className="px-4 pb-3 flex justify-end border-t pt-3">
                                             <CopyToFeishuButton content={msg.content} />
