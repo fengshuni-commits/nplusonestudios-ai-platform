@@ -1187,13 +1187,20 @@ async function refineBenchmarkInBackground(
       messages: [
         {
           role: "system",
-          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
+          content: (() => {
+            const bjDate2 = new Date(Date.now() + 8 * 3600 * 1000);
+            const [y2, m2, d2] = bjDate2.toISOString().slice(0, 10).split('-');
+            const dateStr2 = `${y2}年${m2}月${d2}日`;
+            return `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
+
+**当前日期**：${dateStr2}（北京时间）。报告中如需标注日期，请使用此日期。
 
 **要求**：
 - 保持报告的整体结构和专业性
 - 根据用户反馈精确修改相应部分
 - 不要改动用户没有提到的内容
-- 输出完整的修订后报告（Markdown 格式）`,
+- 输出完整的修订后报告（Markdown 格式）`;
+          })(),
         },
         {
           role: "user",
@@ -1292,7 +1299,13 @@ async function generateBenchmarkInBackground(
       messages: [
         {
           role: "system",
-          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息和以下对标案例列表，生成一份专业的对标调研报告。
+          content: (() => {
+            const bjDate = new Date(Date.now() + 8 * 3600 * 1000);
+            const [y, m, d] = bjDate.toISOString().slice(0, 10).split('-');
+            const dateStr = `${y}年${m}月${d}日`;
+            return `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息和以下对标案例列表，生成一份专业的对标调研报告。
+
+**当前日期**：${dateStr}（北京时间）。报告中如需标注日期，请使用此日期。
 
 **对标案例及真实链接**：
 ${caseRefs}
@@ -1314,7 +1327,8 @@ ${caseRefs}
 4. **材料与工艺参考**
 5. **总结与建议**
 
-请以 Markdown 格式输出，结构清晰，内容专业。`
+请以 Markdown 格式输出，结构清晰，内容专业。`;
+          })()
         },
         {
           role: "user",
