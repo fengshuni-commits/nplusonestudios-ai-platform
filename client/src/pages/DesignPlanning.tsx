@@ -441,9 +441,14 @@ export default function DesignPlanning() {
                                         <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${collapsedMessages.has(i) ? '' : 'rotate-180'}`} />
                                       </div>
                                       {!collapsedMessages.has(i) ? (
-                                        <div className="p-4 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                                          <Streamdown>{msg.content}</Streamdown>
-                                        </div>
+                                        <>
+                                          <div className="p-4 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                                            <Streamdown>{msg.content}</Streamdown>
+                                          </div>
+                                          <div className="px-4 pb-3 flex justify-end border-t pt-3">
+                                            <CopyToFeishuButton content={msg.content} />
+                                          </div>
+                                        </>
                                       ) : (
                                         <div className="px-3 py-2 text-xs text-muted-foreground/60 italic">
                                           {msg.content.slice(0, 120).replace(/#+\s/g, '').replace(/\*\*/g, '')}…
