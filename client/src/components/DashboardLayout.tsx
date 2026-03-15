@@ -148,7 +148,11 @@ export default function DashboardLayout({
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-2">
-            <div className="text-2xl font-bold tracking-tight">N+1 STUDIOS</div>
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo_83af1afa.jpeg"
+              alt="N+1 STUDIOS"
+              className="h-12 w-auto object-contain"
+            />
             <div className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
               AI 工作平台
             </div>
@@ -436,10 +440,12 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar with Logo */}
         <header className="h-12 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm tracking-tight text-foreground">
-              N+1 STUDIOS
-            </span>
+          <div className="flex items-center gap-3">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo_83af1afa.jpeg"
+              alt="N+1 STUDIOS"
+              className="h-6 w-auto object-contain"
+            />
             <span className="text-[10px] tracking-[0.15em] text-muted-foreground/60 uppercase">
               AI 工作平台
             </span>

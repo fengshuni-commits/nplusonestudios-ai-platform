@@ -560,3 +560,9 @@
 ## Bug 修复：archdaily 链接不准确
 - [x] 重写 tavily.ts：优先 gooood.cn，对 archdaily 链接进行关键词验证，低置信度时降级为搜索页
 - [x] 修复 refine prompt：从数据库读取 caseRefs 并锁定链接，防止 LLM 替换 URL
+
+## Logo 图片替换
+- [x] 将 N+1 STUDIOS logo 图片上传到 CDN
+- [x] 顶部信息条（DashboardLayout header）替换文字 logo 为图片
+- [x] 主页（Home.tsx）问候语区域替换文字 logo 为图片
+- [x] 登录页（DashboardLayout 未登录状态）替换文字 logo 为图片

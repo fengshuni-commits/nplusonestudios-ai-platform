@@ -67,7 +67,14 @@ export default function Home() {
               {greetingData?.greeting || `欢迎回来，${user?.name || "设计师"}。`}
             </h1>
           )}
-          <p className="text-sm text-muted-foreground mt-0.5">{user?.name} · N+1 STUDIOS</p>
+          <div className="flex items-center gap-2 mt-1">
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo_83af1afa.jpeg"
+              alt="N+1 STUDIOS"
+              className="h-4 w-auto object-contain opacity-70"
+            />
+            {user?.name && <span className="text-xs text-muted-foreground">{user.name}</span>}
+          </div>
         </div>
         <Button
           variant="ghost" size="sm"
