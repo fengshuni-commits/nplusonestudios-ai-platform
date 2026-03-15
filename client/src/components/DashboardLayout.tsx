@@ -149,7 +149,7 @@ export default function DashboardLayout({
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-2">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo_83af1afa.jpeg"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo-transparent_aaa215a8.png"
               alt="N+1 STUDIOS"
               className="h-12 w-auto object-contain"
             />
@@ -442,7 +442,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
         <header className="h-12 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
           <div className="flex items-center gap-3">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo_83af1afa.jpeg"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo-transparent_aaa215a8.png"
               alt="N+1 STUDIOS"
               className="h-6 w-auto object-contain"
             />

@@ -69,7 +69,7 @@ export default function Home() {
           )}
           <div className="flex items-center gap-2 mt-1">
             <img
-              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo_83af1afa.jpeg"
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo-transparent_aaa215a8.png"
               alt="N+1 STUDIOS"
               className="h-4 w-auto object-contain opacity-70"
             />
