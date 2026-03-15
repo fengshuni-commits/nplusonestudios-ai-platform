@@ -1310,7 +1310,7 @@ const benchmarkRouter = router({
   generate: protectedProcedure
     .input(z.object({
       projectName: z.string(),
-      projectType: z.string(),
+      projectType: z.string().optional().default(""),
       requirements: z.string(),
       referenceCount: z.number().min(1).max(10).optional(),
       toolId: z.number().optional(),
@@ -1351,7 +1351,7 @@ const benchmarkRouter = router({
       currentReport: z.string().min(1),
       feedback: z.string().min(1),
       projectName: z.string(),
-      projectType: z.string(),
+      projectType: z.string().optional().default(""),
       toolId: z.number().optional(),
       parentHistoryId: z.number().optional(), // history record ID of the report being refined
     }))

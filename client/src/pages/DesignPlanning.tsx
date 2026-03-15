@@ -332,17 +332,6 @@ export default function DesignPlanning() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>项目类型</Label>
-                  <Select value={form.projectType} onValueChange={(v) => setForm({ ...form, projectType: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {projectTypes.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label>项目需求与描述 *</Label>
                   <Textarea
                     value={form.requirements}
