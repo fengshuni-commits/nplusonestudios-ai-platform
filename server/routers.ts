@@ -592,8 +592,9 @@ const dashboardRouter = router({
   greeting: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
     const userName = ctx.user.name || "设计师";
-    const hour = new Date().getHours();
-    const timeOfDay = hour < 6 ? "深夜" : hour < 12 ? "早上" : hour < 14 ? "中午" : hour < 18 ? "下午" : "晚上";
+    // Use Beijing time (UTC+8) for greeting
+    const bjHour = new Date(Date.now() + 8 * 3600 * 1000).getUTCHours();
+    const timeOfDay = bjHour < 6 ? "深夜" : bjHour < 9 ? "早上" : bjHour < 12 ? "上午" : bjHour < 14 ? "中午" : bjHour < 18 ? "下午" : bjHour < 22 ? "晚上" : "深夜";
 
     // Check if we have a cached greeting generated within the last 2 hours
     const cached = await db.getCachedGreeting(userId);
