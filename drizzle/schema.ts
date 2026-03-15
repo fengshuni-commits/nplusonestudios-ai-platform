@@ -57,6 +57,20 @@ export const projectCustomFields = mysqlTable("project_custom_fields", {
 export type ProjectCustomField = typeof projectCustomFields.$inferSelect;
 export type InsertProjectCustomField = typeof projectCustomFields.$inferInsert;
 
+// ─── Project Field Templates (信息类别模板，管理员配置) ────
+export const projectFieldTemplates = mysqlTable("project_field_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  description: varchar("description", { length: 256 }),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  isDefault: boolean("isDefault").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProjectFieldTemplate = typeof projectFieldTemplates.$inferSelect;
+export type InsertProjectFieldTemplate = typeof projectFieldTemplates.$inferInsert;
+
 // ─── Project Members ─────────────────────────────────────
 export const projectMembers = mysqlTable("project_members", {
   id: int("id").autoincrement().primaryKey(),

@@ -18,6 +18,7 @@ import {
   workflowInstances,
   feedback, InsertFeedback,
   projectCustomFields, InsertProjectCustomField,
+  projectFieldTemplates, InsertProjectFieldTemplate,
   generationHistory,
   InsertGenerationHistory,
   benchmarkJobs,
@@ -171,10 +172,38 @@ export async function updateProjectCustomField(id: number, data: Partial<InsertP
 export async function deleteProjectCustomField(id: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(projectCustomFields).where(eq(projectCustomFields.id, id));
+   await db.delete(projectCustomFields).where(eq(projectCustomFields.id, id));
 }
 
-/// ─── Project Members ─────────────────────────────────────
+// ─── Project Field Templates ──────────────────────────────────────
+
+export async function listProjectFieldTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(projectFieldTemplates)
+    .orderBy(projectFieldTemplates.sortOrder, projectFieldTemplates.createdAt);
+}
+
+export async function createProjectFieldTemplate(data: InsertProjectFieldTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(projectFieldTemplates).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function updateProjectFieldTemplate(id: number, data: Partial<InsertProjectFieldTemplate>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(projectFieldTemplates).set(data).where(eq(projectFieldTemplates.id, id));
+}
+
+export async function deleteProjectFieldTemplate(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(projectFieldTemplates).where(eq(projectFieldTemplates.id, id));
+}
+
+/// ─── Project Members ───────────────────────────────────────────────────
 
 export async function listProjectMembers(projectId: number) {
   const db = await getDb();

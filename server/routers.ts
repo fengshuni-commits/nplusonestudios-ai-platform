@@ -789,6 +789,66 @@ const projectsRouter = router({
       return { success: true };
     }),
 
+  // ─── AI Extract Project Info from free text ────
+  extractInfo: protectedProcedure
+    .input(z.object({
+      text: z.string().min(1),
+      projectId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      // Get field templates as hints
+      const templates = await db.listProjectFieldTemplates();
+      const templateNames = templates.map(t => t.name).join("、");
+      const response = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `你是一个建筑设计项目信息提取助手。用户会输入一段描述项目的自由文字，请你提取其中的关键信息并对应到合适的信息类别。
+
+常用的信息类别包括：${templateNames}。你也可以创建新的类别名称。
+
+要求：
+1. 返回 JSON 数组，每个元素包含 fieldName 和 fieldValue
+2. fieldName 应与常用类别名称匹配（如果内容匹配），或创建简短清晰的新类别名
+3. fieldValue 应是简洁准确的信息，去掉冠冕词语
+4. 只返回能明确识别的信息，不要猜测
+5. 如果文字中没有有效信息，返回空数组`,
+          },
+          { role: "user", content: input.text },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "project_info_extraction",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                fields: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      fieldName: { type: "string" },
+                      fieldValue: { type: "string" },
+                    },
+                    required: ["fieldName", "fieldValue"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["fields"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const rawContent = response.choices[0]?.message?.content;
+      const content = typeof rawContent === "string" ? rawContent : "{}";
+      const parsed = JSON.parse(content);
+      return { fields: parsed.fields || [] };
+    }),
+
   // ─── Export project info as context for AI modules ────
   getProjectContext: protectedProcedure
     .input(z.object({ id: z.number() }))
@@ -2707,6 +2767,48 @@ async function generatePresentationInBackground(
   }
 }
 
+// ─── Field Templates Router ─────────────────────────────────────────────────
+const fieldTemplatesRouter = router({
+  list: protectedProcedure.query(async () => {
+    return db.listProjectFieldTemplates();
+  }),
+
+  create: adminProcedure
+    .input(z.object({
+      name: z.string().min(1).max(128),
+      description: z.string().max(256).optional(),
+      sortOrder: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return db.createProjectFieldTemplate({
+        name: input.name,
+        description: input.description,
+        sortOrder: input.sortOrder ?? 0,
+        isDefault: false,
+      });
+    }),
+
+  update: adminProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().min(1).max(128).optional(),
+      description: z.string().max(256).optional(),
+      sortOrder: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateProjectFieldTemplate(id, data);
+      return { success: true };
+    }),
+
+  delete: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.deleteProjectFieldTemplate(input.id);
+      return { success: true };
+    }),
+});
+
 const presentationRouter = router({
   generate: protectedProcedure
     .input(z.object({
@@ -2768,6 +2870,7 @@ export const appRouter = router({system: systemRouter,
   feedback: feedbackRouter,
   enhance: enhanceRouter,
   presentation: presentationRouter,
+  fieldTemplates: fieldTemplatesRouter,
 });
 
 export type AppRouter = typeof appRouter;

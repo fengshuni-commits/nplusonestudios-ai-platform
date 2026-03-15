@@ -514,3 +514,13 @@
 - [x] 后端：generatePresentationInBackground（LLM 结构化 → 图片获取 → PPTX 构建 → S3 上传）
 - [x] 前端：Presentation.tsx 完整实现（演示标题+内容输入、项目信息导入、图片上传、进度轮询、下载 PPT、生成历史）
 - [x] 更新 HelpGuide 使用说明与实际功能对应
+
+## 项目信息类别模板系统
+- [x] 数据库：新增 project_field_templates 表（id, name, description, sortOrder, isDefault, createdAt）
+- [x] 数据库：预置 10 个默认类别（甲方名称、项目面积、项目地点、设计周期、预算范围、项目概况、设计理念、业务目标、甲方背景、特殊要求）
+- [x] 后端：fieldTemplates 路由（list, create, update, delete，管理员权限）
+- [x] 后端：projects.extractInfo API（接收自由文字，LLM 提取关键词并分类为字段列表）
+- [x] 前端：重构新建项目对话框（仅名称+编号必填，提供类别选择列表，支持自由文字 AI 提取）
+- [x] 前端：重构项目详情页信息编辑（支持从类别列表选择添加字段，支持自由文字 AI 提取）
+- [x] 前端：管理员设置页面添加信息类别模板管理（增删改排序）
+- [x] 测试：12 项测试全部通过
