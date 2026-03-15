@@ -69,7 +69,7 @@ export default function ProjectDetail() {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold">{project.name}</h1>
-            <Badge variant="outline">{statusLabel(project.status)}</Badge>
+            <Badge variant="outline" className={statusBadgeProps(project.status).className}>{statusBadgeProps(project.status).label}</Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             {project.code && `${project.code} · `}{clientNameFromCustom || project.clientName || "未指定甲方"}
@@ -449,7 +449,7 @@ function ProjectInfoTab({
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm pt-2"><Badge variant="outline">{statusLabel(project.status)}</Badge></p>
+              <p className="text-sm pt-2"><Badge variant="outline" className={statusBadgeProps(project.status).className}>{statusBadgeProps(project.status).label}</Badge></p>
             )}
           </div>
 
@@ -1160,9 +1160,15 @@ function CategoryBadge({ category }: { category: string }) {
   return <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">{map[category] || category}</span>;
 }
 
-function statusLabel(s: string) {
-  const m: Record<string, string> = { planning: "待启动", design: "设计中", construction: "施工中", completed: "已完成", archived: "已归档" };
-  return m[s] || s;
+function statusBadgeProps(status: string): { label: string; className: string } {
+  const configs: Record<string, { label: string; className: string }> = {
+    planning:     { label: "待启动",   className: "border-slate-300 text-slate-500 bg-slate-50 dark:bg-slate-900/30 dark:text-slate-400" },
+    design:       { label: "设计中",   className: "border-blue-400 text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
+    construction: { label: "施工中",   className: "border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+    completed:    { label: "已完成",   className: "border-green-400 text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400" },
+    archived:     { label: "已归档",   className: "border-gray-300 text-gray-400 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500" },
+  };
+  return configs[status] ?? { label: status, className: "" };
 }
 
 function docTypeLabel(s: string) {

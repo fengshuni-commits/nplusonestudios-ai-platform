@@ -588,3 +588,6 @@
 
 ## 文案修改：项目状态「规划中」→「待启动」
 - [x] Home.tsx、Projects.tsx、ProjectDetail.tsx 中所有「规划中」替换为「待启动」
+
+## 项目状态标签颜色区分
+- [x] Projects.tsx、ProjectDetail.tsx、Home.tsx：为各状态设置专属颜色（待启动=灰蓝、设计中=蓝、施工中=橙、已完成=绿、已归档=灰）
