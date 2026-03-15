@@ -155,11 +155,34 @@ function scoreResult(result: TavilySearchResult, caseName: string): number {
 }
 
 /**
- * Perform a single Tavily search
+ * Low-quality domains to exclude from all searches.
+ * These tend to produce irrelevant aggregator pages, ads, or social noise.
+ */
+const EXCLUDE_DOMAINS = [
+  "pinterest.com",
+  "pinterest.cn",
+  "zhihu.com",
+  "baidu.com",
+  "baike.baidu.com",
+  "weibo.com",
+  "douban.com",
+  "taobao.com",
+  "jd.com",
+  "amazon.com",
+  "youtube.com",
+  "instagram.com",
+  "facebook.com",
+  "twitter.com",
+  "reddit.com",
+  "quora.com",
+  "wikipedia.org",
+];
+
+/**
+ * Perform a single Tavily search (open web, no domain restriction)
  */
 async function tavilySearch(
   query: string,
-  domains: string[],
   maxResults = 5
 ): Promise<TavilySearchResult[]> {
   const response = await fetch(`${TAVILY_BASE_URL}/search`, {
@@ -172,7 +195,7 @@ async function tavilySearch(
       query,
       max_results: maxResults,
       search_depth: "basic",
-      include_domains: domains,
+      exclude_domains: EXCLUDE_DOMAINS,
     }),
     signal: AbortSignal.timeout(15000),
   });
@@ -203,22 +226,21 @@ export async function searchCaseStudy(
     return getFallbackUrl(caseName);
   }
 
-  const domains = getSearchDomains(projectType);
   let allResults: TavilySearchResult[] = [];
 
   try {
-    // Strategy 1: Chinese query - gooood.cn is very accurate for Chinese architecture projects
+    // Strategy 1: Chinese query - open web, no domain restriction
     try {
       const chineseQuery = `${caseName} 建筑设计`;
-      const chineseResults = await tavilySearch(chineseQuery, ["gooood.cn", "archdaily.cn"], 5);
+      const chineseResults = await tavilySearch(chineseQuery, 5);
       allResults.push(...chineseResults);
     } catch {
       // Chinese search failure is non-critical
     }
 
-    // Strategy 2: English query - better for international sites
+    // Strategy 2: English query - open web, no domain restriction
     const englishQuery = `${caseName} architecture design`;
-    const englishResults = await tavilySearch(englishQuery, domains, 5);
+    const englishResults = await tavilySearch(englishQuery, 5);
     allResults.push(...englishResults);
 
     if (allResults.length === 0) {

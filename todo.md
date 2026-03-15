@@ -596,3 +596,8 @@
 - [x] 查找生成记录 UI 位置及 inputParams 中提示词字段
 - [x] 在记录卡片中添加「复制提示词」按钮
 - [x] 保存检查点
+
+## Tavily 搜索范围优化：去掉 include_domains 强制约束
+- [x] 定位 tavily.ts 中 include_domains 的使用位置
+- [x] 改为 exclude_domains 过滤低质量站，扩大覆盖面
+- [x] 保存检查点
