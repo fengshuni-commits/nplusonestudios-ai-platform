@@ -566,3 +566,9 @@
 - [x] 顶部信息条（DashboardLayout header）替换文字 logo 为图片
 - [x] 主页（Home.tsx）问候语区域替换文字 logo 为图片
 - [x] 登录页（DashboardLayout 未登录状态）替换文字 logo 为图片
+
+## Bug 修复：案例调研报告链接不准确（Round 2）
+- [x] 读取 tavily.ts 和 benchmark 生成逻辑，定位链接编造根源
+- [x] 重构：搜索结果 URL 强锁定到 prompt，禁止 LLM 自行生成 URL
+- [x] 修复 refine 流程：从数据库读取 caseRefs 并传入，防止修改时替换链接
+- [x] 测试验证链接质量

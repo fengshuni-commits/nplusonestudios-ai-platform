@@ -625,18 +625,17 @@ export default function HistoryPage() {
     setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
     setRefineFeedback("");
     setIsRefining(true);
-    // For refine, use the latest chain item as parent if available
-    const latestChainItem = chainQuery.data && chainQuery.data.length > 0
-      ? chainQuery.data[chainQuery.data.length - 1]
-      : null;
+    // Always use selectedRootId (root of the chain) as parentHistoryId
+    // so the refine worker can load caseRefs from the original report's inputParams
+    const rootHistoryId = selectedRootId || activeItem.id;
     refineMutation.mutate({
       currentReport: currentReportContent,
       feedback: userMsg,
       projectName: activeItem.title || "未命名项目",
       projectType: "办公空间",
-      parentHistoryId: latestChainItem?.id || activeItem.id,
+      parentHistoryId: rootHistoryId,
     });
-  }, [refineFeedback, currentReportContent, displayContentItem, selectedItem, chainQuery.data, refineMutation, isRefining]);
+  }, [refineFeedback, currentReportContent, displayContentItem, selectedItem, chainQuery.data, refineMutation, isRefining, selectedRootId]);
   const deleteMutation = trpc.history.delete.useMutation({
     onSuccess: () => { utils.history.listGrouped.invalidate(); toast.success("已删除记录"); },
     onError: (e) => toast.error(e.message || "删除失败"),

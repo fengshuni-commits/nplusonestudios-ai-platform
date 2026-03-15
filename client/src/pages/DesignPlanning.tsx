@@ -217,6 +217,11 @@ export default function DesignPlanning() {
         setIsReportCollapsed(true);
         setIsRefining(false);
         setRefineJobId(null);
+        // Update reportHistoryId so next refine uses the latest history record
+        // which contains the caseRefs needed to lock links
+        if ((result as any).historyId) {
+          setReportHistoryId((result as any).historyId);
+        }
         toast.success("修订版报告已生成，已自动保存到生成历史");
         return true;
       } else if (result.status === "failed") {

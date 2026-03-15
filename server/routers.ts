@@ -1185,9 +1185,26 @@ async function refineBenchmarkInBackground(
   try {
     await db.updateBenchmarkJob(jobId, { status: "processing" });
 
-    // Load stored caseRefs to lock links during refinement
-    const jobData = await db.getBenchmarkJob(jobId);
-    const storedCaseRefs = jobData?.caseRefs as Record<string, string> | null | undefined;
+    // Load caseRefs from parent history record (most reliable source)
+    // The refine job itself is brand new and has no caseRefs yet
+    let storedCaseRefs: Record<string, string> | null | undefined = null;
+    if (parentHistoryId) {
+      try {
+        const parentHistory = await db.getGenerationHistoryById(parentHistoryId, userId);
+        const parentInputParams = parentHistory?.inputParams as Record<string, unknown> | null;
+        if (parentInputParams?.caseRefs && typeof parentInputParams.caseRefs === 'object') {
+          storedCaseRefs = parentInputParams.caseRefs as Record<string, string>;
+          console.log(`[Benchmark Refine] Loaded ${Object.keys(storedCaseRefs).length} caseRefs from parentHistoryId=${parentHistoryId}`);
+        }
+      } catch (e) {
+        console.warn('[Benchmark Refine] Failed to load parent caseRefs:', e);
+      }
+    }
+    // Fallback: try loading from the refine job itself (legacy path)
+    if (!storedCaseRefs) {
+      const jobData = await db.getBenchmarkJob(jobId);
+      storedCaseRefs = jobData?.caseRefs as Record<string, string> | null | undefined;
+    }
     const caseRefsSection = storedCaseRefs && Object.keys(storedCaseRefs).length > 0
       ? `\n\n**已验证的案例链接（必须原样保留，不得修改或替换）**：\n${Object.entries(storedCaseRefs).map(([name, url]) => `- ${name}: ${url}`).join('\n')}\n\n注意：以 \`?q=\` 结尾的链接是搜索页，这是正常的，请原样保留，不要替换为其他 URL。`
       : '';
@@ -1272,7 +1289,8 @@ async function generateBenchmarkInBackground(
 **要求**：
 - 只返回案例名称列表，每行一个，无需其他内容
 - 案例必须是真实存在的建筑项目，优先选择在 ArchDaily、谷德设计等主流建筑媒体上有详细介绍的项目
-- 案例名称要具体，包含项目地点和类型，例如"北京某科技公司总部办公楼"或"上海某展厅设计"
+- 案例名称必须是项目的真实英文或中文名称，例如"Apple Park"、"腾讯滨海大厦"、"华为松山湖研发中心"，不要使用描述性短语
+- 优先选择知名度高、在建筑媒体上有大量报道的项目，确保 Tavily 搜索能找到真实链接
 - 不要包含任何链接或额外说明
 
 直接输出案例名称列表，每行一个。`
@@ -1368,7 +1386,7 @@ ${caseRefs}
       module: "benchmark_report",
       title: `${input.projectName} - 案例调研报告`,
       summary: `${input.projectType} | ${input.requirements?.substring(0, 100) || ''}`,
-      inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements },
+      inputParams: { projectName: input.projectName, projectType: input.projectType, requirements: input.requirements, caseRefs: caseUrlMap },
       outputContent: content,
       status: "success",
       durationMs: Date.now() - startTime,
@@ -1376,8 +1394,7 @@ ${caseRefs}
       createdByName: userName,
       modelName: response.model || null,
     }).catch(() => ({ id: 0 }));
-
-    await db.updateBenchmarkJob(jobId, { status: "done", result: content, historyId: historyResult.id });
+    await db.updateBenchmarkJob(jobId, { status: "done", result: content, historyId: historyResult.id });;
   } catch (error: any) {
     console.error("[Benchmark] Background job failed:", error);
     await db.createAiToolLog({
@@ -1450,6 +1467,7 @@ const benchmarkRouter = router({
         inputParams: { type: 'refine', ...input } as Record<string, unknown>,
       });
       // Fire-and-forget background refine
+      // Pass userId so refineBenchmarkInBackground can look up parent history caseRefs
       refineBenchmarkInBackground(jobId, input, ctx.user.id, ctx.user.name, input.parentHistoryId).catch(err => {
         console.error("[Benchmark Refine] Unhandled error:", err);
       });
