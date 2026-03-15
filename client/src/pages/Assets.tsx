@@ -524,6 +524,90 @@ function Breadcrumb({
   );
 }
 
+// ─── Create Folder Dialog ────────────────────────────────
+function CreateFolderDialog({
+  open,
+  onClose,
+  onCreated,
+  parentFolderId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  parentFolderId: number | null;
+}) {
+  const [folderName, setFolderName] = useState("");
+  const createFolderMutation = trpc.assets.createFolder.useMutation({
+    onSuccess: () => {
+      toast.success(`文件夹「${folderName}」创建成功`);
+      setFolderName("");
+      onCreated();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message || "创建失败"),
+  });
+
+  const handleCreate = () => {
+    if (!folderName.trim()) {
+      toast.error("请输入文件夹名称");
+      return;
+    }
+    createFolderMutation.mutate({
+      name: folderName.trim(),
+      parentId: parentFolderId ?? undefined,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FolderPlus className="h-4 w-4" />
+            新建文件夹
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              文件夹名称
+            </label>
+            <Input
+              placeholder="输入文件夹名称…"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              autoFocus
+              className="h-8 text-sm"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={createFolderMutation.isPending}
+          >
+            取消
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleCreate}
+            disabled={!folderName.trim() || createFolderMutation.isPending}
+          >
+            {createFolderMutation.isPending ? (
+              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />创建中</>
+            ) : (
+              <>创建</>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────
 export default function Assets() {
   const [search, setSearch] = useState("");
@@ -531,6 +615,7 @@ export default function Assets() {
   const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [folderPath, setFolderPath] = useState<Array<{ id: number | null; name: string }>>([]);
 
@@ -615,10 +700,16 @@ export default function Assets() {
               {assets.length > 0 ? `共 ${assets.length} 个项目` : "团队共享素材，支持文件夹结构"}
             </p>
           </div>
-          <Button size="sm" onClick={() => setUploadOpen(true)}>
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
-            上传
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setCreateFolderOpen(true)}>
+              <FolderPlus className="h-3.5 w-3.5 mr-1.5" />
+              新建文件夹
+            </Button>
+            <Button size="sm" onClick={() => setUploadOpen(true)}>
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              上传
+            </Button>
+          </div>
         </div>
 
         {/* Breadcrumb */}
@@ -701,6 +792,14 @@ export default function Assets() {
         onClose={() => setUploadOpen(false)}
         currentFolderId={currentFolderId}
         onUploaded={() => utils.assets.listByParent.invalidate()}
+      />
+
+      {/* Create folder dialog */}
+      <CreateFolderDialog
+        open={createFolderOpen}
+        onClose={() => setCreateFolderOpen(false)}
+        onCreated={() => utils.assets.listByParent.invalidate()}
+        parentFolderId={currentFolderId}
       />
 
       {/* Lightbox */}
