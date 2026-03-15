@@ -34,7 +34,6 @@ export default function Projects() {
   const [fields, setFields] = useState<FieldEntry[]>([]);
   const [freeText, setFreeText] = useState("");
   const [showFreeText, setShowFreeText] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(true);
 
   // AI extraction state
   const extractInfo = trpc.projects.extractInfo.useMutation({
@@ -100,7 +99,6 @@ export default function Projects() {
     setFields([]);
     setFreeText("");
     setShowFreeText(false);
-    setShowTemplates(true);
   };
 
   const handleCreate = () => {
@@ -162,55 +160,20 @@ export default function Projects() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm text-muted-foreground">补充项目信息（可选）</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => { setShowFreeText(!showFreeText); setShowTemplates(false); }}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      AI 提取
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => { setShowTemplates(!showTemplates); setShowFreeText(false); }}
-                    >
-                      {showTemplates ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      选择类别
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setShowFreeText(!showFreeText)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {showFreeText ? "收起 AI 提取" : "AI 提取"}
+                  </Button>
                 </div>
 
-                {/* AI free text input */}
-                {showFreeText && (
-                  <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                    <p className="text-xs text-muted-foreground">输入一段项目描述，AI 将自动提取关键信息并分类</p>
-                    <Textarea
-                      value={freeText}
-                      onChange={(e) => setFreeText(e.target.value)}
-                      placeholder="例：这是一个位于上海浦东的科技公司总部，建筑面积约 8000 平方米，甲方是某半导体企业，预算约 2000 万，希望体现科技感和开放协作氛围..."
-                      rows={4}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleExtract}
-                      disabled={extractInfo.isPending}
-                      className="w-full"
-                    >
-                      <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                      {extractInfo.isPending ? "AI 提取中..." : "AI 自动提取"}
-                    </Button>
-                  </div>
-                )}
-
-                {/* Template category selector */}
-                {showTemplates && fieldTemplates && fieldTemplates.length > 0 && (
+                {/* Template category selector - always visible */}
+                {fieldTemplates && fieldTemplates.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">选择需要填写的信息类别：</p>
                     <div className="flex flex-wrap gap-2">
@@ -233,6 +196,29 @@ export default function Projects() {
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* AI free text input - toggleable */}
+                {showFreeText && (
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">输入一段项目描述，AI 将自动提取关键信息并分类（与上方标签选择结果合并）</p>
+                    <Textarea
+                      value={freeText}
+                      onChange={(e) => setFreeText(e.target.value)}
+                      placeholder="例：这是一个位于上海浦东的科技公司总部，建筑面积约 8000 平方米，甲方是某半导体企业，预算约 2000 万，希望体现科技感和开放协作氛围..."
+                      rows={4}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleExtract}
+                      disabled={extractInfo.isPending}
+                      className="w-full"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                      {extractInfo.isPending ? "AI 提取中..." : "AI 自动提取"}
+                    </Button>
                   </div>
                 )}
 
