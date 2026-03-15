@@ -341,7 +341,7 @@ export default function Projects() {
           <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部状态</SelectItem>
-            <SelectItem value="planning">规划中</SelectItem>
+            <SelectItem value="planning">待启动</SelectItem>
             <SelectItem value="design">设计中</SelectItem>
             <SelectItem value="construction">施工中</SelectItem>
             <SelectItem value="completed">已完成</SelectItem>
@@ -435,6 +435,6 @@ export default function Projects() {
 }
 
 function statusLabel(status: string) {
-  const map: Record<string, string> = { planning: "规划中", design: "设计中", construction: "施工中", completed: "已完成", archived: "已归档" };
+  const map: Record<string, string> = { planning: "待启动", design: "设计中", construction: "施工中", completed: "已完成", archived: "已归档" };
   return map[status] || status;
 }

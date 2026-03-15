@@ -254,7 +254,7 @@ function EmptyState({ message, action }: { message: string; action?: { label: st
 }
 
 function statusLabel(status: string) {
-  const map: Record<string, string> = { planning: "规划中", design: "设计中", construction: "施工中", completed: "已完成", archived: "已归档" };
+  const map: Record<string, string> = { planning: "待启动", design: "设计中", construction: "施工中", completed: "已完成", archived: "已归档" };
   return map[status] || status;
 }
 

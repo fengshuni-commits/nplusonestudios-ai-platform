@@ -585,3 +585,6 @@
 - [x] AI 效果图模块：风格列表改为动态读取，生成时注入 promptHint 和参考图
 - [x] 删除 AI 效果图模块的「导入项目信息」功能
 - [x] 编写 vitest 测试
+
+## 文案修改：项目状态「规划中」→「待启动」
+- [x] Home.tsx、Projects.tsx、ProjectDetail.tsx 中所有「规划中」替换为「待启动」
