@@ -259,7 +259,7 @@ export default function DesignPlanning() {
 
 
   const handleGenerate = () => {
-    if (!form.projectName.trim()) { toast.error("请输入项目名称"); return; }
+    if (!form.projectName.trim()) { toast.error("请输入报告名称"); return; }
     if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
     setIsGenerating(true);
     setReport("");
@@ -315,7 +315,7 @@ export default function DesignPlanning() {
                   onImport={(ctx: ProjectContext) => {
                     setImportedProjectId(ctx.project.id);
                     const newForm = { ...form };
-                    if (ctx.project.name) newForm.projectName = ctx.project.name;
+                    if (ctx.project.name) newForm.projectName = `${ctx.project.name}案例调研报告`;
                     // Map project overview / business goal to requirements
                     const reqParts: string[] = [];
                     if (ctx.project.companyProfile) reqParts.push(`公司概况：${ctx.project.companyProfile}`);
@@ -334,11 +334,11 @@ export default function DesignPlanning() {
                 />
 
                 <div className="space-y-2">
-                  <Label>项目名称 *</Label>
+                  <Label>报告名称 *</Label>
                   <Input
                     value={form.projectName}
                     onChange={(e) => setForm({ ...form, projectName: e.target.value })}
-                    placeholder="例：某科技园区总部办公楼"
+                    placeholder="例：某科技园区总部办公楼案例调研报告"
                   />
                 </div>
                 <div className="space-y-2">
