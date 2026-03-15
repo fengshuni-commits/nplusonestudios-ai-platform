@@ -405,6 +405,22 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: Tile
         </div>
       )}
 
+      {/* Copy prompt button for benchmark_report */}
+      {item.module === "benchmark_report" && (item.summary || item.title) && (
+        <div className="absolute bottom-1.5 right-8 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          onClick={(e) => {
+            e.stopPropagation();
+            const promptText = item.summary || item.title || "";
+            navigator.clipboard.writeText(promptText)
+              .then(() => { const el = e.currentTarget as HTMLElement; el.setAttribute("data-copied", "1"); setTimeout(() => el.removeAttribute("data-copied"), 1500); })
+              .catch(() => {});
+          }}>
+          <div className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors" title="复制提示词">
+            <Copy className="h-3 w-3" />
+          </div>
+        </div>
+      )}
+
       {/* Delete button */}
       <div className="absolute bottom-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10"
         onClick={(e) => e.stopPropagation()}>
