@@ -33,15 +33,10 @@ const moduleLabels: Record<string, { label: string; icon: React.ComponentType<{ 
   media_instagram: { label: "Instagram", icon: Camera, color: "bg-pink-100 text-pink-700" },
 };
 
-// ─── Built-in project info fields ───────────────────────
+// ─── Built-in project info fields (only core fields; others are in custom fields)
 const builtInFields = [
   { key: "name", label: "项目名称", type: "input" as const, required: true },
   { key: "code", label: "项目编号", type: "input" as const },
-  { key: "clientName", label: "甲方名称", type: "input" as const },
-  { key: "companyProfile", label: "公司概况", type: "textarea" as const },
-  { key: "businessGoal", label: "业务目标", type: "textarea" as const },
-  { key: "clientProfile", label: "客户情况", type: "textarea" as const },
-  { key: "projectOverview", label: "项目概况", type: "textarea" as const },
 ];
 
 export default function ProjectDetail() {
@@ -56,6 +51,9 @@ export default function ProjectDetail() {
   const { data: project, isLoading: projectLoading } = trpc.projects.getById.useQuery({ id: projectId });
   const { data: customFields } = trpc.projects.listCustomFields.useQuery({ projectId });
   const { data: generationHistory } = trpc.projects.listGenerationHistory.useQuery({ projectId });
+
+  // Derive clientName from custom fields (migrated from standard field)
+  const clientNameFromCustom = customFields?.find((f: any) => f.fieldName === '甲方名称')?.fieldValue;
 
   if (projectLoading || !project) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">加载中...</div>;
@@ -74,7 +72,7 @@ export default function ProjectDetail() {
             <Badge variant="outline">{statusLabel(project.status)}</Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {project.code && `${project.code} · `}{project.clientName || "未指定甲方"}
+            {project.code && `${project.code} · `}{clientNameFromCustom || project.clientName || "未指定甲方"}
           </p>
         </div>
       </div>
@@ -261,11 +259,6 @@ function ProjectInfoTab({
     }
     updateProject.mutate(payload as any);
   };
-
-  // Compute merged info list: built-in fields with values + custom fields
-  const builtInWithValues = builtInFields
-    .filter(f => f.key !== "name" && f.key !== "code") // name/code shown in header
-    .filter(f => !!(project as any)[f.key]);
 
   return (
     <div className="space-y-6">
@@ -460,35 +453,9 @@ function ProjectInfoTab({
             )}
           </div>
 
-          {/* Built-in fields with values (non-editing: only show filled; editing: show all) */}
-          {editing ? (
-            builtInFields
-              .filter(f => f.key !== "name" && f.key !== "code")
-              .map((field) => (
-                <div key={field.key} className="grid grid-cols-[120px_1fr] gap-4 items-start">
-                  <Label className="text-sm text-muted-foreground pt-2">{field.label}</Label>
-                  {field.type === "textarea" ? (
-                    <Textarea value={form[field.key] || ""} onChange={(e) => setForm({ ...form, [field.key]: e.target.value })} rows={3} className="text-sm" />
-                  ) : (
-                    <Input value={form[field.key] || ""} onChange={(e) => setForm({ ...form, [field.key]: e.target.value })} className="text-sm" />
-                  )}
-                </div>
-              ))
-          ) : (
-            builtInWithValues.map((field) => (
-              <div key={field.key} className="grid grid-cols-[120px_1fr] gap-4 items-start">
-                <span className="text-sm text-muted-foreground pt-1">{field.label}</span>
-                <p className="text-sm pt-1 whitespace-pre-wrap">{(project as any)[field.key]}</p>
-              </div>
-            ))
-          )}
-
           {/* Custom fields */}
           {customFields && customFields.length > 0 && (
             <>
-              {(editing || builtInWithValues.length > 0) && customFields.length > 0 && (
-                <div className="border-t my-2" />
-              )}
               {customFields.map((cf: any) => (
                 <div key={cf.id} className="grid grid-cols-[120px_1fr_auto] gap-4 items-start group">
                   {editingFieldId === cf.id ? (
@@ -532,7 +499,7 @@ function ProjectInfoTab({
           )}
 
           {/* Empty state */}
-          {!editing && builtInWithValues.length === 0 && (!customFields || customFields.length === 0) && (
+          {!editing && (!customFields || customFields.length === 0) && (
             <p className="text-sm text-muted-foreground text-center py-4">暂无项目信息，点击「添加信息」添加</p>
           )}
         </CardContent>

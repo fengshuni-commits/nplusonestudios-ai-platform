@@ -539,3 +539,6 @@
 ## 项目看板卡片显示甲方名称
 - [x] 后端：listProjects 附带 clientNameDisplay 字段（从 project_custom_fields 读取甲方名称）
 - [x] 前端：项目卡片在项目名称下方显示甲方名称（如有）
+
+## Bug 修复：项目详情页重复信息标签未合并
+- [x] 彻底重构 ProjectInfoTab：去掉 builtInFields 中已迁移的 5 个标准字段，只保留 name/code，页面头部甲方名称从自定义字段读取
