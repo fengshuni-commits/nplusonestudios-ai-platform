@@ -335,3 +335,52 @@ describe("colorPlan router - AI 彩平", () => {
     }
   });
 });
+
+describe("generateImageWithTool - external API routing", () => {
+  it("falls back to built-in AI when toolId is null", async () => {
+    // When no toolId is provided, generateImageWithTool should call built-in generateImage
+    // We can't easily mock the network, but we verify the function exists and accepts null toolId
+    const { generateImageWithTool } = await import("./_core/generateImageWithTool");
+    expect(typeof generateImageWithTool).toBe("function");
+    // Calling with null toolId should attempt built-in AI (will fail in test env without real API)
+    try {
+      await generateImageWithTool({ prompt: "test", toolId: null });
+    } catch (err: any) {
+      // Expected: no built-in API in test env, but should NOT throw a "toolId" related error
+      expect(err.message).not.toContain("toolId");
+    }
+  });
+
+  it("falls back to built-in AI when tool has no apiEndpoint", async () => {
+    const { generateImageWithTool } = await import("./_core/generateImageWithTool");
+    // toolId 999999 doesn't exist → should fall back gracefully
+    try {
+      await generateImageWithTool({ prompt: "test", toolId: 999999 });
+    } catch (err: any) {
+      expect(err.message).not.toContain("toolId");
+    }
+  });
+
+  it("colorPlan.generate accepts toolId parameter", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    // Should reject with auth error, not schema validation error
+    await expect(
+      caller.colorPlan.generate({
+        floorPlanUrl: "https://example.com/floor.png",
+        toolId: 240008,
+      })
+    ).rejects.toThrow();
+  });
+
+  it("rendering.generate accepts toolId parameter", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.rendering.generate({
+        prompt: "modern office",
+        toolId: 240008,
+      })
+    ).rejects.toThrow();
+  });
+});

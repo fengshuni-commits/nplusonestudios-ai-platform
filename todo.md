@@ -656,3 +656,12 @@
 - [x] 后端：colorPlan.generate 接口添加 toolId 参数和工具日志
 - [x] 前端：ColorPlan.tsx 头部添加 AiToolSelector（category="rendering"）
 - [x] 保存检查点
+
+## 修复 AI 效果图/彩平外部 API 调用（高优先级）
+- [x] 调查根本原因：rendering.generate 始终调用内置 AI，toolId 只用于日志
+- [x] 测试验证 Gemini API Key 可用（gemini-3.1-flash-image-preview，9秒返回图像）
+- [x] 修复数据库：Gemini 3 工具的 apiEndpoint 更新为正确的 Gemini API 端点
+- [x] 创建 generateImageWithTool.ts：根据 toolId 路由到外部 API（Gemini）或内置 AI
+- [x] 更新 rendering.generate：使用 generateImageWithTool 替代 generateImage
+- [x] 更新 colorPlan.generate：使用 generateImageWithTool 替代 generateImage
+- [x] 编写测试（31 项全部通过）并保存检查点

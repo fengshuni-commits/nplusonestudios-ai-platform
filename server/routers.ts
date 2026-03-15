@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { invokeLLM, invokeLLMWithUserTool } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
+import { generateImageWithTool } from "./_core/generateImageWithTool";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
@@ -1812,7 +1813,7 @@ const renderingRouter = router({
           genOpts.size = imageSize;
         }
 
-        const result = await generateImage(genOpts);
+        const result = await generateImageWithTool({ ...genOpts, toolId: input.toolId });
 
         await db.createAiToolLog({
           toolId: input.toolId || 0,
@@ -1975,7 +1976,7 @@ const colorPlanRouter = router({
       }
 
       try {
-        const result = await generateImage({ prompt, originalImages });
+        const result = await generateImageWithTool({ prompt, originalImages, toolId: input.toolId });
 
         const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,
