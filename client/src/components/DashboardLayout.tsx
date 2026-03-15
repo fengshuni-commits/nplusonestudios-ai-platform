@@ -417,7 +417,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Help Guide Modal */}
-      <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} />
+      <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} pageKey={location} />
 
       {/* Hover Popover - Sub menu (only in collapsed mode) */}
       {!expanded && hoveredSectionData && hoveredSectionData.items.length > 1 && (
