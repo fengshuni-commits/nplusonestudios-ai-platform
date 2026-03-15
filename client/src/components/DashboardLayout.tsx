@@ -39,6 +39,8 @@ import {
   LayoutDashboard,
   Presentation,
   Palette,
+  LayoutTemplate,
+  BookImage,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { HelpGuide } from "./HelpGuide";
@@ -101,6 +103,8 @@ const menuSections: MenuSection[] = [
       { icon: BookMarked, label: "小红书", path: "/media/xiaohongshu" },
       { icon: MessageCircle, label: "公众号", path: "/media/wechat" },
       { icon: Camera, label: "Instagram", path: "/media/instagram" },
+      { icon: LayoutTemplate, label: "图文排版", path: "/media/layout" },
+      { icon: BookImage, label: "作品集", path: "/media/portfolio" },
     ],
   },
   {

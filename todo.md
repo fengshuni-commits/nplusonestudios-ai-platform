@@ -643,3 +643,10 @@
 - [x] 导航：DashboardLayout 设计板块添加「AI 彩平」入口（Palette 图标）
 - [x] 路由：App.tsx 注册 /design/color-plan 路由
 - [x] 编写测试并保存检查点（27 项测试全部通过）
+
+## 媒体板块新增占位模块
+- [x] 创建「图文排版」占位页面（/media/layout）
+- [x] 创建「作品集」占位页面（/media/portfolio）
+- [x] App.tsx 注册两个新路由
+- [x] DashboardLayout 媒体板块添加两个导航入口（LayoutTemplate + BookImage 图标）
+- [x] 保存检查点

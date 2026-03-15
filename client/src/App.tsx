@@ -30,6 +30,8 @@ import Home from "./pages/Home";
 import DesignBrief from "./pages/DesignBrief";
 import PresentationPage from "./pages/Presentation";
 import ColorPlan from "./pages/ColorPlan";
+import MediaLayout from "./pages/MediaLayout";
+import MediaPortfolio from "./pages/MediaPortfolio";
 
 function Router() {
   return (
@@ -64,6 +66,8 @@ function Router() {
         <Route path="/media/xiaohongshu" component={MediaXiaohongshu} />
         <Route path="/media/wechat" component={MediaWechat} />
         <Route path="/media/instagram" component={MediaInstagram} />
+        <Route path="/media/layout" component={MediaLayout} />
+        <Route path="/media/portfolio" component={MediaPortfolio} />
 
         {/* 历史板块 */}
         <Route path="/history" component={HistoryPage} />
