@@ -419,7 +419,29 @@ export async function listAssets(opts?: { category?: string; search?: string }) 
   const conditions = [];
   if (opts?.category) conditions.push(eq(assets.category, opts.category));
   if (opts?.search) conditions.push(like(assets.name, `%${opts.search}%`));
-  return db.select().from(assets).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(assets.createdAt));
+  const rows = await db
+    .select({
+      id: assets.id,
+      name: assets.name,
+      description: assets.description,
+      category: assets.category,
+      tags: assets.tags,
+      fileUrl: assets.fileUrl,
+      fileKey: assets.fileKey,
+      fileType: assets.fileType,
+      fileSize: assets.fileSize,
+      thumbnailUrl: assets.thumbnailUrl,
+      uploadedBy: assets.uploadedBy,
+      historyId: assets.historyId,
+      projectId: assets.projectId,
+      createdAt: assets.createdAt,
+      projectName: projects.name,
+    })
+    .from(assets)
+    .leftJoin(projects, eq(assets.projectId, projects.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(assets.createdAt));
+  return rows;
 }
 
 export async function createAsset(data: InsertAsset) {

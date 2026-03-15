@@ -993,6 +993,8 @@ const assetsRouter = router({
       fileType: z.string().optional(),
       fileSize: z.number().optional(),
       thumbnailUrl: z.string().optional(),
+      historyId: z.number().optional(),
+      projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       return db.createAsset({ ...input, uploadedBy: ctx.user.id });
@@ -1042,6 +1044,8 @@ const assetsRouter = router({
         tags: input.tags,
         thumbnailUrl: imageUrl,
         uploadedBy: ctx.user.id,
+        historyId: input.historyId,
+        projectId: history.projectId ?? undefined,
       });
       return { asset, alreadyExists: false };
     }),

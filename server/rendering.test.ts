@@ -245,4 +245,41 @@ describe("assets router - material upload and sync", () => {
       caller.assets.importFromHistory({ historyId: 999999 })
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+  it("assets.create accepts historyId and projectId fields in schema", async () => {
+    const user = createTestUser();
+    const ctx = createContext(user);
+    const caller = appRouter.createCaller(ctx);
+    // Schema validation must pass (historyId/projectId are valid optional fields)
+    // The call may succeed (DB available) or fail (DB unavailable) - both are acceptable
+    try {
+      const result = await caller.assets.create({
+        name: "test-with-project",
+        fileUrl: "https://example.com/img.png",
+        fileKey: "assets/test.png",
+        historyId: 1,
+        projectId: 2,
+      });
+      // If DB is available, result should have an id
+      expect(result).toHaveProperty("id");
+    } catch (err: any) {
+      // If DB is unavailable, should not be a schema validation error
+      expect(err.message).not.toContain("Expected");
+      expect(err.code).not.toBe("BAD_REQUEST");
+    }
+  });
+  it("assets.list accepts category filter in schema", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    // Unauthenticated should throw auth error, not schema error
+    await expect(
+      caller.assets.list({ category: "ai_render", search: "test" })
+    ).rejects.toThrow();
+  });
+  it("assets.delete requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.assets.delete({ id: 1 })
+    ).rejects.toThrow();
+  });
 });

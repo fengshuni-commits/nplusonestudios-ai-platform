@@ -610,3 +610,11 @@
 - [x] 后端：添加从生成记录导入素材库的路由（assets.importFromHistory）
 - [x] 前端：图片卡片 hover 时显示「导入素材库」按钮，带状态反馈
 - [x] 编写测试并保存检查点
+
+## 素材库模块完善
+- [x] 数据库：assets 表增加 historyId、projectId 字段
+- [x] 后端：listAssets 带关联项目名称（JOIN projects）
+- [x] 后端：importFromHistory 写入 historyId 和 projectId
+- [x] 后端：assets.create 支持 historyId、projectId 参数
+- [x] 前端：重构 Assets.tsx（图片网格、关联项目标签、本地上传、删除、搜索）
+- [x] 编写测试并保存检查点

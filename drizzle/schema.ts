@@ -136,9 +136,10 @@ export const assets = mysqlTable("assets", {
   fileSize: int("fileSize"),
   thumbnailUrl: text("thumbnailUrl"),
   uploadedBy: int("uploadedBy"),
+  historyId: int("historyId"),
+  projectId: int("projectId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
-
 export type Asset = typeof assets.$inferSelect;
 export type InsertAsset = typeof assets.$inferInsert;
 

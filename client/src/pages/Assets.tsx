@@ -1,13 +1,532 @@
-import ComingSoon from "@/components/ComingSoon";
-import { Image } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Upload,
+  Search,
+  Trash2,
+  FolderOpen,
+  X,
+  Download,
+  Maximize2,
+  ImageIcon,
+  Loader2,
+  FolderPlus,
+} from "lucide-react";
 
-export default function Assets() {
+// ─── Types ────────────────────────────────────────────────
+type AssetItem = {
+  id: number;
+  name: string;
+  description: string | null;
+  category: string | null;
+  tags: string | null;
+  fileUrl: string;
+  fileKey: string;
+  fileType: string | null;
+  fileSize: number | null;
+  thumbnailUrl: string | null;
+  uploadedBy: number | null;
+  historyId: number | null;
+  projectId: number | null;
+  createdAt: Date;
+  projectName: string | null;
+};
+
+// ─── Lightbox ─────────────────────────────────────────────
+function Lightbox({ src, name, onClose }: { src: string; name: string; onClose: () => void }) {
   return (
-    <ComingSoon
-      icon={<Image className="h-8 w-8 text-primary/40" />}
-      title="素材库"
-      description="团队共享的素材库，支持图片、文档、模型文件的上传、分类与检索。"
-      features={["图片素材管理", "文档模板库", "3D 模型文件", "标签分类系统", "全文检索"]}
-    />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute -top-10 right-0 text-white/70 hover:text-white"
+          onClick={onClose}
+        >
+          <X className="h-5 w-5" />
+        </Button>
+        <img
+          src={src}
+          alt={name}
+          className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+        />
+        <p className="mt-2 text-center text-sm text-white/60 truncate max-w-[90vw]">{name}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Asset Card ───────────────────────────────────────────
+function AssetCard({
+  asset,
+  onDelete,
+  onLightbox,
+}: {
+  asset: AssetItem;
+  onDelete: (id: number) => void;
+  onLightbox: (src: string, name: string) => void;
+}) {
+  const isImage =
+    asset.fileType?.startsWith("image/") ||
+    asset.thumbnailUrl ||
+    /\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i.test(asset.fileUrl);
+
+  const displayUrl = asset.thumbnailUrl || asset.fileUrl;
+
+  const categoryLabel: Record<string, string> = {
+    ai_render: "AI 效果图",
+    image: "图片",
+    document: "文档",
+    model: "模型",
+    reference: "参考图",
+  };
+
+  return (
+    <div className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-border/80 transition-all duration-200 hover:shadow-md">
+      {/* Image area */}
+      <div
+        className="aspect-square bg-muted cursor-zoom-in overflow-hidden"
+        onClick={() => isImage && onLightbox(asset.fileUrl, asset.name)}
+      >
+        {isImage ? (
+          <img
+            src={displayUrl}
+            alt={asset.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ImageIcon className="h-10 w-10 text-muted-foreground/30" />
+          </div>
+        )}
+
+        {/* Hover overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 pointer-events-none" />
+
+        {/* Action buttons on hover */}
+        <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          {isImage && (
+            <button
+              className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+              title="放大查看"
+              onClick={(e) => { e.stopPropagation(); onLightbox(asset.fileUrl, asset.name); }}
+            >
+              <Maximize2 className="h-3 w-3" />
+            </button>
+          )}
+          <a
+            href={asset.fileUrl}
+            download={asset.name}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+            title="下载"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Download className="h-3 w-3" />
+          </a>
+          <button
+            className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-red-500/80 hover:text-white transition-colors"
+            title="删除"
+            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Info area */}
+      <div className="px-2.5 py-2 space-y-1">
+        <p className="text-xs font-medium text-foreground truncate" title={asset.name}>
+          {asset.name}
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {asset.category && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+              {categoryLabel[asset.category] || asset.category}
+            </Badge>
+          )}
+          {asset.projectName && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 h-4 font-normal text-primary/70 border-primary/30 bg-primary/5 max-w-[120px] truncate"
+              title={asset.projectName}
+            >
+              <FolderOpen className="h-2.5 w-2.5 mr-0.5 shrink-0" />
+              {asset.projectName}
+            </Badge>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Upload Dialog ────────────────────────────────────────
+function UploadDialog({
+  open,
+  onClose,
+  onUploaded,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onUploaded: () => void;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadMutation = trpc.assets.upload.useMutation();
+  const createMutation = trpc.assets.create.useMutation();
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const dropped = Array.from(e.dataTransfer.files).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    setFiles((prev) => [...prev, ...dropped]);
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    setFiles((prev) => [...prev, ...selected]);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpload = async () => {
+    if (files.length === 0) return;
+    setUploading(true);
+    setProgress(0);
+
+    let successCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        // Read file as base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1]); // strip data:xxx;base64,
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Upload to S3
+        const { url, key } = await uploadMutation.mutateAsync({
+          fileName: file.name,
+          fileData: base64,
+          contentType: file.type,
+        });
+
+        // Create asset record
+        await createMutation.mutateAsync({
+          name: file.name.replace(/\.[^.]+$/, ""),
+          fileUrl: url,
+          fileKey: key,
+          fileType: file.type,
+          fileSize: file.size,
+          thumbnailUrl: url,
+          category: "image",
+        });
+
+        successCount++;
+      } catch (err: any) {
+        toast.error(`${file.name} 上传失败：${err.message || "未知错误"}`);
+      }
+      setProgress(Math.round(((i + 1) / files.length) * 100));
+    }
+
+    setUploading(false);
+    if (successCount > 0) {
+      toast.success(`成功上传 ${successCount} 张图片`);
+      onUploaded();
+      onClose();
+    }
+    setFiles([]);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            上传图片到素材库
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Drop zone */}
+        <div
+          className="border-2 border-dashed border-border/60 rounded-xl p-8 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">拖拽图片到此处，或点击选择文件</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">支持 PNG、JPG、WebP、GIF 格式</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+
+        {/* File list */}
+        {files.length > 0 && (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {files.map((file, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-sm">
+                <ImageIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="flex-1 truncate text-foreground/80">{file.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {(file.size / 1024).toFixed(0)} KB
+                </span>
+                <button
+                  onClick={() => removeFile(i)}
+                  className="text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Progress */}
+        {uploading && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                上传中…
+              </span>
+              <span>{progress}%</span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="outline" onClick={onClose} disabled={uploading}>
+            取消
+          </Button>
+          <Button
+            onClick={handleUpload}
+            disabled={files.length === 0 || uploading}
+          >
+            {uploading ? (
+              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />上传中</>
+            ) : (
+              <><Upload className="h-3.5 w-3.5 mr-1.5" />上传 {files.length > 0 ? `(${files.length})` : ""}</>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────
+export default function Assets() {
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
+  const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const utils = trpc.useUtils();
+
+  const { data: assetsData, isLoading } = trpc.assets.list.useQuery(
+    { category: categoryFilter, search: search || undefined },
+    { refetchOnWindowFocus: false }
+  );
+
+  const deleteMutation = trpc.assets.delete.useMutation({
+    onSuccess: () => {
+      utils.assets.list.invalidate();
+      toast.success("已删除素材");
+    },
+    onError: (e) => toast.error(e.message || "删除失败"),
+  });
+
+  const assets = (assetsData || []) as AssetItem[];
+
+  const categories = [
+    { value: undefined, label: "全部" },
+    { value: "ai_render", label: "AI 效果图" },
+    { value: "image", label: "本地上传" },
+    { value: "reference", label: "参考图" },
+  ];
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border/40">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">素材库</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {assets.length > 0 ? `共 ${assets.length} 个素材` : "团队共享素材，可用于 AI 生成参考图或演示文稿"}
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setUploadOpen(true)}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            上传图片
+          </Button>
+        </div>
+
+        {/* Search + filter */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="搜索素材名称…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+          <div className="flex gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={String(c.value)}
+                onClick={() => setCategoryFilter(c.value)}
+                className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                  categoryFilter === c.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-40 gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            加载中…
+          </div>
+        ) : assets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-60 text-center">
+            <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+              <FolderPlus className="h-7 w-7 text-muted-foreground/40" />
+            </div>
+            <p className="text-sm font-medium text-foreground/60 mb-1">素材库暂无内容</p>
+            <p className="text-xs text-muted-foreground/50 max-w-xs">
+              可在「生成记录」中点击 AI 效果图上的
+              <span className="inline-flex items-center mx-1 text-emerald-500/80">
+                <FolderPlus className="h-3 w-3" />
+              </span>
+              图标导入，或点击右上角「上传图片」按钮添加本地图片
+            </p>
+            <Button size="sm" variant="outline" className="mt-4" onClick={() => setUploadOpen(true)}>
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              上传图片
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
+            {assets.map((asset) => (
+              <AssetCard
+                key={asset.id}
+                asset={asset}
+                onDelete={(id) => setDeleteTarget(id)}
+                onLightbox={(src, name) => setLightbox({ src, name })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upload dialog */}
+      <UploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={() => utils.assets.list.invalidate()}
+      />
+
+      {/* Lightbox */}
+      {lightbox && (
+        <Lightbox
+          src={lightbox.src}
+          name={lightbox.name}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+
+      {/* Delete confirm */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              删除后无法恢复，原始生成记录不受影响。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget !== null) {
+                  deleteMutation.mutate({ id: deleteTarget });
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
