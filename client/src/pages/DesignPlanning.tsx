@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
@@ -340,16 +341,23 @@ export default function DesignPlanning() {
                     rows={5}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>对标案例数量</Label>
-                  <Select value={form.referenceCount.toString()} onValueChange={(v) => setForm({ ...form, referenceCount: parseInt(v) })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[3, 5, 8, 10].map((n) => (
-                        <SelectItem key={n} value={n.toString()}>{n} 个案例</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>对标案例数量</Label>
+                    <span className="text-sm font-medium tabular-nums text-primary">{form.referenceCount} 个</span>
+                  </div>
+                  <Slider
+                    min={3}
+                    max={10}
+                    step={1}
+                    value={[form.referenceCount]}
+                    onValueChange={(vals: number[]) => setForm({ ...form, referenceCount: vals[0] })}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-[11px] text-muted-foreground/60 px-0.5">
+                    <span>3 个</span>
+                    <span>10 个</span>
+                  </div>
                 </div>
                 <Button onClick={handleGenerate} disabled={isGenerating} className="w-full">
                   {isGenerating ? (
