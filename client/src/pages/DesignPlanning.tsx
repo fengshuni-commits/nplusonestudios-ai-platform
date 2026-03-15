@@ -8,7 +8,8 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AiToolSelector from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Compass, FileText, Loader2, Sparkles, Send, MessageSquare, ChevronDown, Copy, Check } from "lucide-react";
+import { Compass, FileText, Loader2, Sparkles, Send, MessageSquare, ChevronDown, Copy, Check, HelpCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
@@ -289,7 +290,69 @@ export default function DesignPlanning() {
           <h1 className="text-2xl font-semibold tracking-tight">案例调研</h1>
           <p className="text-sm text-muted-foreground mt-1">AI 生成对标案例分析报告</p>
         </div>
-        <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" />
+        <div className="flex items-center gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="使用说明">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>案例调研 — 使用说明</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 text-sm text-foreground/90 leading-relaxed">
+                <p>案例调研模块通过 AI 自动检索并整理国内外同类项目案例，生成结构化的对标分析报告，帮助团队在方案设计阶段快速建立参照体系。</p>
+
+                <div>
+                  <p className="font-medium mb-2">一、快速开始</p>
+                  <ol className="space-y-1.5 list-decimal list-inside text-muted-foreground">
+                    <li>在《调研参数》面板填写《项目名称》和《项目需求与描述》</li>
+                    <li>选择需要生成的对标案例数量（3–10 个）</li>
+                    <li>右上角选择 AI 工具（不同工具在搜索覆盖面和报告质量上有所差异）</li>
+                    <li>点击《生成调研报告》，等待 1–3 分钟即可完成</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <p className="font-medium mb-2">二、关键功能</p>
+                  <div className="space-y-2.5">
+                    <div>
+                      <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-1">导入项目信息</p>
+                      <p>点击调研参数面板顶部的《导入项目信息》按钮，可将项目库中已建立的项目信息（公司概况、业务目标、项目概况等）自动填入调研参数，无需重复输入。</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-1">对话式修订</p>
+                      <p>报告生成后，可在下方对话框输入修改意见（如“请增加对可持续性的分析”“补充中国本土案例”），AI 会在原报告基础上进行定向修订，每次修订结果均会自动保存到生成历史。</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-1">复制到飞书</p>
+                      <p>报告区域右上角点击《复制到飞书》，将报告内容复制到剪贴板，直接在飞书文档中粘贴即可自动识别格式。</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-1">关联项目</p>
+                      <p>在《生成历史》页面中找到该报告，可将其关联到对应项目，方便后续在项目看板中统一查阅所有相关成果。</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="font-medium mb-2">三、填写建议</p>
+                  <ul className="space-y-1 list-disc list-inside text-muted-foreground">
+                    <li>项目名称建议包含地点、业主类型和空间类型，如《某科技园区总部办公楼》</li>
+                    <li>项目需求描述越具体，搜索结果越精准；建议包含面积、功能分区、风格定位等信息</li>
+                    <li>对标案例数量建议选 5–7 个，覆盖面和分析深度平衡较好</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-md bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
+                  生成时间通常为 1–3 分钟，使用推理模型时可能超过 3 分钟，请耐心等待。生成结果已自动保存，不必手动备份。
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" />
+        </div>
       </div>
 
       <div className="mt-4">
