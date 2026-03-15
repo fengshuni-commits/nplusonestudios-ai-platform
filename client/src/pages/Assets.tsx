@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,8 @@ import {
   ImageIcon,
   Loader2,
   FolderPlus,
+  ChevronRight,
+  Folder,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────
@@ -48,6 +50,9 @@ type AssetItem = {
   uploadedBy: number | null;
   historyId: number | null;
   projectId: number | null;
+  parentId: number | null;
+  isFolder: boolean;
+  path: string | null;
   createdAt: Date;
   projectName: string | null;
 };
@@ -84,10 +89,12 @@ function AssetCard({
   asset,
   onDelete,
   onLightbox,
+  onOpenFolder,
 }: {
   asset: AssetItem;
   onDelete: (id: number) => void;
   onLightbox: (src: string, name: string) => void;
+  onOpenFolder: (id: number) => void;
 }) {
   const isImage =
     asset.fileType?.startsWith("image/") ||
@@ -103,6 +110,40 @@ function AssetCard({
     model: "模型",
     reference: "参考图",
   };
+
+  if (asset.isFolder) {
+    return (
+      <div
+        className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/60 transition-all duration-200 hover:shadow-md cursor-pointer"
+        onClick={() => onOpenFolder(asset.id)}
+      >
+        <div className="aspect-square bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+          <Folder className="h-12 w-12 text-primary/40 group-hover:text-primary/60 transition-colors" />
+        </div>
+        <div className="px-2.5 py-2 space-y-1">
+          <p className="text-xs font-medium text-foreground truncate" title={asset.name}>
+            {asset.name}
+          </p>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+            文件夹
+          </Badge>
+        </div>
+        {/* Delete button on hover */}
+        <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <button
+            className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-red-500/80 hover:text-white transition-colors"
+            title="删除文件夹"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(asset.id);
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-border/80 transition-all duration-200 hover:shadow-md">
@@ -135,7 +176,10 @@ function AssetCard({
             <button
               className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors"
               title="放大查看"
-              onClick={(e) => { e.stopPropagation(); onLightbox(asset.fileUrl, asset.name); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onLightbox(asset.fileUrl, asset.name);
+              }}
             >
               <Maximize2 className="h-3 w-3" />
             </button>
@@ -154,7 +198,10 @@ function AssetCard({
           <button
             className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-red-500/80 hover:text-white transition-colors"
             title="删除"
-            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(asset.id);
+            }}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -192,29 +239,49 @@ function AssetCard({
 function UploadDialog({
   open,
   onClose,
+  currentFolderId,
   onUploaded,
 }: {
   open: boolean;
   onClose: () => void;
+  currentFolderId: number | null;
   onUploaded: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const uploadMutation = trpc.assets.upload.useMutation();
   const createMutation = trpc.assets.create.useMutation();
+  const createFolderMutation = trpc.assets.createFolder.useMutation();
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const dropped = Array.from(e.dataTransfer.files).filter((f) =>
-      f.type.startsWith("image/")
-    );
-    setFiles((prev) => [...prev, ...dropped]);
+    const items = Array.from(e.dataTransfer.items || []);
+    const droppedFiles: File[] = [];
+
+    items.forEach((item) => {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file && file.type.startsWith("image/")) {
+          droppedFiles.push(file);
+        }
+      }
+    });
+
+    setFiles((prev) => [...prev, ...droppedFiles]);
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    setFiles((prev) => [...prev, ...selected]);
+  };
+
+  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []).filter((f) =>
       f.type.startsWith("image/")
     );
@@ -231,9 +298,35 @@ function UploadDialog({
     setProgress(0);
 
     let successCount = 0;
+    const folderMap = new Map<string, number>(); // path -> folderId
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
+        // Get folder path from webkitRelativePath or construct from file name
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        const pathParts = relativePath.split("/");
+        let parentId = currentFolderId;
+
+        // Create folder hierarchy if needed
+        if (pathParts.length > 1) {
+          for (let j = 0; j < pathParts.length - 1; j++) {
+            const folderPath = pathParts.slice(0, j + 1).join("/");
+            if (!folderMap.has(folderPath)) {
+              const folderName = pathParts[j];
+              const { id: newFolderId } = await createFolderMutation.mutateAsync({
+                name: folderName,
+                parentId: parentId ?? undefined,
+                path: folderPath,
+              });
+              folderMap.set(folderPath, newFolderId);
+              parentId = newFolderId;
+            } else {
+              parentId = folderMap.get(folderPath)!;
+            }
+          }
+        }
+
         // Read file as base64
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -252,7 +345,7 @@ function UploadDialog({
           contentType: file.type,
         });
 
-        // Create asset record
+          // Create asset record
         await createMutation.mutateAsync({
           name: file.name.replace(/\.[^.]+$/, ""),
           fileUrl: url,
@@ -297,7 +390,7 @@ function UploadDialog({
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">拖拽图片到此处，或点击选择文件</p>
+          <p className="text-sm text-muted-foreground">拖拽图片或文件夹到此处，或点击选择</p>
           <p className="text-xs text-muted-foreground/60 mt-1">支持 PNG、JPG、WebP、GIF 格式</p>
           <input
             ref={fileInputRef}
@@ -307,6 +400,35 @@ function UploadDialog({
             className="hidden"
             onChange={handleFileChange}
           />
+          <input
+            ref={folderInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            {...({ webkitdirectory: "" } as any)}
+            className="hidden"
+            onChange={handleFolderChange}
+          />
+        </div>
+
+        {/* Quick buttons */}
+        <div className="flex gap-2 justify-center">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
+            选择图片
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => folderInputRef.current?.click()}
+          >
+            <Folder className="h-3.5 w-3.5 mr-1.5" />
+            选择文件夹
+          </Button>
         </div>
 
         {/* File list */}
@@ -315,7 +437,9 @@ function UploadDialog({
             {files.map((file, i) => (
               <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-sm">
                 <ImageIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="flex-1 truncate text-foreground/80">{file.name}</span>
+                <span className="flex-1 truncate text-foreground/80 text-xs">
+                  {(file as any).webkitRelativePath || file.name}
+                </span>
                 <span className="text-xs text-muted-foreground shrink-0">
                   {(file.size / 1024).toFixed(0)} KB
                 </span>
@@ -369,6 +493,37 @@ function UploadDialog({
   );
 }
 
+// ─── Breadcrumb Navigation ────────────────────────────────
+function Breadcrumb({
+  path,
+  onNavigate,
+}: {
+  path: Array<{ id: number | null; name: string }>;
+  onNavigate: (folderId: number | null) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+      <button
+        onClick={() => onNavigate(null)}
+        className="hover:text-foreground transition-colors"
+      >
+        素材库
+      </button>
+      {path.map((item, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <ChevronRight className="h-3 w-3" />
+          <button
+            onClick={() => onNavigate(item.id)}
+            className="hover:text-foreground transition-colors max-w-[150px] truncate"
+          >
+            {item.name}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────
 export default function Assets() {
   const [search, setSearch] = useState("");
@@ -376,23 +531,71 @@ export default function Assets() {
   const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [folderPath, setFolderPath] = useState<Array<{ id: number | null; name: string }>>([]);
 
   const utils = trpc.useUtils();
 
-  const { data: assetsData, isLoading } = trpc.assets.list.useQuery(
-    { category: categoryFilter, search: search || undefined },
+  const { data: assetsData, isLoading } = trpc.assets.listByParent.useQuery(
+    { parentId: currentFolderId ?? undefined },
     { refetchOnWindowFocus: false }
   );
 
   const deleteMutation = trpc.assets.delete.useMutation({
     onSuccess: () => {
-      utils.assets.list.invalidate();
+      utils.assets.listByParent.invalidate();
       toast.success("已删除素材");
     },
     onError: (e) => toast.error(e.message || "删除失败"),
   });
 
+  const deleteFolderMutation = trpc.assets.deleteFolder.useMutation({
+    onSuccess: () => {
+      utils.assets.listByParent.invalidate();
+      toast.success("已删除文件夹");
+    },
+    onError: (e) => toast.error(e.message || "删除失败"),
+  });
+
   const assets = (assetsData || []) as AssetItem[];
+
+  // Filter assets by search and category
+  const filteredAssets = useMemo(() => {
+    return assets.filter((a) => {
+      if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (categoryFilter && !a.isFolder && a.category !== categoryFilter) return false;
+      return true;
+    });
+  }, [assets, search, categoryFilter]);
+
+  const handleOpenFolder = (folderId: number) => {
+    const folder = assets.find((a) => a.id === folderId && a.isFolder);
+    if (folder) {
+      setCurrentFolderId(folderId);
+      setFolderPath((prev) => [...prev, { id: folderId, name: folder.name }]);
+    }
+  };
+
+  const handleNavigate = (folderId: number | null) => {
+    setCurrentFolderId(folderId);
+    if (folderId === null) {
+      setFolderPath([]);
+    } else {
+      const index = folderPath.findIndex((p) => p.id === folderId);
+      if (index >= 0) {
+        setFolderPath((prev) => prev.slice(0, index + 1));
+      }
+    }
+  };
+
+  const handleDelete = (id: number) => {
+    const asset = assets.find((a) => a.id === id);
+    if (asset?.isFolder) {
+      setDeleteTarget(id);
+    } else {
+      setDeleteTarget(id);
+    }
+  };
 
   const categories = [
     { value: undefined, label: "全部" },
@@ -409,14 +612,21 @@ export default function Assets() {
           <div>
             <h1 className="text-lg font-semibold text-foreground">素材库</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {assets.length > 0 ? `共 ${assets.length} 个素材` : "团队共享素材，可用于 AI 生成参考图或演示文稿"}
+              {assets.length > 0 ? `共 ${assets.length} 个项目` : "团队共享素材，支持文件夹结构"}
             </p>
           </div>
           <Button size="sm" onClick={() => setUploadOpen(true)}>
             <Upload className="h-3.5 w-3.5 mr-1.5" />
-            上传图片
+            上传
           </Button>
         </div>
+
+        {/* Breadcrumb */}
+        {folderPath.length > 0 && (
+          <div className="mb-3">
+            <Breadcrumb path={folderPath} onNavigate={handleNavigate} />
+          </div>
+        )}
 
         {/* Search + filter */}
         <div className="flex items-center gap-3">
@@ -454,32 +664,31 @@ export default function Assets() {
             <Loader2 className="h-4 w-4 animate-spin" />
             加载中…
           </div>
-        ) : assets.length === 0 ? (
+        ) : filteredAssets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-60 text-center">
             <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
               <FolderPlus className="h-7 w-7 text-muted-foreground/40" />
             </div>
-            <p className="text-sm font-medium text-foreground/60 mb-1">素材库暂无内容</p>
+            <p className="text-sm font-medium text-foreground/60 mb-1">
+              {currentFolderId ? "文件夹为空" : "素材库暂无内容"}
+            </p>
             <p className="text-xs text-muted-foreground/50 max-w-xs">
-              可在「生成记录」中点击 AI 效果图上的
-              <span className="inline-flex items-center mx-1 text-emerald-500/80">
-                <FolderPlus className="h-3 w-3" />
-              </span>
-              图标导入，或点击右上角「上传图片」按钮添加本地图片
+              点击右上角「上传」按钮添加图片或文件夹
             </p>
             <Button size="sm" variant="outline" className="mt-4" onClick={() => setUploadOpen(true)}>
               <Upload className="h-3.5 w-3.5 mr-1.5" />
-              上传图片
+              上传
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
-            {assets.map((asset) => (
+            {filteredAssets.map((asset) => (
               <AssetCard
                 key={asset.id}
                 asset={asset}
-                onDelete={(id) => setDeleteTarget(id)}
+                onDelete={handleDelete}
                 onLightbox={(src, name) => setLightbox({ src, name })}
+                onOpenFolder={handleOpenFolder}
               />
             ))}
           </div>
@@ -490,7 +699,8 @@ export default function Assets() {
       <UploadDialog
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onUploaded={() => utils.assets.list.invalidate()}
+        currentFolderId={currentFolderId}
+        onUploaded={() => utils.assets.listByParent.invalidate()}
       />
 
       {/* Lightbox */}
@@ -508,7 +718,9 @@ export default function Assets() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
             <AlertDialogDescription>
-              删除后无法恢复，原始生成记录不受影响。
+              {assets.find((a) => a.id === deleteTarget)?.isFolder
+                ? "删除文件夹将同时删除其中的所有内容，无法恢复。"
+                : "删除后无法恢复，原始生成记录不受影响。"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -517,7 +729,12 @@ export default function Assets() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 if (deleteTarget !== null) {
-                  deleteMutation.mutate({ id: deleteTarget });
+                  const asset = assets.find((a) => a.id === deleteTarget);
+                  if (asset?.isFolder) {
+                    deleteFolderMutation.mutate({ folderId: deleteTarget });
+                  } else {
+                    deleteMutation.mutate({ id: deleteTarget });
+                  }
                   setDeleteTarget(null);
                 }
               }}

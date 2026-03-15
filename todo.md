@@ -618,3 +618,13 @@
 - [x] 后端：assets.create 支持 historyId、projectId 参数
 - [x] 前端：重构 Assets.tsx（图片网格、关联项目标签、本地上传、删除、搜索）
 - [x] 编写测试并保存检查点
+
+## 素材库文件夹结构支持
+- [x] 数据库：assets 表增加 parentId、isFolder、path 字段
+- [x] 后端：assets.createFolder 创建文件夹
+- [x] 后端：assets.moveAsset 移动素材到文件夹
+- [x] 后端：assets.deleteFolder 删除文件夹（级联删除）
+- [x] 后端：assets.listByParent 树形结构返回（支持按 parentId 查询）
+- [x] 前端：Assets.tsx 重构为树形导航（面包屑路导航、文件夹打开、内容区）
+- [x] 前端：支持拖拽上传文件夹（webkitdirectory）与自动创建文件夹层级
+- [x] 编写测试并保存检查点

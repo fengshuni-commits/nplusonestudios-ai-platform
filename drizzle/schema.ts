@@ -138,6 +138,9 @@ export const assets = mysqlTable("assets", {
   uploadedBy: int("uploadedBy"),
   historyId: int("historyId"),
   projectId: int("projectId"),
+  parentId: int("parentId"),
+  isFolder: boolean("isFolder").default(false).notNull(),
+  path: varchar("path", { length: 1024 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type Asset = typeof assets.$inferSelect;

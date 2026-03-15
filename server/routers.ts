@@ -1049,6 +1049,36 @@ const assetsRouter = router({
       });
       return { asset, alreadyExists: false };
     }),
+  createFolder: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1).max(256),
+      parentId: z.number().optional(),
+      path: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return db.createFolder(input);
+    }),
+  listByParent: protectedProcedure
+    .input(z.object({ parentId: z.number().optional() }))
+    .query(async ({ input }) => {
+      return db.getAssetsByParent(input.parentId ?? null);
+    }),
+  moveAsset: protectedProcedure
+    .input(z.object({
+      assetId: z.number(),
+      newParentId: z.number().optional(),
+      newPath: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await db.moveAsset(input.assetId, input.newParentId ?? null, input.newPath);
+      return { success: true };
+    }),
+  deleteFolder: protectedProcedure
+    .input(z.object({ folderId: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.deleteFolder(input.folderId);
+      return { success: true };
+    }),
 });
 // ─── Standards ────────────────────────────────────────────
 

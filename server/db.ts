@@ -1,4 +1,4 @@
-import { eq, desc, like, and, sql, inArray, or } from "drizzle-orm";
+import { eq, desc, like, and, sql, inArray, or, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -462,6 +462,85 @@ export async function findAssetByUrl(fileUrl: string) {
   const result = await db.select().from(assets).where(eq(assets.fileUrl, fileUrl)).limit(1);
   return result[0];
 }
+
+export async function createFolder(data: { name: string; parentId?: number; path?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(assets).values({
+    name: data.name,
+    parentId: data.parentId,
+    isFolder: true,
+    path: data.path,
+    fileUrl: "",
+    fileKey: "",
+  });
+  return { id: result[0].insertId };
+}
+
+export async function getAssetsByParent(parentId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  const condition = parentId === null ? isNull(assets.parentId) : eq(assets.parentId, parentId);
+  return db
+    .select({
+      id: assets.id,
+      name: assets.name,
+      description: assets.description,
+      category: assets.category,
+      tags: assets.tags,
+      fileUrl: assets.fileUrl,
+      fileKey: assets.fileKey,
+      fileType: assets.fileType,
+      fileSize: assets.fileSize,
+      thumbnailUrl: assets.thumbnailUrl,
+      uploadedBy: assets.uploadedBy,
+      historyId: assets.historyId,
+      projectId: assets.projectId,
+      parentId: assets.parentId,
+      isFolder: assets.isFolder,
+      path: assets.path,
+      createdAt: assets.createdAt,
+      projectName: projects.name,
+    })
+    .from(assets)
+    .leftJoin(projects, eq(assets.projectId, projects.id))
+    .where(condition)
+    .orderBy(assets.isFolder, desc(assets.createdAt));
+}
+
+export async function moveAsset(assetId: number, newParentId: number | null, newPath?: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(assets)
+    .set({ parentId: newParentId, path: newPath })
+    .where(eq(assets.id, assetId));
+}
+
+export async function deleteFolder(folderId: number) {
+  const db = await getDb();
+  if (!db) return;
+  // Get all children recursively
+  const getAllChildren = async (parentId: number): Promise<number[]> => {
+    const children = await db
+      .select({ id: assets.id, isFolder: assets.isFolder })
+      .from(assets)
+      .where(eq(assets.parentId, parentId));
+    let allIds = children.map((c) => c.id);
+    for (const child of children) {
+      if (child.isFolder) {
+        allIds = allIds.concat(await getAllChildren(child.id));
+      }
+    }
+    return allIds;
+  };
+  const childIds = await getAllChildren(folderId);
+  const allIds = [folderId, ...childIds];
+  if (allIds.length > 0) {
+    await db.delete(assets).where(inArray(assets.id, allIds));
+  }
+}
+
 // ─── Standardss ───────────────────────────────────────────
 
 export async function listStandards(opts?: { category?: string }) {
