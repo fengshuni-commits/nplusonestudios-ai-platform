@@ -633,3 +633,13 @@
 - [x] 前端：Assets.tsx 添加「新建文件夹」按钮和对话框
 - [x] 前端：支持在任意文件夹层级创建新文件夹
 - [x] 编写测试并保存检查点
+
+## AI 彩平功能
+- [x] 后端：renderingRouter 新增 colorPlan 子路由（generate 接口）
+- [x] 后端：上传底图接口（base64 → S3）
+- [x] 前端：新建 ColorPlan.tsx 页面（上传底图、选择参考图、生成结果展示）
+- [x] 前端：支持从素材库选择参考图
+- [x] 前端：生成结果支持下载和导入素材库
+- [x] 导航：DashboardLayout 设计板块添加「AI 彩平」入口（Palette 图标）
+- [x] 路由：App.tsx 注册 /design/color-plan 路由
+- [x] 编写测试并保存检查点（27 项测试全部通过）

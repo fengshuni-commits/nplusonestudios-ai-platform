@@ -1902,7 +1902,97 @@ const renderingRouter = router({
     }),
 });
 
-// ─── AI Module: Meeting Minutes ──────────────────────────
+//// ─── AI Module: Color Floor Plan (彩平) ──────────────────
+const colorPlanRouter = router({
+  /** Upload a floor plan image (base64) and return the S3 URL */
+  uploadFloorPlan: protectedProcedure
+    .input(z.object({
+      fileName: z.string(),
+      fileData: z.string(),
+      contentType: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.fileData, "base64");
+      const key = `color-plan/${nanoid()}-${input.fileName}`;
+      const { url } = await storagePut(key, buffer, input.contentType);
+      return { url, key };
+    }),
+
+  /** Generate a colorized floor plan from a base floor plan + optional reference image */
+  generate: protectedProcedure
+    .input(z.object({
+      floorPlanUrl: z.string().url(),
+      referenceUrl: z.string().url().optional(),
+      style: z.string().optional(),
+      extraPrompt: z.string().optional(),
+      projectId: z.number().optional(),
+      parentHistoryId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const startTime = Date.now();
+
+      let prompt =
+        `Architectural colored floor plan. ` +
+        `Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. ` +
+        `Apply realistic material textures and colors: warm wood flooring for living and dining areas, ` +
+        `light tile or stone for bathrooms and kitchens, soft carpet or parquet for bedrooms, ` +
+        `green indoor plants, furniture with drop shadows for depth. ` +
+        `Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. ` +
+        `Clean top-down orthographic view. High quality architectural presentation style.`;
+
+      if (input.style) prompt += ` Style: ${input.style}.`;
+      if (input.extraPrompt) prompt += ` ${input.extraPrompt}`;
+
+      const originalImages: Array<{ url?: string; mimeType?: string }> = [
+        { url: input.floorPlanUrl, mimeType: "image/png" },
+      ];
+      if (input.referenceUrl) {
+        originalImages.push({ url: input.referenceUrl, mimeType: "image/png" });
+        prompt =
+          `[STYLE REFERENCE: The second image shows the target color style and material palette. ` +
+          `Apply the same color scheme and material textures to the floor plan.] ` + prompt;
+      }
+
+      try {
+        const result = await generateImage({ prompt, originalImages });
+
+        const historyResult = await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "color_plan",
+          title: `AI 彩平 - ${new Date().toLocaleDateString("zh-CN")}`,
+          summary: prompt.substring(0, 200),
+          inputParams: {
+            floorPlanUrl: input.floorPlanUrl,
+            referenceUrl: input.referenceUrl || null,
+            style: input.style || null,
+            extraPrompt: input.extraPrompt || null,
+          },
+          outputUrl: result.url,
+          status: "success",
+          durationMs: Date.now() - startTime,
+          parentId: input.parentHistoryId || null,
+          projectId: input.projectId || null,
+          createdByName: ctx.user.name || null,
+        }).catch(() => ({ id: 0 }));
+
+        return { url: result.url, historyId: historyResult.id };
+      } catch (error) {
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "color_plan",
+          title: `AI 彩平 - 失败`,
+          summary: prompt.substring(0, 200),
+          inputParams: { floorPlanUrl: input.floorPlanUrl },
+          status: "failed",
+          durationMs: Date.now() - startTime,
+          createdByName: ctx.user.name || null,
+        }).catch(() => {});
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "彩平生成失败，请稍后重试" });
+      }
+    }),
+});
+
+// ─── AI Module: Meeting Minutes ──────────────────────
 
 const meetingRouter = router({
   transcribe: protectedProcedure
@@ -3049,6 +3139,7 @@ export const appRouter = router({system: systemRouter,
   aiTools: aiToolsRouter,
   benchmark: benchmarkRouter,
   rendering: renderingRouter,
+  colorPlan: colorPlanRouter,
   meeting: meetingRouter,
   admin: adminRouter,
   upload: uploadRouter,

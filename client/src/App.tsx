@@ -29,6 +29,7 @@ import PendingApproval from "./pages/PendingApproval";
 import Home from "./pages/Home";
 import DesignBrief from "./pages/DesignBrief";
 import PresentationPage from "./pages/Presentation";
+import ColorPlan from "./pages/ColorPlan";
 
 function Router() {
   return (
@@ -46,6 +47,7 @@ function Router() {
         {/* 设计板块 */}
         <Route path="/design/planning" component={DesignPlanning} />
         <Route path="/design/tools" component={DesignTools} />
+        <Route path="/design/color-plan" component={ColorPlan} />
         <Route path="/design/presentation" component={PresentationPage} />
 
         {/* 营建板块 */}

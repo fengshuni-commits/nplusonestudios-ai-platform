@@ -38,6 +38,7 @@ import {
   HelpCircle,
   LayoutDashboard,
   Presentation,
+  Palette,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { HelpGuide } from "./HelpGuide";
@@ -69,6 +70,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: Compass, label: "案例调研", path: "/design/planning" },
       { icon: Ruler, label: "AI效果图", path: "/design/tools" },
+      { icon: Palette, label: "AI彩平", path: "/design/color-plan" },
       { icon: Presentation, label: "演示文稿", path: "/design/presentation" },
     ],
   },

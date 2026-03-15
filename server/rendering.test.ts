@@ -283,3 +283,55 @@ describe("assets router - material upload and sync", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("colorPlan router - AI 彩平", () => {
+  it("colorPlan.uploadFloorPlan requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.colorPlan.uploadFloorPlan({
+        fileName: "floor.png",
+        fileData: "aGVsbG8=",
+        contentType: "image/png",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("colorPlan.generate requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.colorPlan.generate({
+        floorPlanUrl: "https://example.com/floor.png",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("colorPlan.generate validates floorPlanUrl must be a valid URL", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.colorPlan.generate({
+        floorPlanUrl: "not-a-url",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("colorPlan.generate accepts optional referenceUrl and extraPrompt", async () => {
+    const user = createTestUser();
+    const ctx = createContext(user);
+    const caller = appRouter.createCaller(ctx);
+    try {
+      await caller.colorPlan.generate({
+        floorPlanUrl: "https://example.com/floor.png",
+        referenceUrl: "https://example.com/ref.png",
+        extraPrompt: "北欧风格，浅木色为主",
+        projectId: 1,
+      });
+    } catch (err: any) {
+      // Should fail at image generation (external API), not schema validation
+      expect(err.code).not.toBe("BAD_REQUEST");
+      expect(err.message).not.toContain("Expected");
+    }
+  });
+});
