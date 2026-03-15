@@ -542,3 +542,7 @@
 
 ## Bug 修复：项目详情页重复信息标签未合并
 - [x] 彻底重构 ProjectInfoTab：去掉 builtInFields 中已迁移的 5 个标准字段，只保留 name/code，页面头部甲方名称从自定义字段读取
+
+## 项目卡片摘要改为显示自定义字段内容
+- [x] 后端：listProjects 附带 summaryDisplay（优先「项目概况」，其次第一条自定义字段）
+- [x] 前端：卡片摘要改为显示 summaryDisplay，不再使用 description 字段

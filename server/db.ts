@@ -115,18 +115,37 @@ export async function listProjects(opts?: { search?: string; status?: string }) 
   if (opts?.status) conditions.push(eq(projects.status, opts.status as any));
   const rows = await db.select().from(projects).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(projects.updatedAt));
   if (rows.length === 0) return [];
-  // Attach clientName from project_custom_fields for each project
+  // Attach clientName and summary from project_custom_fields for each project
   const projectIds = rows.map(r => r.id);
-  const clientFields = await db.select({
+  // Fetch all custom fields for these projects (to derive clientName + summary)
+  const allCustomFields = await db.select({
     projectId: projectCustomFields.projectId,
+    fieldName: projectCustomFields.fieldName,
     fieldValue: projectCustomFields.fieldValue,
+    sortOrder: projectCustomFields.sortOrder,
+    createdAt: projectCustomFields.createdAt,
   }).from(projectCustomFields)
-    .where(and(
-      inArray(projectCustomFields.projectId, projectIds),
-      eq(projectCustomFields.fieldName, '甲方名称')
-    ));
-  const clientMap = new Map(clientFields.map(f => [f.projectId, f.fieldValue]));
-  return rows.map(r => ({ ...r, clientNameDisplay: clientMap.get(r.id) ?? null }));
+    .where(inArray(projectCustomFields.projectId, projectIds))
+    .orderBy(projectCustomFields.sortOrder, projectCustomFields.createdAt);
+
+  // Group by projectId
+  const fieldsByProject = new Map<number, typeof allCustomFields>();
+  for (const f of allCustomFields) {
+    if (!fieldsByProject.has(f.projectId)) fieldsByProject.set(f.projectId, []);
+    fieldsByProject.get(f.projectId)!.push(f);
+  }
+
+  return rows.map(r => {
+    const fields = fieldsByProject.get(r.id) || [];
+    const clientField = fields.find(f => f.fieldName === '甲方名称');
+    // Summary: prefer 项目概况, else first field with value
+    const summaryField = fields.find(f => f.fieldName === '项目概况') || fields.find(f => f.fieldValue?.trim());
+    return {
+      ...r,
+      clientNameDisplay: clientField?.fieldValue ?? null,
+      summaryDisplay: summaryField?.fieldValue ?? null,
+    };
+  });
 }
 
 export async function getProjectById(id: number) {

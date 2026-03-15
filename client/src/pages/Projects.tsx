@@ -386,7 +386,7 @@ export default function Projects() {
                 </div>
                 <h3 className="font-medium text-sm group-hover:text-primary transition-colors">{project.name}</h3>
                 {project.code && <p className="text-xs text-muted-foreground mt-0.5">{project.code}</p>}
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{project.description || "暂无描述"}</p>
+                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{(project as any).summaryDisplay || "暂无描述"}</p>
                 <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
                   {(project as any).clientNameDisplay && (
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(project as any).clientNameDisplay}</span>
