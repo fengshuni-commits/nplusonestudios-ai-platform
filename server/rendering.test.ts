@@ -230,4 +230,19 @@ describe("assets router - material upload and sync", () => {
     const caller = appRouter.createCaller(ctx);
     await expect(caller.assets.list()).rejects.toThrow();
   });
+  it("assets.importFromHistory requires authentication", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.assets.importFromHistory({ historyId: 1 })
+    ).rejects.toThrow();
+  });
+  it("assets.importFromHistory throws NOT_FOUND for non-existent history", async () => {
+    const user = createTestUser();
+    const ctx = createContext(user);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.assets.importFromHistory({ historyId: 999999 })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
 });

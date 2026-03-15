@@ -41,6 +41,7 @@ import {
   RotateCcw,
   ExternalLink,
   FolderOpen,
+  FolderPlus,
   Link2,
   Link2Off,
 } from "lucide-react";
@@ -278,6 +279,7 @@ interface TileCardProps {
   onOpenDetail?: (item: any) => void;
   onLightbox?: (src: string, label: string) => void;
   onNavigate?: (path: string) => void;
+  onImport?: (id: number) => void;
 }
 
 /** Expandable content preview for benchmark report chain items */
@@ -303,7 +305,7 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
   );
 }
 
-function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: TileCardProps) {
+function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImport }: TileCardProps) {
   const cfg = MODULE_MAP[item.module] || {
     label: item.module,
     icon: FileText,
@@ -401,6 +403,16 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate }: Tile
           onClick={(e) => { e.stopPropagation(); window.open(item.outputUrl, "_blank"); }}>
           <div className="h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-colors">
             <Download className="h-3 w-3" />
+          </div>
+        </div>
+      )}
+
+      {/* Import to asset library button for ai_render */}
+      {item.module === "ai_render" && (item.latestOutputUrl || item.outputUrl) && onImport && (
+        <div className="absolute bottom-1.5 right-14 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          onClick={(e) => { e.stopPropagation(); onImport(item.id); }}>
+          <div className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-emerald-500/80 hover:text-white transition-colors" title="导入到素材库">
+            <FolderPlus className="h-3 w-3" />
           </div>
         </div>
       )}
@@ -657,6 +669,19 @@ export default function HistoryPage() {
     onSuccess: () => { utils.history.listGrouped.invalidate(); toast.success("已删除记录"); },
     onError: (e) => toast.error(e.message || "删除失败"),
   });
+  const importMutation = trpc.assets.importFromHistory.useMutation({
+    onSuccess: (data) => {
+      if (data.alreadyExists) {
+        toast.info("该图片已在素材库中");
+      } else {
+        toast.success("已导入到素材库");
+      }
+    },
+    onError: (e) => toast.error(e.message || "导入失败"),
+  });
+  const handleImport = useCallback((historyId: number) => {
+    importMutation.mutate({ historyId });
+  }, [importMutation]);
 
   // Project association
   const { data: projectsData } = trpc.projects.list.useQuery({});
@@ -740,6 +765,7 @@ export default function HistoryPage() {
                       onOpenDetail={handleOpenDetail}
                       onLightbox={(src, label) => setLightbox({ src, label })}
                       onNavigate={(path) => navigate(path)}
+                      onImport={handleImport}
                     />
                   ))}
                 </div>
@@ -923,6 +949,10 @@ export default function HistoryPage() {
                                       <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
                                         onClick={() => downloadImage(chainItem.outputUrl!, itemTitle)} title="下载原图">
                                         <Download className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-emerald-500"
+                                        onClick={() => handleImport(chainItem.id)} title="导入到素材库">
+                                        <FolderPlus className="h-3 w-3" />
                                       </Button>
                                       <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
                                         onClick={() => { setDetailOpen(false); handleContinueEdit(chainItem.outputUrl!, chainItem.id); }} title="使用此图片继续生成">

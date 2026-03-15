@@ -434,8 +434,13 @@ export async function deleteAsset(id: number) {
   if (!db) return;
   await db.delete(assets).where(eq(assets.id, id));
 }
-
-// ─── Standards ───────────────────────────────────────────
+export async function findAssetByUrl(fileUrl: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(assets).where(eq(assets.fileUrl, fileUrl)).limit(1);
+  return result[0];
+}
+// ─── Standardss ───────────────────────────────────────────
 
 export async function listStandards(opts?: { category?: string }) {
   const db = await getDb();

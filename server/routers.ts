@@ -1017,9 +1017,36 @@ const assetsRouter = router({
       const { url } = await storagePut(key, buffer, input.contentType);
       return { url, key };
     }),
+  importFromHistory: protectedProcedure
+    .input(z.object({
+      historyId: z.number(),
+      useEnhanced: z.boolean().optional().default(false),
+      name: z.string().optional(),
+      category: z.string().optional().default("ai_render"),
+      tags: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const history = await db.getGenerationHistoryById(input.historyId, ctx.user.id);
+      if (!history) throw new TRPCError({ code: "NOT_FOUND", message: "生成记录不存在" });
+      const imageUrl = (input.useEnhanced && history.enhancedImageUrl) ? history.enhancedImageUrl : history.outputUrl;
+      if (!imageUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "该记录没有可导入的图片" });
+      // Check if already imported (same URL)
+      const existing = await db.findAssetByUrl(imageUrl);
+      if (existing) return { asset: existing, alreadyExists: true };
+      const asset = await db.createAsset({
+        name: input.name || history.title || "未命名素材",
+        fileUrl: imageUrl,
+        fileKey: imageUrl,
+        fileType: "image/png",
+        category: input.category,
+        tags: input.tags,
+        thumbnailUrl: imageUrl,
+        uploadedBy: ctx.user.id,
+      });
+      return { asset, alreadyExists: false };
+    }),
 });
-
-// ─── Standards ───────────────────────────────────────────
+// ─── Standards ────────────────────────────────────────────
 
 const standardsRouter = router({
   list: protectedProcedure
