@@ -386,10 +386,10 @@ export default function Projects() {
                 </div>
                 <h3 className="font-medium text-sm group-hover:text-primary transition-colors">{project.name}</h3>
                 {project.code && <p className="text-xs text-muted-foreground mt-0.5">{project.code}</p>}
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{project.projectOverview || project.description || "暂无描述"}</p>
+                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{project.description || "暂无描述"}</p>
                 <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
-                  {project.clientName && (
-                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{project.clientName}</span>
+                  {(project as any).clientNameDisplay && (
+                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(project as any).clientNameDisplay}</span>
                   )}
                   <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(project.createdAt).toLocaleDateString("zh-CN")}</span>
                 </div>

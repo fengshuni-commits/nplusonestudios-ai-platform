@@ -113,7 +113,20 @@ export async function listProjects(opts?: { search?: string; status?: string }) 
   const conditions = [];
   if (opts?.search) conditions.push(or(like(projects.name, `%${opts.search}%`), like(projects.code, `%${opts.search}%`)));
   if (opts?.status) conditions.push(eq(projects.status, opts.status as any));
-  return db.select().from(projects).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(projects.updatedAt));
+  const rows = await db.select().from(projects).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(projects.updatedAt));
+  if (rows.length === 0) return [];
+  // Attach clientName from project_custom_fields for each project
+  const projectIds = rows.map(r => r.id);
+  const clientFields = await db.select({
+    projectId: projectCustomFields.projectId,
+    fieldValue: projectCustomFields.fieldValue,
+  }).from(projectCustomFields)
+    .where(and(
+      inArray(projectCustomFields.projectId, projectIds),
+      eq(projectCustomFields.fieldName, '甲方名称')
+    ));
+  const clientMap = new Map(clientFields.map(f => [f.projectId, f.fieldValue]));
+  return rows.map(r => ({ ...r, clientNameDisplay: clientMap.get(r.id) ?? null }));
 }
 
 export async function getProjectById(id: number) {
