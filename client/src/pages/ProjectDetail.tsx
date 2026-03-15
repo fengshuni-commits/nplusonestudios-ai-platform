@@ -139,9 +139,8 @@ function ProjectInfoTab({
   const [addFieldOpen, setAddFieldOpen] = useState(false);
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldValue, setNewFieldValue] = useState("");
-  const [addMode, setAddMode] = useState<"template" | "ai">("template");
+  const [showAiExtract, setShowAiExtract] = useState(false);
   const [freeText, setFreeText] = useState("");
-  const [showTemplates, setShowTemplates] = useState(true);
 
   // Editing custom field
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -320,7 +319,7 @@ function ProjectInfoTab({
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">自定义信息</CardTitle>
-            <Dialog open={addFieldOpen} onOpenChange={(open) => { setAddFieldOpen(open); if (!open) { setNewFieldName(""); setNewFieldValue(""); setFreeText(""); setAddMode("template"); setShowTemplates(true); } }}>
+            <Dialog open={addFieldOpen} onOpenChange={(open) => { setAddFieldOpen(open); if (!open) { setNewFieldName(""); setNewFieldValue(""); setFreeText(""); setShowAiExtract(false); } }}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="outline">
                   <Plus className="h-4 w-4 mr-1" />添加信息
@@ -329,89 +328,77 @@ function ProjectInfoTab({
               <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>添加项目信息</DialogTitle></DialogHeader>
                 <div className="space-y-4 pt-2">
-                  {/* Mode tabs */}
-                  <div className="flex gap-2 border-b pb-3">
-                    <button
-                      type="button"
-                      onClick={() => setAddMode("template")}
-                      className={`text-sm px-3 py-1.5 rounded-md transition-colors ${
-                        addMode === "template" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      选择类别
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAddMode("ai")}
-                      className={`text-sm px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                        addMode === "ai" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />AI 自动提取
-                    </button>
-                  </div>
-
-                  {addMode === "template" ? (
-                    <div className="space-y-4">
-                      {/* Template selector */}
-                      {fieldTemplates && fieldTemplates.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">点击选择信息类别，或手动输入自定义名称</p>
-                          <div className="flex flex-wrap gap-2">
-                            {fieldTemplates.map((t: any) => (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => setNewFieldName(t.name)}
-                                className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                                  newFieldName === t.name
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground"
-                                }`}
-                              >
-                                {t.name}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        <Label>信息名称 <span className="text-destructive">*</span></Label>
-                        <Input value={newFieldName} onChange={(e) => setNewFieldName(e.target.value)} placeholder="选择上方类别或手动输入" />
+                  {/* Template category selector - always visible */}
+                  {fieldTemplates && fieldTemplates.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">点击选择信息类别，或手动输入自定义名称</p>
+                      <div className="flex flex-wrap gap-2">
+                        {fieldTemplates.map((t: any) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setNewFieldName(t.name)}
+                            className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                              newFieldName === t.name
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground"
+                            }`}
+                          >
+                            {t.name}
+                          </button>
+                        ))}
                       </div>
-                      <div className="space-y-2">
-                        <Label>信息内容</Label>
-                        <Textarea value={newFieldValue} onChange={(e) => setNewFieldValue(e.target.value)} placeholder="填写具体内容" rows={3} />
-                      </div>
-                      <Button onClick={() => {
-                        if (!newFieldName.trim()) { toast.error("请输入信息名称"); return; }
-                        createCustomField.mutate({ projectId, fieldName: newFieldName, fieldValue: newFieldValue || undefined });
-                      }} disabled={createCustomField.isPending} className="w-full">
-                        {createCustomField.isPending ? "添加中..." : "添加"}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">输入一段项目描述，AI 将自动提取关键信息并分类添加</p>
-                      <Textarea
-                        value={freeText}
-                        onChange={(e) => setFreeText(e.target.value)}
-                        placeholder="例：这是一个位于上海浦东的科技公司总部，建筑面积约 8000 平方米，甲方是某半导体企业，预算约 2000 万，希望体现科技感和开放协作氛围..."
-                        rows={5}
-                      />
-                      <Button
-                        onClick={() => {
-                          if (!freeText.trim()) { toast.error("请输入项目描述文字"); return; }
-                          extractInfo.mutate({ text: freeText, projectId });
-                        }}
-                        disabled={extractInfo.isPending}
-                        className="w-full"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                        {extractInfo.isPending ? "AI 提取中..." : "AI 自动提取并添加"}
-                      </Button>
                     </div>
                   )}
+
+                  <div className="space-y-2">
+                    <Label>信息名称 <span className="text-destructive">*</span></Label>
+                    <Input value={newFieldName} onChange={(e) => setNewFieldName(e.target.value)} placeholder="选择上方类别或手动输入" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>信息内容</Label>
+                    <Textarea value={newFieldValue} onChange={(e) => setNewFieldValue(e.target.value)} placeholder="填写具体内容" rows={3} />
+                  </div>
+                  <Button onClick={() => {
+                    if (!newFieldName.trim()) { toast.error("请输入信息名称"); return; }
+                    createCustomField.mutate({ projectId, fieldName: newFieldName, fieldValue: newFieldValue || undefined });
+                  }} disabled={createCustomField.isPending} className="w-full">
+                    {createCustomField.isPending ? "添加中..." : "添加"}
+                  </Button>
+
+                  {/* AI free text extraction - toggleable */}
+                  <div className="border-t pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAiExtract(!showAiExtract)}
+                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {showAiExtract ? "收起 AI 批量提取" : "AI 批量提取（输入描述文字，自动识别并添加多个字段）"}
+                    </button>
+                    {showAiExtract && (
+                      <div className="mt-3 space-y-3">
+                        <p className="text-xs text-muted-foreground">输入一段项目描述，AI 将自动提取关键信息并批量添加到项目中</p>
+                        <Textarea
+                          value={freeText}
+                          onChange={(e) => setFreeText(e.target.value)}
+                          placeholder="例：这是一个位于上海浦东的科技公司总部，建筑面积约 8000 平方米，甲方是某半导体企业，预算约 2000 万，希望体现科技感和开放协作氛围..."
+                          rows={4}
+                        />
+                        <Button
+                          onClick={() => {
+                            if (!freeText.trim()) { toast.error("请输入项目描述文字"); return; }
+                            extractInfo.mutate({ text: freeText, projectId });
+                          }}
+                          disabled={extractInfo.isPending}
+                          className="w-full"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          {extractInfo.isPending ? "AI 提取中..." : "AI 自动提取并添加"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
