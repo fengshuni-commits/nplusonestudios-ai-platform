@@ -1,0 +1,1 @@
+ALTER TABLE `benchmark_jobs` ADD `caseRefs` json;

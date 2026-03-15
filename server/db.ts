@@ -1099,7 +1099,7 @@ export async function getBenchmarkJob(id: string) {
   const db = await getDb();
   if (!db) return undefined;
   // Use raw SQL to bypass any ORM-level caching / REPEATABLE READ isolation issues
-  const result = await db.execute(sql`SELECT id, userId, status, result, error, historyId, createdAt, updatedAt FROM benchmark_jobs WHERE id = ${id} LIMIT 1`);
+  const result = await db.execute(sql`SELECT id, userId, status, result, error, historyId, caseRefs, createdAt, updatedAt FROM benchmark_jobs WHERE id = ${id} LIMIT 1`);
   const rows = result[0] as unknown as any[];
   if (!rows || rows.length === 0) return undefined;
   const row = rows[0];
@@ -1111,6 +1111,7 @@ export async function getBenchmarkJob(id: string) {
     result: row.result as string | null,
     error: row.error as string | null,
     historyId: row.historyId as number | null,
+    caseRefs: row.caseRefs as Record<string, string> | null,
     createdAt: row.createdAt ? new Date(row.createdAt as string) : new Date(),
     updatedAt: row.updatedAt ? new Date(row.updatedAt as string) : new Date(),
   };
@@ -1121,6 +1122,7 @@ export async function updateBenchmarkJob(id: string, updates: {
   result?: string | null;
   error?: string | null;
   historyId?: number | null;
+  caseRefs?: Record<string, string> | null;
 }) {
   const db = await getDb();
   if (!db) return;
@@ -1129,6 +1131,7 @@ export async function updateBenchmarkJob(id: string, updates: {
   if (updates.result !== undefined) set.result = updates.result;
   if (updates.error !== undefined) set.error = updates.error;
   if (updates.historyId !== undefined) set.historyId = updates.historyId;
+  if (updates.caseRefs !== undefined) set.caseRefs = updates.caseRefs;
   if (Object.keys(set).length === 0) return;
   await db.update(benchmarkJobs).set(set).where(eq(benchmarkJobs.id, id));
 }

@@ -32,70 +32,18 @@ const BASE_DOMAINS = [
 
 /**
  * Domain sets by project type
- * projectType values match those in DesignPlanning.tsx
  */
 const DOMAIN_MAP: Record<string, string[]> = {
-  // 办公空间 - office
-  office: [
-    ...BASE_DOMAINS,
-    "officelovin.com",
-    "interiordesign.net",
-    "workplaceinsight.net",
-  ],
-  // 展厅 / 展览 - exhibition
-  exhibition: [
-    ...BASE_DOMAINS,
-    "designboom.com",
-    "exhibitormagazine.com",
-    "exhibitionworld.co.uk",
-  ],
-  // 商业空间 - commercial
-  commercial: [
-    ...BASE_DOMAINS,
-    "retaildesignblog.net",
-    "designboom.com",
-    "vmsd.com",
-  ],
-  // 住宅 - residential
-  residential: [
-    ...BASE_DOMAINS,
-    "designboom.com",
-    "dwell.com",
-    "architecturaldigest.com",
-  ],
-  // 文化空间 - cultural
-  cultural: [
-    ...BASE_DOMAINS,
-    "designboom.com",
-    "architecturalrecord.com",
-    "museumsandheritage.com",
-  ],
-  // 研发实验室 - lab
-  lab: [
-    ...BASE_DOMAINS,
-    "designboom.com",
-    "architecturalrecord.com",
-    "interiordesign.net",
-  ],
-  // 工厂厂房 - factory
-  factory: [
-    ...BASE_DOMAINS,
-    "designboom.com",
-    "architecturalrecord.com",
-    "interiordesign.net",
-  ],
-  // 其他 - other (fallback)
-  other: [
-    ...BASE_DOMAINS,
-    "designboom.com",
-    "architecturalrecord.com",
-    "interiordesign.net",
-  ],
+  office: [...BASE_DOMAINS, "officelovin.com", "interiordesign.net", "workplaceinsight.net"],
+  exhibition: [...BASE_DOMAINS, "designboom.com", "exhibitormagazine.com", "exhibitionworld.co.uk"],
+  commercial: [...BASE_DOMAINS, "retaildesignblog.net", "designboom.com", "vmsd.com"],
+  residential: [...BASE_DOMAINS, "designboom.com", "dwell.com", "architecturaldigest.com"],
+  cultural: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "museumsandheritage.com"],
+  lab: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "interiordesign.net"],
+  factory: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "interiordesign.net"],
+  other: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "interiordesign.net"],
 };
 
-/**
- * Get search domains for a given project type
- */
 export function getSearchDomains(projectType?: string): string[] {
   if (!projectType) return DOMAIN_MAP.other;
   const key = projectType.toLowerCase();
@@ -107,7 +55,8 @@ export function getSearchDomains(projectType?: string): string[] {
 }
 
 /**
- * Generate a fallback search URL when Tavily returns no results
+ * Generate a fallback search URL - uses archdaily search page
+ * This is a valid, real URL that the LLM should keep as-is
  */
 function getFallbackUrl(caseName: string): string {
   const encoded = encodeURIComponent(caseName);
@@ -115,8 +64,55 @@ function getFallbackUrl(caseName: string): string {
 }
 
 /**
+ * Extract meaningful keywords from a case name for URL matching
+ * Filters out common words that don't help identify a specific project
+ */
+function extractKeywords(caseName: string): string[] {
+  const stopWords = new Set([
+    "the", "a", "an", "of", "in", "at", "by", "for", "with", "and", "or",
+    "office", "building", "center", "centre", "space", "design", "project",
+    "architecture", "studio", "tower", "complex", "park", "campus",
+    "设计", "建筑", "办公", "空间", "中心", "大楼", "园区",
+  ]);
+  return caseName
+    .toLowerCase()
+    .split(/[\s\-\/\(\)]+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+}
+
+/**
+ * Check if a URL is likely to be a correct match for the case name.
+ * For archdaily, the URL slug usually contains the project name keywords.
+ * For gooood, the URL may be numeric but the title should match.
+ */
+function isUrlLikelyCorrect(result: TavilySearchResult, caseName: string): boolean {
+  const keywords = extractKeywords(caseName);
+  if (keywords.length === 0) return true; // can't validate, assume ok
+
+  const urlLower = result.url.toLowerCase();
+  const titleLower = result.title.toLowerCase();
+
+  // For archdaily: URL slug should contain at least one keyword
+  if (urlLower.includes("archdaily.com") || urlLower.includes("archdaily.cn")) {
+    // archdaily URL format: /123456/project-name-slug
+    // Check if the slug part contains a keyword
+    const hasKeywordInUrl = keywords.some(kw => urlLower.includes(kw));
+    const hasKeywordInTitle = keywords.filter(kw => titleLower.includes(kw)).length >= Math.min(2, keywords.length);
+    return hasKeywordInUrl || hasKeywordInTitle;
+  }
+
+  // For gooood: title match is sufficient (URLs are often numeric)
+  if (urlLower.includes("gooood.cn")) {
+    const matchCount = keywords.filter(kw => titleLower.includes(kw)).length;
+    return matchCount >= Math.min(1, keywords.length);
+  }
+
+  // For other domains: at least one keyword in title or URL
+  return keywords.some(kw => titleLower.includes(kw) || urlLower.includes(kw));
+}
+
+/**
  * Score a search result for relevance to the case name
- * Higher score = more relevant
  */
 function scoreResult(result: TavilySearchResult, caseName: string): number {
   let score = result.score || 0;
@@ -125,7 +121,6 @@ function scoreResult(result: TavilySearchResult, caseName: string): number {
   const urlLower = result.url.toLowerCase();
   const contentLower = result.content.toLowerCase();
 
-  // Boost if title contains key words from case name
   const keywords = nameLower.split(/[\s\-\/]+/).filter(w => w.length > 2);
   for (const kw of keywords) {
     if (titleLower.includes(kw)) score += 0.3;
@@ -133,19 +128,34 @@ function scoreResult(result: TavilySearchResult, caseName: string): number {
     if (contentLower.includes(kw)) score += 0.1;
   }
 
-  // Penalize generic listing/search pages
-  if (urlLower.includes("/search") || urlLower.includes("?q=") || urlLower.includes("/tag/") || urlLower.includes("/category/")) {
-    score -= 0.5;
+  // Penalize generic listing/search/tag pages
+  if (
+    urlLower.includes("/search") ||
+    urlLower.includes("?q=") ||
+    urlLower.includes("/tag/") ||
+    urlLower.includes("/category/") ||
+    urlLower.includes("/type/") ||
+    urlLower.includes("/topics/")
+  ) {
+    score -= 0.8;
   }
 
-  // Boost project-specific pages (contain year or project-like path)
-  if (/\/\d{6,}\//.test(result.url)) score += 0.2; // archdaily style ID in URL
+  // Boost project-specific pages (archdaily style numeric ID in URL)
+  if (/\/\d{6,}\//.test(result.url)) score += 0.3;
+
+  // Boost gooood results (usually very accurate for Chinese projects)
+  if (urlLower.includes("gooood.cn")) score += 0.2;
+
+  // Penalize results that don't match the case name well
+  if (!isUrlLikelyCorrect(result, caseName)) {
+    score -= 0.6;
+  }
 
   return score;
 }
 
 /**
- * Perform a single Tavily search with given query and domains
+ * Perform a single Tavily search
  */
 async function tavilySearch(
   query: string,
@@ -176,12 +186,13 @@ async function tavilySearch(
 }
 
 /**
- * Search for a benchmark case study and return real URLs.
+ * Search for a benchmark case study and return a verified URL.
+ *
  * Strategy:
- * 1. Try English query first (better for international architecture sites)
- * 2. If no good results, try Chinese query (for gooood.cn etc.)
- * 3. Score results by relevance, pick best
- * 4. Fall back to ArchDaily search URL if nothing found
+ * 1. Try Chinese query first (gooood.cn is very accurate for Chinese projects)
+ * 2. Try English query for international sites (archdaily, dezeen)
+ * 3. Score and validate results - penalize archdaily links that don't match case name
+ * 4. Fall back to archdaily search page (a real, valid URL) if no good match found
  */
 export async function searchCaseStudy(
   caseName: string,
@@ -196,35 +207,39 @@ export async function searchCaseStudy(
   let allResults: TavilySearchResult[] = [];
 
   try {
-    // Strategy 1: English query - better for archdaily, dezeen, designboom
-    const englishQuery = `${caseName} architecture design project`;
+    // Strategy 1: Chinese query - gooood.cn is very accurate for Chinese architecture projects
+    try {
+      const chineseQuery = `${caseName} 建筑设计`;
+      const chineseResults = await tavilySearch(chineseQuery, ["gooood.cn", "archdaily.cn"], 5);
+      allResults.push(...chineseResults);
+    } catch {
+      // Chinese search failure is non-critical
+    }
+
+    // Strategy 2: English query - better for international sites
+    const englishQuery = `${caseName} architecture design`;
     const englishResults = await tavilySearch(englishQuery, domains, 5);
     allResults.push(...englishResults);
-
-    // Strategy 2: If few results, also try Chinese query for gooood.cn
-    if (allResults.length < 3) {
-      try {
-        const chineseQuery = `${caseName} 建筑设计`;
-        const chineseResults = await tavilySearch(chineseQuery, ["gooood.cn", "archdaily.cn"], 3);
-        allResults.push(...chineseResults);
-      } catch {
-        // Chinese search failure is non-critical
-      }
-    }
 
     if (allResults.length === 0) {
       console.warn(`[Tavily] No results for "${caseName}", using fallback`);
       return getFallbackUrl(caseName);
     }
 
-    // Score and sort results
+    // Score, validate, and sort results
     const scored = allResults
       .map(r => ({ result: r, score: scoreResult(r, caseName) }))
       .sort((a, b) => b.score - a.score);
 
     const best = scored[0];
-    // If best score is very low, use fallback
-    if (best.score < 0.1) {
+
+    // Log for debugging
+    console.log(`[Tavily] Best match for "${caseName}": score=${best.score.toFixed(2)} url=${best.result.url}`);
+
+    // If best score is too low, the result is unreliable - use fallback search page
+    // The fallback is a real archdaily search URL, not a fabricated project URL
+    if (best.score < 0.3) {
+      console.warn(`[Tavily] Low confidence for "${caseName}" (score=${best.score.toFixed(2)}), using search page fallback`);
       return getFallbackUrl(caseName);
     }
 
@@ -237,13 +252,12 @@ export async function searchCaseStudy(
 
 /**
  * Search for multiple case studies in parallel
- * Returns a map of caseName -> URL (always has a value, fallback if not found)
+ * Returns a map of caseName -> URL
  */
 export async function searchCaseStudies(
   caseNames: string[],
   projectType?: string
 ): Promise<Record<string, string>> {
-  // Limit concurrency to avoid rate limiting
   const BATCH_SIZE = 3;
   const results: Record<string, string> = {};
 
@@ -258,7 +272,6 @@ export async function searchCaseStudies(
     for (const { name, url } of batchResults) {
       results[name] = url;
     }
-    // Small delay between batches to avoid rate limiting
     if (i + BATCH_SIZE < caseNames.length) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }

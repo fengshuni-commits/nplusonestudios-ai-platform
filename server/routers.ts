@@ -1183,6 +1183,14 @@ async function refineBenchmarkInBackground(
   const startTime = Date.now();
   try {
     await db.updateBenchmarkJob(jobId, { status: "processing" });
+
+    // Load stored caseRefs to lock links during refinement
+    const jobData = await db.getBenchmarkJob(jobId);
+    const storedCaseRefs = jobData?.caseRefs as Record<string, string> | null | undefined;
+    const caseRefsSection = storedCaseRefs && Object.keys(storedCaseRefs).length > 0
+      ? `\n\n**已验证的案例链接（必须原样保留，不得修改或替换）**：\n${Object.entries(storedCaseRefs).map(([name, url]) => `- ${name}: ${url}`).join('\n')}\n\n注意：以 \`?q=\` 结尾的链接是搜索页，这是正常的，请原样保留，不要替换为其他 URL。`
+      : '';
+
     const response = await invokeLLMWithUserTool({
       messages: [
         {
@@ -1193,12 +1201,13 @@ async function refineBenchmarkInBackground(
             const dateStr2 = `${y2}年${m2}月${d2}日`;
             return `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
 
-**当前日期**：${dateStr2}（北京时间）。报告中如需标注日期，请使用此日期。
+**当前日期**：${dateStr2}（北京时间）。报告中如需标注日期，请使用此日期。${caseRefsSection}
 
 **要求**：
 - 保持报告的整体结构和专业性
 - 根据用户反馈精确修改相应部分
 - 不要改动用户没有提到的内容
+- 严格使用上方提供的案例链接，不得自行编造或替换任何 URL
 - 输出完整的修订后报告（Markdown 格式）`;
           })(),
         },
@@ -1287,6 +1296,9 @@ async function generateBenchmarkInBackground(
     // === Phase 2: Search real URLs for each case using Tavily ===
     const caseUrlMap = await searchCaseStudies(caseNames, input.projectType);
     console.log(`[Benchmark] Phase 2 done: searched URLs for ${Object.keys(caseUrlMap).length} cases (projectType: ${input.projectType})`);
+
+    // Persist caseUrlMap so refine can reuse the same verified URLs
+    await db.updateBenchmarkJob(jobId, { caseRefs: caseUrlMap });
 
     // Build case reference context with real URLs
     const caseRefs = caseNames.map(name => {

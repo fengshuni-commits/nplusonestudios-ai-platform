@@ -405,6 +405,8 @@ export const benchmarkJobs = mysqlTable("benchmark_jobs", {
   result: text("result"),
   /** Error message if failed */
   error: text("error"),
+  /** Case references: JSON map of caseName -> URL (set after Phase 2 search) */
+  caseRefs: json("caseRefs"),
   /** Related generation history ID (set on completion) */
   historyId: int("historyId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

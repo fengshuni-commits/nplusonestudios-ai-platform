@@ -552,3 +552,11 @@
 
 ## Bug 修复：案例报告日期显示为 2023 年
 - [x] 在 benchmark 报告生成和 refine 的 system prompt 中注入北京时间当前日期，模型将使用此日期
+
+## Bug 修复：案例报告链接不准确
+- [ ] 查看当前搜索和 URL 获取逻辑，找到链接编造的根源
+- [ ] 修复：将已搜索到的真实 URL 锁定到 prompt，refine 时也传入原始链接列表防止被替换
+
+## Bug 修复：archdaily 链接不准确
+- [x] 重写 tavily.ts：优先 gooood.cn，对 archdaily 链接进行关键词验证，低置信度时降级为搜索页
+- [x] 修复 refine prompt：从数据库读取 caseRefs 并锁定链接，防止 LLM 替换 URL
