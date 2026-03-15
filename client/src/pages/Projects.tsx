@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { Plus, Search, FolderKanban, Calendar, Users, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -34,6 +34,40 @@ export default function Projects() {
   const [fields, setFields] = useState<FieldEntry[]>([]);
   const [freeText, setFreeText] = useState("");
   const [showFreeText, setShowFreeText] = useState(false);
+
+  // New tag state
+  const [showNewTag, setShowNewTag] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const newTagInputRef = useRef<HTMLInputElement>(null);
+
+  const createTemplate = trpc.fieldTemplates.create.useMutation({
+    onSuccess: (_created, variables) => {
+      utils.fieldTemplates.list.invalidate();
+      // Auto-select the new tag using the input name
+      setFields(prev => [...prev, { fieldName: variables.name, fieldValue: "" }]);
+      setNewTagName("");
+      setShowNewTag(false);
+      toast.success(`已添加标签「${variables.name}」`);
+    },
+    onError: () => toast.error("添加标签失败"),
+  });
+
+  const handleAddNewTag = () => {
+    const trimmed = newTagName.trim();
+    if (!trimmed) return;
+    // Check if already exists in templates
+    const existing = fieldTemplates?.find((t: any) => t.name === trimmed);
+    if (existing) {
+      // Just select it
+      if (!selectedTemplateNames.has(trimmed)) {
+        setFields(prev => [...prev, { fieldName: trimmed, fieldValue: "" }]);
+      }
+      setNewTagName("");
+      setShowNewTag(false);
+      return;
+    }
+    createTemplate.mutate({ name: trimmed });
+  };
 
   // AI extraction state
   const extractInfo = trpc.projects.extractInfo.useMutation({
@@ -99,6 +133,8 @@ export default function Projects() {
     setFields([]);
     setFreeText("");
     setShowFreeText(false);
+    setShowNewTag(false);
+    setNewTagName("");
   };
 
   const handleCreate = () => {
@@ -173,31 +209,69 @@ export default function Projects() {
                 </div>
 
                 {/* Template category selector - always visible */}
-                {fieldTemplates && fieldTemplates.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">选择需要填写的信息类别：</p>
-                    <div className="flex flex-wrap gap-2">
-                      {fieldTemplates.map((t: any) => {
-                        const selected = selectedTemplateNames.has(t.name);
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => toggleTemplate(t.name)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                              selected
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground"
-                            }`}
-                          >
-                            {selected && <Check className="h-3 w-3" />}
-                            {t.name}
-                          </button>
-                        );
-                      })}
-                    </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">选择需要填写的信息类别：</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(fieldTemplates || []).map((t: any) => {
+                      const selected = selectedTemplateNames.has(t.name);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => toggleTemplate(t.name)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                            selected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground"
+                          }`}
+                        >
+                          {selected && <Check className="h-3 w-3" />}
+                          {t.name}
+                        </button>
+                      );
+                    })}
+                    {/* Add new tag button */}
+                    {showNewTag ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          ref={newTagInputRef}
+                          autoFocus
+                          value={newTagName}
+                          onChange={(e) => setNewTagName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); handleAddNewTag(); }
+                            if (e.key === "Escape") { setShowNewTag(false); setNewTagName(""); }
+                          }}
+                          placeholder="标签名称"
+                          className="h-6 px-2 text-xs border rounded-full bg-background outline-none focus:ring-1 focus:ring-primary w-24"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddNewTag}
+                          disabled={createTemplate.isPending}
+                          className="px-2 py-1 rounded-full text-xs bg-primary text-primary-foreground border border-primary"
+                        >
+                          确定
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewTag(false); setNewTagName(""); }}
+                          className="px-1.5 py-1 rounded-full text-xs text-muted-foreground hover:text-foreground border border-border"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewTag(true); setTimeout(() => newTagInputRef.current?.focus(), 50); }}
+                        className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded-full text-xs border border-dashed border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                      >
+                        <Plus className="h-3 w-3" />新标签
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* AI free text input - toggleable */}
                 {showFreeText && (
