@@ -577,3 +577,11 @@
 - [x] 定位报告渲染组件（Streamdown/Markdown 链接渲染方式）
 - [x] 实现自定义链接渲染：检测 ?q= 并附加“搜索页”角标
 - [x] 测试并保存检查点
+
+## 出品标准：渲染风格管理
+- [x] 数据库新建 render_styles 表（id, label, promptHint, referenceImageUrl, sortOrder, isActive）
+- [x] 后端 CRUD 路由：列表/创建/更新/删除/排序/图片上传
+- [x] 前端出品标准页面：风格列表、新增、编辑弹窗、参考图上传、拖拽排序
+- [x] AI 效果图模块：风格列表改为动态读取，生成时注入 promptHint 和参考图
+- [x] 删除 AI 效果图模块的「导入项目信息」功能
+- [x] 编写 vitest 测试

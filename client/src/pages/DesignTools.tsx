@@ -20,12 +20,11 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
-import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
 
 export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
   const [prompt, setPrompt] = useState("");
-  const [style, setStyle] = useState("architectural-rendering");
+  const [styleId, setStyleId] = useState<number | undefined>(undefined);
   const [aspectRatio, setAspectRatio] = useState("auto");
   const [resolution, setResolution] = useState("standard");
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string; historyId?: number }>>([]);
@@ -192,9 +191,6 @@ export default function DesignTools() {
 
   // Store the display-resolution mask canvas data URL for preview overlay on the base image
   const [maskPreviewUrl, setMaskPreviewUrl] = useState<string | null>(null);
-
-  // Project import state
-  const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
 
   const uploadMutation = trpc.upload.file.useMutation();
   const createAssetMutation = trpc.assets.create.useMutation();
@@ -478,7 +474,7 @@ export default function DesignTools() {
       if (maskDataUrl) maskImageData = maskDataUrl;
 
       generateMutation.mutate({
-        prompt, style, toolId,
+        prompt, styleId, toolId,
         referenceImageUrl, parentHistoryId,
         materialImageUrl, maskImageData,
         aspectRatio: aspectRatio !== "auto" ? aspectRatio : undefined,
@@ -488,15 +484,8 @@ export default function DesignTools() {
   };
 
   // ─── Options ──────────────────────────────────────────
-  const styles = [
-    { value: "architectural-rendering", label: "建筑渲染" },
-    { value: "sketch", label: "手绘草图" },
-    { value: "watercolor", label: "水彩风格" },
-    { value: "minimal-line", label: "极简线稿" },
-    { value: "photorealistic", label: "照片级写实" },
-    { value: "conceptual", label: "概念设计" },
-    { value: "axonometric", label: "轴测图" },
-  ];
+  const { data: renderStylesData } = trpc.renderStyles.list.useQuery({ activeOnly: true });
+  const styles = renderStylesData ?? [];
 
   const aspectRatios = [
     { value: "auto", label: "自动" },
@@ -539,25 +528,6 @@ export default function DesignTools() {
             <CardTitle className="text-base font-medium">生成参数</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* ── Import Project Info ── */}
-            <ImportProjectInfo
-              selectedProjectId={importedProjectId}
-              onImport={(ctx: ProjectContext) => {
-                setImportedProjectId(ctx.project.id);
-                // Build a prompt prefix from project info
-                const parts: string[] = [];
-                if (ctx.project.name) parts.push(ctx.project.name);
-                if (ctx.project.projectOverview) parts.push(ctx.project.projectOverview);
-                if (ctx.project.businessGoal) parts.push(ctx.project.businessGoal);
-                ctx.customFields.forEach(cf => {
-                  if (cf.fieldValue) parts.push(`${cf.fieldName}：${cf.fieldValue}`);
-                });
-                if (parts.length > 0 && !prompt.trim()) {
-                  setPrompt(parts.join("，"));
-                }
-              }}
-            />
-
             {/* ── Base Image ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
@@ -687,11 +657,14 @@ export default function DesignTools() {
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label>渲染风格</Label>
-                <Select value={style} onValueChange={setStyle}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={styleId !== undefined ? String(styleId) : ""}
+                  onValueChange={(v) => setStyleId(v ? Number(v) : undefined)}
+                >
+                  <SelectTrigger><SelectValue placeholder="选择风格（可选）" /></SelectTrigger>
                   <SelectContent>
                     {styles.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -936,7 +909,6 @@ export default function DesignTools() {
                         onClick={() => {
                           if (img.historyId) {
                             setParentHistoryId(img.historyId);
-                            setImportedProjectId(null);
                           }
                         }}
                       >

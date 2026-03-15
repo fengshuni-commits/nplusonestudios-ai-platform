@@ -1056,8 +1056,72 @@ const standardsRouter = router({
     }),
 });
 
+// ─── Render Styles (出品标准：渲染风格库) ─────────────────
+const renderStylesRouter = router({
+  list: protectedProcedure
+    .input(z.object({ activeOnly: z.boolean().optional() }).optional())
+    .query(async ({ input }) => {
+      return db.listRenderStyles(input);
+    }),
+  create: protectedProcedure
+    .input(z.object({
+      label: z.string().min(1).max(128),
+      promptHint: z.string().min(1),
+      referenceImageUrl: z.string().url().optional().nullable(),
+      sortOrder: z.number().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return db.createRenderStyle({
+        label: input.label,
+        promptHint: input.promptHint,
+        referenceImageUrl: input.referenceImageUrl ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        isActive: input.isActive ?? true,
+      });
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      label: z.string().min(1).max(128).optional(),
+      promptHint: z.string().min(1).optional(),
+      referenceImageUrl: z.string().url().optional().nullable(),
+      sortOrder: z.number().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateRenderStyle(id, data);
+      return { success: true };
+    }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.deleteRenderStyle(input.id);
+      return { success: true };
+    }),
+  reorder: protectedProcedure
+    .input(z.object({ orderedIds: z.array(z.number()) }))
+    .mutation(async ({ input }) => {
+      await db.reorderRenderStyles(input.orderedIds);
+      return { success: true };
+    }),
+  uploadRefImage: protectedProcedure
+    .input(z.object({
+      styleId: z.number(),
+      fileName: z.string(),
+      fileData: z.string(),
+      contentType: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.fileData, "base64");
+      const key = `render-styles/${nanoid()}-${input.fileName}`;
+      const { url } = await storagePut(key, buffer, input.contentType);
+      await db.updateRenderStyle(input.styleId, { referenceImageUrl: url });
+      return { url, key };
+    }),
+});
 // ─── AI Tools ────────────────────────────────────────────
-
 const aiToolsRouter = router({
   list: protectedProcedure
     .input(z.object({ category: z.string().optional(), capability: z.string().optional(), activeOnly: z.boolean().optional() }).optional())
@@ -1532,9 +1596,10 @@ const benchmarkRouter = router({
 
 const renderingRouter = router({
   generate: protectedProcedure
-    .input(z.object({
+     .input(z.object({
       prompt: z.string().min(1),
       style: z.string().optional(),
+      styleId: z.number().optional(),
       toolId: z.number().optional(),
       referenceImageUrl: z.string().url().optional(),
       parentHistoryId: z.number().optional(),
@@ -1545,10 +1610,21 @@ const renderingRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
-
       // Build prompt with style and aspect ratio instruction
       let fullPrompt = input.prompt;
-      if (input.style) fullPrompt += `, style: ${input.style}`;
+      let styleRefImageUrl: string | null = null;
+      // Prefer styleId (from render_styles table) over legacy style string
+      if (input.styleId) {
+        try {
+          const renderStyle = await db.getRenderStyleById(input.styleId);
+          if (renderStyle) {
+            fullPrompt += `, ${renderStyle.promptHint}`;
+            if (renderStyle.referenceImageUrl) styleRefImageUrl = renderStyle.referenceImageUrl;
+          }
+        } catch { /* ignore */ }
+      } else if (input.style) {
+        fullPrompt += `, style: ${input.style}`;
+      }
 
       // Strongly enforce aspect ratio in prompt for better compliance
       const ratioLabels: Record<string, string> = {
@@ -1660,6 +1736,10 @@ const renderingRouter = router({
 
         if (input.materialImageUrl) {
           originalImages.push({ url: input.materialImageUrl, mimeType: "image/png" });
+        }
+        // Append style reference image (from render_styles table) as the last reference
+        if (styleRefImageUrl) {
+          originalImages.push({ url: styleRefImageUrl, mimeType: "image/png" });
         }
 
         if (originalImages.length > 0) {
@@ -2904,6 +2984,7 @@ export const appRouter = router({system: systemRouter,
   documents: documentsRouter,
   assets: assetsRouter,
   standards: standardsRouter,
+  renderStyles: renderStylesRouter,
   aiTools: aiToolsRouter,
   benchmark: benchmarkRouter,
   rendering: renderingRouter,

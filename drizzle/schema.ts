@@ -414,3 +414,22 @@ export const benchmarkJobs = mysqlTable("benchmark_jobs", {
 });
 export type BenchmarkJob = typeof benchmarkJobs.$inferSelect;
 export type InsertBenchmarkJob = typeof benchmarkJobs.$inferInsert;
+
+// ─── Render Styles (出品标准：渲染风格库) ─────────────────────────────────────
+export const renderStyles = mysqlTable("render_styles", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Display name shown in the UI dropdown */
+  label: varchar("label", { length: 128 }).notNull(),
+  /** Prompt hint injected into image generation prompt */
+  promptHint: text("promptHint").notNull(),
+  /** Reference image URL (S3) used as style reference for AI generation; nullable */
+  referenceImageUrl: text("referenceImageUrl"),
+  /** Display order (ascending) */
+  sortOrder: int("sortOrder").default(0).notNull(),
+  /** Whether this style is active and visible in the dropdown */
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type RenderStyle = typeof renderStyles.$inferSelect;
+export type InsertRenderStyle = typeof renderStyles.$inferInsert;

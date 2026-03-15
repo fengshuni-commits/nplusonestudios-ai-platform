@@ -22,6 +22,7 @@ import {
   generationHistory,
   InsertGenerationHistory,
   benchmarkJobs,
+  renderStyles, InsertRenderStyle,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1161,4 +1162,59 @@ export async function updateGenerationHistoryProject(historyId: number, projectI
   await db.update(generationHistory)
     .set({ projectId })
     .where(eq(generationHistory.id, historyId));
+}
+
+// ─── Render Styles (出品标准：渲染风格库) ─────────────────────────────────────
+
+export async function listRenderStyles(opts?: { activeOnly?: boolean }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (opts?.activeOnly) conditions.push(eq(renderStyles.isActive, true));
+  return db.select().from(renderStyles)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(renderStyles.sortOrder, renderStyles.createdAt);
+}
+
+export async function getRenderStyleById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(renderStyles).where(eq(renderStyles.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createRenderStyle(data: InsertRenderStyle) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(renderStyles).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function updateRenderStyle(id: number, data: Partial<InsertRenderStyle>) {
+  const db = await getDb();
+  if (!db) return;
+  const set: Record<string, unknown> = {};
+  if (data.label !== undefined) set.label = data.label;
+  if (data.promptHint !== undefined) set.promptHint = data.promptHint;
+  if (data.referenceImageUrl !== undefined) set.referenceImageUrl = data.referenceImageUrl;
+  if (data.sortOrder !== undefined) set.sortOrder = data.sortOrder;
+  if (data.isActive !== undefined) set.isActive = data.isActive;
+  if (Object.keys(set).length === 0) return;
+  await db.update(renderStyles).set(set).where(eq(renderStyles.id, id));
+}
+
+export async function deleteRenderStyle(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(renderStyles).where(eq(renderStyles.id, id));
+}
+
+export async function reorderRenderStyles(orderedIds: number[]) {
+  const db = await getDb();
+  if (!db) return;
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      db.update(renderStyles).set({ sortOrder: index }).where(eq(renderStyles.id, id))
+    )
+  );
 }
