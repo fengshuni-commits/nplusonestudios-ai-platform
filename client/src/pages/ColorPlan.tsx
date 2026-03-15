@@ -408,7 +408,7 @@ export default function ColorPlan() {
             </p>
           </div>
           <AiToolSelector
-            category="rendering"
+            capability="image_generation"
             value={toolId}
             onChange={setToolId}
             label="AI 工具"

@@ -665,3 +665,11 @@
 - [x] 更新 rendering.generate：使用 generateImageWithTool 替代 generateImage
 - [x] 更新 colorPlan.generate：使用 generateImageWithTool 替代 generateImage
 - [x] 编写测试（31 项全部通过）并保存检查点
+
+## AI 工具选择器过滤修复
+- [x] 数据库：qwen3.5-plus capabilities 去掉 rendering，只保留 document/analysis
+- [x] 数据库：qwen-image-2.0 和 gemini-3-pro-image-preview capabilities 改为 image_generation
+- [x] 数据库：Gemini 3（旧条目）capabilities 去掉 rendering
+- [x] 前端：DesignTools.tsx 和 ColorPlan.tsx 的 AiToolSelector 改用 capability="image_generation"
+- [x] 后端：generateImageWithTool.ts 添加 qwen-image (dashscope) 调用分支，自动检测 provider
+- [x] 编写测试并保存检查点，31 项测试全部通过

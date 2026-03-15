@@ -20,6 +20,76 @@ export type GenerateWithToolOptions = GenerateImageOptions & {
 };
 
 /**
+ * Call the Qwen-Image (DashScope) API for image generation.
+ * Returns the generated image URL directly (DashScope returns a URL, not base64).
+ */
+async function callQwenImageApi(opts: {
+  apiKey: string;
+  modelName: string;
+  apiEndpoint: string;
+  prompt: string;
+  size?: string;
+}): Promise<Buffer> {
+  const { apiKey, modelName, apiEndpoint, prompt, size } = opts;
+
+  const body: Record<string, any> = {
+    model: modelName,
+    input: {
+      messages: [
+        {
+          role: "user",
+          content: [{ text: prompt }],
+        },
+      ],
+    },
+    parameters: {
+      prompt_extend: true,
+      watermark: false,
+      size: size || "1024*1024",
+    },
+  };
+
+  const response = await fetch(apiEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120000), // 2 min timeout
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `Qwen-Image API request failed (${response.status} ${response.statusText})${
+        detail ? ": " + detail.substring(0, 500) : ""
+      }`
+    );
+  }
+
+  const result = await response.json();
+
+  // Extract image URL from DashScope response
+  const imageUrl: string | undefined =
+    result?.output?.choices?.[0]?.message?.content?.[0]?.image;
+
+  if (!imageUrl) {
+    throw new Error(
+      `Qwen-Image API returned no image. Response: ${JSON.stringify(result).substring(0, 300)}`
+    );
+  }
+
+  // Fetch the image and return as Buffer (URL expires in 24h)
+  const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(60000) });
+  if (!imgResp.ok) {
+    throw new Error(`Failed to download Qwen-Image result (${imgResp.status})`);
+  }
+  const imgBuf = await imgResp.arrayBuffer();
+  return Buffer.from(imgBuf);
+}
+
+/**
  * Call the Gemini generateContent API for image generation.
  * Returns the generated image as a Buffer.
  */
@@ -150,16 +220,40 @@ export async function generateImageWithTool(
     return { url: result.url || "", modelName: tool.name };
   }
 
-  const provider = tool.provider?.toLowerCase() || "gemini";
+  // Auto-detect provider from apiEndpoint if not explicitly set
+  let provider = tool.provider?.toLowerCase() || "";
+  if (!provider) {
+    if (tool.apiEndpoint.includes("dashscope.aliyuncs.com")) {
+      provider = "qwen";
+    } else if (tool.apiEndpoint.includes("generativelanguage.googleapis.com")) {
+      provider = "gemini";
+    } else {
+      provider = "unknown";
+    }
+  }
   const config = (tool.configJson as Record<string, string> | null) || {};
-  const modelName = config.modelName || "gemini-3-pro-image-preview";
+  const modelName = config.modelName || (provider === "qwen" ? "qwen-image-2.0-pro" : "gemini-3-pro-image-preview");
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 
   try {
     let imageBuffer: Buffer;
 
-    if (provider === "gemini") {
+    if (provider === "qwen") {
+      // Convert size format from "1024x768" to "1024*768" for DashScope
+      let qwenSize = "1024*1024";
+      if (genOpts.size) {
+        qwenSize = genOpts.size.replace("x", "*");
+      }
+
+      imageBuffer = await callQwenImageApi({
+        apiKey,
+        modelName,
+        apiEndpoint: tool.apiEndpoint,
+        prompt: genOpts.prompt,
+        size: qwenSize,
+      });
+    } else if (provider === "gemini") {
       // Parse size into aspectRatio and imageSize for Gemini API
       let aspectRatio = config.aspectRatio || "1:1";
       let imageSize = config.imageSize || "1K";
