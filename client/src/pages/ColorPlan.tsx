@@ -23,6 +23,7 @@ import {
   FolderOpen,
   RefreshCw,
 } from "lucide-react";
+import AiToolSelector from "@/components/AiToolSelector";
 
 // ─── Types ────────────────────────────────────────────────
 type AssetItem = {
@@ -269,6 +270,9 @@ export default function ColorPlan() {
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
   const [isUploadingRef, setIsUploadingRef] = useState(false);
 
+  // AI tool selection
+  const [toolId, setToolId] = useState<number | undefined>(undefined);
+
   // Style & extra prompt
   const [extraPrompt, setExtraPrompt] = useState("");
 
@@ -359,6 +363,7 @@ export default function ColorPlan() {
         floorPlanUrl,
         referenceUrl: referenceUrl || undefined,
         extraPrompt: extraPrompt.trim() || undefined,
+        toolId,
       });
       setResultUrl(result.url || null);
       setResultHistoryId(result.historyId);
@@ -402,6 +407,12 @@ export default function ColorPlan() {
               上传平面底图，参考风格图，一键生成彩色平面图
             </p>
           </div>
+          <AiToolSelector
+            category="rendering"
+            value={toolId}
+            onChange={setToolId}
+            label="AI 工具"
+          />
         </div>
       </div>
 

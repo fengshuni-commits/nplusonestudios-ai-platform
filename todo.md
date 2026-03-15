@@ -650,3 +650,9 @@
 - [x] App.tsx 注册两个新路由
 - [x] DashboardLayout 媒体板块添加两个导航入口（LayoutTemplate + BookImage 图标）
 - [x] 保存检查点
+
+## AI 彩平：添加 API 选择功能
+- [x] 读取 DesignTools.tsx 中 API 选择器的实现方式（AiToolSelector 组件）
+- [x] 后端：colorPlan.generate 接口添加 toolId 参数和工具日志
+- [x] 前端：ColorPlan.tsx 头部添加 AiToolSelector（category="rendering"）
+- [x] 保存检查点
