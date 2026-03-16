@@ -41,12 +41,26 @@ export async function getDb() {
   return _db;
 }
 
+/** Execute a DB operation with one automatic retry on ECONNRESET */
+export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: any) {
+    if (err?.code === 'ECONNRESET' || err?.cause?.code === 'ECONNRESET') {
+      // Reset the connection pool and retry once
+      console.warn('[Database] ECONNRESET detected, resetting connection and retrying...');
+      _db = null;
+      await getDb();
+      return await fn();
+    }
+    throw err;
+  }
+}
+
 // ─── Users ───────────────────────────────────────────────
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
-  const db = await getDb();
-  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
 
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
@@ -67,7 +81,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (user.openId === ENV.ownerOpenId) { values.approved = true; }
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+
+  await withRetry(async () => {
+    const db = await getDb();
+    if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  });
 }
 
 export async function approveUser(userId: number): Promise<void> {
@@ -89,10 +108,12 @@ export async function listPendingUsers() {
 }
 
 export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return undefined;
+    const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  });
 }
 
 export async function listUsers() {
