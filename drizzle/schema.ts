@@ -437,3 +437,16 @@ export const renderStyles = mysqlTable("render_styles", {
 });
 export type RenderStyle = typeof renderStyles.$inferSelect;
 export type InsertRenderStyle = typeof renderStyles.$inferInsert;
+
+// ─── AI Tool Defaults per Capability ─────────────────────
+// 每个 capability 类别可以独立设置一个默认工具
+export const aiToolDefaults = mysqlTable("ai_tool_defaults", {
+  id: int("id").autoincrement().primaryKey(),
+  /** capability 标识，如 "image_generation"、"document"、"analysis" */
+  capability: varchar("capability", { length: 64 }).notNull().unique(),
+  /** 对应的默认工具 ID（引用 ai_tools.id） */
+  toolId: int("toolId").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AiToolDefault = typeof aiToolDefaults.$inferSelect;
+export type InsertAiToolDefault = typeof aiToolDefaults.$inferInsert;

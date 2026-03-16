@@ -1289,6 +1289,28 @@ const aiToolsRouter = router({
       return { success: true };
     }),
 
+  // 按 capability 类别设置默认工具
+  setDefaultForCapability: adminProcedure
+    .input(z.object({ capability: z.string().min(1), toolId: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.setDefaultToolForCapability(input.capability, input.toolId);
+      return { success: true };
+    }),
+
+  // 按 capability 类别清除默认工具（恢复为内置 AI）
+  clearDefaultForCapability: adminProcedure
+    .input(z.object({ capability: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      await db.clearDefaultToolForCapability(input.capability);
+      return { success: true };
+    }),
+
+  // 获取所有 capability 的默认工具映射
+  getCapabilityDefaults: protectedProcedure
+    .query(async () => {
+      return db.getAllCapabilityDefaults();
+    }),
+
   delete: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

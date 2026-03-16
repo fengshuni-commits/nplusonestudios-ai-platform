@@ -685,3 +685,11 @@
 - [x] 改用原生 DashScope 异步端点（提交任务 + 轮询结果）
 - [x] 端到端测试通过（15秒内 SUCCEEDED，返回图片 URL）
 - [x] 保存检查点
+
+## AI 工具默认设置按功能类别分组
+- [x] 数据库：新增 ai_tool_defaults 表（capability, toolId），替代 ai_tools.isDefault 全局字段
+- [x] 后端：aiTools.setDefaultForCapability API（按 capability 设置默认工具）
+- [x] 后端：aiTools.getDefaultForCapability API（按 capability 获取默认工具）
+- [x] 前端：API 密钥管理页面按 capability 分组，每组独立设置默认工具
+- [x] 前端：AiToolSelector 按 capability 读取对应默认工具（而非全局 isDefault）
+- [x] 测试并保存检查点

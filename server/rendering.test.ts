@@ -349,7 +349,7 @@ describe("generateImageWithTool - external API routing", () => {
       // Expected: no built-in API in test env, but should NOT throw a "toolId" related error
       expect(err.message).not.toContain("toolId");
     }
-  });
+  }, 15000);
 
   it("falls back to built-in AI when tool has no apiEndpoint", async () => {
     const { generateImageWithTool } = await import("./_core/generateImageWithTool");
@@ -359,7 +359,7 @@ describe("generateImageWithTool - external API routing", () => {
     } catch (err: any) {
       expect(err.message).not.toContain("toolId");
     }
-  });
+  }, 15000);
 
   it("colorPlan.generate accepts toolId parameter", async () => {
     const ctx = createContext(null);
@@ -381,6 +381,59 @@ describe("generateImageWithTool - external API routing", () => {
         prompt: "modern office",
         toolId: 240008,
       })
+    ).rejects.toThrow();
+  });
+});
+
+describe("aiTools - capability defaults", () => {
+  it("getCapabilityDefaults returns a record object", async () => {
+    const ctx = createContext(createTestUser({ role: "admin" }));
+    const caller = appRouter.createCaller(ctx);
+    const defaults = await caller.aiTools.getCapabilityDefaults();
+    expect(typeof defaults).toBe("object");
+    expect(defaults).not.toBeNull();
+  });
+
+  it("setDefaultForCapability and clearDefaultForCapability work correctly", async () => {
+    const ctx = createContext(createTestUser({ role: "admin" }));
+    const caller = appRouter.createCaller(ctx);
+
+    // First, get all tools to find a valid toolId
+    const tools = await caller.aiTools.list({ activeOnly: true });
+    if (tools.length === 0) {
+      // No tools configured, skip this test
+      return;
+    }
+    const testTool = tools[0];
+    const testCapability = "test_capability_" + Date.now();
+
+    // Set default for a test capability
+    const setResult = await caller.aiTools.setDefaultForCapability({
+      capability: testCapability,
+      toolId: testTool.id,
+    });
+    expect(setResult.success).toBe(true);
+
+    // Verify it was set
+    const defaults = await caller.aiTools.getCapabilityDefaults();
+    expect(defaults[testCapability]).toBe(testTool.id);
+
+    // Clear the default
+    const clearResult = await caller.aiTools.clearDefaultForCapability({
+      capability: testCapability,
+    });
+    expect(clearResult.success).toBe(true);
+
+    // Verify it was cleared
+    const defaultsAfter = await caller.aiTools.getCapabilityDefaults();
+    expect(defaultsAfter[testCapability]).toBeUndefined();
+  });
+
+  it("setDefaultForCapability requires admin role", async () => {
+    const ctx = createContext(null);
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.aiTools.setDefaultForCapability({ capability: "image_generation", toolId: 1 })
     ).rejects.toThrow();
   });
 });

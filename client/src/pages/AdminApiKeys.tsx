@@ -6,13 +6,23 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shared/toolCapabilities";
 
+// 需要在 UI 中展示的功能类别（按使用频率排序）
+const DISPLAY_CAPABILITIES: { key: string; label: string; desc: string }[] = [
+  { key: "image_generation", label: "图像生成", desc: "AI 效果图、AI 彩平等图像生成功能" },
+  { key: "rendering",        label: "AI 效果图",  desc: "设计渲染、图生图" },
+  { key: "document",         label: "文档生成",  desc: "案例调研报告、演示文稿" },
+  { key: "analysis",         label: "分析理解",  desc: "多模态理解、数据分析" },
+  { key: "media",            label: "媒体内容",  desc: "小红书、公众号、Instagram 文案" },
+];
+
 export default function AdminApiKeys() {
   const { data: tools, isLoading: toolsLoading } = trpc.aiTools.list.useQuery({});
+  const { data: capabilityDefaults, isLoading: defaultsLoading } = trpc.aiTools.getCapabilityDefaults.useQuery();
   const utils = trpc.useUtils();
   const [toolDialogOpen, setToolDialogOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -62,23 +72,37 @@ export default function AdminApiKeys() {
     onError: (err) => toast.error(err.message),
   });
 
-  const setDefault = trpc.aiTools.setDefault.useMutation({
+  const setDefaultForCapability = trpc.aiTools.setDefaultForCapability.useMutation({
     onSuccess: () => {
-      utils.aiTools.list.invalidate();
-      Object.keys(localStorage)
-        .filter(k => k.startsWith("ai-tool-pref-"))
-        .forEach(k => localStorage.removeItem(k));
-      toast.success("已设为默认工具，各功能模块将自动采用");
+      utils.aiTools.getCapabilityDefaults.invalidate();
+      toast.success("已设为该类别的默认工具");
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const clearDefaultForCapability = trpc.aiTools.clearDefaultForCapability.useMutation({
+    onSuccess: () => {
+      utils.aiTools.getCapabilityDefaults.invalidate();
+      toast.success("已恢复为内置 AI");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // 获取某 capability 下有哪些工具
+  const getToolsForCapability = (capKey: string) => {
+    if (!tools) return [];
+    return tools.filter((t: any) => {
+      const caps: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
+      return caps.includes(capKey) && t.isActive;
+    });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI 工具管理</h1>
-          <p className="text-sm text-muted-foreground mt-1">添加外部 AI 模型 API，平台自动判断其适用功能模块并接入生成流程</p>
+          <p className="text-sm text-muted-foreground mt-1">添加外部 AI 模型 API，按功能类别分别设置默认工具</p>
         </div>
         <Dialog open={toolDialogOpen} onOpenChange={setToolDialogOpen}>
           <DialogTrigger asChild>
@@ -87,7 +111,6 @@ export default function AdminApiKeys() {
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>添加 AI 工具</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
-              {/* 工具名称 */}
               <div className="space-y-2">
                 <Label>模型名称 <span className="text-destructive">*</span></Label>
                 <Input
@@ -106,8 +129,6 @@ export default function AdminApiKeys() {
                   </div>
                 )}
               </div>
-
-              {/* API 端点 */}
               <div className="space-y-2">
                 <Label>API 端点</Label>
                 <Input
@@ -116,13 +137,11 @@ export default function AdminApiKeys() {
                   placeholder="https://api.openai.com/v1/chat/completions"
                 />
               </div>
-
-              {/* API Key（明文输入，加密存储） */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
                   <KeyRound className="h-3.5 w-3.5" />
                   API Key
-                  <span className="text-xs text-muted-foreground font-normal ml-1">（加密存储，不会明文保存）</span>
+                  <span className="text-xs text-muted-foreground font-normal ml-1">（加密存储）</span>
                 </Label>
                 <div className="relative">
                   <Input
@@ -141,8 +160,6 @@ export default function AdminApiKeys() {
                   </button>
                 </div>
               </div>
-
-              {/* 备注名称（可选） */}
               <div className="space-y-2">
                 <Label>备注名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Input
@@ -151,8 +168,6 @@ export default function AdminApiKeys() {
                   placeholder="例：主账号、测试用"
                 />
               </div>
-
-              {/* 备注说明（可选） */}
               <div className="space-y-2">
                 <Label>备注说明 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Textarea
@@ -162,7 +177,6 @@ export default function AdminApiKeys() {
                   rows={2}
                 />
               </div>
-
               <Button
                 onClick={() => {
                   if (!toolForm.name.trim()) { toast.error("请输入模型名称"); return; }
@@ -178,6 +192,77 @@ export default function AdminApiKeys() {
         </Dialog>
       </div>
 
+      {/* ── 按功能类别分组设置默认工具 ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-medium flex items-center gap-2">
+            <Star className="h-4 w-4" />各功能类别默认工具
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">每个功能类别可以独立指定默认工具，打开对应功能模块时自动选中</p>
+        </CardHeader>
+        <CardContent>
+          {toolsLoading || defaultsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-muted rounded animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {DISPLAY_CAPABILITIES.map(({ key, label, desc }) => {
+                const capTools = getToolsForCapability(key);
+                const currentDefaultId = capabilityDefaults?.[key];
+                const currentDefault = capTools.find((t: any) => t.id === currentDefaultId);
+                return (
+                  <div key={key} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-xs text-muted-foreground">{desc}</span>
+                      </div>
+                      <div className="mt-1">
+                        {currentDefault ? (
+                          <div className="flex items-center gap-1.5">
+                            <Badge className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-primary/20">
+                              {currentDefault.name}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">为当前默认</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">使用内置 AI（未设置外部默认）</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {capTools.length > 0 ? (
+                        <select
+                          className="text-xs h-7 px-2 rounded border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          value={currentDefaultId?.toString() || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) {
+                              clearDefaultForCapability.mutate({ capability: key });
+                            } else {
+                              setDefaultForCapability.mutate({ capability: key, toolId: parseInt(val) });
+                            }
+                          }}
+                        >
+                          <option value="">内置 AI</option>
+                          {capTools.map((t: any) => (
+                            <option key={t.id} value={t.id.toString()}>{t.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">暂无可用工具</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── 已配置的 AI 工具列表 ── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium flex items-center gap-2">
@@ -197,6 +282,14 @@ export default function AdminApiKeys() {
                 const caps: ToolCapability[] = Array.isArray(tool.capabilities) ? tool.capabilities : [];
                 const isExpanded = expandedId === tool.id;
                 const isEditingKey = editKeyId === tool.id;
+                // 判断该工具是否是某个 capability 的默认工具
+                const isAnyDefault = capabilityDefaults
+                  ? Object.values(capabilityDefaults).includes(tool.id)
+                  : false;
+                const defaultForCaps = capabilityDefaults
+                  ? DISPLAY_CAPABILITIES.filter(({ key }) => capabilityDefaults[key] === tool.id).map(c => c.label)
+                  : [];
+
                 return (
                   <div key={tool.id} className="rounded-lg border border-border overflow-hidden">
                     <div
@@ -208,10 +301,12 @@ export default function AdminApiKeys() {
                           <Sparkles className="h-4 w-4 text-primary" />
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="text-sm font-medium truncate">{tool.name}</p>
-                            {tool.isDefault && (
-                              <Badge className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-primary/20">默认</Badge>
+                            {isAnyDefault && (
+                              <Badge className="text-[10px] h-4 px-1.5 bg-amber-500/15 text-amber-600 border-amber-500/20">
+                                默认：{defaultForCaps.join("、")}
+                              </Badge>
                             )}
                             {tool.hasApiKey ? (
                               <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" aria-label="已配置 API Key" />
@@ -231,17 +326,6 @@ export default function AdminApiKeys() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {!tool.isDefault && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 bg-background"
-                            onClick={(e) => { e.stopPropagation(); setDefault.mutate({ id: tool.id }); }}
-                            disabled={setDefault.isPending}
-                          >
-                            设为默认
-                          </Button>
-                        )}
                         <Button
                           variant={tool.isActive ? "secondary" : "outline"}
                           size="sm"
@@ -262,7 +346,6 @@ export default function AdminApiKeys() {
                           </div>
                         )}
 
-                        {/* API Key 展示区域 */}
                         <div>
                           <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
                             <KeyRound className="h-3 w-3" />API Key

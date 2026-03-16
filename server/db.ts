@@ -23,6 +23,7 @@ import {
   InsertGenerationHistory,
   benchmarkJobs,
   renderStyles, InsertRenderStyle,
+  aiToolDefaults,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -605,6 +606,45 @@ export async function clearDefaultAiTool() {
   const db = await getDb();
   if (!db) return;
   await db.update(aiTools).set({ isDefault: false });
+}
+
+// ─── AI Tool Defaults per Capability ─────────────────────
+
+/** 获取某 capability 的默认工具 ID */
+export async function getDefaultToolForCapability(capability: string): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(aiToolDefaults).where(eq(aiToolDefaults.capability, capability)).limit(1);
+  return rows[0]?.toolId;
+}
+
+/** 获取所有 capability 的默认工具映射 */
+export async function getAllCapabilityDefaults(): Promise<Record<string, number>> {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.select().from(aiToolDefaults);
+  const result: Record<string, number> = {};
+  for (const row of rows) {
+    result[row.capability] = row.toolId;
+  }
+  return result;
+}
+
+/** 设置某 capability 的默认工具（upsert） */
+export async function setDefaultToolForCapability(capability: string, toolId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(aiToolDefaults)
+    .values({ capability, toolId })
+    .onDuplicateKeyUpdate({ set: { toolId } });
+}
+
+/** 删除某 capability 的默认工具（恢复为内置 AI） */
+export async function clearDefaultToolForCapability(capability: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(aiToolDefaults).where(eq(aiToolDefaults.capability, capability));
 }
 
 // ─── AI Tool Logs ────────────────────────────────────────
