@@ -693,3 +693,8 @@
 - [x] 前端：API 密钥管理页面按 capability 分组，每组独立设置默认工具
 - [x] 前端：AiToolSelector 按 capability 读取对应默认工具（而非全局 isDefault）
 - [x] 测试并保存检查点
+
+## 修复 capability 类别重复问题
+- [x] 分析「图像生成」和「AI效果图」两个类别的来源（toolCapabilities.ts vs AdminApiKeys.tsx）
+- [x] 合并为统一的单一类别，消除重复
+- [x] 保存检查点
