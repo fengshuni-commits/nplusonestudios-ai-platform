@@ -134,6 +134,13 @@
       "when": 1773626056397,
       "tag": "0018_handy_satana",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1773744477640,
+      "tag": "0019_high_masque",
+      "breakpoints": true
     }
   ]
 }

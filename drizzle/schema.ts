@@ -450,3 +450,26 @@ export const aiToolDefaults = mysqlTable("ai_tool_defaults", {
 });
 export type AiToolDefault = typeof aiToolDefaults.$inferSelect;
 export type InsertAiToolDefault = typeof aiToolDefaults.$inferInsert;
+
+// ─── Video Generation History ────────────────────────────
+// 存储用户的视频生成历史记录
+export const videoHistory = mysqlTable("video_history", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId"),
+  toolId: int("toolId"), // 使用的视频生成工具 ID
+  mode: mysqlEnum("mode", ["text-to-video", "image-to-video"]).notNull(),
+  prompt: text("prompt").notNull(), // 文生视频的描述词或图生视频的额外描述
+  duration: int("duration").notNull(), // 视频时长（秒），1-8
+  inputImageUrl: text("inputImageUrl"), // 图生视频时的首帧图 URL
+  outputVideoUrl: text("outputVideoUrl"), // 生成的视频 URL
+  taskId: varchar("taskId", { length: 256 }), // 第三方 API 的任务 ID（用于查询状态）
+  status: mysqlEnum("status", ["pending", "processing", "completed", "failed"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"), // 失败时的错误信息
+  metadata: json("metadata"), // 存储额外信息（如 API 响应、参数等）
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VideoHistory = typeof videoHistory.$inferSelect;
+export type InsertVideoHistory = typeof videoHistory.$inferInsert;

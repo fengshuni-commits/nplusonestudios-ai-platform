@@ -14,6 +14,7 @@ import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shar
 // 需要在 UI 中展示的功能类别（与 toolCapabilities.ts 中的真实 capability 一一对应）
 const DISPLAY_CAPABILITIES: { key: ToolCapability; label: string; desc: string }[] = [
   { key: "rendering", label: "AI 效果图 / 图像生成", desc: "AI 效果图、AI 彩平、图生图等图像生成功能" },
+  { key: "video",     label: "AI 视频生成",             desc: "文生视频、图生视频等视频生成功能" },
   { key: "document",  label: "文档生成",             desc: "案例调研报告、演示文稿" },
   { key: "analysis", label: "分析理解",             desc: "多模态理解、数据分析" },
   { key: "media",    label: "媒体内容",             desc: "小红书、公众号、Instagram 文案" },

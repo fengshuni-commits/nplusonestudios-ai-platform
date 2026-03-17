@@ -17,7 +17,7 @@ type AiToolSelectorProps = {
 
 const BUILTIN_TOOL_ID = -1;
 
-export default function AiToolSelector({ category, capability, value, onChange, label, showBuiltIn = true }: AiToolSelectorProps) {
+export function AiToolSelector({ category, capability, value, onChange, label, showBuiltIn = true }: AiToolSelectorProps) {
   const filterKey = capability || category;
   const { data: tools } = trpc.aiTools.list.useQuery(
     filterKey ? { capability: filterKey, activeOnly: true } : { activeOnly: true }

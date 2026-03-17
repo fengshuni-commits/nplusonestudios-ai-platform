@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import AiToolSelector from "@/components/AiToolSelector";
+import { AiToolSelector } from "@/components/AiToolSelector";
 import ImageMaskEditor from "@/components/ImageMaskEditor";
 import { trpc } from "@/lib/trpc";
 import { Slider } from "@/components/ui/slider";
@@ -20,6 +20,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+import VideoGeneration from "./VideoGeneration";
 
 export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -513,15 +514,22 @@ export default function DesignTools() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">AI效果图</h1>
-          <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代与局部调整</p>
-        </div>
-        <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" />
-      </div>
+      <Tabs defaultValue="rendering" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="rendering">AI 效果图</TabsTrigger>
+          <TabsTrigger value="video">AI 视频</TabsTrigger>
+        </TabsList>
 
-      <div className="grid lg:grid-cols-5 gap-6">
+        <TabsContent value="rendering" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">AI效果图</h1>
+              <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代与局部调整</p>
+            </div>
+            <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" />
+          </div>
+
+          <div className="grid lg:grid-cols-5 gap-6">
         {/* ─── Input Panel ─────────────────────────────── */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-4">
@@ -1150,7 +1158,13 @@ export default function DesignTools() {
             )}
           </CardContent>
         </Card>
-      </div>
+        </div>
+        </TabsContent>
+
+        <TabsContent value="video" className="space-y-6">
+          <VideoGeneration />
+        </TabsContent>
+      </Tabs>
 
       {/* ─── Asset Picker Dialog ──────────────────────── */}
       <Dialog open={showAssetPicker} onOpenChange={setShowAssetPicker}>

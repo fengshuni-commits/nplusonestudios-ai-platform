@@ -24,6 +24,7 @@ import {
   benchmarkJobs,
   renderStyles, InsertRenderStyle,
   aiToolDefaults,
+  videoHistory, InsertVideoHistory,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1384,4 +1385,29 @@ export async function reorderRenderStyles(orderedIds: number[]) {
       db.update(renderStyles).set({ sortOrder: index }).where(eq(renderStyles.id, id))
     )
   );
+}
+
+
+// ─── Video History ───────────────────────────────────────
+
+// Export videoHistory table for use in routers
+export { videoHistory };
+
+// Create a db proxy object for use in routers
+export const db = {
+  insert: (table: any) => ({
+    values: async (data: any) => {
+      const database = await getDb();
+      if (!database) throw new Error('Database not available');
+      return await database.insert(table).values(data);
+    },
+  }),
+};
+
+// Get video history for a user
+export async function getVideoHistory(userId: number) {
+  const database = await getDb();
+  if (!database) return [];
+  const { eq } = await import('drizzle-orm');
+  return await database.select().from(videoHistory).where(eq(videoHistory.userId, userId));
 }

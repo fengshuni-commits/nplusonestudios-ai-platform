@@ -8,6 +8,7 @@ import * as db from "./db";
 import { invokeLLM, invokeLLMWithUserTool } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
 import { generateImageWithTool } from "./_core/generateImageWithTool";
+import { generateVideoWithTool, queryVideoTaskStatus } from "./_core/generateVideoWithTool";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
@@ -3214,6 +3215,61 @@ export const appRouter = router({system: systemRouter,
   enhance: enhanceRouter,
   presentation: presentationRouter,
   fieldTemplates: fieldTemplatesRouter,
+  video: router({
+    generate: protectedProcedure
+      .input(
+        z.object({
+          mode: z.enum(["text-to-video", "image-to-video"]),
+          prompt: z.string().min(1),
+          duration: z.number().min(1).max(8),
+          toolId: z.number(),
+          inputImageUrl: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const tool = await db.getAiToolById(input.toolId);
+        if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
+
+        const jobId = nanoid();
+        const result = await generateVideoWithTool({
+          mode: input.mode,
+          prompt: input.prompt,
+          duration: input.duration,
+          inputImageUrl: input.inputImageUrl,
+          tool: {
+            id: tool.id,
+            name: tool.name,
+            apiEndpoint: tool.apiEndpoint || undefined,
+            apiKeyEncrypted: tool.apiKeyEncrypted || undefined,
+            configJson: tool.configJson || undefined,
+          },
+        });
+
+        await db.db.insert(db.videoHistory).values({
+          userId: ctx.user.id,
+          toolId: input.toolId,
+          mode: input.mode,
+          prompt: input.prompt,
+          duration: input.duration,
+          inputImageUrl: input.inputImageUrl,
+          taskId: result.taskId,
+          status: result.status,
+          outputVideoUrl: result.videoUrl,
+          errorMessage: result.errorMessage,
+        });
+
+        return {
+          taskId: result.taskId,
+          status: result.status,
+          videoUrl: result.videoUrl,
+        };
+      }),
+    getStatus: protectedProcedure
+      .input(z.object({ taskId: z.string() }))
+      .query(async ({ input, ctx }) => {
+        return { status: "processing" as const, progress: 50 };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

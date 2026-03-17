@@ -115,7 +115,7 @@ const CAPABILITY_RULES: CapabilityRule[] = [
   },
   {
     keywords: ["jimeng", "即梦", "janus"],
-    capabilities: ["rendering", "image"],
+    capabilities: ["rendering", "image", "video"],
   },
   {
     keywords: ["wanx", "万象", "tongyi-wanx"],

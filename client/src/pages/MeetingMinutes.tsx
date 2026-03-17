@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import AiToolSelector from "@/components/AiToolSelector";
+import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { FileText, Loader2, Sparkles, Upload, Mic, Copy, Download } from "lucide-react";
 import { useState, useRef } from "react";

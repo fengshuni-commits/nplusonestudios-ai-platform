@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import AiToolSelector from "@/components/AiToolSelector";
+import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { Compass, FileText, Loader2, Sparkles, Send, MessageSquare, ChevronDown, Copy, Check, HelpCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";

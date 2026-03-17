@@ -23,7 +23,7 @@ import {
   FolderOpen,
   RefreshCw,
 } from "lucide-react";
-import AiToolSelector from "@/components/AiToolSelector";
+import { AiToolSelector } from "@/components/AiToolSelector";
 
 // ─── Types ────────────────────────────────────────────────
 type AssetItem = {

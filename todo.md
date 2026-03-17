@@ -714,3 +714,23 @@
 - [x] 数据库：ai_tools 表增加字段存储 AccessKeyID（或复用现有字段）
 - [x] 测试验证即梦 API 调用
 - [x] 保存检查点
+
+## AI 视频功能（即梦视频生成）
+- [x] 后端：研究即梦视频生成 API（文生视频、图生视频）
+- [x] 后端：实现视频生成 tRPC 接口（video.generate）
+- [x] 后端：实现视频任务查询接口（video.getStatus）
+- [x] 后端：实现视频下载和存储逻辑
+- [x] 数据库：添加 video_history 表存储视频生成记录
+- [x] 前端：创建 VideoGeneration.tsx 页面组件
+- [x] 前端：实现文生视频 Tab（描述词输入、时长选择）
+- [x] 前端：实现图生视频 Tab（首帧图上传/素材库选择、描述词、时长选择）
+- [x] 前端：实现视频预览播放器
+- [x] 前端：实现视频下载功能
+- [x] 前端：集成视频历史记录
+- [x] 前端：在设计板块导航中添加「AI 视频」菜单项
+- [x] 测试验证和保存检查点
+
+### 视频功能中的工具选择器支持
+- [x] 在 toolCapabilities.ts 中添加 video capability
+- [x] 修改 inferCapabilities 识别视频生成工具
+- [x] 在 AdminApiKeys 中为「视频生成」类别添加默认工具配置

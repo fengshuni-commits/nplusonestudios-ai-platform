@@ -32,6 +32,22 @@ export interface ImageGenerationResponse {
 }
 
 /**
+ * 生成 HMAC-SHA256 签名（用于即梦视频 API）
+ */
+export function generateHmacSignature(
+  secretAccessKey: string,
+  body: string,
+  timestamp: string
+): string {
+  const crypto = require("crypto");
+  const message = `${body}${timestamp}`;
+  return crypto
+    .createHmac("sha256", secretAccessKey)
+    .update(message)
+    .digest("hex");
+}
+
+/**
  * 生成火山引擎 API 签名
  * 参考：https://www.volcengine.com/docs/6477/1219375
  */
