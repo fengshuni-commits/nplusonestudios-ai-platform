@@ -34,8 +34,12 @@ export default function AdminApiKeys() {
     apiKeyName: "",
     apiKey: "",
     description: "",
+    accessKeyId: "", // 即梦 AI 专用
   });
   const [showFormKey, setShowFormKey] = useState(false);
+
+  // 检测是否为即梦工具
+  const isJimengTool = toolForm.name.toLowerCase().includes("即梦") || toolForm.name.toLowerCase().includes("jimeng") || toolForm.apiEndpoint.includes("volcengine");
 
   // 实时预览推断能力
   const previewCapabilities = toolForm.name.trim()
@@ -46,7 +50,7 @@ export default function AdminApiKeys() {
     onSuccess: () => {
       utils.aiTools.list.invalidate();
       setToolDialogOpen(false);
-      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "" });
+      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "" });
       setShowFormKey(false);
       toast.success("AI 工具添加成功");
     },
@@ -159,6 +163,22 @@ export default function AdminApiKeys() {
                   </button>
                 </div>
               </div>
+              {isJimengTool && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    AccessKeyID
+                    <span className="text-xs text-muted-foreground font-normal ml-1">（即梦 AI 专用）</span>
+                  </Label>
+                  <Input
+                    type="text"
+                    value={toolForm.accessKeyId}
+                    onChange={(e) => setToolForm({ ...toolForm, accessKeyId: e.target.value })}
+                    placeholder="即梦 AI AccessKeyID"
+                    className="font-mono text-sm"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>备注名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Input
@@ -412,6 +432,14 @@ export default function AdminApiKeys() {
                           )}
                         </div>
 
+                        {tool.configJson?.accessKeyId && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">AccessKeyID</p>
+                            <p className="text-xs font-mono bg-background rounded px-2 py-1 border text-muted-foreground">
+                              {tool.configJson.accessKeyId.substring(0, 8)}...{tool.configJson.accessKeyId.substring(tool.configJson.accessKeyId.length - 4)}
+                            </p>
+                          </div>
+                        )}
                         {tool.apiKeyName && !tool.apiKeyName.startsWith('sk-') && (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1">备注名称</p>

@@ -14,6 +14,7 @@ import { getAiToolById } from "server/db";
 import { decryptApiKey } from "./crypto";
 import { storagePut } from "server/storage";
 import { generateImage, type GenerateImageOptions } from "./imageGeneration";
+import { generateImageWithJimeng, type VolcengineConfig } from "./volcengine";
 
 export type GenerateWithToolOptions = GenerateImageOptions & {
   toolId?: number | null;
@@ -341,6 +342,30 @@ export async function generateImageWithTool(
         imageSize,
         aspectRatio,
       });
+    } else if (provider === "jimeng" || provider === "volcengine") {
+      // 即梦 AI (火山引擎) 图像生成
+      const volcengineConfig: VolcengineConfig = {
+        accessKeyId: config.accessKeyId || "",
+        secretAccessKey: apiKey,
+      };
+      if (!volcengineConfig.accessKeyId) {
+        throw new Error("即梦 AI 缺少 AccessKeyID 配置");
+      }
+      const response = await generateImageWithJimeng(volcengineConfig, {
+        prompt: genOpts.prompt,
+        negativePrompt: config.negativePrompt,
+        width: genOpts.size ? parseInt(genOpts.size.split("x")[0]) : 512,
+        height: genOpts.size ? parseInt(genOpts.size.split("x")[1]) : 512,
+      });
+      if (!response.data?.image_urls?.[0]?.url) {
+        throw new Error(`即梦 API 返回无效响应: ${JSON.stringify(response).substring(0, 300)}`);
+      }
+      const imageUrl = response.data.image_urls[0].url;
+      const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(60000) });
+      if (!imgResp.ok) {
+        throw new Error(`Failed to download 即梦 image (${imgResp.status})`);
+      }
+      imageBuffer = Buffer.from(await imgResp.arrayBuffer());
     } else {
       // Unknown provider — fall back to built-in AI
       console.warn(`[generateImageWithTool] Unknown provider "${provider}", falling back to built-in AI`);

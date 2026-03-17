@@ -1236,6 +1236,7 @@ const aiToolsRouter = router({
       apiEndpoint: z.string().optional(),
       apiKeyName: z.string().optional(),
       apiKey: z.string().optional(), // plaintext API key, will be encrypted before storage
+      accessKeyId: z.string().optional(), // 即梦 AI 专用
       configJson: z.any().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -1247,9 +1248,11 @@ const aiToolsRouter = router({
         document: "document", analysis: "analysis", layout: "layout", media: "other",
       };
       const category = (capToCategory[capabilities[0]] || "other") as any;
-      const { apiKey, ...rest } = input;
+      const { apiKey, accessKeyId, ...rest } = input;
       const apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : undefined;
-      return db.createAiTool({ ...rest, apiKeyEncrypted, category, capabilities, createdBy: ctx.user.id });
+      // 如果有 accessKeyId，存到 configJson 中
+      const configJson = accessKeyId ? { ...(input.configJson || {}), accessKeyId } : input.configJson;
+      return db.createAiTool({ ...rest, apiKeyEncrypted, category, capabilities, configJson, createdBy: ctx.user.id });
     }),
 
   update: adminProcedure
@@ -1262,6 +1265,7 @@ const aiToolsRouter = router({
       apiEndpoint: z.string().optional(),
       apiKeyName: z.string().optional(),
       apiKey: z.string().optional(), // plaintext API key, will be encrypted before storage
+      accessKeyId: z.string().optional(), // 即梦 AI 专用
       configJson: z.any().optional(),
       isActive: z.boolean().optional(),
       isDefault: z.boolean().optional(),
@@ -1269,13 +1273,17 @@ const aiToolsRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { encryptApiKey } = await import("./_core/crypto");
-      const { id, apiKey, ...data } = input;
+      const { id, apiKey, accessKeyId, ...data } = input;
       if (data.isDefault === true) {
         await db.clearDefaultAiTool();
       }
       const updateData: any = { ...data };
       if (apiKey !== undefined) {
         updateData.apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : null;
+      // 如果有 accessKeyId，更新 configJson
+      if (accessKeyId !== undefined) {
+        updateData.configJson = { ...(data.configJson || {}), accessKeyId };
+      }
       }
       await db.updateAiTool(id, updateData);
       return { success: true };

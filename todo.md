@@ -698,3 +698,19 @@
 - [x] 分析「图像生成」和「AI效果图」两个类别的来源（toolCapabilities.ts vs AdminApiKeys.tsx）
 - [x] 合并为统一的单一类别，消除重复
 - [x] 保存检查点
+
+## 修复 AI 工具 capabilities 字段错误
+- [ ] 修正数据库中 Gemini 3 的 capabilities（加入 rendering）
+- [ ] 修正 gemini-3-pro-image-preview 的 capabilities（image_generation → rendering,image）
+- [ ] 修复 inferCapabilities 推断逻辑，确保 gemini 类工具包含 rendering
+- [ ] 保存检查点
+
+## 集成即梦 AI（火山引擎）
+- [x] 后端：实现火山引擎 HMAC-SHA256 签名生成
+- [x] 后端：实现即梦 API 调用逻辑（支持 AccessKeyID + SecretAccessKey）
+- [x] 后端：在 generateImageWithTool 中添加即梦 AI 路由
+- [x] 前端：修改 AdminApiKeys 支持 AccessKeyID/SecretAccessKey 两个字段
+- [x] 前端：AI 工具管理页面识别「即梦」工具，显示 AccessKeyID/SecretAccessKey 输入框
+- [x] 数据库：ai_tools 表增加字段存储 AccessKeyID（或复用现有字段）
+- [x] 测试验证即梦 API 调用
+- [x] 保存检查点
