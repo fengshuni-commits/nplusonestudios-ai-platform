@@ -3291,13 +3291,14 @@ export const appRouter = router({system: systemRouter,
         const records = await db.listVideoHistory(ctx.user.id);
         const record = records.find((r: any) => r.id === input.id);
         if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+        if (!record.toolId) throw new TRPCError({ code: "NOT_FOUND", message: "工具 ID 不存在" });
         const tool = await db.getAiToolById(record.toolId);
         if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
         const result = await generateVideoWithTool({
           mode: record.mode,
           prompt: record.prompt,
           duration: record.duration,
-          inputImageUrl: record.inputImageUrl,
+          inputImageUrl: record.inputImageUrl || undefined,
           tool: {
             id: tool.id,
             name: tool.name,

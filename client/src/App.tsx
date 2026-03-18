@@ -16,7 +16,7 @@ import Standards from "./pages/Standards";
 import Integrations from "./pages/Integrations";
 import Workflows from "./pages/Workflows";
 import AdminTeam from "./pages/AdminTeam";
-import AdminApiKeys from "./pages/AdminApiKeys";
+import AiToolsManagement from "./pages/AiToolsManagement";
 import AdminSettings from "./pages/AdminSettings";
 import AdminCaseSources from "./pages/AdminCaseSources";
 import AdminFeedback from "./pages/AdminFeedback";
@@ -80,7 +80,7 @@ function Router() {
         <Route path="/integrations" component={Integrations} />
         <Route path="/workflows" component={Workflows} />
         <Route path="/admin/team" component={AdminTeam} />
-        <Route path="/admin/api-keys" component={AdminApiKeys} />
+        <Route path="/admin/ai-tools" component={AiToolsManagement} />
         <Route path="/admin/case-sources" component={AdminCaseSources} />
         <Route path="/admin/settings" component={AdminSettings} />
         <Route path="/admin/feedback" component={AdminFeedback} />

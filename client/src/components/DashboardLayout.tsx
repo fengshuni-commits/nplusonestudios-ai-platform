@@ -120,7 +120,7 @@ const menuSections: MenuSection[] = [
       { icon: Webhook, label: "API 与 Webhook", path: "/integrations" },
       { icon: Workflow, label: "工作流", path: "/workflows" },
       { icon: Users, label: "团队管理", path: "/admin/team" },
-      { icon: Key, label: "API 密钥", path: "/admin/api-keys" },
+      { icon: Key, label: "AI 工具管理", path: "/admin/api-keys" },
       { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
       { icon: BarChart3, label: "反馈分析", path: "/admin/feedback" },
     ],
