@@ -20,7 +20,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
-import VideoGeneration from "./VideoGeneration";
+
 
 export default function DesignTools() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
@@ -515,9 +515,8 @@ export default function DesignTools() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="rendering" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-1">
           <TabsTrigger value="rendering">AI 效果图</TabsTrigger>
-          <TabsTrigger value="video">AI 视频</TabsTrigger>
         </TabsList>
 
         <TabsContent value="rendering" className="space-y-6">
@@ -1159,10 +1158,6 @@ export default function DesignTools() {
           </CardContent>
         </Card>
         </div>
-        </TabsContent>
-
-        <TabsContent value="video" className="space-y-6">
-          <VideoGeneration />
         </TabsContent>
       </Tabs>
 

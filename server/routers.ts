@@ -3269,6 +3269,55 @@ export const appRouter = router({system: systemRouter,
       .query(async ({ input, ctx }) => {
         return { status: "processing" as const, progress: 50 };
       }),
+    list: protectedProcedure
+      .input(
+        z.object({
+          limit: z.number().min(1).max(100).default(20),
+          offset: z.number().min(0).default(0),
+        })
+      )
+      .query(async ({ input, ctx }) => {
+        return await db.listVideoHistory(ctx.user.id);
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await db.deleteVideoHistory(input.id);
+        return { success: true };
+      }),
+    regenerate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const records = await db.listVideoHistory(ctx.user.id);
+        const record = records.find((r: any) => r.id === input.id);
+        if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+        const tool = await db.getAiToolById(record.toolId);
+        if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
+        const result = await generateVideoWithTool({
+          mode: record.mode,
+          prompt: record.prompt,
+          duration: record.duration,
+          inputImageUrl: record.inputImageUrl,
+          tool: {
+            id: tool.id,
+            name: tool.name,
+            apiEndpoint: tool.apiEndpoint || undefined,
+            apiKeyEncrypted: tool.apiKeyEncrypted || undefined,
+            configJson: tool.configJson || undefined,
+          },
+        });
+        await db.updateVideoHistory(input.id, {
+          taskId: result.taskId,
+          status: result.status,
+          outputVideoUrl: result.videoUrl,
+          errorMessage: result.errorMessage,
+        });
+        return {
+          taskId: result.taskId,
+          status: result.status,
+          videoUrl: result.videoUrl,
+        };
+      }),
   }),
 });
 

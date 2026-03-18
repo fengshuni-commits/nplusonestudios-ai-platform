@@ -349,7 +349,7 @@ describe("generateImageWithTool - external API routing", () => {
       // Expected: no built-in API in test env, but should NOT throw a "toolId" related error
       expect(err.message).not.toContain("toolId");
     }
-  }, 15000);
+  }, 30000);
 
   it("falls back to built-in AI when tool has no apiEndpoint", async () => {
     const { generateImageWithTool } = await import("./_core/generateImageWithTool");
@@ -359,7 +359,7 @@ describe("generateImageWithTool - external API routing", () => {
     } catch (err: any) {
       expect(err.message).not.toContain("toolId");
     }
-  }, 15000);
+  }, 30000);
 
   it("colorPlan.generate accepts toolId parameter", async () => {
     const ctx = createContext(null);

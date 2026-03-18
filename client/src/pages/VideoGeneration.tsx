@@ -270,7 +270,7 @@ export default function VideoGeneration() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">任务 ID: {taskId}</span>
               <Badge variant={taskStatus === "completed" ? "default" : "secondary"}>
-                {getStatusLabel(taskStatus || checkTaskStatus.data?.status)}
+                {getStatusLabel((taskStatus || checkTaskStatus.data?.status) as any)}
               </Badge>
             </div>
 

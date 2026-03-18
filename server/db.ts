@@ -1395,6 +1395,32 @@ export { videoHistory };
 
 // Create a db proxy object for use in routers
 export const db = {
+  videoHistory,
+  select: () => ({
+    from: (table: any) => ({
+      where: async (condition: any) => {
+        const database = await getDb();
+        if (!database) throw new Error('Database not available');
+        return await database.select().from(table).where(condition);
+      },
+    }),
+  }),
+  delete: (table: any) => ({
+    where: async (condition: any) => {
+      const database = await getDb();
+      if (!database) throw new Error('Database not available');
+      return await database.delete(table).where(condition);
+    },
+  }),
+  update: (table: any) => ({
+    set: (data: any) => ({
+      where: async (condition: any) => {
+        const database = await getDb();
+        if (!database) throw new Error('Database not available');
+        return await database.update(table).set(data).where(condition);
+      },
+    }),
+  }),
   insert: (table: any) => ({
     values: async (data: any) => {
       const database = await getDb();
@@ -1403,6 +1429,25 @@ export const db = {
     },
   }),
 };
+
+// Helper functions for video history
+export async function listVideoHistory(userId: number) {
+  const database = await getDb();
+  if (!database) return [];
+  return await database.select().from(videoHistory).where(eq(videoHistory.userId, userId)).orderBy(desc(videoHistory.createdAt));
+}
+
+export async function deleteVideoHistory(id: number) {
+  const database = await getDb();
+  if (!database) return;
+  await database.delete(videoHistory).where(eq(videoHistory.id, id));
+}
+
+export async function updateVideoHistory(id: number, data: Partial<InsertVideoHistory>) {
+  const database = await getDb();
+  if (!database) return;
+  await database.update(videoHistory).set(data).where(eq(videoHistory.id, id));
+}
 
 // Get video history for a user
 export async function getVideoHistory(userId: number) {
