@@ -44,6 +44,7 @@ import {
   FolderPlus,
   Link2,
   Link2Off,
+  Film,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -121,11 +122,19 @@ const MODULE_MAP: Record<string, {
     iconColor: "text-rose-200",
     accentColor: "bg-rose-400/20 text-rose-200",
   },
+  ai_video: {
+    label: "AI 视频",
+    icon: Film,
+    gradient: "from-purple-900 to-purple-700",
+    iconColor: "text-purple-300",
+    accentColor: "bg-purple-500/20 text-purple-300",
+  },
 };
 
 // Module display order
 const MODULE_ORDER = [
   "ai_render",
+  "ai_video",
   "benchmark_report",
   "benchmark_ppt",
   "meeting_minutes",
@@ -323,6 +332,9 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
     if (isRender && onOpenDetail) {
       // AI 效果图：打开迭代链详情
       onOpenDetail(item);
+    } else if (item.module === "ai_video" && onOpenDetail) {
+      // AI 视频：打开视频详情
+      onOpenDetail(item);
     } else if (item.module === "benchmark_ppt" && item.outputUrl) {
       // PPT：直接打开下载链接
       window.open(item.outputUrl, "_blank");
@@ -344,12 +356,14 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
       {/* Background: image or gradient */}
       {isRender && displayUrl ? (
         <img src={displayUrl} alt={title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+      ) : item.module === "ai_video" && displayUrl ? (
+        <video src={displayUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
       ) : (
         <div className={`absolute inset-0 bg-gradient-to-br ${cfg.gradient}`} />
       )}
 
       {/* Dark overlay for non-image tiles */}
-      {!isRender && (
+      {!isRender && item.module !== "ai_video" && (
         <div className="absolute inset-0 bg-black/20" />
       )}
 
@@ -562,6 +576,10 @@ export default function HistoryPage() {
       setSelectedRootId(item.id);
       setSelectedItem(item);
       setDetailOpen(true);
+    } else if (item.module === "ai_video") {
+      // Open video viewer for ai_video
+      setContentItem(item);
+      setContentItemId(item.id);
     } else {
       // Open content viewer for all non-render modules
       setContentItem(item); // show immediately with cached data
@@ -718,6 +736,7 @@ export default function HistoryPage() {
             <SelectContent>
               <SelectItem value="all">全部模块</SelectItem>
               <SelectItem value="ai_render">AI 效果图</SelectItem>
+              <SelectItem value="ai_video">AI 视频</SelectItem>
               <SelectItem value="benchmark_report">案例调研报告</SelectItem>
               <SelectItem value="benchmark_ppt">调研 PPT</SelectItem>
               <SelectItem value="meeting_minutes">会议纪要</SelectItem>
@@ -1163,6 +1182,20 @@ export default function HistoryPage() {
                 <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 加载中…
               </div>
+            ) : displayContentItem?.module === "ai_video" && displayContentItem?.outputUrl ? (
+              <div className="space-y-4">
+                <video
+                  src={displayContentItem.outputUrl}
+                  controls
+                  className="w-full rounded-lg bg-black"
+                />
+                {displayContentItem?.summary && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">描述</p>
+                    <p className="text-sm text-foreground/80 leading-relaxed">{displayContentItem.summary}</p>
+                  </div>
+                )}
+              </div>
             ) : (currentReportContent || displayContentItem?.outputContent) ? (
               <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
                 <ReportMarkdown>{currentReportContent || displayContentItem?.outputContent || ""}</ReportMarkdown>
@@ -1170,7 +1203,7 @@ export default function HistoryPage() {
             ) : displayContentItem?.summary ? (
               <div className="space-y-3">
                 <p className="text-sm text-foreground/80 leading-relaxed">{displayContentItem.summary}</p>
-                <p className="text-xs text-muted-foreground/60 border-t border-border/30 pt-3">此记录的完整内容未保存，仅显示摘要。重新生成可查看完整内容。</p>
+                <p className="text-xs text-muted-foreground/60 border-t border-border/30 pt-3">此记录的完整内容未保存，仅昺示摘要。重新生成可查看完整内容。</p>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">暂无内容</p>
