@@ -28,6 +28,7 @@ import {
   ImageIcon,
   Check,
   X,
+  Upload,
 } from "lucide-react";
 
 type TaskStatus = "pending" | "processing" | "completed" | "failed";
@@ -44,6 +45,76 @@ export default function VideoGeneration() {
   // 素材库弹窗
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [assetSearch, setAssetSearch] = useState("");
+
+  // 本地上传状态
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 上传图片到 S3 并同步到素材库
+  const uploadAsset = trpc.assets.upload.useMutation();
+  const createAsset = trpc.assets.create.useMutation();
+
+  const handleLocalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!e.target) return;
+    // 重置 input 以允许重复选择同一文件
+    (e.target as HTMLInputElement).value = "";
+    if (!file) return;
+
+    // 校验文件类型
+    if (!file.type.startsWith("image/")) {
+      toast.error("请选择图片文件（JPG、PNG、WebP 等）");
+      return;
+    }
+    // 校验文件大小（16MB）
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("图片文件不能超过 16MB");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // 读取为 base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // 去掉 data:image/xxx;base64, 前缀
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // 上传到 S3
+      const { url, key } = await uploadAsset.mutateAsync({
+        fileName: file.name,
+        fileData: base64,
+        contentType: file.type,
+      });
+
+      // 同步到素材库
+      await createAsset.mutateAsync({
+        name: file.name.replace(/\.[^.]+$/, "") || "上传图片",
+        fileUrl: url,
+        fileKey: key,
+        fileType: file.type,
+        fileSize: file.size,
+        thumbnailUrl: url,
+        category: "image",
+        tags: "视频首帧,本地上传",
+      });
+
+      // 填入首帧图
+      setInputImageUrl(url);
+      setInputImagePreview(url);
+      toast.success(`图片已上传并同步到素材库：${file.name}`);
+    } catch (err: any) {
+      toast.error(`上传失败：${err.message || "未知错误"}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   // 任务状态
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -303,16 +374,39 @@ export default function VideoGeneration() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {/* 素材库选择按钮 */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-24 border-dashed flex flex-col gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowAssetPicker(true)}
-                    >
-                      <FolderOpen className="h-6 w-6" />
-                      <span className="text-sm">从素材库选择图片</span>
-                    </Button>
+                    {/* 隐藏的文件 input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLocalUpload}
+                    />
+                    {/* 素材库选择 + 本地上传 两个并排按钮 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-24 border-dashed flex flex-col gap-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowAssetPicker(true)}
+                      >
+                        <FolderOpen className="h-6 w-6" />
+                        <span className="text-sm">从素材库选择</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-24 border-dashed flex flex-col gap-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                      >
+                        {isUploading ? (
+                          <><Loader2 className="h-6 w-6 animate-spin" /><span className="text-sm">上传中...</span></>
+                        ) : (
+                          <><Upload className="h-6 w-6" /><span className="text-sm">本地上传图片</span></>
+                        )}
+                      </Button>
+                    </div>
                     {/* 手动粘贴 URL */}
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-px bg-border" />
