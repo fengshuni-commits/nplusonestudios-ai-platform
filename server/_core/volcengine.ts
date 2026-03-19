@@ -321,21 +321,18 @@ export async function submitJimengVideoTask(
     frames,
   };
 
+  // 即梦 3.0 Pro 统一使用 CVSync2AsyncSubmitTask，req_key 固定为 jimeng_ti2v_v30_pro
+  action = "CVSync2AsyncSubmitTask";
+  reqKey = "jimeng_ti2v_v30_pro";
+  body.req_key = reqKey;
+
   if (request.mode === "image-to-video" && request.inputImageUrl) {
-    // 图生视频（首帧）
-    action = "JimengI2VFirstV301080SubmitTask";
-    reqKey = "jimeng_i2v_first_v30_1080p";
-    body.req_key = reqKey;
-    body.image_url = request.inputImageUrl;
-  } else {
-    // 文生视频
-    action = "JimengT2VV301080PSubmitTask";
-    reqKey = "jimeng_t2v_v30_1080p";
-    body.req_key = reqKey;
+    // 图生视频（首帧）：传入图片 URL
+    body.image_urls = [request.inputImageUrl];
   }
 
   try {
-    const result = await callVolcengineVisualApi(config, action, body);
+    const result = await callVolcengineVisualApi(config, action, body, "2022-08-31");
 
     const data = result.data as Record<string, unknown> | undefined;
     const taskId = (data?.task_id as string) || "";
@@ -371,24 +368,22 @@ export async function queryJimengVideoTask(
   let action: string;
   let reqKey: string;
 
-  if (mode === "image-to-video") {
-    action = "JimengI2VFirstV301080GetResult";
-    reqKey = "jimeng_i2v_first_v30_1080p";
-  } else {
-    action = "JimengT2VV301080PGetResult";
-    reqKey = "jimeng_t2v_v30_1080p";
-  }
+  // 即梦 3.0 Pro 统一使用 CVSync2AsyncGetResult
+  action = "CVSync2AsyncGetResult";
+  reqKey = "jimeng_ti2v_v30_pro";
 
   try {
     const result = await callVolcengineVisualApi(config, action, {
       req_key: reqKey,
       task_id: taskId,
-    });
+    }, "2022-08-31");
 
     const data = result.data as Record<string, unknown> | undefined;
     const status = (data?.status as string) || "";
-    const videoUrl = data?.video_url as string | undefined;
-    const errorMessage = data?.error_message as string | undefined;
+    // Pro 版返回格式：data.video_url 或 data.videos[0].url
+    const videos = data?.videos as Array<Record<string, unknown>> | undefined;
+    const videoUrl = (data?.video_url as string | undefined) || (videos?.[0]?.url as string | undefined);
+    const errorMessage = (data?.error_message as string | undefined) || (data?.message as string | undefined);
 
     let mappedStatus: VideoStatusResponse["status"];
     let progress: number;
