@@ -3267,7 +3267,16 @@ export const appRouter = router({system: systemRouter,
     getStatus: protectedProcedure
       .input(z.object({ taskId: z.string() }))
       .query(async ({ input, ctx }) => {
-        return { status: "processing" as const, progress: 50 };
+        const records = await db.listVideoHistory(ctx.user.id);
+        const record = records.find((r: any) => r.taskId === input.taskId);
+        if (!record) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
+        }
+        return {
+          status: record.status,
+          videoUrl: record.outputVideoUrl,
+          errorMessage: record.errorMessage,
+        };
       }),
     list: protectedProcedure
       .input(

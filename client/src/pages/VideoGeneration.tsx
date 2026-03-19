@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ export default function VideoGeneration() {
   const [mode, setMode] = useState<"text-to-video" | "image-to-video">("text-to-video");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(3);
-  const [selectedToolId, setSelectedToolId] = useState<number | null>(null);
+  const [selectedToolId, setSelectedToolId] = useState<number | undefined>();
   const [inputImageUrl, setInputImageUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
@@ -45,6 +45,16 @@ export default function VideoGeneration() {
       refetchInterval: 3000, // 每 3 秒查询一次
     }
   );
+
+  // 当查询返回新状态时，更新本地状态
+  useEffect(() => {
+    if (checkTaskStatus.data) {
+      setTaskStatus(checkTaskStatus.data.status);
+      if (checkTaskStatus.data.videoUrl) {
+        setGeneratedVideoUrl(checkTaskStatus.data.videoUrl);
+      }
+    }
+  }, [checkTaskStatus.data]);
 
   const handleGenerateClick = async () => {
     if (!prompt.trim()) {
@@ -167,7 +177,7 @@ export default function VideoGeneration() {
                   <AiToolSelector
                     capability="video"
                     value={selectedToolId}
-                    onChange={setSelectedToolId}
+                    onChange={(toolId) => setSelectedToolId(toolId)}
                   />
                 </div>
               </div>
@@ -229,7 +239,7 @@ export default function VideoGeneration() {
                   <AiToolSelector
                     capability="video"
                     value={selectedToolId}
-                    onChange={setSelectedToolId}
+                    onChange={(toolId) => setSelectedToolId(toolId)}
                   />
                 </div>
               </div>
@@ -262,7 +272,7 @@ export default function VideoGeneration() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              {getStatusIcon(taskStatus || checkTaskStatus.data?.status)}
+              {getStatusIcon((taskStatus || checkTaskStatus.data?.status) as any)}
               生成状态
             </CardTitle>
           </CardHeader>
@@ -280,7 +290,7 @@ export default function VideoGeneration() {
               </div>
             )}
 
-            {(taskStatus === "completed" || (checkTaskStatus.data && typeof checkTaskStatus.data === "object" && "videoUrl" in checkTaskStatus.data)) && (
+            {(taskStatus === "completed" || (checkTaskStatus.data && typeof checkTaskStatus.data === "object" && "videoUrl" in checkTaskStatus.data && (checkTaskStatus.data as any).videoUrl)) && (
               <div className="space-y-3">
                 <div className="bg-black rounded-lg aspect-video flex items-center justify-center">
                   <video
