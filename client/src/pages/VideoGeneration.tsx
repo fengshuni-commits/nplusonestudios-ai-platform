@@ -1,14 +1,34 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Play, Download, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import {
+  Play,
+  Download,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  FolderOpen,
+  Search,
+  ImageIcon,
+  Check,
+  X,
+} from "lucide-react";
 
 type TaskStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -18,7 +38,12 @@ export default function VideoGeneration() {
   const [duration, setDuration] = useState(3);
   const [selectedToolId, setSelectedToolId] = useState<number | undefined>();
   const [inputImageUrl, setInputImageUrl] = useState("");
+  const [inputImagePreview, setInputImagePreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // 素材库弹窗
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetSearch, setAssetSearch] = useState("");
 
   // 任务状态
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -26,6 +51,8 @@ export default function VideoGeneration() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  // 是否有正在进行中或已完成的任务（用于控制工作区显示）
+  const [hasActiveTask, setHasActiveTask] = useState(false);
   const prevStatusRef = useRef<string | null>(null);
   const restoredRef = useRef(false);
 
@@ -33,6 +60,7 @@ export default function VideoGeneration() {
   const { data: videoList } = trpc.video.list.useQuery({ limit: 1, offset: 0 });
 
   // 页面加载时，从最近任务恢复状态（只执行一次）
+  // 仅恢复进行中的任务（pending/processing），已完成/失败的任务不自动显示到工作区
   useEffect(() => {
     if (restoredRef.current) return;
     if (!videoList) return;
@@ -41,14 +69,16 @@ export default function VideoGeneration() {
     const latest = items[0];
     if (!latest?.taskId) return;
     restoredRef.current = true;
-    setTaskId(latest.taskId);
-    setTaskStatus(latest.status as TaskStatus);
-    if (latest.outputVideoUrl) setVideoUrl(latest.outputVideoUrl);
-    if (latest.errorMessage) setErrorMessage(latest.errorMessage);
-    if (latest.status === "completed") setProgress(100);
-    else if (latest.status === "processing") setProgress(50);
-    else if (latest.status === "pending") setProgress(10);
-    prevStatusRef.current = latest.status;
+    // 只有进行中的任务才恢复到工作区（让轮询继续）
+    if (latest.status === "pending" || latest.status === "processing") {
+      setTaskId(latest.taskId);
+      setTaskStatus(latest.status as TaskStatus);
+      setHasActiveTask(true);
+      if (latest.status === "processing") setProgress(50);
+      else setProgress(10);
+      prevStatusRef.current = latest.status;
+    }
+    // 已完成/失败的任务不恢复，用户需要主动点击生成才显示工作区
   }, [videoList]);
 
   // 轮询：只要 taskId 存在且任务未终止，就持续查询
@@ -85,6 +115,40 @@ export default function VideoGeneration() {
     }
   }, [statusData]);
 
+  // 素材库数据
+  const { data: allAssets } = trpc.assets.list.useQuery(undefined, {
+    enabled: showAssetPicker,
+  });
+
+  const imageAssets = useMemo(() => {
+    if (!allAssets) return [];
+    return (allAssets as any[]).filter((a) => {
+      const isImage =
+        a.fileType?.startsWith("image/") ||
+        /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(a.fileUrl || "") ||
+        a.category === "image";
+      if (!isImage) return false;
+      if (assetSearch.trim()) {
+        const q = assetSearch.toLowerCase();
+        return (
+          a.name?.toLowerCase().includes(q) ||
+          a.tags?.toLowerCase().includes(q) ||
+          a.description?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [allAssets, assetSearch]);
+
+  const handleSelectAsset = (asset: any) => {
+    const url = asset.fileUrl;
+    setInputImageUrl(url);
+    setInputImagePreview(asset.thumbnailUrl || url);
+    setShowAssetPicker(false);
+    setAssetSearch("");
+    toast.success(`已选择素材：${asset.name}`);
+  };
+
   const generateVideo = trpc.video.generate.useMutation({
     onSuccess: (data: any) => {
       // 重置状态，开始新任务
@@ -93,6 +157,7 @@ export default function VideoGeneration() {
       setProgress(0);
       prevStatusRef.current = null;
       restoredRef.current = true; // 防止恢复逻辑覆盖新任务
+      setHasActiveTask(true);
 
       setTaskId(data.taskId);
       setTaskStatus(data.status);
@@ -175,6 +240,7 @@ export default function VideoGeneration() {
           <TabsTrigger value="image-to-video">图生视频</TabsTrigger>
         </TabsList>
 
+        {/* ─── 文生视频 ─── */}
         <TabsContent value="text-to-video" className="space-y-6">
           <Card>
             <CardHeader><CardTitle>文生视频</CardTitle></CardHeader>
@@ -208,18 +274,64 @@ export default function VideoGeneration() {
           </Card>
         </TabsContent>
 
+        {/* ─── 图生视频 ─── */}
         <TabsContent value="image-to-video" className="space-y-6">
           <Card>
             <CardHeader><CardTitle>图生视频</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>首帧图 *</Label>
-                <div className="border-2 border-dashed rounded-lg p-6 text-center hover:bg-accent/50 transition-colors">
-                  <input type="text" placeholder="粘贴图片 URL 或从素材库选择"
-                    value={inputImageUrl} onChange={(e) => setInputImageUrl(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md text-sm" />
-                  <p className="text-xs text-muted-foreground mt-2">支持 JPG、PNG 格式，建议尺寸 1280×720</p>
-                </div>
+                {/* 已选图片预览 */}
+                {inputImagePreview ? (
+                  <div className="relative rounded-lg overflow-hidden border border-border bg-muted">
+                    <img
+                      src={inputImagePreview}
+                      alt="首帧图"
+                      className="w-full max-h-48 object-contain"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-7 w-7 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                      onClick={() => { setInputImageUrl(""); setInputImagePreview(null); }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
+                      <p className="text-xs text-white/80 truncate">{inputImageUrl}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* 素材库选择按钮 */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-24 border-dashed flex flex-col gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowAssetPicker(true)}
+                    >
+                      <FolderOpen className="h-6 w-6" />
+                      <span className="text-sm">从素材库选择图片</span>
+                    </Button>
+                    {/* 手动粘贴 URL */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-xs text-muted-foreground">或粘贴图片 URL</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                    <Input
+                      type="text"
+                      placeholder="https://..."
+                      value={inputImageUrl}
+                      onChange={(e) => {
+                        setInputImageUrl(e.target.value);
+                        if (e.target.value.trim()) setInputImagePreview(e.target.value.trim());
+                      }}
+                      className="text-sm"
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">支持 JPG、PNG 格式，建议尺寸 1280×720</p>
               </div>
               <div className="space-y-2">
                 <Label>视频描述（可选）</Label>
@@ -257,8 +369,8 @@ export default function VideoGeneration() {
         )}
       </Button>
 
-      {/* 任务状态卡片 */}
-      {taskId && (
+      {/* 任务状态卡片：只在用户主动触发过任务后才显示 */}
+      {hasActiveTask && taskId && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -328,6 +440,67 @@ export default function VideoGeneration() {
           </CardContent>
         </Card>
       )}
+
+      {/* ─── 素材库选择弹窗 ─── */}
+      <Dialog open={showAssetPicker} onOpenChange={(open) => { setShowAssetPicker(open); if (!open) setAssetSearch(""); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              从素材库选择
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={assetSearch}
+              onChange={(e) => setAssetSearch(e.target.value)}
+              placeholder="搜索素材名称或标签..."
+              className="pl-9"
+            />
+          </div>
+
+          <ScrollArea className="h-[50vh]">
+            {imageAssets.length > 0 ? (
+              <div className="grid grid-cols-3 gap-3 p-1">
+                {imageAssets.map((asset: any) => (
+                  <div
+                    key={asset.id}
+                    onClick={() => handleSelectAsset(asset)}
+                    className="group relative rounded-lg overflow-hidden border border-border bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                  >
+                    <div className="aspect-square">
+                      <img
+                        src={asset.thumbnailUrl || asset.fileUrl}
+                        alt={asset.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="h-4 w-4 text-primary-foreground" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
+                      <p className="text-[11px] text-white/90 truncate">{asset.name}</p>
+                      {asset.tags && <p className="text-[9px] text-white/60 truncate">{asset.tags}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <ImageIcon className="h-10 w-10 mb-3 opacity-20" />
+                <p className="text-sm">{assetSearch ? "没有找到匹配的素材" : "素材库中暂无图片素材"}</p>
+                <p className="text-xs mt-1 opacity-60">请先在素材库页面上传图片素材</p>
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
