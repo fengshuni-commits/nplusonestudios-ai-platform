@@ -3241,7 +3241,7 @@ export const appRouter = router({system: systemRouter,
             name: tool.name,
             apiEndpoint: tool.apiEndpoint || undefined,
             apiKeyEncrypted: tool.apiKeyEncrypted || undefined,
-            configJson: tool.configJson || undefined,
+            configJson: (tool.configJson as Record<string, unknown> | undefined) || undefined,
           },
         });
 
@@ -3272,21 +3272,46 @@ export const appRouter = router({system: systemRouter,
         if (!record) {
           throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
         }
-        
-        // 根据状态计算进度百分比
-        let progress = 0;
-        if (record.status === "pending") {
-          progress = 10;
-        } else if (record.status === "processing") {
-          // 从 metadata 中获取进度，或使用默认值
-          const metadata = typeof record.metadata === "string" ? JSON.parse(record.metadata) : record.metadata;
-          progress = metadata?.progress || 50;
-        } else if (record.status === "completed") {
-          progress = 100;
-        } else if (record.status === "failed") {
-          progress = 0;
+
+        // 如果任务还在进行中，调用 API 查询最新状态
+        if (record.status === "pending" || record.status === "processing") {
+          try {
+            const tool = record.toolId ? await db.getAiToolById(record.toolId) : null;
+            if (tool && record.taskId) {
+              const apiStatus = await queryVideoTaskStatus(
+                record.taskId,
+                {
+                  name: tool.name,
+                  apiKeyEncrypted: tool.apiKeyEncrypted || undefined,
+                  configJson: (tool.configJson as Record<string, unknown> | undefined) || undefined,
+                },
+                (record.mode as "text-to-video" | "image-to-video") || "text-to-video"
+              );
+              // 更新数据库中的状态
+              await db.updateVideoHistory(record.id, {
+                status: apiStatus.status,
+                outputVideoUrl: apiStatus.videoUrl,
+                errorMessage: apiStatus.errorMessage,
+              });
+              return {
+                status: apiStatus.status,
+                videoUrl: apiStatus.videoUrl,
+                errorMessage: apiStatus.errorMessage,
+                progress: apiStatus.progress || 0,
+              };
+            }
+          } catch (err) {
+            console.error("[video.getStatus] API 查询失败:", err);
+            // 查询失败时返回数据库中的状态
+          }
         }
-        
+
+        // 已完成或失败，直接返回数据库中的状态
+        let progress = 0;
+        if (record.status === "pending") progress = 10;
+        else if (record.status === "processing") progress = 50;
+        else if (record.status === "completed") progress = 100;
+
         return {
           status: record.status,
           videoUrl: record.outputVideoUrl,
@@ -3329,7 +3354,7 @@ export const appRouter = router({system: systemRouter,
             name: tool.name,
             apiEndpoint: tool.apiEndpoint || undefined,
             apiKeyEncrypted: tool.apiKeyEncrypted || undefined,
-            configJson: tool.configJson || undefined,
+            configJson: (tool.configJson as Record<string, unknown> | undefined) || undefined,
           },
         });
         await db.updateVideoHistory(input.id, {
