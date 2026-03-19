@@ -3272,10 +3272,26 @@ export const appRouter = router({system: systemRouter,
         if (!record) {
           throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
         }
+        
+        // 根据状态计算进度百分比
+        let progress = 0;
+        if (record.status === "pending") {
+          progress = 10;
+        } else if (record.status === "processing") {
+          // 从 metadata 中获取进度，或使用默认值
+          const metadata = typeof record.metadata === "string" ? JSON.parse(record.metadata) : record.metadata;
+          progress = metadata?.progress || 50;
+        } else if (record.status === "completed") {
+          progress = 100;
+        } else if (record.status === "failed") {
+          progress = 0;
+        }
+        
         return {
           status: record.status,
           videoUrl: record.outputVideoUrl,
           errorMessage: record.errorMessage,
+          progress,
         };
       }),
     list: protectedProcedure

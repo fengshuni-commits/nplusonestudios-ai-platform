@@ -21,6 +21,7 @@ export default function VideoGeneration() {
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<"pending" | "processing" | "completed" | "failed" | null>(null);
+  const [progress, setProgress] = useState(0);
 
   const generateVideo = trpc.video.generate.useMutation({
     onSuccess: (data: any) => {
@@ -50,6 +51,7 @@ export default function VideoGeneration() {
   useEffect(() => {
     if (checkTaskStatus.data) {
       setTaskStatus(checkTaskStatus.data.status);
+      setProgress(checkTaskStatus.data.progress || 0);
       if (checkTaskStatus.data.videoUrl) {
         setGeneratedVideoUrl(checkTaskStatus.data.videoUrl);
       }
@@ -283,6 +285,22 @@ export default function VideoGeneration() {
                 {getStatusLabel((taskStatus || checkTaskStatus.data?.status) as any)}
               </Badge>
             </div>
+
+            {/* 进度条 */}
+            {taskStatus && taskStatus !== "failed" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">进度</span>
+                  <span className="text-xs font-semibold text-foreground">{progress}%</span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {checkTaskStatus.data && typeof checkTaskStatus.data === "object" && "errorMessage" in checkTaskStatus.data && (checkTaskStatus.data as any).errorMessage && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
