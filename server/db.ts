@@ -1502,3 +1502,12 @@ export async function getVideoHistory(userId: number) {
   const { eq } = await import('drizzle-orm');
   return await database.select().from(videoHistory).where(eq(videoHistory.userId, userId));
 }
+
+export async function getVideoHistoryById(id: number, userId: number) {
+  const database = await getDb();
+  if (!database) return null;
+  const rows = await database.select().from(videoHistory)
+    .where(and(eq(videoHistory.id, id), eq(videoHistory.userId, userId)))
+    .limit(1);
+  return rows[0] || null;
+}

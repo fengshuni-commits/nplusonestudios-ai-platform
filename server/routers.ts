@@ -2529,6 +2529,37 @@ const historyRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
+      // ai_video items use offset id (>1000000); resolve to videoHistory
+      if (input.id > 1000000) {
+        const realId = input.id - 1000000;
+        const v = await db.getVideoHistoryById(realId, ctx.user.id);
+        if (!v) return null;
+        return {
+          id: v.id + 1000000,
+          userId: v.userId,
+          projectId: v.projectId || null,
+          module: "ai_video" as const,
+          title: (v.prompt || "").slice(0, 60) || "AI 视频",
+          inputText: v.prompt || "",
+          inputImageUrl: v.inputImageUrl || null,
+          outputUrl: v.outputVideoUrl || null,
+          outputText: null,
+          outputContent: null,
+          summary: null,
+          inputParams: null,
+          status: v.status,
+          errorMessage: v.errorMessage || null,
+          metadata: { ...(typeof v.metadata === 'object' && v.metadata ? v.metadata : {}), taskId: v.taskId, mode: v.mode, duration: v.duration, videoHistoryId: v.id },
+          parentId: null,
+          enhancedImageUrl: null,
+          chainLength: 1,
+          latestOutputUrl: v.outputVideoUrl || null,
+          latestTitle: (v.prompt || "").slice(0, 60) || "AI 视频",
+          latestEnhancedImageUrl: null,
+          createdAt: v.createdAt,
+          updatedAt: v.updatedAt,
+        };
+      }
       return db.getGenerationHistoryById(input.id, ctx.user.id);
     }),
   /** Get edit chain: all items sharing the same root ancestor */
