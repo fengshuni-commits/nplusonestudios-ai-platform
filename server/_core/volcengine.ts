@@ -39,7 +39,6 @@ export function generateHmacSignature(
   body: string,
   timestamp: string
 ): string {
-  const crypto = require("crypto");
   const message = `${body}${timestamp}`;
   return crypto
     .createHmac("sha256", secretAccessKey)
