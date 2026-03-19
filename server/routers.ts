@@ -3328,10 +3328,25 @@ export const appRouter = router({system: systemRouter,
                 },
                 (record.mode as "text-to-video" | "image-to-video") || "text-to-video"
               );
+              // 当任务完成时，将视频转存到 S3 以获得永久 URL
+              let permanentVideoUrl = apiStatus.videoUrl;
+              if (apiStatus.status === "completed" && apiStatus.videoUrl) {
+                try {
+                  const videoResp = await fetch(apiStatus.videoUrl);
+                  if (videoResp.ok) {
+                    const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
+                    const s3Key = `video-history/${ctx.user.id}/${record.id}-${Date.now()}.mp4`;
+                    const { url: s3Url } = await storagePut(s3Key, videoBuffer, "video/mp4");
+                    permanentVideoUrl = s3Url;
+                  }
+                } catch (s3Err) {
+                  console.error("[video.getStatus] 视频转存 S3 失败，使用原始 URL:", s3Err);
+                }
+              }
               // 更新数据库中的状态
               await db.updateVideoHistory(record.id, {
                 status: apiStatus.status,
-                outputVideoUrl: apiStatus.videoUrl,
+                outputVideoUrl: permanentVideoUrl,
                 errorMessage: apiStatus.errorMessage,
               });
               // 状态变为 failed 时发送通知（进入此分支时 record.status 必为 pending/processing）
@@ -3343,7 +3358,7 @@ export const appRouter = router({system: systemRouter,
               }
               return {
                 status: apiStatus.status,
-                videoUrl: apiStatus.videoUrl,
+                videoUrl: permanentVideoUrl,
                 errorMessage: apiStatus.errorMessage,
                 progress: apiStatus.progress || 0,
               };
@@ -3359,13 +3374,28 @@ export const appRouter = router({system: systemRouter,
         if (record.status === "pending") progress = 10;
         else if (record.status === "processing") progress = 50;
         else if (record.status === "completed") progress = 100;
-
+        // 如果已完成但 URL 是临时链接（aigc-cloud.com），尝试重新下载并转存到 S3
+        let finalVideoUrl = record.outputVideoUrl;
+        if (record.status === "completed" && record.outputVideoUrl && record.outputVideoUrl.includes("aigc-cloud.com")) {
+          try {
+            const videoResp = await fetch(record.outputVideoUrl);
+            if (videoResp.ok) {
+              const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
+              const s3Key = `video-history/${ctx.user.id}/${record.id}-${Date.now()}.mp4`;
+              const { url: s3Url } = await storagePut(s3Key, videoBuffer, "video/mp4");
+              finalVideoUrl = s3Url;
+              await db.updateVideoHistory(record.id, { outputVideoUrl: s3Url });
+            }
+          } catch (s3Err) {
+            console.error("[video.getStatus] 已完成视频转存 S3 失败:", s3Err);
+          }
+        }
         return {
           status: record.status,
-          videoUrl: record.outputVideoUrl,
+          videoUrl: finalVideoUrl,
           errorMessage: record.errorMessage,
           progress,
-        };
+         };
       }),
     list: protectedProcedure
       .input(
