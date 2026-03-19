@@ -1006,6 +1006,40 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   const limit = opts?.limit || 50;
   const offset = opts?.offset || 0;
 
+  // Helper: convert videoHistory rows to unified history format
+  const toHistoryItem = (v: typeof videoHistory.$inferSelect) => ({
+    id: v.id + 1000000,
+    userId: v.userId,
+    projectId: v.projectId || null,
+    module: "ai_video" as const,
+    title: (v.prompt || "").slice(0, 60) || "AI 视频",
+    inputText: v.prompt || "",
+    inputImageUrl: v.inputImageUrl || null,
+    outputUrl: v.outputVideoUrl || null,
+    outputText: null,
+    status: v.status,
+    errorMessage: v.errorMessage || null,
+    metadata: { ...(v.metadata as object || {}), taskId: v.taskId, mode: v.mode, duration: v.duration, videoHistoryId: v.id },
+    parentId: null,
+    enhancedImageUrl: null,
+    chainLength: 1,
+    latestOutputUrl: v.outputVideoUrl || null,
+    latestTitle: (v.prompt || "").slice(0, 60) || "AI 视频",
+    latestEnhancedImageUrl: null,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+  });
+
+  // If filtering to ai_video, return only video history
+  if (opts?.module === "ai_video") {
+    const videoItems = await db.select().from(videoHistory)
+      .where(eq(videoHistory.userId, userId))
+      .orderBy(desc(videoHistory.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return { items: videoItems.map(toHistoryItem), total: videoItems.length };
+  }
+
   // If filtering to a specific non-render, non-benchmark_report module, use the simple list
   if (opts?.module && opts.module !== "ai_render" && opts.module !== "benchmark_report") {
     return listGenerationHistory(userId, opts);
@@ -1078,7 +1112,19 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
     return { ...item, chainLength: 1, latestOutputUrl: item.outputUrl, latestTitle: item.title, latestEnhancedImageUrl: item.enhancedImageUrl || null };
   }));
 
-  return { items: enrichedItems, total: countResult[0]?.count || 0 };
+  // Merge videoHistory items into the "all" view
+  const videoItems = await db.select().from(videoHistory)
+    .where(eq(videoHistory.userId, userId))
+    .orderBy(desc(videoHistory.createdAt))
+    .limit(limit);
+  const videoAsHistory = videoItems.map(toHistoryItem);
+
+  // Merge and sort by createdAt, then apply limit
+  const allItems = [...enrichedItems, ...videoAsHistory]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, limit);
+
+  return { items: allItems, total: (countResult[0]?.count || 0) + videoItems.length };
 }
 
 

@@ -10,6 +10,8 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Play, Download, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 
+type TaskStatus = "pending" | "processing" | "completed" | "failed";
+
 export default function VideoGeneration() {
   const [mode, setMode] = useState<"text-to-video" | "image-to-video">("text-to-video");
   const [prompt, setPrompt] = useState("");
@@ -18,17 +20,40 @@ export default function VideoGeneration() {
   const [inputImageUrl, setInputImageUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // 任务状态：taskId 驱动轮询，videoUrl 直接从查询结果读取
+  // 任务状态
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [taskStatus, setTaskStatus] = useState<"pending" | "processing" | "completed" | "failed" | null>(null);
+  const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const prevStatusRef = useRef<string | null>(null);
+  const restoredRef = useRef(false);
+
+  // 加载最近的视频任务列表，用于恢复状态
+  const { data: videoList } = trpc.video.list.useQuery({ limit: 1, offset: 0 });
+
+  // 页面加载时，从最近任务恢复状态（只执行一次）
+  useEffect(() => {
+    if (restoredRef.current) return;
+    if (!videoList) return;
+    const items = Array.isArray(videoList) ? videoList : (videoList as any).items || [];
+    if (items.length === 0) return;
+    const latest = items[0];
+    if (!latest?.taskId) return;
+    restoredRef.current = true;
+    setTaskId(latest.taskId);
+    setTaskStatus(latest.status as TaskStatus);
+    if (latest.outputVideoUrl) setVideoUrl(latest.outputVideoUrl);
+    if (latest.errorMessage) setErrorMessage(latest.errorMessage);
+    if (latest.status === "completed") setProgress(100);
+    else if (latest.status === "processing") setProgress(50);
+    else if (latest.status === "pending") setProgress(10);
+    prevStatusRef.current = latest.status;
+  }, [videoList]);
 
   // 轮询：只要 taskId 存在且任务未终止，就持续查询
   const isTerminal = taskStatus === "completed" || taskStatus === "failed";
-  const checkTaskStatus = trpc.video.getStatus.useQuery(
+  const { data: statusData } = trpc.video.getStatus.useQuery(
     { taskId: taskId || "" },
     {
       enabled: !!taskId && !isTerminal,
@@ -38,33 +63,27 @@ export default function VideoGeneration() {
 
   // 同步查询结果到本地状态
   useEffect(() => {
-    const data = checkTaskStatus.data;
-    if (!data) return;
-
+    if (!statusData) return;
     const prevStatus = prevStatusRef.current;
-    const newStatus = data.status;
+    const newStatus = statusData.status;
     prevStatusRef.current = newStatus;
 
     setTaskStatus(newStatus);
-    setProgress(data.progress ?? 0);
+    setProgress(statusData.progress ?? 0);
 
-    if (data.videoUrl) {
-      setVideoUrl(data.videoUrl);
-    }
-    if (data.errorMessage) {
-      setErrorMessage(data.errorMessage);
-    }
+    if (statusData.videoUrl) setVideoUrl(statusData.videoUrl);
+    if (statusData.errorMessage) setErrorMessage(statusData.errorMessage);
 
     if (newStatus === "failed" && prevStatus !== "failed") {
       toast.error(
-        `视频生成失败：${data.errorMessage || "任务被拒绝或超时，请检查工具配置"}`,
+        `视频生成失败：${statusData.errorMessage || "任务被拒绝或超时，请检查工具配置"}`,
         { duration: 10000 }
       );
     }
     if (newStatus === "completed" && prevStatus !== "completed") {
       toast.success("视频已生成完成！");
     }
-  }, [checkTaskStatus.data]);
+  }, [statusData]);
 
   const generateVideo = trpc.video.generate.useMutation({
     onSuccess: (data: any) => {
@@ -73,6 +92,7 @@ export default function VideoGeneration() {
       setErrorMessage(null);
       setProgress(0);
       prevStatusRef.current = null;
+      restoredRef.current = true; // 防止恢复逻辑覆盖新任务
 
       setTaskId(data.taskId);
       setTaskStatus(data.status);
@@ -91,7 +111,7 @@ export default function VideoGeneration() {
     },
   });
 
-  const handleGenerateClick = async () => {
+  const handleGenerateClick = () => {
     if (!prompt.trim()) { toast.error("请输入描述词"); return; }
     if (mode === "image-to-video" && !inputImageUrl.trim()) { toast.error("请选择或上传首帧图"); return; }
     if (!selectedToolId) { toast.error("请选择视频生成工具"); return; }
@@ -107,10 +127,10 @@ export default function VideoGeneration() {
   };
 
   const handleDownloadVideo = () => {
-    const url = videoUrl;
-    if (!url) { toast.error("视频 URL 不可用"); return; }
+    if (!videoUrl) { toast.error("视频 URL 不可用"); return; }
     const link = document.createElement("a");
-    link.href = url;
+    link.href = videoUrl;
+    link.target = "_blank";
     link.download = `video-${Date.now()}.mp4`;
     document.body.appendChild(link);
     link.click();
@@ -118,7 +138,7 @@ export default function VideoGeneration() {
     toast.success("视频下载已开始");
   };
 
-  const getStatusIcon = (status: typeof taskStatus) => {
+  const getStatusIcon = (status: TaskStatus | null) => {
     switch (status) {
       case "pending":
       case "processing":
@@ -132,7 +152,7 @@ export default function VideoGeneration() {
     }
   };
 
-  const getStatusLabel = (status: typeof taskStatus) => {
+  const getStatusLabel = (status: TaskStatus | null) => {
     switch (status) {
       case "pending": return "等待处理";
       case "processing": return "生成中...";
@@ -263,7 +283,7 @@ export default function VideoGeneration() {
                 </div>
                 <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -290,10 +310,19 @@ export default function VideoGeneration() {
                     onError={() => toast.error("视频加载失败，请尝试直接下载")}
                   />
                 </div>
-                <Button onClick={handleDownloadVideo} variant="outline" className="w-full">
-                  <Download className="h-4 w-4 mr-2" />
-                  下载视频
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleDownloadVideo} variant="outline" className="flex-1">
+                    <Download className="h-4 w-4 mr-2" />
+                    下载视频
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => window.open(videoUrl, "_blank")}
+                  >
+                    在新窗口打开
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
