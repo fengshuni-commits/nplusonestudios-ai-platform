@@ -15,6 +15,7 @@ import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
 import { submitEnhanceTask, getEnhanceTaskStatus, downloadAndStoreEnhancedImage } from "./magnific";
 import { nanoid } from "nanoid";
 import { searchCaseStudies } from "./tavily";
+import { notifyOwner } from "./_core/notification";
 import crypto from "crypto";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
 import { createRequire } from "module";
@@ -3258,10 +3259,19 @@ export const appRouter = router({system: systemRouter,
           errorMessage: result.errorMessage,
         });
 
+        // 任务提交阶段即失败时发送通知
+        if (result.status === "failed") {
+          await notifyOwner({
+            title: "视频生成失败",
+            content: `工具：${tool.name}\n模式：${input.mode === "text-to-video" ? "文生视频" : "图生视频"}\n描述：${input.prompt.slice(0, 100)}\n失败原因：${result.errorMessage || "API 调用失败，请检查工具配置"}`,
+          }).catch(() => {});
+        }
+
         return {
           taskId: result.taskId,
           status: result.status,
           videoUrl: result.videoUrl,
+          errorMessage: result.errorMessage,
         };
       }),
     getStatus: protectedProcedure
@@ -3293,6 +3303,13 @@ export const appRouter = router({system: systemRouter,
                 outputVideoUrl: apiStatus.videoUrl,
                 errorMessage: apiStatus.errorMessage,
               });
+              // 状态变为 failed 时发送通知（进入此分支时 record.status 必为 pending/processing）
+              if (apiStatus.status === "failed") {
+                await notifyOwner({
+                  title: "视频生成失败",
+                  content: `工具：${tool.name}\n模式：${record.mode === "text-to-video" ? "文生视频" : "图生视频"}\n描述：${record.prompt?.slice(0, 100) || ""}\n任务 ID：${record.taskId}\n失败原因：${apiStatus.errorMessage || "视频生成任务超时或被拒绝，请检查工具配置"}`,
+                }).catch(() => {});
+              }
               return {
                 status: apiStatus.status,
                 videoUrl: apiStatus.videoUrl,

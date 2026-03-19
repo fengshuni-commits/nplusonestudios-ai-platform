@@ -30,11 +30,15 @@ export default function VideoGeneration() {
       if (data.videoUrl) {
         setGeneratedVideoUrl(data.videoUrl);
       }
-      toast.success("视频生成任务已提交");
+      if (data.status === "failed") {
+        toast.error(`失败原因：${data.errorMessage || "API 调用失败，请检查工具配置"}`, { duration: 8000 });
+      } else {
+        toast.success("视频生成任务已提交，请等待...");
+      }
       setIsGenerating(false);
     },
     onError: (err: any) => {
-      toast.error(err.message || "视频生成失败");
+      toast.error(`视频生成失败：${err.message || "未知错误"}`, { duration: 8000 });
       setIsGenerating(false);
     },
   });
@@ -50,10 +54,23 @@ export default function VideoGeneration() {
   // 当查询返回新状态时，更新本地状态
   useEffect(() => {
     if (checkTaskStatus.data) {
-      setTaskStatus(checkTaskStatus.data.status);
+      const prevStatus = taskStatus;
+      const newStatus = checkTaskStatus.data.status;
+      setTaskStatus(newStatus);
       setProgress(checkTaskStatus.data.progress || 0);
       if (checkTaskStatus.data.videoUrl) {
         setGeneratedVideoUrl(checkTaskStatus.data.videoUrl);
+      }
+      // 状态首次变为 failed 时显示 toast
+      if (newStatus === "failed" && prevStatus !== "failed") {
+        toast.error(
+          `视频生成失败：${checkTaskStatus.data.errorMessage || "任务被拒绝或超时，请检查工具配置"}`,
+          { duration: 10000 }
+        );
+      }
+      // 状态首次变为 completed 时显示成功 toast
+      if (newStatus === "completed" && prevStatus !== "completed") {
+        toast.success("视频已生成完成！");
       }
     }
   }, [checkTaskStatus.data]);
