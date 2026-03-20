@@ -379,7 +379,7 @@ export default function ColorPlan() {
     if (!resultUrl) return;
     const a = document.createElement("a");
     a.href = resultUrl;
-    a.download = `彩平图-${Date.now()}.png`;
+      a.download = `平面图-${Date.now()}.png`;
     a.click();
   };
 
@@ -402,7 +402,7 @@ export default function ColorPlan() {
       <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">AI 彩平</h1>
+            <h1 className="text-lg font-semibold text-foreground">AI 平面图</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               上传平面底图，参考风格图，一键生成彩色平面图
             </p>

@@ -74,7 +74,7 @@ const menuSections: MenuSection[] = [
       { icon: Compass, label: "案例调研", path: "/design/planning" },
       { icon: Ruler, label: "AI效果图", path: "/design/tools" },
       { icon: Film, label: "AI视频", path: "/design/video" },
-      { icon: Palette, label: "AI彩平", path: "/design/color-plan" },
+      { icon: Palette, label: "AI平面图", path: "/design/color-plan" },
       { icon: Presentation, label: "演示文稿", path: "/design/presentation" },
     ],
   },
