@@ -791,3 +791,12 @@
 - [x] 实现配置生成器（自动生成 skill.yaml）
 - [x] 实现在线 Token 生成工具
 - [x] 测试验证并保存检查点
+
+## API 管理模块 - 改造 API 与 Webhook 页面
+- [x] 读取现有 API 与 Webhook 页面代码
+- [x] 设计 api_tokens 表结构（Token、创建时间、过期时间、状态等）
+- [x] 实现后端 tRPC 接口：generateOpenClawToken、listTokens、revokeToken
+- [x] 改造前端页面为 API 管理模块（Token 管理 + OpenClaw 集成指南）
+- [x] 实现 Token 复制、撤销、过期时间显示等交互
+- [x] 集成 OpenClaw 集成方案网页到模块中
+- [x] 测试验证并保存检查点

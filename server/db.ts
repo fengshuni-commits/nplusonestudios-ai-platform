@@ -25,6 +25,7 @@ import {
   renderStyles, InsertRenderStyle,
   aiToolDefaults,
   videoHistory, InsertVideoHistory,
+  apiTokens, InsertApiToken, ApiToken,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -43,6 +44,91 @@ export async function getDb() {
 }
 
 /** Execute a DB operation with one automatic retry on ECONNRESET */
+// ─── API Token Helpers ──────────────────────────────────
+export async function generateOpenClawToken(
+  userId: number,
+  name: string,
+  expiresInDays: number = 365
+): Promise<{ token: string; tokenPreview: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not connected");
+
+  // 生成随机 token
+  const token = `sk_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  const tokenHash = await hashToken(token);
+  const tokenPreview = token.substring(0, 10);
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+
+  await db.insert(apiTokens).values({
+    userId,
+    name,
+    tokenHash,
+    tokenPreview,
+    type: "openclaw",
+    expiresAt,
+    isActive: true,
+  });
+
+  return { token, tokenPreview };
+}
+
+export async function getApiTokensByUserId(userId: number): Promise<ApiToken[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(apiTokens)
+    .where(eq(apiTokens.userId, userId))
+    .orderBy(apiTokens.createdAt);
+}
+
+export async function revokeApiToken(tokenId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  await db
+    .update(apiTokens)
+    .set({ isActive: false })
+    .where(and(eq(apiTokens.id, tokenId), eq(apiTokens.userId, userId)));
+
+  return true;
+}
+
+export async function verifyApiToken(token: string): Promise<{ userId: number; type: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const tokenHash = await hashToken(token);
+  const record = await db
+    .select()
+    .from(apiTokens)
+    .where(and(eq(apiTokens.tokenHash, tokenHash), eq(apiTokens.isActive, true)))
+    .limit(1);
+
+  if (record.length === 0) return null;
+
+  const tokenRecord = record[0];
+  if (new Date() > tokenRecord.expiresAt) return null;
+
+  // 更新最后使用时间
+  await db
+    .update(apiTokens)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(apiTokens.id, tokenRecord.id));
+
+  return { userId: tokenRecord.userId, type: tokenRecord.type };
+}
+
+// 简单的 token 哈希函数（生产环境应使用 bcrypt）
+async function hashToken(token: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();

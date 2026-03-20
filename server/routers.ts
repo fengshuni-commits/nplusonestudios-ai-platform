@@ -3448,6 +3448,40 @@ export const appRouter = router({system: systemRouter,
         };
       }),
   }),
+  apiTokens: router({
+    generateOpenClaw: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(256),
+        expiresInDays: z.number().min(1).max(365).default(365),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { token, tokenPreview } = await db.generateOpenClawToken(
+          ctx.user.id,
+          input.name,
+          input.expiresInDays
+        );
+        return { token, tokenPreview };
+      }),
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const tokens = await db.getApiTokensByUserId(ctx.user.id);
+      return tokens.map((t) => ({
+        id: t.id,
+        name: t.name,
+        tokenPreview: t.tokenPreview,
+        type: t.type,
+        expiresAt: t.expiresAt,
+        lastUsedAt: t.lastUsedAt,
+        isActive: t.isActive,
+        createdAt: t.createdAt,
+      }));
+    }),
+    revoke: protectedProcedure
+      .input(z.object({ tokenId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const success = await db.revokeApiToken(input.tokenId, ctx.user.id);
+        return { success };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

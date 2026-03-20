@@ -141,6 +141,13 @@
       "when": 1773744477640,
       "tag": "0019_high_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1774004834860,
+      "tag": "0020_public_phalanx",
+      "breakpoints": true
     }
   ]
 }

@@ -205,6 +205,23 @@ export const aiToolLogs = mysqlTable("ai_tool_logs", {
 
 export type AiToolLog = typeof aiToolLogs.$inferSelect;
 
+// ─── API Tokens (OpenClaw 专用 API Token) ──────────────
+export const apiTokens = mysqlTable("api_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  tokenHash: varchar("tokenHash", { length: 255 }).notNull().unique(),
+  tokenPreview: varchar("tokenPreview", { length: 20 }).notNull(), // 前 10 个字符用于显示
+  type: mysqlEnum("type", ["openclaw", "webhook", "general"]).default("general").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  lastUsedAt: timestamp("lastUsedAt"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ApiToken = typeof apiTokens.$inferSelect;
+export type InsertApiToken = typeof apiTokens.$inferInsert;
+
 // ─── Suppliers (供应商) ──────────────────────────────────
 export const suppliers = mysqlTable("suppliers", {
   id: int("id").autoincrement().primaryKey(),
