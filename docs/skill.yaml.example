@@ -1,0 +1,340 @@
+# OpenClaw Skill 配置文件示例
+# 
+# 使用方式：
+# 1. 复制此文件到 skills/n1-design-tools/skill.yaml
+# 2. 根据实际情况修改 api_base_url 和 api_token
+# 3. 在 OpenClaw 中加载此 Skill
+
+name: n1-design-tools
+version: 1.0.0
+description: N+1 STUDIOS 设计工具集成 - 支持 AI 效果图、视频、平面图生成
+author: N+1 STUDIOS
+license: MIT
+
+# 功能标签
+capabilities:
+  - rendering:generate-image      # AI 效果图生成
+  - video:generate-video          # AI 视频生成
+  - colorplan:generate-floorplan  # AI 平面图生成
+  - assets:list                   # 素材库查询
+
+# 环境变量配置
+config:
+  api_base_url:
+    type: string
+    description: N+1 STUDIOS API 基础 URL（例如 https://platform.nplusonestudios.com 或 http://localhost:3000）
+    required: true
+    example: "https://platform.nplusonestudios.com"
+    
+  api_token:
+    type: string
+    description: JWT API Token（从网站管理后台获取，需要 365 天有效期）
+    required: true
+    sensitive: true
+    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    
+  default_tool_id:
+    type: number
+    description: 默认 AI 工具 ID（在网站管理后台 /admin/ai-tools 查看）
+    required: false
+    default: 1
+    example: 1
+
+# 依赖项
+dependencies:
+  axios: "^1.6.0"
+  typescript: "^5.0.0"
+
+# 导出的方法
+exports:
+  - name: generateImage
+    description: 生成 AI 效果图
+    params:
+      - name: prompt
+        type: string
+        description: 效果图描述（例如：现代办公室，玻璃隔断，木质地板）
+        required: true
+      - name: style
+        type: string
+        description: 风格（minimalist, modern, industrial, scandinavian 等）
+        required: false
+        default: "modern"
+      - name: aspectRatio
+        type: string
+        description: 宽高比（16:9, 1:1, 9:16, 4:3）
+        required: false
+        default: "16:9"
+      - name: toolId
+        type: number
+        description: AI 工具 ID（不指定则使用默认值）
+        required: false
+    returns:
+      type: object
+      properties:
+        taskId:
+          type: string
+          description: 任务 ID
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        resultUrl:
+          type: string
+          description: 生成的图片 URL（仅在完成时返回）
+        errorMessage:
+          type: string
+          description: 错误信息（仅在失败时返回）
+    example:
+      input:
+        prompt: "现代办公室，玻璃隔断，木质地板"
+        style: "minimalist"
+        aspectRatio: "16:9"
+      output:
+        taskId: "task_abc123"
+        status: "pending"
+        resultUrl: null
+        errorMessage: null
+
+  - name: generateVideo
+    description: 生成 AI 视频（1-8 秒）
+    params:
+      - name: mode
+        type: string
+        description: 生成模式（text-to-video 或 image-to-video）
+        required: true
+        enum: [text-to-video, image-to-video]
+      - name: prompt
+        type: string
+        description: 视频描述或动作提示
+        required: true
+      - name: duration
+        type: number
+        description: 视频时长（1-8 秒）
+        required: true
+        min: 1
+        max: 8
+      - name: inputImageUrl
+        type: string
+        description: 首帧图片 URL（仅在 image-to-video 模式下需要）
+        required: false
+      - name: toolId
+        type: number
+        description: AI 工具 ID
+        required: false
+    returns:
+      type: object
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        resultUrl:
+          type: string
+          description: 生成的视频 URL
+        errorMessage:
+          type: string
+    example:
+      input:
+        mode: "text-to-video"
+        prompt: "镜头缓慢推进，展示现代办公室"
+        duration: 5
+      output:
+        taskId: "task_def456"
+        status: "pending"
+        resultUrl: null
+
+  - name: generateColorPlan
+    description: 生成 AI 平面图（彩色方案）
+    params:
+      - name: floorPlanUrl
+        type: string
+        description: 平面底图 URL（黑白线稿或平面图）
+        required: true
+      - name: referenceUrl
+        type: string
+        description: 参考风格图 URL（可选）
+        required: false
+      - name: extraPrompt
+        type: string
+        description: 额外提示（例如：北欧风格，浅色系）
+        required: false
+      - name: toolId
+        type: number
+        description: AI 工具 ID
+        required: false
+    returns:
+      type: object
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        resultUrl:
+          type: string
+          description: 生成的平面图 URL
+        errorMessage:
+          type: string
+
+  - name: getTaskStatus
+    description: 查询生成任务的状态
+    params:
+      - name: taskId
+        type: string
+        description: 任务 ID
+        required: true
+      - name: type
+        type: string
+        description: 任务类型
+        required: true
+        enum: [image, video, colorplan]
+    returns:
+      type: object
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        resultUrl:
+          type: string
+        progress:
+          type: number
+          description: 进度百分比（0-100）
+        errorMessage:
+          type: string
+
+  - name: waitForCompletion
+    description: 等待任务完成（轮询）
+    params:
+      - name: taskId
+        type: string
+        required: true
+      - name: type
+        type: string
+        required: true
+        enum: [image, video, colorplan]
+      - name: maxWaitTime
+        type: number
+        description: 最大等待时间（毫秒，默认 180000）
+        required: false
+        default: 180000
+      - name: pollInterval
+        type: number
+        description: 轮询间隔（毫秒，默认 5000）
+        required: false
+        default: 5000
+    returns:
+      type: object
+      description: 完成的任务信息
+
+  - name: listAssets
+    description: 列出素材库中的所有资源
+    params: []
+    returns:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: number
+          name:
+            type: string
+          fileUrl:
+            type: string
+          category:
+            type: string
+          tags:
+            type: string
+
+# 系统 Prompt 建议
+system_prompt: |
+  你是 N+1 STUDIOS 的 AI 设计助手。你可以帮助用户生成高质量的建筑和室内设计内容。
+  
+  你有以下能力：
+  
+  1. **生成 AI 效果图** - 将文字描述转换为逼真的建筑/空间效果图
+     - 支持多种风格：现代、极简、工业、北欧等
+     - 支持多种宽高比：16:9（宽屏）、1:1（正方形）、9:16（竖屏）、4:3（标准）
+     - 用途：快速可视化设计概念、演示方案给客户
+  
+  2. **生成 AI 视频** - 创建 1-8 秒的设计视频
+     - 文生视频：直接从文字描述生成动态视频
+     - 图生视频：基于静态图片生成动画效果
+     - 用途：展示空间动态、产品演示、营销内容
+  
+  3. **生成 AI 平面图** - 将黑白平面图转换为彩色方案
+     - 支持参考风格图
+     - 支持自定义提示（风格、配色等）
+     - 用途：快速生成多个配色方案、客户演示
+  
+  4. **查询素材库** - 访问已有的设计素材和参考图
+  
+  工作流程：
+  1. 理解用户的设计需求
+  2. 选择合适的工具（效果图/视频/平面图）
+  3. 调用相应的 Skill 方法
+  4. 等待生成完成
+  5. 返回结果给用户
+  
+  提示：
+  - 生成任务是异步的，通常需要 30-120 秒
+  - 效果图最快（30 秒），视频最慢（60-120 秒）
+  - 如果用户提供了参考图，优先使用图片而不是文字描述
+  - 如果生成失败，检查提示词是否清晰、具体
+
+# 测试配置
+test:
+  enabled: true
+  fixtures:
+    - name: "生成效果图"
+      method: generateImage
+      params:
+        prompt: "现代办公室，玻璃隔断，木质地板"
+        style: "minimalist"
+    - name: "查询任务状态"
+      method: getTaskStatus
+      params:
+        taskId: "test_task_123"
+        type: "image"
+
+# 日志配置
+logging:
+  level: info
+  format: json
+  include_timestamps: true
+  include_request_body: true
+  include_response_body: true
+
+# 速率限制建议
+rate_limits:
+  rendering:
+    limit: 10
+    window: "1h"
+    description: "每小时最多 10 个效果图"
+  video:
+    limit: 5
+    window: "1h"
+    description: "每小时最多 5 个视频"
+  colorplan:
+    limit: 20
+    window: "1h"
+    description: "每小时最多 20 个平面图"
+
+# 错误处理
+error_handling:
+  retry_on_failure: true
+  max_retries: 3
+  retry_delay_ms: 2000
+  timeout_ms: 30000
+
+# 更新日志
+changelog:
+  - version: 1.0.0
+    date: 2026-03-20
+    changes:
+      - "初始版本"
+      - "支持 AI 效果图生成"
+      - "支持 AI 视频生成（文生视频和图生视频）"
+      - "支持 AI 平面图生成"
+      - "支持素材库查询"

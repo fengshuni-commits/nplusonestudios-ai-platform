@@ -33,6 +33,7 @@ import ColorPlan from "./pages/ColorPlan";
 import MediaLayout from "./pages/MediaLayout";
 import MediaPortfolio from "./pages/MediaPortfolio";
 import VideoGeneration from "./pages/VideoGeneration";
+import OpenClawIntegration from "./pages/OpenClawIntegration";
 
 function Router() {
   return (
@@ -53,6 +54,7 @@ function Router() {
         <Route path="/design/video" component={VideoGeneration} />
         <Route path="/design/color-plan" component={ColorPlan} />
         <Route path="/design/presentation" component={PresentationPage} />
+        <Route path="/openclaw" component={OpenClawIntegration} />
 
         {/* 营建板块 */}
         <Route path="/construction/docs" component={ConstructionDocs} />
