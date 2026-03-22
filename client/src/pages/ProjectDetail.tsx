@@ -1045,6 +1045,8 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [subTaskTitle, setSubTaskTitle] = useState("");
+  const [editingSubTaskId, setEditingSubTaskId] = useState<number | null>(null);
+  const [editingSubTaskTitle, setEditingSubTaskTitle] = useState("");
   const [viewMode, setViewMode] = useState<"kanban" | "gantt">("kanban");
   const { data: tasks } = trpc.tasks.listByProject.useQuery({ projectId });
   const { data: members } = trpc.projects.listMembers.useQuery({ projectId });
@@ -1551,7 +1553,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                         >
                           {st.status === "done" && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                         </button>
-                        <span className={`text-xs flex-1 ${st.status === "done" ? "line-through text-muted-foreground" : ""}`}>{st.title}</span>
+                        <span className={`text-xs flex-1 cursor-pointer hover:text-primary ${st.status === "done" ? "line-through text-muted-foreground" : ""}`} onClick={() => canEditTask(selectedTask) && setEditingSubTaskId(st.id)}>{st.title}</span>
                       </div>
                     ))}
                   </div>
