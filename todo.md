@@ -831,3 +831,8 @@
 ## 修复 API Token 调用次数始终显示 0
 - [x] 修复 sdk.ts 中双重哈希问题：updateApiTokenLastUsed 应传入原始 token 而非 tokenHash
 - [x] 验证修复效果并保存检查点
+
+## 补充案例调研模块 API 文档
+- [x] 梳理案例调研后端接口（benchmark.generate、benchmark.pollStatus、benchmark.refine）
+- [x] 在 /api-docs 页面新增案例调研 API 文档区块
+- [x] 验证页面显示并保存检查点

@@ -1,12 +1,43 @@
 import { useState } from "react";
-import { Copy, Check, ExternalLink, Shield, Terminal } from "lucide-react";
+import { Copy, Check, ExternalLink, Shield, Terminal, Clock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 
 const BASE_URL = "https://platform.nplusonestudios.com";
 
-const apis = [
+type ApiParam = {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+  default?: string;
+};
+
+type ApiResponseField = {
+  name: string;
+  type: string;
+  description: string;
+};
+
+type ApiDef = {
+  name: string;
+  endpoint: string;
+  description: string;
+  method: "POST" | "GET";
+  generationTime: string;
+  isAsync?: boolean;
+  asyncNote?: string;
+  params: ApiParam[];
+  responseFields: ApiResponseField[];
+  requestExample: Record<string, unknown>;
+  responseExample: Record<string, unknown>;
+  curlExample: string;
+};
+
+// ── 同步 API ──────────────────────────────────────────────
+const syncApis: ApiDef[] = [
   {
     name: "AI 效果图生成",
     endpoint: "rendering.generate",
@@ -118,6 +149,132 @@ const apis = [
   -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
   -H 'Content-Type: application/json' \\
   -d '{"json":{"imageUrl":"https://cdn.example.com/floor-plan.jpg","prompt":"温暖木色，现代简约","projectId":null}}'`,
+  },
+];
+
+// ── 案例调研异步 API（三步流程）──────────────────────────
+type BenchmarkApiStep = {
+  step: number;
+  name: string;
+  endpoint: string;
+  method: "POST" | "GET";
+  description: string;
+  params: ApiParam[];
+  responseFields: ApiResponseField[];
+  requestExample: Record<string, unknown>;
+  responseExample: Record<string, unknown>;
+  curlExample: string;
+};
+
+const benchmarkSteps: BenchmarkApiStep[] = [
+  {
+    step: 1,
+    name: "提交生成任务",
+    endpoint: "benchmark.generate",
+    method: "POST",
+    description: "提交案例调研报告生成任务，立即返回 jobId，后台异步生成（约 60-120 秒）",
+    params: [
+      { name: "projectName", type: "string", required: true, description: "项目名称，如「百悦科技园办公空间」" },
+      { name: "requirements", type: "string", required: true, description: "调研需求描述，如「工业风科技感办公空间，面积约3000㎡」" },
+      { name: "projectType", type: "string", required: false, default: "\"\"", description: "项目类型，如 office、exhibition、commercial 等（可选）" },
+      { name: "referenceCount", type: "number", required: false, default: "5", description: "对标案例数量（1-10，默认 5）" },
+      { name: "toolId", type: "number", required: false, description: "指定 AI 工具 ID（可选，不传则使用默认工具）" },
+    ],
+    responseFields: [
+      { name: "jobId", type: "string", description: "任务 ID，用于后续轮询状态" },
+    ],
+    requestExample: {
+      projectName: "百悦科技园办公空间",
+      requirements: "工业风科技感办公空间，面积约3000㎡，需要展示科技公司的创新文化",
+      projectType: "office",
+      referenceCount: 5,
+    },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            jobId: "V1StGXR8_Z5jdHi6B-myT",
+          }
+        }
+      }
+    },
+    curlExample: `curl -X POST '${BASE_URL}/api/trpc/benchmark.generate' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"projectName":"百悦科技园办公空间","requirements":"工业风科技感办公空间，面积约3000㎡","projectType":"office","referenceCount":5}}'`,
+  },
+  {
+    step: 2,
+    name: "轮询任务状态",
+    endpoint: "benchmark.pollStatus",
+    method: "GET",
+    description: "查询生成任务的当前状态。建议每 3 秒轮询一次，直到 status 变为 done 或 failed",
+    params: [
+      { name: "jobId", type: "string", required: true, description: "第一步返回的任务 ID" },
+    ],
+    responseFields: [
+      { name: "status", type: "string", description: "任务状态：pending（排队中）/ processing（生成中）/ done（完成）/ failed（失败）/ not_found（任务不存在）" },
+      { name: "content", type: "string", description: "生成的报告 Markdown 内容（仅 status=done 时返回）" },
+      { name: "historyId", type: "number", description: "生成记录 ID（仅 status=done 时返回）" },
+      { name: "generatedAt", type: "string", description: "完成时间 ISO 字符串（仅 status=done 时返回）" },
+      { name: "error", type: "string", description: "错误信息（仅 status=failed 时返回）" },
+    ],
+    requestExample: {
+      jobId: "V1StGXR8_Z5jdHi6B-myT",
+    },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            status: "done",
+            content: "# 案例调研报告\n\n## 项目概述\n...",
+            historyId: 840010,
+            generatedAt: "2026-03-22T10:30:00.000Z",
+          }
+        }
+      }
+    },
+    curlExample: `curl -G '${BASE_URL}/api/trpc/benchmark.pollStatus' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  --data-urlencode 'input={"json":{"jobId":"V1StGXR8_Z5jdHi6B-myT"}}'`,
+  },
+  {
+    step: 3,
+    name: "对话式优化报告",
+    endpoint: "benchmark.refine",
+    method: "POST",
+    description: "基于已生成的报告进行对话式修改优化，提交修改意见后异步生成修订版，同样需要轮询 benchmark.pollStatus",
+    params: [
+      { name: "currentReport", type: "string", required: true, description: "当前报告的完整 Markdown 内容（从 pollStatus 的 content 字段获取）" },
+      { name: "feedback", type: "string", required: true, description: "修改意见，如「增加更多可持续设计案例，减少传统办公案例」" },
+      { name: "projectName", type: "string", required: true, description: "项目名称（与生成时保持一致）" },
+      { name: "projectType", type: "string", required: false, default: "\"\"", description: "项目类型（可选）" },
+      { name: "parentHistoryId", type: "number", required: false, description: "父报告的历史记录 ID（用于关联版本链，建议传入）" },
+      { name: "toolId", type: "number", required: false, description: "指定 AI 工具 ID（可选）" },
+    ],
+    responseFields: [
+      { name: "jobId", type: "string", description: "修改任务 ID，使用 benchmark.pollStatus 轮询结果" },
+    ],
+    requestExample: {
+      currentReport: "# 案例调研报告\n\n## 项目概述\n...",
+      feedback: "增加更多可持续设计和绿色建筑案例，减少传统办公案例的比重",
+      projectName: "百悦科技园办公空间",
+      projectType: "office",
+      parentHistoryId: 840010,
+    },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            jobId: "K9mNpQR2_X7keLm3C-abZ",
+          }
+        }
+      }
+    },
+    curlExample: `curl -X POST '${BASE_URL}/api/trpc/benchmark.refine' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"currentReport":"# 案例调研报告\\n...","feedback":"增加更多可持续设计案例","projectName":"百悦科技园办公空间","parentHistoryId":840010}}'`,
   },
 ];
 
@@ -233,150 +390,122 @@ export default function ApiDocs() {
           </p>
         </Card>
 
-        {/* APIs */}
-        <div className="space-y-6">
-          {apis.map((api, idx) => (
-            <Card key={idx} className="p-6 bg-white border-slate-200 hover:shadow-md transition">
-              <div className="mb-5">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">{api.name}</h3>
-                    <p className="text-slate-500 text-sm mt-0.5">{api.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
-                    <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                      {api.method}
-                    </span>
-                    <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
-                      {api.generationTime}
-                    </span>
-                  </div>
-                </div>
+        {/* ── 同步 APIs ── */}
+        <h2 className="text-xl font-bold text-slate-900 mb-4">同步 API</h2>
+        <p className="text-sm text-slate-500 mb-5">以下 API 在单次请求内完成，直接返回生成结果。</p>
 
-                {/* Endpoint */}
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <code className="flex-1 text-sm font-mono text-slate-700">
-                    <span className="text-slate-400">{apiEndpoint}/</span>
-                    <span className="text-blue-600 font-semibold">{api.endpoint}</span>
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => copyToClipboard(`${apiEndpoint}/${api.endpoint}`, `ep-${idx}`)}
-                    className="gap-1 text-xs"
-                  >
-                    {copiedKey === `ep-${idx}` ? <><Check className="w-3 h-3" /> 已复制</> : <Copy className="w-3 h-3" />}
-                  </Button>
-                </div>
-              </div>
+        <div className="space-y-6 mb-12">
+          {syncApis.map((api, idx) => (
+            <ApiCard
+              key={idx}
+              api={api}
+              idx={idx}
+              apiEndpoint={apiEndpoint}
+              copiedKey={copiedKey}
+              copyToClipboard={copyToClipboard}
+            />
+          ))}
+        </div>
 
-              <Tabs defaultValue="curl" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 mb-4">
-                  <TabsTrigger value="curl">curl 示例</TabsTrigger>
-                  <TabsTrigger value="params">请求参数</TabsTrigger>
-                  <TabsTrigger value="response">返回字段</TabsTrigger>
-                  <TabsTrigger value="json">JSON 示例</TabsTrigger>
-                </TabsList>
+        {/* ── 案例调研 API（异步三步流程）── */}
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">案例调研 API</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            案例调研报告生成耗时较长（约 60-120 秒），采用<strong>异步任务模式</strong>：先提交任务获取 jobId，再轮询状态，完成后获取报告内容。
+          </p>
 
-                {/* curl Example */}
-                <TabsContent value="curl">
-                  <div className="relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-slate-500">将 <code className="font-mono bg-slate-100 px-1 rounded">sk_1774xxxxxxxxx_xxxxxxxxxx</code> 替换为你的真实 Token</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(api.curlExample, `curl-${idx}`)}
-                        className="gap-1 text-xs"
-                      >
-                        {copiedKey === `curl-${idx}` ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制</>}
-                      </Button>
-                    </div>
-                    <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">
-                      {api.curlExample}
-                    </pre>
-                  </div>
-                </TabsContent>
+          {/* 流程示意 */}
+          <div className="flex items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold">
+              <span>1</span> benchmark.generate
+            </div>
+            <ArrowRight className="w-4 h-4 text-blue-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-semibold">
+              <Clock className="w-3.5 h-3.5" /> 每 3s 轮询
+            </div>
+            <ArrowRight className="w-4 h-4 text-blue-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-semibold">
+              <span>2</span> benchmark.pollStatus
+            </div>
+            <ArrowRight className="w-4 h-4 text-blue-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">
+              status = done → 获取报告
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg text-sm font-semibold">
+              <span>3</span> benchmark.refine（可选）
+            </div>
+          </div>
 
-                {/* Parameters */}
-                <TabsContent value="params">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">参数名</th>
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">类型</th>
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">必需</th>
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">说明</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {api.params.map((param, pidx) => (
-                          <tr key={pidx} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-2 px-3 font-mono text-slate-900 text-xs">{param.name}</td>
-                            <td className="py-2 px-3 text-slate-500 text-xs font-mono">{param.type}</td>
-                            <td className="py-2 px-3">
-                              <span className={param.required ? "text-red-600 font-semibold text-xs" : "text-slate-400 text-xs"}>
-                                {param.required ? "必需" : "可选"}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-slate-600 text-xs">
-                              {param.description}
-                              {"default" in param && param.default && (
-                                <span className="text-slate-400 ml-1">（默认: {param.default}）</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </TabsContent>
+          {/* 轮询代码示例 */}
+          <Card className="mb-6 p-5 bg-white border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-500" /> 轮询示例代码（JavaScript）
+            </h3>
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => copyToClipboard(`async function waitForReport(jobId, token) {
+  const base = '${BASE_URL}/api/trpc';
+  while (true) {
+    const res = await fetch(
+      base + '/benchmark.pollStatus?input=' + encodeURIComponent(JSON.stringify({ json: { jobId } })),
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const data = await res.json();
+    const { status, content, historyId, error } = data.result.data.json;
 
-                {/* Response */}
-                <TabsContent value="response">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">字段名</th>
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">类型</th>
-                          <th className="text-left py-2 px-3 font-semibold text-slate-700">说明</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {api.responseFields.map((field, fidx) => (
-                          <tr key={fidx} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-2 px-3 font-mono text-slate-900 text-xs">{field.name}</td>
-                            <td className="py-2 px-3 text-slate-500 text-xs font-mono">{field.type}</td>
-                            <td className="py-2 px-3 text-slate-600 text-xs">{field.description}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-3">
-                    注：tRPC 响应体结构为 <code className="font-mono bg-slate-100 px-1 rounded">{"{ result: { data: { json: { ...fields } } } }"}</code>
-                  </p>
-                </TabsContent>
+    if (status === 'done') {
+      console.log('报告生成完成，historyId:', historyId);
+      return content; // Markdown 格式报告内容
+    }
+    if (status === 'failed') {
+      throw new Error('生成失败: ' + error);
+    }
+    // pending 或 processing，继续等待
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}`, "poll-code")}
+                className="absolute top-2 right-2 gap-1 text-xs z-10"
+              >
+                {copiedKey === "poll-code" ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制</>}
+              </Button>
+              <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">{`async function waitForReport(jobId, token) {
+  const base = '${BASE_URL}/api/trpc';
+  while (true) {
+    const res = await fetch(
+      base + '/benchmark.pollStatus?input=' + encodeURIComponent(JSON.stringify({ json: { jobId } })),
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const data = await res.json();
+    const { status, content, historyId, error } = data.result.data.json;
 
-                {/* JSON Example */}
-                <TabsContent value="json" className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-slate-900 mb-2 text-sm">请求体（-d 参数中的 json 字段）</h4>
-                    <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
-                      {JSON.stringify(api.requestExample, null, 2)}
-                    </pre>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-slate-900 mb-2 text-sm">完整返回示例</h4>
-                    <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
-                      {JSON.stringify(api.responseExample, null, 2)}
-                    </pre>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </Card>
+    if (status === 'done') {
+      console.log('报告生成完成，historyId:', historyId);
+      return content; // Markdown 格式报告内容
+    }
+    if (status === 'failed') {
+      throw new Error('生成失败: ' + error);
+    }
+    // pending 或 processing，继续等待
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}`}</pre>
+            </div>
+          </Card>
+        </div>
+
+        {/* 三步接口卡片 */}
+        <div className="space-y-6 mb-12">
+          {benchmarkSteps.map((step, idx) => (
+            <BenchmarkStepCard
+              key={idx}
+              step={step}
+              apiEndpoint={apiEndpoint}
+              copiedKey={copiedKey}
+              copyToClipboard={copyToClipboard}
+            />
           ))}
         </div>
 
@@ -408,6 +537,278 @@ export default function ApiDocs() {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── 同步 API 卡片组件 ──────────────────────────────────────
+function ApiCard({
+  api,
+  idx,
+  apiEndpoint,
+  copiedKey,
+  copyToClipboard,
+}: {
+  api: ApiDef;
+  idx: number;
+  apiEndpoint: string;
+  copiedKey: string | null;
+  copyToClipboard: (text: string, key: string) => void;
+}) {
+  return (
+    <Card className="p-6 bg-white border-slate-200 hover:shadow-md transition">
+      <div className="mb-5">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">{api.name}</h3>
+            <p className="text-slate-500 text-sm mt-0.5">{api.description}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-4">
+            <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+              {api.method}
+            </span>
+            <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+              {api.generationTime}
+            </span>
+          </div>
+        </div>
+
+        {/* Endpoint */}
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <code className="flex-1 text-sm font-mono text-slate-700">
+            <span className="text-slate-400">{apiEndpoint}/</span>
+            <span className="text-blue-600 font-semibold">{api.endpoint}</span>
+          </code>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => copyToClipboard(`${apiEndpoint}/${api.endpoint}`, `ep-${idx}`)}
+            className="gap-1 text-xs"
+          >
+            {copiedKey === `ep-${idx}` ? <><Check className="w-3 h-3" /> 已复制</> : <Copy className="w-3 h-3" />}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs defaultValue="curl" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsTrigger value="curl">curl 示例</TabsTrigger>
+          <TabsTrigger value="params">请求参数</TabsTrigger>
+          <TabsTrigger value="response">返回字段</TabsTrigger>
+          <TabsTrigger value="json">JSON 示例</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="curl">
+          <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500">将 <code className="font-mono bg-slate-100 px-1 rounded">sk_1774xxxxxxxxx_xxxxxxxxxx</code> 替换为你的真实 Token</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => copyToClipboard(api.curlExample, `curl-${idx}`)}
+                className="gap-1 text-xs"
+              >
+                {copiedKey === `curl-${idx}` ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制</>}
+              </Button>
+            </div>
+            <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">
+              {api.curlExample}
+            </pre>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="params">
+          <ParamTable params={api.params} />
+        </TabsContent>
+
+        <TabsContent value="response">
+          <ResponseTable fields={api.responseFields} />
+        </TabsContent>
+
+        <TabsContent value="json" className="space-y-4">
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">请求体（-d 参数中的 json 字段）</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
+              {JSON.stringify(api.requestExample, null, 2)}
+            </pre>
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">完整返回示例</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
+              {JSON.stringify(api.responseExample, null, 2)}
+            </pre>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </Card>
+  );
+}
+
+// ── 案例调研步骤卡片组件 ───────────────────────────────────
+function BenchmarkStepCard({
+  step,
+  apiEndpoint,
+  copiedKey,
+  copyToClipboard,
+}: {
+  step: BenchmarkApiStep;
+  apiEndpoint: string;
+  copiedKey: string | null;
+  copyToClipboard: (text: string, key: string) => void;
+}) {
+  const stepKey = `bm-${step.step}`;
+  return (
+    <Card className="p-6 bg-white border-slate-200 hover:shadow-md transition">
+      <div className="mb-5">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
+              {step.step}
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">{step.name}</h3>
+              <p className="text-slate-500 text-sm mt-0.5">{step.description}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-4">
+            <Badge variant="outline" className="text-xs font-semibold border-blue-300 text-blue-700">
+              {step.method}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Endpoint */}
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <code className="flex-1 text-sm font-mono text-slate-700">
+            <span className="text-slate-400">{apiEndpoint}/</span>
+            <span className="text-blue-600 font-semibold">{step.endpoint}</span>
+          </code>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => copyToClipboard(`${apiEndpoint}/${step.endpoint}`, `ep-${stepKey}`)}
+            className="gap-1 text-xs"
+          >
+            {copiedKey === `ep-${stepKey}` ? <><Check className="w-3 h-3" /> 已复制</> : <Copy className="w-3 h-3" />}
+          </Button>
+        </div>
+      </div>
+
+      <Tabs defaultValue="curl" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsTrigger value="curl">curl 示例</TabsTrigger>
+          <TabsTrigger value="params">请求参数</TabsTrigger>
+          <TabsTrigger value="response">返回字段</TabsTrigger>
+          <TabsTrigger value="json">JSON 示例</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="curl">
+          <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500">将 <code className="font-mono bg-slate-100 px-1 rounded">sk_1774xxxxxxxxx_xxxxxxxxxx</code> 替换为你的真实 Token</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => copyToClipboard(step.curlExample, `curl-${stepKey}`)}
+                className="gap-1 text-xs"
+              >
+                {copiedKey === `curl-${stepKey}` ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制</>}
+              </Button>
+            </div>
+            <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">
+              {step.curlExample}
+            </pre>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="params">
+          <ParamTable params={step.params} />
+        </TabsContent>
+
+        <TabsContent value="response">
+          <ResponseTable fields={step.responseFields} />
+        </TabsContent>
+
+        <TabsContent value="json" className="space-y-4">
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">请求体（-d 参数中的 json 字段）</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
+              {JSON.stringify(step.requestExample, null, 2)}
+            </pre>
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">完整返回示例</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
+              {JSON.stringify(step.responseExample, null, 2)}
+            </pre>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </Card>
+  );
+}
+
+// ── 共享子组件 ────────────────────────────────────────────
+function ParamTable({ params }: { params: ApiParam[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200">
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">参数名</th>
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">类型</th>
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">必需</th>
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {params.map((param, pidx) => (
+            <tr key={pidx} className="border-b border-slate-100 hover:bg-slate-50">
+              <td className="py-2 px-3 font-mono text-slate-900 text-xs">{param.name}</td>
+              <td className="py-2 px-3 text-slate-500 text-xs font-mono">{param.type}</td>
+              <td className="py-2 px-3">
+                <span className={param.required ? "text-red-600 font-semibold text-xs" : "text-slate-400 text-xs"}>
+                  {param.required ? "必需" : "可选"}
+                </span>
+              </td>
+              <td className="py-2 px-3 text-slate-600 text-xs">
+                {param.description}
+                {"default" in param && param.default && (
+                  <span className="text-slate-400 ml-1">（默认: {param.default}）</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ResponseTable({ fields }: { fields: ApiResponseField[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200">
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">字段名</th>
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">类型</th>
+            <th className="text-left py-2 px-3 font-semibold text-slate-700">说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fields.map((field, fidx) => (
+            <tr key={fidx} className="border-b border-slate-100 hover:bg-slate-50">
+              <td className="py-2 px-3 font-mono text-slate-900 text-xs">{field.name}</td>
+              <td className="py-2 px-3 text-slate-500 text-xs font-mono">{field.type}</td>
+              <td className="py-2 px-3 text-slate-600 text-xs">{field.description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-slate-400 mt-3">
+        注：tRPC 响应体结构为 <code className="font-mono bg-slate-100 px-1 rounded">{"{ result: { data: { json: { ...fields } } } }"}</code>
+      </p>
     </div>
   );
 }
