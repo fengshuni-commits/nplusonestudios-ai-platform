@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Copy, Download, ExternalLink, Check, Trash2, Plus, Key, AlertCircle, BarChart2, Clock } from 'lucide-react';
+import { Copy, Download, ExternalLink, Check, Trash2, Plus, Key, AlertCircle, BarChart2, Clock, ArrowRight, Terminal } from 'lucide-react';
+import { Tabs as InnerTabs, TabsContent as InnerTabsContent, TabsList as InnerTabsList, TabsTrigger as InnerTabsTrigger } from '@/components/ui/tabs';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
@@ -374,76 +375,417 @@ export default function Integrations() {
         </TabsContent>
 
         {/* API 文档标签页 */}
-        <TabsContent value="docs" className="space-y-6">
-          {[
-            {
-              icon: '🎨',
-              name: 'generateImage',
-              title: 'AI 效果图生成',
-              description: '根据文字描述生成建筑/空间效果图',
-              params: [
-                { name: 'prompt', type: 'string', desc: '效果图描述' },
-                { name: 'style', type: 'string', desc: '风格 (minimalist, modern, industrial...)' },
-                { name: 'aspectRatio', type: 'string', desc: '宽高比 (16:9, 1:1, 9:16, 4:3)' },
-              ],
-              time: '约 30 秒',
-            },
-            {
-              icon: '🎬',
-              name: 'generateVideo',
-              title: 'AI 视频生成',
-              description: '生成 1-8 秒的设计视频（支持文生视频和图生视频）',
-              params: [
-                { name: 'mode', type: 'string', desc: 'text-to-video | image-to-video' },
-                { name: 'prompt', type: 'string', desc: '视频描述' },
-                { name: 'duration', type: 'number', desc: '时长 (1-8 秒)' },
-                { name: 'inputImageUrl', type: 'string', desc: '首帧图 URL (图生视频时需要)' },
-              ],
-              time: '约 60-120 秒',
-            },
-            {
-              icon: '🏠',
-              name: 'generateColorPlan',
-              title: 'AI 平面图生成',
-              description: '将黑白平面图转换为彩色配色方案',
-              params: [
-                { name: 'floorPlanUrl', type: 'string', desc: '平面底图 URL' },
-                { name: 'referenceUrl', type: 'string', desc: '参考风格图 URL' },
-                { name: 'extraPrompt', type: 'string', desc: '额外提示' },
-              ],
-              time: '约 45 秒',
-            },
-          ].map((api) => (
-            <Card key={api.name}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span>{api.icon}</span>
-                  {api.title}
-                </CardTitle>
-                <CardDescription>{api.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-semibold mb-2">参数</h4>
-                  <div className="bg-muted p-3 rounded-lg text-sm space-y-1">
-                    {api.params.map((param) => (
-                      <div key={param.name}>
-                        <span className="text-blue-600 font-mono">{param.name}</span>
-                        <span className="text-muted-foreground"> ({param.type}): </span>
-                        <span>{param.desc}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-semibold mb-2">生成时间</h4>
-                  <Badge variant="outline">{api.time}</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <TabsContent value="docs" className="space-y-8">
+          <ApiDocsSection copiedId={copiedId} handleCopy={handleCopy} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── API 文档区块 ──────────────────────────────────────────
+const BASE_URL = 'https://platform.nplusonestudios.com';
+const API_BASE = `${BASE_URL}/api/trpc`;
+
+type ApiParam = { name: string; type: string; required: boolean; desc: string; default?: string };
+type ApiField = { name: string; type: string; desc: string };
+type ApiEntry = {
+  icon: string;
+  name: string;
+  title: string;
+  description: string;
+  method: 'POST' | 'GET';
+  time: string;
+  params: ApiParam[];
+  responseFields: ApiField[];
+  curlExample: string;
+  requestExample: Record<string, unknown>;
+  responseExample: Record<string, unknown>;
+};
+
+const syncApiList: ApiEntry[] = [
+  {
+    icon: '🎨',
+    name: 'rendering.generate',
+    title: 'AI 效果图生成',
+    description: '根据文字描述生成建筑/空间效果图，支持多种风格',
+    method: 'POST',
+    time: '约 20-40 秒',
+    params: [
+      { name: 'prompt', type: 'string', required: true, desc: '效果图描述（中英文均可）' },
+      { name: 'style', type: 'string', required: false, desc: '风格，如 minimalist、modern、industrial' },
+      { name: 'projectId', type: 'number | null', required: false, default: 'null', desc: '关联项目 ID（可选）' },
+    ],
+    responseFields: [
+      { name: 'url', type: 'string', desc: '生成的图片 CDN URL' },
+      { name: 'prompt', type: 'string', desc: '实际使用的提示词' },
+      { name: 'historyId', type: 'number', desc: '生成记录 ID' },
+    ],
+    requestExample: { prompt: '现代办公空间，玻璃和木材元素，自然采光', style: 'minimalist', projectId: null },
+    responseExample: { result: { data: { json: { url: 'https://cdn.../rendering/xxx.jpg', prompt: '...', historyId: 840001 } } } },
+    curlExample: `curl -X POST '${API_BASE}/rendering.generate' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"prompt":"现代办公空间，玻璃和木材元素","style":"minimalist","projectId":null}}'`,
+  },
+  {
+    icon: '🎬',
+    name: 'video.generate',
+    title: 'AI 视频生成',
+    description: '生成设计视频，支持文生视频和图生视频两种模式',
+    method: 'POST',
+    time: '约 60-120 秒（需轮询 video.getStatus）',
+    params: [
+      { name: 'mode', type: 'string', required: true, desc: 'text（文生视频）或 image（图生视频）' },
+      { name: 'prompt', type: 'string', required: false, desc: '视频描述（文生视频时必需）' },
+      { name: 'imageUrl', type: 'string', required: false, desc: '首帧图片 URL（图生视频时必需）' },
+      { name: 'duration', type: 'number', required: false, default: '5', desc: '时长（秒）：5 或 10' },
+    ],
+    responseFields: [
+      { name: 'taskId', type: 'string', desc: '任务 ID，用于轮询进度' },
+      { name: 'status', type: 'string', desc: '初始状态：pending' },
+      { name: 'historyId', type: 'number', desc: '生成记录 ID' },
+    ],
+    requestExample: { mode: 'text', prompt: '现代办公空间工作场景，光线充足', duration: 5 },
+    responseExample: { result: { data: { json: { taskId: 'task_xxx', status: 'pending', historyId: 12345 } } } },
+    curlExample: `curl -X POST '${API_BASE}/video.generate' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"mode":"text","prompt":"现代办公空间工作场景","duration":5}}'`,
+  },
+  {
+    icon: '🏠',
+    name: 'rendering.colorPlan',
+    title: 'AI 平面图生成',
+    description: '将黑白平面图转换为彩色渲染平面图',
+    method: 'POST',
+    time: '约 30-50 秒',
+    params: [
+      { name: 'imageUrl', type: 'string', required: true, desc: '底图 URL（黑白平面图）' },
+      { name: 'prompt', type: 'string', required: true, desc: '配色和风格描述' },
+      { name: 'projectId', type: 'number | null', required: false, default: 'null', desc: '关联项目 ID（可选）' },
+    ],
+    responseFields: [
+      { name: 'url', type: 'string', desc: '生成的彩色平面图 CDN URL' },
+      { name: 'prompt', type: 'string', desc: '实际使用的提示词' },
+      { name: 'historyId', type: 'number', desc: '生成记录 ID' },
+    ],
+    requestExample: { imageUrl: 'https://cdn.example.com/floor-plan.jpg', prompt: '温暖木色，现代简约', projectId: null },
+    responseExample: { result: { data: { json: { url: 'https://cdn.../color-plan/xxx.jpg', prompt: '...', historyId: 840002 } } } },
+    curlExample: `curl -X POST '${API_BASE}/rendering.colorPlan' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"imageUrl":"https://cdn.example.com/floor-plan.jpg","prompt":"温暖木色，现代简约","projectId":null}}'`,
+  },
+];
+
+type BenchmarkStep = {
+  step: number;
+  name: string;
+  endpoint: string;
+  method: 'POST' | 'GET';
+  description: string;
+  params: ApiParam[];
+  responseFields: ApiField[];
+  curlExample: string;
+  requestExample: Record<string, unknown>;
+  responseExample: Record<string, unknown>;
+};
+
+const benchmarkSteps: BenchmarkStep[] = [
+  {
+    step: 1,
+    name: 'benchmark.generate',
+    endpoint: 'benchmark.generate',
+    method: 'POST',
+    description: '提交案例调研报告生成任务，立即返回 jobId，后台异步生成（约 60-120 秒）',
+    params: [
+      { name: 'projectName', type: 'string', required: true, desc: '项目名称，如「百悦科技园办公空间」' },
+      { name: 'requirements', type: 'string', required: true, desc: '调研需求描述，如「工业风科技感办公空间，面积约3000㎡」' },
+      { name: 'projectType', type: 'string', required: false, default: '""', desc: '项目类型，如 office、exhibition 等' },
+      { name: 'referenceCount', type: 'number', required: false, default: '5', desc: '对标案例数量（1-10）' },
+      { name: 'toolId', type: 'number', required: false, desc: '指定 AI 工具 ID（可选）' },
+    ],
+    responseFields: [
+      { name: 'jobId', type: 'string', desc: '任务 ID，用于轮询状态' },
+    ],
+    requestExample: { projectName: '百悦科技园办公空间', requirements: '工业风科技感办公空间，面积约3000㎡', projectType: 'office', referenceCount: 5 },
+    responseExample: { result: { data: { json: { jobId: 'V1StGXR8_Z5jdHi6B-myT' } } } },
+    curlExample: `curl -X POST '${API_BASE}/benchmark.generate' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"projectName":"百悦科技园办公空间","requirements":"工业风科技感办公空间，面积约3000㎡","projectType":"office","referenceCount":5}}'`,
+  },
+  {
+    step: 2,
+    name: 'benchmark.pollStatus',
+    endpoint: 'benchmark.pollStatus',
+    method: 'GET',
+    description: '查询生成任务状态，建议每 3 秒轮询一次，直到 status 变为 done 或 failed',
+    params: [
+      { name: 'jobId', type: 'string', required: true, desc: '第一步返回的任务 ID' },
+    ],
+    responseFields: [
+      { name: 'status', type: 'string', desc: 'pending / processing / done / failed / not_found' },
+      { name: 'content', type: 'string', desc: '报告 Markdown 内容（status=done 时返回）' },
+      { name: 'historyId', type: 'number', desc: '生成记录 ID（status=done 时返回）' },
+      { name: 'generatedAt', type: 'string', desc: '完成时间 ISO 字符串（status=done 时返回）' },
+      { name: 'error', type: 'string', desc: '错误信息（status=failed 时返回）' },
+    ],
+    requestExample: { jobId: 'V1StGXR8_Z5jdHi6B-myT' },
+    responseExample: { result: { data: { json: { status: 'done', content: '# 案例调研报告\n...', historyId: 840010, generatedAt: '2026-03-22T10:30:00.000Z' } } } },
+    curlExample: `curl -G '${API_BASE}/benchmark.pollStatus' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  --data-urlencode 'input={"json":{"jobId":"V1StGXR8_Z5jdHi6B-myT"}}'`,
+  },
+  {
+    step: 3,
+    name: 'benchmark.refine',
+    endpoint: 'benchmark.refine',
+    method: 'POST',
+    description: '基于已生成的报告进行对话式修改，提交修改意见后异步生成修订版（同样需要轮询 pollStatus）',
+    params: [
+      { name: 'currentReport', type: 'string', required: true, desc: '当前报告的完整 Markdown 内容' },
+      { name: 'feedback', type: 'string', required: true, desc: '修改意见，如「增加更多可持续设计案例」' },
+      { name: 'projectName', type: 'string', required: true, desc: '项目名称（与生成时保持一致）' },
+      { name: 'projectType', type: 'string', required: false, default: '""', desc: '项目类型（可选）' },
+      { name: 'parentHistoryId', type: 'number', required: false, desc: '父报告的历史记录 ID（建议传入）' },
+    ],
+    responseFields: [
+      { name: 'jobId', type: 'string', desc: '修改任务 ID，使用 benchmark.pollStatus 轮询结果' },
+    ],
+    requestExample: { currentReport: '# 案例调研报告\n...', feedback: '增加更多可持续设计案例', projectName: '百悦科技园办公空间', parentHistoryId: 840010 },
+    responseExample: { result: { data: { json: { jobId: 'K9mNpQR2_X7keLm3C-abZ' } } } },
+    curlExample: `curl -X POST '${API_BASE}/benchmark.refine' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"currentReport":"# 案例调研报告\\n...","feedback":"增加更多可持续设计案例","projectName":"百悦科技园办公空间","parentHistoryId":840010}}'`,
+  },
+];
+
+function ApiDocsSection({ copiedId, handleCopy }: { copiedId: string | null; handleCopy: (text: string, id: string) => void }) {
+  return (
+    <>
+      {/* 同步 API */}
+      <div>
+        <h3 className="text-base font-semibold mb-1">同步 API</h3>
+        <p className="text-sm text-muted-foreground mb-4">以下 API 在单次请求内完成，直接返回生成结果。</p>
+        <div className="space-y-4">
+          {syncApiList.map((api) => (
+            <SyncApiCard key={api.name} api={api} copiedId={copiedId} handleCopy={handleCopy} />
+          ))}
+        </div>
+      </div>
+
+      {/* 案例调研 API */}
+      <div>
+        <h3 className="text-base font-semibold mb-1">案例调研 API</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          案例调研报告生成耗时较长（约 60-120 秒），采用<strong>异步任务模式</strong>：先提交任务获取 jobId，再轮询状态，完成后获取报告内容。
+        </p>
+
+        {/* 流程示意 */}
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4 flex-wrap text-xs">
+          <span className="px-2 py-1 bg-blue-600 text-white rounded font-semibold">1 benchmark.generate</span>
+          <ArrowRight className="w-3 h-3 text-blue-400 shrink-0" />
+          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-semibold flex items-center gap-1"><Clock className="w-3 h-3" />每 3s 轮询</span>
+          <ArrowRight className="w-3 h-3 text-blue-400 shrink-0" />
+          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-semibold">2 benchmark.pollStatus</span>
+          <ArrowRight className="w-3 h-3 text-blue-400 shrink-0" />
+          <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-semibold">status=done → 获取报告</span>
+          <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded font-semibold">3 benchmark.refine（可选）</span>
+        </div>
+
+        <div className="space-y-4">
+          {benchmarkSteps.map((step) => (
+            <BenchmarkStepCard key={step.step} step={step} copiedId={copiedId} handleCopy={handleCopy} />
+          ))}
+        </div>
+      </div>
+
+      {/* 公开文档链接 */}
+      <div className="p-4 bg-muted rounded-lg flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">查看完整公开 API 文档</p>
+          <p className="text-xs text-muted-foreground mt-0.5">包含详细的 curl 示例、JSON 示例和错误处理说明</p>
+        </div>
+        <a
+          href="/api-docs"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 transition"
+        >
+          打开文档 <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+      </div>
+    </>
+  );
+}
+
+function SyncApiCard({ api, copiedId, handleCopy }: { api: ApiEntry; copiedId: string | null; handleCopy: (text: string, id: string) => void }) {
+  const key = api.name;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{api.icon}</span>
+            <div>
+              <CardTitle className="text-base">{api.title}</CardTitle>
+              <CardDescription className="text-xs mt-0.5">{api.description}</CardDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <Badge variant="outline" className="text-xs">{api.method}</Badge>
+            <Badge variant="outline" className="text-xs text-purple-700 border-purple-300">{api.time}</Badge>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-2 p-2 bg-muted rounded text-xs font-mono">
+          <Terminal className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">{API_BASE}/</span>
+          <span className="text-blue-600 font-semibold">{api.name}</span>
+          <Button size="sm" variant="ghost" className="ml-auto h-5 px-1" onClick={() => handleCopy(`${API_BASE}/${api.name}`, `ep-${key}`)}>  
+            {copiedId === `ep-${key}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <InnerTabs defaultValue="params">
+          <InnerTabsList className="grid w-full grid-cols-3 h-8 mb-3">
+            <InnerTabsTrigger value="params" className="text-xs">请求参数</InnerTabsTrigger>
+            <InnerTabsTrigger value="response" className="text-xs">返回字段</InnerTabsTrigger>
+            <InnerTabsTrigger value="curl" className="text-xs">curl 示例</InnerTabsTrigger>
+          </InnerTabsList>
+          <InnerTabsContent value="params">
+            <CompactParamTable params={api.params} />
+          </InnerTabsContent>
+          <InnerTabsContent value="response">
+            <CompactResponseTable fields={api.responseFields} />
+          </InnerTabsContent>
+          <InnerTabsContent value="curl">
+            <CurlBlock code={api.curlExample} id={`curl-${key}`} copiedId={copiedId} handleCopy={handleCopy} />
+          </InnerTabsContent>
+        </InnerTabs>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BenchmarkStepCard({ step, copiedId, handleCopy }: { step: BenchmarkStep; copiedId: string | null; handleCopy: (text: string, id: string) => void }) {
+  const key = `bm-${step.step}`;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+              {step.step}
+            </div>
+            <div>
+              <CardTitle className="text-base">{step.name === 'benchmark.generate' ? '提交生成任务' : step.name === 'benchmark.pollStatus' ? '轮询任务状态' : '对话式优化报告'}</CardTitle>
+              <CardDescription className="text-xs mt-0.5">{step.description}</CardDescription>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-xs shrink-0 ml-2">{step.method}</Badge>
+        </div>
+        <div className="flex items-center gap-2 mt-2 p-2 bg-muted rounded text-xs font-mono">
+          <Terminal className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">{API_BASE}/</span>
+          <span className="text-blue-600 font-semibold">{step.endpoint}</span>
+          <Button size="sm" variant="ghost" className="ml-auto h-5 px-1" onClick={() => handleCopy(`${API_BASE}/${step.endpoint}`, `ep-${key}`)}>  
+            {copiedId === `ep-${key}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <InnerTabs defaultValue="params">
+          <InnerTabsList className="grid w-full grid-cols-3 h-8 mb-3">
+            <InnerTabsTrigger value="params" className="text-xs">请求参数</InnerTabsTrigger>
+            <InnerTabsTrigger value="response" className="text-xs">返回字段</InnerTabsTrigger>
+            <InnerTabsTrigger value="curl" className="text-xs">curl 示例</InnerTabsTrigger>
+          </InnerTabsList>
+          <InnerTabsContent value="params">
+            <CompactParamTable params={step.params} />
+          </InnerTabsContent>
+          <InnerTabsContent value="response">
+            <CompactResponseTable fields={step.responseFields} />
+          </InnerTabsContent>
+          <InnerTabsContent value="curl">
+            <CurlBlock code={step.curlExample} id={`curl-${key}`} copiedId={copiedId} handleCopy={handleCopy} />
+          </InnerTabsContent>
+        </InnerTabs>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CompactParamTable({ params }: { params: ApiParam[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">参数名</th>
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">类型</th>
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">必需</th>
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {params.map((p, i) => (
+            <tr key={i} className="border-b last:border-0 hover:bg-muted/50">
+              <td className="py-1.5 px-2 font-mono text-blue-600">{p.name}</td>
+              <td className="py-1.5 px-2 font-mono text-muted-foreground">{p.type}</td>
+              <td className="py-1.5 px-2">
+                <span className={p.required ? 'text-red-600 font-semibold' : 'text-muted-foreground'}>
+                  {p.required ? '必需' : '可选'}
+                </span>
+              </td>
+              <td className="py-1.5 px-2 text-muted-foreground">
+                {p.desc}{p.default && <span className="text-muted-foreground/60 ml-1">（默认: {p.default}）</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CompactResponseTable({ fields }: { fields: ApiField[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">字段名</th>
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">类型</th>
+            <th className="text-left py-1.5 px-2 font-semibold text-muted-foreground">说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fields.map((f, i) => (
+            <tr key={i} className="border-b last:border-0 hover:bg-muted/50">
+              <td className="py-1.5 px-2 font-mono text-blue-600">{f.name}</td>
+              <td className="py-1.5 px-2 font-mono text-muted-foreground">{f.type}</td>
+              <td className="py-1.5 px-2 text-muted-foreground">{f.desc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-muted-foreground mt-2">响应体结构：<code className="font-mono bg-muted px-1 rounded">{'{ result: { data: { json: { ...fields } } } }'}</code></p>
+    </div>
+  );
+}
+
+function CurlBlock({ code, id, copiedId, handleCopy }: { code: string; id: string; copiedId: string | null; handleCopy: (text: string, id: string) => void }) {
+  return (
+    <div className="relative">
+      <Button size="sm" variant="outline" className="absolute top-2 right-2 gap-1 text-xs z-10 h-6" onClick={() => handleCopy(code, id)}>
+        {copiedId === id ? <><Check className="w-3 h-3" />已复制</> : <><Copy className="w-3 h-3" />复制</>}
+      </Button>
+      <pre className="p-3 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre pr-20">{code}</pre>
     </div>
   );
 }

@@ -836,3 +836,8 @@
 - [x] 梳理案例调研后端接口（benchmark.generate、benchmark.pollStatus、benchmark.refine）
 - [x] 在 /api-docs 页面新增案例调研 API 文档区块
 - [x] 验证页面显示并保存检查点
+
+## 更新 API 管理模块中的 API 文档
+- [x] 定位 Integrations 页面内嵌 API 文档区块
+- [x] 补充案例调研三个接口文档
+- [x] 验证并保存检查点
