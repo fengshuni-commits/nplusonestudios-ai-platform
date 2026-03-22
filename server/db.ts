@@ -112,10 +112,10 @@ export async function verifyApiToken(token: string): Promise<{ userId: number; t
   const tokenRecord = record[0];
   if (new Date() > tokenRecord.expiresAt) return null;
 
-  // 更新最后使用时间
+  // 更新最后使用时间 + 递增调用次数
   await db
     .update(apiTokens)
-    .set({ lastUsedAt: new Date() })
+    .set({ lastUsedAt: new Date(), callCount: sql`${apiTokens.callCount} + 1` })
     .where(eq(apiTokens.id, tokenRecord.id));
 
   return { userId: tokenRecord.userId, type: tokenRecord.type };

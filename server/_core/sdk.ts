@@ -275,9 +275,7 @@ class SDKServer {
             const user = await db.getUserById(tokenInfo.userId);
             console.log("[Auth] User lookup result:", user ? `User ${user.id}` : "null");
             if (user) {
-              // Update last used time
-              const tokenHash = db.hashToken(token);
-              await db.updateApiTokenLastUsed(tokenHash);
+              // verifyApiToken already updated lastUsedAt + callCount
               console.log(`[Auth] API Token authenticated for user ${tokenInfo.userId}`);
               return user;
             }

@@ -827,3 +827,7 @@
 - [x] 更新 getApiTokensByUserId 函数，返回 callCount 和 lastUsedAt
 - [x] 更新前端 Token 列表，显示调用次数和最后使用时间
 - [x] 验证并保存检查点
+
+## 修复 API Token 调用次数始终显示 0
+- [x] 修复 sdk.ts 中双重哈希问题：updateApiTokenLastUsed 应传入原始 token 而非 tokenHash
+- [x] 验证修复效果并保存检查点
