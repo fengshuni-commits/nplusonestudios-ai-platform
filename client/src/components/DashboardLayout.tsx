@@ -99,7 +99,7 @@ const menuSections: MenuSection[] = [
   },
   {
     id: "media",
-    label: "媒体",
+    label: "品牌",
     icon: Megaphone,
     items: [
       { icon: BookMarked, label: "小红书", path: "/media/xiaohongshu" },
