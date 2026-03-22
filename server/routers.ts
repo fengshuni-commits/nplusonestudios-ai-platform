@@ -1022,6 +1022,7 @@ const assetsRouter = router({
       thumbnailUrl: z.string().optional(),
       historyId: z.number().optional(),
       projectId: z.number().optional(),
+      parentId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       return db.createAsset({ ...input, uploadedBy: ctx.user.id });

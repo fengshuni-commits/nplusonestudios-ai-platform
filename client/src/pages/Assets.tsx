@@ -21,6 +21,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Upload,
   Search,
   Trash2,
@@ -33,7 +40,31 @@ import {
   FolderPlus,
   ChevronRight,
   Folder,
+  BookImage,
+  Sparkles,
+  FileText,
+  Palette,
+  Megaphone,
+  Camera,
+  Archive,
 } from "lucide-react";
+
+// ─── Category Config ──────────────────────────────────────
+export const ASSET_CATEGORIES = [
+  { value: "reference",   label: "参考图片",  icon: BookImage,  color: "text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400" },
+  { value: "ai_render",   label: "效果图",    icon: Sparkles,   color: "text-purple-600 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-400" },
+  { value: "drawing",     label: "施工图纸",  icon: FileText,   color: "text-orange-600 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400" },
+  { value: "material",    label: "材料样板",  icon: Palette,    color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400" },
+  { value: "brand",       label: "品牌物料",  icon: Megaphone,  color: "text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400" },
+  { value: "photo",       label: "项目照片",  icon: Camera,     color: "text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400" },
+  { value: "other",       label: "其他",      icon: Archive,    color: "text-muted-foreground bg-muted" },
+] as const;
+
+export type AssetCategoryValue = typeof ASSET_CATEGORIES[number]["value"];
+
+export function getCategoryMeta(value: string | null | undefined) {
+  return ASSET_CATEGORIES.find((c) => c.value === value) ?? ASSET_CATEGORIES[ASSET_CATEGORIES.length - 1];
+}
 
 // ─── Types ────────────────────────────────────────────────
 type AssetItem = {
@@ -102,14 +133,7 @@ function AssetCard({
     /\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i.test(asset.fileUrl);
 
   const displayUrl = asset.thumbnailUrl || asset.fileUrl;
-
-  const categoryLabel: Record<string, string> = {
-    ai_render: "AI 效果图",
-    image: "图片",
-    document: "文档",
-    model: "模型",
-    reference: "参考图",
-  };
+  const catMeta = getCategoryMeta(asset.category);
 
   if (asset.isFolder) {
     return (
@@ -128,15 +152,11 @@ function AssetCard({
             文件夹
           </Badge>
         </div>
-        {/* Delete button on hover */}
         <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <button
             className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-red-500/80 hover:text-white transition-colors"
             title="删除文件夹"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(asset.id);
-            }}
+            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -147,7 +167,6 @@ function AssetCard({
 
   return (
     <div className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-border/80 transition-all duration-200 hover:shadow-md">
-      {/* Image area */}
       <div
         className="aspect-square bg-muted cursor-zoom-in overflow-hidden"
         onClick={() => isImage && onLightbox(asset.fileUrl, asset.name)}
@@ -157,29 +176,20 @@ function AssetCard({
             src={displayUrl}
             alt={asset.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <ImageIcon className="h-10 w-10 text-muted-foreground/30" />
           </div>
         )}
-
-        {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 pointer-events-none" />
-
-        {/* Action buttons on hover */}
         <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           {isImage && (
             <button
               className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors"
               title="放大查看"
-              onClick={(e) => {
-                e.stopPropagation();
-                onLightbox(asset.fileUrl, asset.name);
-              }}
+              onClick={(e) => { e.stopPropagation(); onLightbox(asset.fileUrl, asset.name); }}
             >
               <Maximize2 className="h-3 w-3" />
             </button>
@@ -198,27 +208,20 @@ function AssetCard({
           <button
             className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-red-500/80 hover:text-white transition-colors"
             title="删除"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(asset.id);
-            }}
+            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
           >
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
       </div>
-
-      {/* Info area */}
       <div className="px-2.5 py-2 space-y-1">
         <p className="text-xs font-medium text-foreground truncate" title={asset.name}>
           {asset.name}
         </p>
         <div className="flex flex-wrap gap-1">
-          {asset.category && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
-              {categoryLabel[asset.category] || asset.category}
-            </Badge>
-          )}
+          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 h-4 font-normal ${catMeta.color}`}>
+            {catMeta.label}
+          </Badge>
           {asset.projectName && (
             <Badge
               variant="outline"
@@ -240,16 +243,19 @@ function UploadDialog({
   open,
   onClose,
   currentFolderId,
+  defaultCategory,
   onUploaded,
 }: {
   open: boolean;
   onClose: () => void;
   currentFolderId: number | null;
+  defaultCategory: string;
   onUploaded: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>(defaultCategory);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -261,30 +267,22 @@ function UploadDialog({
     e.preventDefault();
     const items = Array.from(e.dataTransfer.items || []);
     const droppedFiles: File[] = [];
-
     items.forEach((item) => {
       if (item.kind === "file") {
         const file = item.getAsFile();
-        if (file && file.type.startsWith("image/")) {
-          droppedFiles.push(file);
-        }
+        if (file) droppedFiles.push(file);
       }
     });
-
     setFiles((prev) => [...prev, ...droppedFiles]);
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || []).filter((f) =>
-      f.type.startsWith("image/")
-    );
+    const selected = Array.from(e.target.files || []);
     setFiles((prev) => [...prev, ...selected]);
   };
 
   const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || []).filter((f) =>
-      f.type.startsWith("image/")
-    );
+    const selected = Array.from(e.target.files || []);
     setFiles((prev) => [...prev, ...selected]);
   };
 
@@ -298,17 +296,15 @@ function UploadDialog({
     setProgress(0);
 
     let successCount = 0;
-    const folderMap = new Map<string, number>(); // path -> folderId
+    const folderMap = new Map<string, number>();
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        // Get folder path from webkitRelativePath or construct from file name
         const relativePath = (file as any).webkitRelativePath || file.name;
         const pathParts = relativePath.split("/");
         let parentId = currentFolderId;
 
-        // Create folder hierarchy if needed
         if (pathParts.length > 1) {
           for (let j = 0; j < pathParts.length - 1; j++) {
             const folderPath = pathParts.slice(0, j + 1).join("/");
@@ -327,33 +323,31 @@ function UploadDialog({
           }
         }
 
-        // Read file as base64
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
             const result = reader.result as string;
-            resolve(result.split(",")[1]); // strip data:xxx;base64,
+            resolve(result.split(",")[1]);
           };
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
 
-        // Upload to S3
         const { url, key } = await uploadMutation.mutateAsync({
           fileName: file.name,
           fileData: base64,
           contentType: file.type,
         });
 
-          // Create asset record
         await createMutation.mutateAsync({
           name: file.name.replace(/\.[^.]+$/, ""),
           fileUrl: url,
           fileKey: key,
           fileType: file.type,
           fileSize: file.size,
-          thumbnailUrl: url,
-          category: "image",
+          thumbnailUrl: file.type.startsWith("image/") ? url : undefined,
+          category: selectedCategory,
+          parentId: parentId ?? undefined,
         });
 
         successCount++;
@@ -365,7 +359,7 @@ function UploadDialog({
 
     setUploading(false);
     if (successCount > 0) {
-      toast.success(`成功上传 ${successCount} 张图片`);
+      toast.success(`成功上传 ${successCount} 个文件`);
       onUploaded();
       onClose();
     }
@@ -373,14 +367,34 @@ function UploadDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { onClose(); setFiles([]); } }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-4 w-4" />
-            上传图片到素材库
+            上传素材
           </DialogTitle>
         </DialogHeader>
+
+        {/* Category selector */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">选择分类</label>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="h-9 text-sm">
+              <SelectValue placeholder="选择分类" />
+            </SelectTrigger>
+            <SelectContent>
+              {ASSET_CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  <div className="flex items-center gap-2">
+                    <c.icon className="h-3.5 w-3.5" />
+                    {c.label}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Drop zone */}
         <div
@@ -390,12 +404,11 @@ function UploadDialog({
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">拖拽图片或文件夹到此处，或点击选择</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">支持 PNG、JPG、WebP、GIF 格式</p>
+          <p className="text-sm text-muted-foreground">拖拽文件到此处，或点击选择</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">支持图片、PDF、CAD 等各类文件</p>
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
             multiple
             className="hidden"
             onChange={handleFileChange}
@@ -403,7 +416,6 @@ function UploadDialog({
           <input
             ref={folderInputRef}
             type="file"
-            accept="image/*"
             multiple
             {...({ webkitdirectory: "" } as any)}
             className="hidden"
@@ -413,19 +425,11 @@ function UploadDialog({
 
         {/* Quick buttons */}
         <div className="flex gap-2 justify-center">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-          >
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
             <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
-            选择图片
+            选择文件
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => folderInputRef.current?.click()}
-          >
+          <Button size="sm" variant="outline" onClick={() => folderInputRef.current?.click()}>
             <Folder className="h-3.5 w-3.5 mr-1.5" />
             选择文件夹
           </Button>
@@ -474,13 +478,8 @@ function UploadDialog({
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" onClick={onClose} disabled={uploading}>
-            取消
-          </Button>
-          <Button
-            onClick={handleUpload}
-            disabled={files.length === 0 || uploading}
-          >
+          <Button variant="outline" onClick={onClose} disabled={uploading}>取消</Button>
+          <Button onClick={handleUpload} disabled={files.length === 0 || uploading}>
             {uploading ? (
               <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />上传中</>
             ) : (
@@ -503,10 +502,7 @@ function Breadcrumb({
 }) {
   return (
     <div className="flex items-center gap-1 text-xs text-muted-foreground">
-      <button
-        onClick={() => onNavigate(null)}
-        className="hover:text-foreground transition-colors"
-      >
+      <button onClick={() => onNavigate(null)} className="hover:text-foreground transition-colors">
         素材库
       </button>
       {path.map((item, i) => (
@@ -548,14 +544,8 @@ function CreateFolderDialog({
   });
 
   const handleCreate = () => {
-    if (!folderName.trim()) {
-      toast.error("请输入文件夹名称");
-      return;
-    }
-    createFolderMutation.mutate({
-      name: folderName.trim(),
-      parentId: parentFolderId ?? undefined,
-    });
+    if (!folderName.trim()) { toast.error("请输入文件夹名称"); return; }
+    createFolderMutation.mutate({ name: folderName.trim(), parentId: parentFolderId ?? undefined });
   };
 
   return (
@@ -569,9 +559,7 @@ function CreateFolderDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              文件夹名称
-            </label>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">文件夹名称</label>
             <Input
               placeholder="输入文件夹名称…"
               value={folderName}
@@ -583,24 +571,11 @@ function CreateFolderDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onClose}
-            disabled={createFolderMutation.isPending}
-          >
-            取消
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleCreate}
-            disabled={!folderName.trim() || createFolderMutation.isPending}
-          >
+          <Button variant="outline" size="sm" onClick={onClose} disabled={createFolderMutation.isPending}>取消</Button>
+          <Button size="sm" onClick={handleCreate} disabled={!folderName.trim() || createFolderMutation.isPending}>
             {createFolderMutation.isPending ? (
               <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />创建中</>
-            ) : (
-              <>创建</>
-            )}
+            ) : <>创建</>}
           </Button>
         </div>
       </DialogContent>
@@ -627,22 +602,30 @@ export default function Assets() {
   );
 
   const deleteMutation = trpc.assets.delete.useMutation({
-    onSuccess: () => {
-      utils.assets.listByParent.invalidate();
-      toast.success("已删除素材");
-    },
+    onSuccess: () => { utils.assets.listByParent.invalidate(); toast.success("已删除素材"); },
     onError: (e) => toast.error(e.message || "删除失败"),
   });
 
   const deleteFolderMutation = trpc.assets.deleteFolder.useMutation({
-    onSuccess: () => {
-      utils.assets.listByParent.invalidate();
-      toast.success("已删除文件夹");
-    },
+    onSuccess: () => { utils.assets.listByParent.invalidate(); toast.success("已删除文件夹"); },
     onError: (e) => toast.error(e.message || "删除失败"),
   });
 
   const assets = (assetsData || []) as AssetItem[];
+
+  // Count per category (excluding folders)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    assets.forEach((a) => {
+      if (!a.isFolder) {
+        const cat = a.category || "other";
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [assets]);
+
+  const totalNonFolder = assets.filter((a) => !a.isFolder).length;
 
   // Filter assets by search and category
   const filteredAssets = useMemo(() => {
@@ -667,27 +650,14 @@ export default function Assets() {
       setFolderPath([]);
     } else {
       const index = folderPath.findIndex((p) => p.id === folderId);
-      if (index >= 0) {
-        setFolderPath((prev) => prev.slice(0, index + 1));
-      }
+      if (index >= 0) setFolderPath((prev) => prev.slice(0, index + 1));
     }
   };
 
-  const handleDelete = (id: number) => {
-    const asset = assets.find((a) => a.id === id);
-    if (asset?.isFolder) {
-      setDeleteTarget(id);
-    } else {
-      setDeleteTarget(id);
-    }
-  };
+  const handleDelete = (id: number) => setDeleteTarget(id);
 
-  const categories = [
-    { value: undefined, label: "全部" },
-    { value: "ai_render", label: "AI 效果图" },
-    { value: "image", label: "本地上传" },
-    { value: "reference", label: "参考图" },
-  ];
+  // Default category for upload dialog: current filter or "reference"
+  const uploadDefaultCategory = categoryFilter || "reference";
 
   return (
     <div className="flex flex-col h-full">
@@ -697,7 +667,7 @@ export default function Assets() {
           <div>
             <h1 className="text-lg font-semibold text-foreground">素材库</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {assets.length > 0 ? `共 ${assets.length} 个项目` : "团队共享素材，支持文件夹结构"}
+              {totalNonFolder > 0 ? `共 ${totalNonFolder} 个素材` : "团队共享素材，按分类管理"}
             </p>
           </div>
           <div className="flex gap-2">
@@ -719,32 +689,53 @@ export default function Assets() {
           </div>
         )}
 
-        {/* Search + filter */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="搜索素材名称…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-8 text-sm"
-            />
-          </div>
-          <div className="flex gap-1.5">
-            {categories.map((c) => (
+        {/* Category tabs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setCategoryFilter(undefined)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              categoryFilter === undefined
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            全部
+            <span className={`text-[10px] px-1 rounded ${categoryFilter === undefined ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background/60 text-muted-foreground"}`}>
+              {totalNonFolder}
+            </span>
+          </button>
+          {ASSET_CATEGORIES.map((c) => {
+            const count = categoryCounts[c.value] || 0;
+            const active = categoryFilter === c.value;
+            return (
               <button
-                key={String(c.value)}
+                key={c.value}
                 onClick={() => setCategoryFilter(c.value)}
-                className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
-                  categoryFilter === c.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
+                <c.icon className="h-3 w-3" />
                 {c.label}
+                <span className={`text-[10px] px-1 rounded ${active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background/60 text-muted-foreground"}`}>
+                  {count}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+
+        {/* Search */}
+        <div className="mt-3 relative max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="搜索素材名称…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
         </div>
       </div>
 
@@ -758,17 +749,26 @@ export default function Assets() {
         ) : filteredAssets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-60 text-center">
             <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-              <FolderPlus className="h-7 w-7 text-muted-foreground/40" />
+              {categoryFilter ? (
+                (() => {
+                  const meta = getCategoryMeta(categoryFilter);
+                  return <meta.icon className="h-7 w-7 text-muted-foreground/40" />;
+                })()
+              ) : (
+                <FolderPlus className="h-7 w-7 text-muted-foreground/40" />
+              )}
             </div>
             <p className="text-sm font-medium text-foreground/60 mb-1">
-              {currentFolderId ? "文件夹为空" : "素材库暂无内容"}
+              {categoryFilter
+                ? `「${getCategoryMeta(categoryFilter).label}」分类暂无素材`
+                : currentFolderId ? "文件夹为空" : "素材库暂无内容"}
             </p>
             <p className="text-xs text-muted-foreground/50 max-w-xs">
-              点击右上角「上传」按钮添加图片或文件夹
+              点击右上角「上传」按钮添加素材
             </p>
             <Button size="sm" variant="outline" className="mt-4" onClick={() => setUploadOpen(true)}>
               <Upload className="h-3.5 w-3.5 mr-1.5" />
-              上传
+              上传素材
             </Button>
           </div>
         ) : (
@@ -791,6 +791,7 @@ export default function Assets() {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         currentFolderId={currentFolderId}
+        defaultCategory={uploadDefaultCategory}
         onUploaded={() => utils.assets.listByParent.invalidate()}
       />
 
@@ -804,11 +805,7 @@ export default function Assets() {
 
       {/* Lightbox */}
       {lightbox && (
-        <Lightbox
-          src={lightbox.src}
-          name={lightbox.name}
-          onClose={() => setLightbox(null)}
-        />
+        <Lightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />
       )}
 
       {/* Delete confirm */}
