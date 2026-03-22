@@ -34,12 +34,15 @@ import MediaLayout from "./pages/MediaLayout";
 import MediaPortfolio from "./pages/MediaPortfolio";
 import VideoGeneration from "./pages/VideoGeneration";
 import OpenClawIntegration from "./pages/OpenClawIntegration";
+import ApiDocs from "./pages/ApiDocs";
 
 function Router() {
   return (
     <Switch>
       {/* 等待审批页面（不需要 DashboardLayout） */}
       <Route path="/pending-approval" component={PendingApproval} />
+      {/* 公开 API 文档（不需要登录） */}
+      <Route path="/api-docs" component={ApiDocs} />
 
       {/* 主应用（带 DashboardLayout） */}
       <Route>
