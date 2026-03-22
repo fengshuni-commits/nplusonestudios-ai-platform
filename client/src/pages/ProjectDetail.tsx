@@ -1409,7 +1409,12 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                         className="text-base font-medium h-8"
                       />
                     ) : (
-                      <DialogTitle className="text-base pr-6 text-left cursor-pointer hover:text-primary" onClick={() => canEditTask(selectedTask) && (setIsEditingTaskTitle(true), setEditingTaskTitle(selectedTask.title))}>
+                      <DialogTitle className="text-base pr-6 text-left cursor-pointer hover:text-primary" onClick={() => {
+                        if (canEditTask(selectedTask)) {
+                          setEditingTaskTitle(selectedTask.title);
+                          setIsEditingTaskTitle(true);
+                        }
+                      }}>
                         {selectedTask.title}
                       </DialogTitle>
                     )}
@@ -1557,7 +1562,40 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                         >
                           {st.status === "done" && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                         </button>
-                        <span className={`text-xs flex-1 cursor-pointer hover:text-primary ${st.status === "done" ? "line-through text-muted-foreground" : ""}`} onClick={() => canEditTask(selectedTask) && setEditingSubTaskId(st.id)}>{st.title}</span>
+                        {editingSubTaskId === st.id ? (
+                          <Input
+                            value={editingSubTaskTitle}
+                            onChange={(e) => setEditingSubTaskTitle(e.target.value)}
+                            onBlur={() => {
+                              if (editingSubTaskTitle.trim()) {
+                                updateTask.mutate({ id: st.id, title: editingSubTaskTitle });
+                              }
+                              setEditingSubTaskId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && editingSubTaskTitle.trim()) {
+                                updateTask.mutate({ id: st.id, title: editingSubTaskTitle });
+                                setEditingSubTaskId(null);
+                              } else if (e.key === "Escape") {
+                                setEditingSubTaskId(null);
+                              }
+                            }}
+                            autoFocus
+                            className="text-xs h-6 flex-1"
+                          />
+                        ) : (
+                          <span
+                            className={`text-xs flex-1 cursor-pointer hover:text-primary ${st.status === "done" ? "line-through text-muted-foreground" : ""}`}
+                            onClick={() => {
+                              if (canEditTask(selectedTask)) {
+                                setEditingSubTaskTitle(st.title);
+                                setEditingSubTaskId(st.id);
+                              }
+                            }}
+                          >
+                            {st.title}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>

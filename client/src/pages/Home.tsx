@@ -491,7 +491,7 @@ function MyTasksPanel({
               showAssignee={memberViewMode !== "mine"}
             />
           ) : (
-            <GanttView tasks={displayedTasks} />
+            <GanttView tasks={displayedTasks} colorByProject={memberViewMode !== "mine"} />
           )}
         </CardContent>
       </Card>
@@ -623,7 +623,21 @@ function TaskListView({
 }
 
 // ─── Gantt View ──────────────────────────────────────────
-function GanttView({ tasks }: { tasks: any[] }) {
+// Project color palette for Gantt chart
+const PROJECT_COLORS = [
+  { bar: "#6366f1" }, // indigo
+  { bar: "#0ea5e9" }, // sky
+  { bar: "#10b981" }, // emerald
+  { bar: "#f59e0b" }, // amber
+  { bar: "#ec4899" }, // pink
+  { bar: "#8b5cf6" }, // violet
+  { bar: "#14b8a6" }, // teal
+  { bar: "#f97316" }, // orange
+  { bar: "#64748b" }, // slate
+  { bar: "#a16207" }, // yellow-800
+];
+
+function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByProject?: boolean }) {
   // Only show tasks with at least a dueDate
   const ganttTasks = useMemo(() => {
     const now = new Date();
@@ -636,6 +650,20 @@ function GanttView({ tasks }: { tasks: any[] }) {
       })
       .sort((a: any, b: any) => a._start.getTime() - b._start.getTime());
   }, [tasks]);
+
+  // Build project → color index map
+  const projectColorMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    let idx = 0;
+    ganttTasks.forEach((t: any) => {
+      const key = String(t.projectId ?? "none");
+      if (!(key in map)) {
+        map[key] = idx % PROJECT_COLORS.length;
+        idx++;
+      }
+    });
+    return map;
+  }, [ganttTasks]);
 
   if (ganttTasks.length === 0) {
     return (
@@ -666,108 +694,154 @@ function GanttView({ tasks }: { tasks: any[] }) {
 
   const dayWidth = 32; // px per day
   const rowHeight = 36; // px per row
+  const labelWidth = 180; // px for sticky label column
 
-  const priorityColors: Record<string, string> = {
-    urgent: "bg-red-400",
-    high: "bg-orange-400",
-    medium: "bg-primary",
-    low: "bg-muted-foreground/40",
+  const priorityBarColors: Record<string, string> = {
+    urgent: "#ef4444",
+    high: "#f97316",
+    medium: "#6366f1",
+    low: "#94a3b8",
   };
 
   return (
     <div className="overflow-x-auto">
-      <div style={{ minWidth: `${totalDays * dayWidth + 160}px` }}>
-        {/* Header: day labels */}
-        <div className="flex" style={{ marginLeft: "160px" }}>
-          {days.map((d, i) => {
-            const isToday = d.getTime() === today.getTime();
-            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-            const showLabel = d.getDate() === 1 || i === 0 || d.getDay() === 1;
+      <div style={{ position: "relative" }}>
+        <div style={{ minWidth: `${totalDays * dayWidth + labelWidth}px` }}>
+
+          {/* Header row */}
+          <div className="flex" style={{ height: "24px" }}>
+            {/* Sticky label header */}
+            <div
+              className="shrink-0 bg-muted/80 border-r border-b border-border/40 flex items-center px-2 z-20"
+              style={{ width: `${labelWidth}px`, position: "sticky", left: 0 }}
+            >
+              <span className="text-[10px] font-medium text-muted-foreground">任务名称</span>
+            </div>
+            {/* Day columns header */}
+            <div className="flex flex-1 border-b border-border/40">
+              {days.map((d, i) => {
+                const isToday = d.getTime() === today.getTime();
+                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                const showLabel = d.getDate() === 1 || i === 0 || d.getDay() === 1;
+                return (
+                  <div
+                    key={i}
+                    style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
+                    className={`relative border-r border-border/20 ${isWeekend ? "bg-muted/30" : ""} ${isToday ? "bg-primary/10" : ""}`}
+                  >
+                    {showLabel && (
+                      <span className="text-[9px] text-muted-foreground absolute top-0 left-0.5 leading-none pt-0.5">
+                        {d.getDate() === 1 ? `${d.getMonth() + 1}月` : `${d.getDate()}`}
+                      </span>
+                    )}
+                    {isToday && (
+                      <span className="text-[9px] font-bold text-primary absolute top-0 left-0.5 leading-none pt-0.5">今</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Task rows */}
+          {ganttTasks.map((task: any) => {
+            const startOffset = Math.floor((task._start.getTime() - rangeStart.getTime()) / 86400000);
+            const duration = Math.max(1, Math.ceil((task._end.getTime() - task._start.getTime()) / 86400000));
+            const daysLeft = Math.ceil((task._end.getTime() - Date.now()) / 86400000);
+            const isOverdue = daysLeft < 0;
+            const isUrgent = daysLeft >= 0 && daysLeft <= 3;
+
+            // Determine bar color
+            let barColor: string;
+            if (colorByProject && task.projectId != null) {
+              const colorIdx = projectColorMap[String(task.projectId)] ?? 0;
+              barColor = PROJECT_COLORS[colorIdx].bar;
+            } else if (isOverdue) {
+              barColor = "#ef4444";
+            } else if (isUrgent) {
+              barColor = "#f59e0b";
+            } else {
+              barColor = priorityBarColors[task.priority] || "#6366f1";
+            }
+
+            const tooltipLabel = [
+              task.title,
+              task.projectName ? `项目：${task.projectName}` : "",
+              task.assigneeName ? `负责人：${task.assigneeName}` : "",
+              `${task._start.toLocaleDateString("zh-CN")} → ${task._end.toLocaleDateString("zh-CN")}`,
+              isOverdue ? "⚠ 已逾期" : isUrgent ? "⚡ 即将到期" : "",
+            ].filter(Boolean).join("\n");
+
             return (
-              <div
-                key={i}
-                style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
-                className={`text-center border-r border-border/30 relative ${isWeekend ? "bg-muted/30" : ""} ${isToday ? "bg-primary/10" : ""}`}
-              >
-                {showLabel && (
-                  <span className="text-[9px] text-muted-foreground absolute top-0 left-0.5 leading-none pt-0.5">
-                    {d.getDate() === 1 ? `${d.getMonth() + 1}月` : `${d.getDate()}`}
-                  </span>
-                )}
-                {isToday && (
-                  <span className="text-[9px] font-bold text-primary absolute top-0 left-0.5 leading-none pt-0.5">今</span>
-                )}
-                <div className="h-5" />
+              <div key={task.id} className="flex items-center border-b border-border/20" style={{ height: `${rowHeight}px` }}>
+                {/* Sticky label column */}
+                <div
+                  className="shrink-0 flex items-center gap-1.5 px-2 bg-background border-r border-border/20 z-10"
+                  style={{ width: `${labelWidth}px`, position: "sticky", left: 0, height: `${rowHeight}px` }}
+                  title={tooltipLabel}
+                >
+                  <PriorityDot priority={task.priority} />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs truncate block leading-tight">{task.title}</span>
+                    {task.projectName && (
+                      <span className="text-[9px] text-muted-foreground truncate block leading-tight">{task.projectName}</span>
+                    )}
+                  </div>
+                </div>
+                {/* Bar area */}
+                <div className="relative flex-1" style={{ height: `${rowHeight}px` }}>
+                  {/* Today line */}
+                  {(() => {
+                    const todayOffset = Math.floor((today.getTime() - rangeStart.getTime()) / 86400000);
+                    return (
+                      <div
+                        className="absolute top-0 bottom-0 w-px bg-primary/40 z-10"
+                        style={{ left: `${todayOffset * dayWidth + dayWidth / 2}px` }}
+                      />
+                    );
+                  })()}
+                  {/* Weekend shading */}
+                  {days.map((d, i) => (
+                    (d.getDay() === 0 || d.getDay() === 6) ? (
+                      <div key={i} className="absolute top-0 bottom-0 bg-muted/20" style={{ left: `${i * dayWidth}px`, width: `${dayWidth}px` }} />
+                    ) : null
+                  ))}
+                  {/* Task bar */}
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 rounded flex items-center px-1.5 cursor-default"
+                    style={{
+                      left: `${startOffset * dayWidth}px`,
+                      width: `${Math.max(20, duration * dayWidth - 2)}px`,
+                      height: "20px",
+                      backgroundColor: barColor,
+                    }}
+                    title={tooltipLabel}
+                  >
+                    {/* Progress fill */}
+                    {(task.progress ?? 0) > 0 && (
+                      <div
+                        className="absolute left-0 top-0 bottom-0 rounded bg-white/30"
+                        style={{ width: `${task.progress}%` }}
+                      />
+                    )}
+                    <span className="text-[9px] text-white font-medium truncate relative z-10">
+                      {duration > 2 ? task.title : ""}
+                    </span>
+                  </div>
+                </div>
               </div>
             );
           })}
         </div>
-
-        {/* Rows */}
-        {ganttTasks.map((task: any) => {
-          const startOffset = Math.floor((task._start.getTime() - rangeStart.getTime()) / 86400000);
-          const duration = Math.max(1, Math.ceil((task._end.getTime() - task._start.getTime()) / 86400000));
-          const daysLeft = Math.ceil((task._end.getTime() - Date.now()) / 86400000);
-          const isOverdue = daysLeft < 0;
-          const isUrgent = daysLeft >= 0 && daysLeft <= 3;
-          const barColor = isOverdue ? "bg-red-400" : isUrgent ? "bg-amber-400" : (priorityColors[task.priority] || "bg-primary");
-
-          return (
-            <div key={task.id} className="flex items-center border-b border-border/20" style={{ height: `${rowHeight}px` }}>
-              {/* Task label */}
-              <div className="shrink-0 flex items-center gap-1.5 px-2" style={{ width: "160px" }}>
-                <PriorityDot priority={task.priority} />
-                <span className="text-xs truncate">{task.title}</span>
-              </div>
-              {/* Bar area */}
-              <div className="relative flex-1" style={{ height: `${rowHeight}px` }}>
-                {/* Today line */}
-                {(() => {
-                  const todayOffset = Math.floor((today.getTime() - rangeStart.getTime()) / 86400000);
-                  return (
-                    <div
-                      className="absolute top-0 bottom-0 w-px bg-primary/40 z-10"
-                      style={{ left: `${todayOffset * dayWidth + dayWidth / 2}px` }}
-                    />
-                  );
-                })()}
-                {/* Weekend shading */}
-                {days.map((d, i) => (
-                  (d.getDay() === 0 || d.getDay() === 6) ? (
-                    <div key={i} className="absolute top-0 bottom-0 bg-muted/20" style={{ left: `${i * dayWidth}px`, width: `${dayWidth}px` }} />
-                  ) : null
-                ))}
-                {/* Task bar */}
-                <div
-                  className={`absolute top-1/2 -translate-y-1/2 rounded ${barColor} flex items-center px-1.5`}
-                  style={{
-                    left: `${startOffset * dayWidth}px`,
-                    width: `${duration * dayWidth - 2}px`,
-                    height: "20px",
-                  }}
-                >
-                  {/* Progress fill */}
-                  {(task.progress ?? 0) > 0 && (
-                    <div
-                      className="absolute left-0 top-0 bottom-0 rounded bg-white/30"
-                      style={{ width: `${task.progress}%` }}
-                    />
-                  )}
-                  <span className="text-[9px] text-white font-medium truncate relative z-10">
-                    {duration > 2 ? task.title : ""}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
       <p className="text-[10px] text-muted-foreground mt-2">
-        仅显示已设置时间范围的任务 · 竖线为今日 · 悬停查看详情请前往项目看板
+        仅显示已设置时间范围的任务 · 竖线为今日 · 悬停任务名称可查看详情
       </p>
     </div>
   );
 }
+
+
 
 function StatCard({ title, value, icon, unit, onClick }: { title: string; value: number | null; icon: React.ReactNode; unit: string; onClick?: () => void }) {
   return (
