@@ -1051,7 +1051,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
     onSuccess: () => {
       utils.tasks.listByProject.invalidate({ projectId });
       setTaskDialogOpen(false);
-      setTaskForm({ title: "", description: "", priority: "medium", category: "design", assigneeId: "", startDate: "", dueDate: "" });
+      setTaskForm({ title: "", description: "", priority: "medium", category: "design", assigneeId: "", reviewerId: "", startDate: "", dueDate: "" });
       toast.success("任务创建成功");
     },
   });
@@ -1074,7 +1074,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
 
   const [taskForm, setTaskForm] = useState({
     title: "", description: "", priority: "medium" as string, category: "design" as string,
-    assigneeId: "", startDate: "", dueDate: "",
+    assigneeId: "", reviewerId: "", startDate: "", dueDate: "",
   });
 
   const memberOptions = (members || []).map((m: any) => ({
@@ -1130,24 +1130,46 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>负责人</Label>
-                <Select value={taskForm.assigneeId} onValueChange={(v) => setTaskForm({ ...taskForm, assigneeId: v })}>
-                  <SelectTrigger><SelectValue placeholder="选择负责人" /></SelectTrigger>
-                  <SelectContent>
-                    {memberOptions.map((m: any) => (
-                      <SelectItem key={m.id} value={String(m.id)}>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-5 w-5">
-                            <AvatarImage src={m.avatar} />
-                            <AvatarFallback className="text-[9px]">{(m.name || "?").charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          {m.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>负责人</Label>
+                  <Select value={taskForm.assigneeId} onValueChange={(v) => setTaskForm({ ...taskForm, assigneeId: v })}>
+                    <SelectTrigger><SelectValue placeholder="选择负责人" /></SelectTrigger>
+                    <SelectContent>
+                      {memberOptions.map((m: any) => (
+                        <SelectItem key={m.id} value={String(m.id)}>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-5 w-5">
+                              <AvatarImage src={m.avatar} />
+                              <AvatarFallback className="text-[9px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            {m.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>审核人</Label>
+                  <Select value={taskForm.reviewerId} onValueChange={(v) => setTaskForm({ ...taskForm, reviewerId: v })}>
+                    <SelectTrigger><SelectValue placeholder="选择审核人" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">不设审核人</SelectItem>
+                      {memberOptions.map((m: any) => (
+                        <SelectItem key={m.id} value={String(m.id)}>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-5 w-5">
+                              <AvatarImage src={m.avatar} />
+                              <AvatarFallback className="text-[9px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            {m.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -1168,6 +1190,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                   priority: taskForm.priority as any,
                   category: taskForm.category as any,
                   assigneeId: taskForm.assigneeId ? Number(taskForm.assigneeId) : undefined,
+                  reviewerId: (taskForm.reviewerId && taskForm.reviewerId !== "none") ? Number(taskForm.reviewerId) : undefined,
                   startDate: taskForm.startDate || undefined,
                   dueDate: taskForm.dueDate || undefined,
                 });
@@ -1290,6 +1313,35 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                     <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="未分配" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">未分配</SelectItem>
+                      {memberOptions.map((m: any) => (
+                        <SelectItem key={m.id} value={String(m.id)}>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-4 w-4">
+                              <AvatarImage src={m.avatar} />
+                              <AvatarFallback className="text-[8px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            {m.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Reviewer */}
+                <div className="space-y-1">
+                  <Label className="text-xs">审核人</Label>
+                  <Select
+                    value={selectedTask.reviewerId ? String(selectedTask.reviewerId) : "none"}
+                    onValueChange={(v) => {
+                      const newId = v === "none" ? null : Number(v);
+                      updateTask.mutate({ id: selectedTask.id, reviewerId: newId });
+                      setSelectedTask({ ...selectedTask, reviewerId: newId });
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="不设审核人" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">不设审核人</SelectItem>
                       {memberOptions.map((m: any) => (
                         <SelectItem key={m.id} value={String(m.id)}>
                           <div className="flex items-center gap-2">

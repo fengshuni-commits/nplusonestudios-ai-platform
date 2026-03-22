@@ -226,6 +226,10 @@ function MyTasksPanel({
   onNavigate: (path: string) => void;
 }) {
   const [view, setView] = useState<"list" | "gantt">("list");
+  const [activeTab, setActiveTab] = useState<"assignee" | "reviewer">("assignee");
+  const assigneeTasks = myTasks.filter((t: any) => t.role === 'assignee');
+  const reviewerTasks = myTasks.filter((t: any) => t.role === 'reviewer');
+  const displayedTasks = activeTab === "assignee" ? assigneeTasks : reviewerTasks;
 
   if (isLoading) {
     return (
@@ -291,12 +295,48 @@ function MyTasksPanel({
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {myTasks.length === 0 ? (
-            <EmptyState message="暂无分配给你的任务" action={{ label: "查看项目", onClick: () => onNavigate("/projects") }} />
+          {/* Tab: 执行中 / 待审核 */}
+          <div className="flex items-center gap-1 mb-3 border-b">
+            <button
+              onClick={() => setActiveTab("assignee")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                activeTab === "assignee"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              执行中
+              {assigneeTasks.length > 0 && (
+                <span className={`inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] ${
+                  activeTab === "assignee" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                }`}>{assigneeTasks.length}</span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("reviewer")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                activeTab === "reviewer"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              待我审核
+              {reviewerTasks.length > 0 && (
+                <span className={`inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] ${
+                  activeTab === "reviewer" ? "bg-primary text-primary-foreground" : "bg-orange-100 text-orange-600"
+                }`}>{reviewerTasks.length}</span>
+              )}
+            </button>
+          </div>
+          {displayedTasks.length === 0 ? (
+            <EmptyState
+              message={activeTab === "assignee" ? "暂无分配给你的任务" : "暂无待审核的任务"}
+              action={{ label: "查看项目", onClick: () => onNavigate("/projects") }}
+            />
           ) : view === "list" ? (
-            <TaskListView tasks={myTasks} onNavigate={onNavigate} />
+            <TaskListView tasks={displayedTasks} onNavigate={onNavigate} isReviewMode={activeTab === "reviewer"} />
           ) : (
-            <GanttView tasks={myTasks} />
+            <GanttView tasks={displayedTasks} />
           )}
         </CardContent>
       </Card>
@@ -305,7 +345,7 @@ function MyTasksPanel({
 }
 
 // ─── Task List View ──────────────────────────────────────
-function TaskListView({ tasks, onNavigate }: { tasks: any[]; onNavigate: (path: string) => void }) {
+function TaskListView({ tasks, onNavigate, isReviewMode }: { tasks: any[]; onNavigate: (path: string) => void; isReviewMode?: boolean }) {
   const utils = trpc.useUtils();
   const updateTask = trpc.tasks.update.useMutation({
     onSuccess: () => utils.tasks.listMine.invalidate(),
@@ -363,23 +403,35 @@ function TaskListView({ tasks, onNavigate }: { tasks: any[]; onNavigate: (path: 
               )}
             </div>
 
-            {/* Status badge */}
+            {/* Status badge / review action */}
             <div className="shrink-0 flex items-center gap-2">
-              <select
-                className="text-[10px] border rounded px-1 py-0.5 bg-background text-foreground cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                value={task.status}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  updateTask.mutate({ id: task.id, status: e.target.value as any });
-                }}
-              >
-                <option value="backlog">待排期</option>
-                <option value="todo">待开始</option>
-                <option value="in_progress">进行中</option>
-                <option value="review">待审核</option>
-                <option value="done">已完成</option>
-              </select>
+              {isReviewMode ? (
+                <button
+                  className="text-[10px] px-2 py-0.5 rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-colors opacity-0 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateTask.mutate({ id: task.id, status: "done" });
+                  }}
+                >
+                  通过审核
+                </button>
+              ) : (
+                <select
+                  className="text-[10px] border rounded px-1 py-0.5 bg-background text-foreground cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                  value={task.status}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    updateTask.mutate({ id: task.id, status: e.target.value as any });
+                  }}
+                >
+                  <option value="backlog">待排期</option>
+                  <option value="todo">待开始</option>
+                  <option value="in_progress">进行中</option>
+                  <option value="review">待审核</option>
+                  <option value="done">已完成</option>
+                </select>
+              )}
               <Badge variant="outline" className="text-[10px] h-5">{taskStatusLabel(task.status)}</Badge>
             </div>
           </div>

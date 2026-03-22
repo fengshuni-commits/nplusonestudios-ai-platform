@@ -162,6 +162,13 @@
       "when": 1774183729956,
       "tag": "0022_mature_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1774185842049,
+      "tag": "0023_lush_star_brand",
+      "breakpoints": true
     }
   ]
 }

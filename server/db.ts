@@ -487,6 +487,7 @@ export async function listTasksByProject(projectId: number) {
       assigneeId: tasks.assigneeId,
       assigneeName: users.name,
       assigneeAvatar: users.avatar,
+      reviewerId: tasks.reviewerId,
       startDate: tasks.startDate,
       dueDate: tasks.dueDate,
       progress: tasks.progress,
@@ -506,29 +507,43 @@ export async function listTasksByProject(projectId: number) {
 export async function listMyTasks(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db
-    .select({
-      id: tasks.id,
-      projectId: tasks.projectId,
-      title: tasks.title,
-      description: tasks.description,
-      status: tasks.status,
-      priority: tasks.priority,
-      category: tasks.category,
-      assigneeId: tasks.assigneeId,
-      startDate: tasks.startDate,
-      dueDate: tasks.dueDate,
-      progress: tasks.progress,
-      parentId: tasks.parentId,
-      createdAt: tasks.createdAt,
-      updatedAt: tasks.updatedAt,
-      projectName: projects.name,
-    })
+  const taskFields = {
+    id: tasks.id,
+    projectId: tasks.projectId,
+    title: tasks.title,
+    description: tasks.description,
+    status: tasks.status,
+    priority: tasks.priority,
+    category: tasks.category,
+    assigneeId: tasks.assigneeId,
+    reviewerId: tasks.reviewerId,
+    startDate: tasks.startDate,
+    dueDate: tasks.dueDate,
+    progress: tasks.progress,
+    parentId: tasks.parentId,
+    createdAt: tasks.createdAt,
+    updatedAt: tasks.updatedAt,
+    projectName: projects.name,
+  };
+  // 执行中：分配给我的任务（状态不是 done）
+  const assignedRows = await db
+    .select({ ...taskFields, role: sql<string>`'assignee'` })
     .from(tasks)
     .leftJoin(projects, eq(tasks.projectId, projects.id))
-    .where(and(eq(tasks.assigneeId, userId), inArray(tasks.status, ["todo", "in_progress", "backlog", "review"])))
+    .where(and(eq(tasks.assigneeId, userId), sql`${tasks.status} != 'done'`))
     .orderBy(tasks.dueDate, desc(tasks.createdAt));
-  return rows;
+  // 待审核：我是审核人，且任务进度为 100% 且状态不是 done
+  const reviewRows = await db
+    .select({ ...taskFields, role: sql<string>`'reviewer'` })
+    .from(tasks)
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .where(and(
+      eq(tasks.reviewerId, userId),
+      sql`${tasks.progress} = 100`,
+      sql`${tasks.status} != 'done'`
+    ))
+    .orderBy(tasks.dueDate, desc(tasks.createdAt));
+  return [...assignedRows, ...reviewRows];
 }
 
 export async function listSubTasks(parentId: number) {
