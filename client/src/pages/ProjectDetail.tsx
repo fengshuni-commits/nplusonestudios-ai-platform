@@ -13,7 +13,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -1381,7 +1381,37 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
           {selectedTask && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-base pr-6">{selectedTask.title}</DialogTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1">
+                    {selectedTask.isEditingTitle ? (
+                      <Input
+                        value={selectedTask.title}
+                        onChange={(e) => setSelectedTask({ ...selectedTask, title: e.target.value })}
+                        onBlur={() => {
+                          updateTask.mutate({ id: selectedTask.id, title: selectedTask.title });
+                          setSelectedTask({ ...selectedTask, isEditingTitle: false });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            updateTask.mutate({ id: selectedTask.id, title: selectedTask.title });
+                            setSelectedTask({ ...selectedTask, isEditingTitle: false });
+                          } else if (e.key === "Escape") {
+                            setSelectedTask({ ...selectedTask, isEditingTitle: false });
+                          }
+                        }}
+                        autoFocus
+                        className="text-base font-medium h-8"
+                      />
+                    ) : (
+                      <DialogTitle className="text-base pr-6 text-left cursor-pointer hover:text-primary" onClick={() => canEditTask(selectedTask) && setSelectedTask({ ...selectedTask, isEditingTitle: true })}>
+                        {selectedTask.title}
+                      </DialogTitle>
+                    )}
+                  </div>
+                  {canEditTask(selectedTask) && !selectedTask.isEditingTitle && (
+                    <Edit2 className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
               </DialogHeader>
               <div className="space-y-4 pt-1 max-h-[70vh] overflow-y-auto pr-1">
                 {/* Status */}
