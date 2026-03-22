@@ -13,7 +13,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -1038,6 +1038,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [subTaskTitle, setSubTaskTitle] = useState("");
+  const [viewMode, setViewMode] = useState<"kanban" | "gantt">("kanban");
   const { data: tasks } = trpc.tasks.listByProject.useQuery({ projectId });
   const { data: members } = trpc.projects.listMembers.useQuery({ projectId });
   const utils = trpc.useUtils();
@@ -1089,10 +1090,29 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground">{topLevelTasks.length} 个任务</p>
-        <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 mr-1" />新建任务</Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-muted rounded-md p-1">
+            <Button
+              size="sm"
+              variant={viewMode === "kanban" ? "default" : "ghost"}
+              className="h-7 px-2 text-xs"
+              onClick={() => setViewMode("kanban")}
+            >
+              看板
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "gantt" ? "default" : "ghost"}
+              className="h-7 px-2 text-xs"
+              onClick={() => setViewMode("gantt")}
+            >
+              <BarChart3 className="h-3.5 w-3.5 mr-1" />甘特图
+            </Button>
+          </div>
+          <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="h-4 w-4 mr-1" />新建任务</Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>新建任务</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
@@ -1200,8 +1220,12 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
+      {/* View Mode */}
+      {viewMode === "kanban" ? (
+      <div>
       {/* Kanban Board */}
       <div className="grid grid-cols-5 gap-3 overflow-x-auto">
         {statusColumns.map((col) => {
@@ -1270,6 +1294,77 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
           );
         })}
       </div>
+      </div>
+      ) : (
+      <div>
+      {/* Gantt Chart View */}
+      <div className="overflow-x-auto border rounded-lg bg-white">
+        <div className="min-w-max">
+          {/* Timeline Header */}
+          <div className="flex border-b bg-muted/50 sticky top-0">
+            <div className="w-40 p-2 border-r text-xs font-medium flex-shrink-0 sticky left-0 bg-muted/50">任务名称</div>
+            <div className="flex flex-1">
+              {Array.from({ length: 30 }).map((_, i) => {
+                const date = new Date();
+                date.setDate(date.getDate() - 14 + i);
+                const isToday = date.toDateString() === new Date().toDateString();
+                return (
+                  <div key={i} className={`w-8 h-8 border-r text-[10px] flex items-center justify-center flex-shrink-0 ${isToday ? 'bg-red-100 text-red-700 font-bold' : 'text-muted-foreground'}`}>
+                    {date.getDate()}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Tasks */}
+          {topLevelTasks.map((task: any) => {
+            const startDate = task.startDate ? new Date(task.startDate) : null;
+            const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let startOffset = 0;
+            let duration = 0;
+            
+            if (startDate && dueDate) {
+              const baseDate = new Date(today);
+              baseDate.setDate(baseDate.getDate() - 14);
+              baseDate.setHours(0, 0, 0, 0);
+              startOffset = Math.max(0, Math.floor((startDate.getTime() - baseDate.getTime()) / 86400000));
+              duration = Math.max(1, Math.ceil((dueDate.getTime() - startDate.getTime()) / 86400000));
+            }
+            
+            return (
+              <div key={task.id} className="flex border-b hover:bg-muted/30 transition-colors">
+                <div className="w-40 p-2 border-r text-xs truncate flex-shrink-0 sticky left-0 bg-white cursor-pointer hover:text-primary" onClick={() => { setSelectedTask(task); setTaskDetailOpen(true); }}>
+                  {task.title}
+                </div>
+                <div className="flex flex-1 relative h-8">
+                  {/* Task bar */}
+                  {startDate && dueDate && (
+                    <div
+                      className="absolute top-1 bottom-1 bg-primary/70 rounded text-[9px] text-white flex items-center px-1 overflow-hidden cursor-pointer hover:bg-primary transition-colors"
+                      style={{
+                        left: `${startOffset * 32}px`,
+                        width: `${Math.max(20, duration * 32)}px`,
+                      }}
+                      onClick={() => { setSelectedTask(task); setTaskDetailOpen(true); }}
+                      title={task.title}
+                    >
+                      <div className="truncate flex-1">{task.title}</div>
+                      {(task.progress ?? 0) > 0 && (
+                        <div className="absolute inset-0 bg-primary/40 rounded" style={{ width: `${task.progress}%` }} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      </div>
+      )}
 
       {/* Task Detail Dialog */}
       <Dialog open={taskDetailOpen} onOpenChange={setTaskDetailOpen}>
