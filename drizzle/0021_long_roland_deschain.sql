@@ -1,0 +1,1 @@
+ALTER TABLE `api_tokens` ADD `callCount` int DEFAULT 0 NOT NULL;

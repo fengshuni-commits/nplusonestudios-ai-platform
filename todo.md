@@ -820,3 +820,10 @@
 - [x] 更新认证说明为正确的 Bearer Token 格式
 - [x] 补充完整的 curl 调用示例（三个核心 API）
 - [x] 验证并保存检查点
+
+## API Token 调用统计显示
+- [x] 在 api_tokens 表中添加 callCount 字段
+- [x] 更新 updateApiTokenLastUsed 函数，同时递增 callCount
+- [x] 更新 getApiTokensByUserId 函数，返回 callCount 和 lastUsedAt
+- [x] 更新前端 Token 列表，显示调用次数和最后使用时间
+- [x] 验证并保存检查点

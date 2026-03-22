@@ -216,7 +216,7 @@ export async function updateApiTokenLastUsed(token: string): Promise<void> {
     const tokenHash = await hashToken(token);
     await db
       .update(apiTokens)
-      .set({ lastUsedAt: new Date() })
+      .set({ lastUsedAt: new Date(), callCount: sql`${apiTokens.callCount} + 1` })
       .where(eq(apiTokens.tokenHash, tokenHash));
   });
 }

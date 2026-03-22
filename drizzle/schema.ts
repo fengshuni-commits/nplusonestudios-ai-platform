@@ -215,6 +215,7 @@ export const apiTokens = mysqlTable("api_tokens", {
   type: mysqlEnum("type", ["openclaw", "webhook", "general"]).default("general").notNull(),
   expiresAt: timestamp("expiresAt").notNull(),
   lastUsedAt: timestamp("lastUsedAt"),
+  callCount: int("callCount").default(0).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

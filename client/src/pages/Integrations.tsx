@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Copy, Download, ExternalLink, Check, Trash2, Plus, Key, AlertCircle } from 'lucide-react';
+import { Copy, Download, ExternalLink, Check, Trash2, Plus, Key, AlertCircle, BarChart2, Clock } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
@@ -178,14 +178,25 @@ export default function Integrations() {
                       key={token.id}
                       className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition"
                     >
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="font-semibold">{token.name}</div>
                         <div className="text-sm text-muted-foreground">
                           {token.tokenPreview}... • 创建于 {new Date(token.createdAt).toLocaleDateString()}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          过期时间：{new Date(token.expiresAt).toLocaleDateString()}
-                          {token.lastUsedAt && ` • 最后使用：${new Date(token.lastUsedAt).toLocaleDateString()}`}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <BarChart2 className="w-3 h-3" />
+                            调用 {(token as any).callCount ?? 0} 次
+                          </span>
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {token.lastUsedAt
+                              ? `最后使用：${new Date(token.lastUsedAt).toLocaleString()}`
+                              : '从未使用'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            过期：{new Date(token.expiresAt).toLocaleDateString()}
+                          </span>
                         </div>
                       </div>
                       <Button

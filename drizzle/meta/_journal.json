@@ -148,6 +148,13 @@
       "when": 1774004834860,
       "tag": "0020_public_phalanx",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1774154482727,
+      "tag": "0021_long_roland_deschain",
+      "breakpoints": true
     }
   ]
 }
