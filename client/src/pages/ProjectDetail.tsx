@@ -1034,7 +1034,7 @@ const statusColumns = [
 ];
 
 function TaskKanbanTab({ projectId }: { projectId: number }) {
-  const { currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
   const { data: project } = trpc.projects.getById.useQuery({ id: projectId });
   const isCreator = project?.createdBy === currentUser?.id;
   const canCreateTask = isCreator;
@@ -1047,6 +1047,8 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const [subTaskTitle, setSubTaskTitle] = useState("");
   const [editingSubTaskId, setEditingSubTaskId] = useState<number | null>(null);
   const [editingSubTaskTitle, setEditingSubTaskTitle] = useState("");
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
+  const [isEditingTaskTitle, setIsEditingTaskTitle] = useState(false);
   const [viewMode, setViewMode] = useState<"kanban" | "gantt">("kanban");
   const { data: tasks } = trpc.tasks.listByProject.useQuery({ projectId });
   const { data: members } = trpc.projects.listMembers.useQuery({ projectId });
@@ -1385,32 +1387,34 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
               <DialogHeader>
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1">
-                    {selectedTask.isEditingTitle ? (
+                    {isEditingTaskTitle ? (
                       <Input
-                        value={selectedTask.title}
-                        onChange={(e) => setSelectedTask({ ...selectedTask, title: e.target.value })}
+                        value={editingTaskTitle}
+                        onChange={(e) => setEditingTaskTitle(e.target.value)}
                         onBlur={() => {
-                          updateTask.mutate({ id: selectedTask.id, title: selectedTask.title });
-                          setSelectedTask({ ...selectedTask, isEditingTitle: false });
+                          if (editingTaskTitle.trim()) {
+                            updateTask.mutate({ id: selectedTask.id, title: editingTaskTitle });
+                          }
+                          setIsEditingTaskTitle(false);
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            updateTask.mutate({ id: selectedTask.id, title: selectedTask.title });
-                            setSelectedTask({ ...selectedTask, isEditingTitle: false });
+                          if (e.key === "Enter" && editingTaskTitle.trim()) {
+                            updateTask.mutate({ id: selectedTask.id, title: editingTaskTitle });
+                            setIsEditingTaskTitle(false);
                           } else if (e.key === "Escape") {
-                            setSelectedTask({ ...selectedTask, isEditingTitle: false });
+                            setIsEditingTaskTitle(false);
                           }
                         }}
                         autoFocus
                         className="text-base font-medium h-8"
                       />
                     ) : (
-                      <DialogTitle className="text-base pr-6 text-left cursor-pointer hover:text-primary" onClick={() => canEditTask(selectedTask) && setSelectedTask({ ...selectedTask, isEditingTitle: true })}>
+                      <DialogTitle className="text-base pr-6 text-left cursor-pointer hover:text-primary" onClick={() => canEditTask(selectedTask) && (setIsEditingTaskTitle(true), setEditingTaskTitle(selectedTask.title))}>
                         {selectedTask.title}
                       </DialogTitle>
                     )}
                   </div>
-                  {canEditTask(selectedTask) && !selectedTask.isEditingTitle && (
+                  {canEditTask(selectedTask) && !isEditingTaskTitle && (
                     <Edit2 className="h-4 w-4 text-muted-foreground" />
                   )}
                 </div>
