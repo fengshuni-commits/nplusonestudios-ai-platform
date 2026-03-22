@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { eq, desc, like, and, sql, inArray, or, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
@@ -55,7 +56,7 @@ export async function generateOpenClawToken(
 
   // 生成随机 token
   const token = `sk_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-  const tokenHash = await hashToken(token);
+  const tokenHash = hashToken(token);
   const tokenPreview = token.substring(0, 10);
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
@@ -99,7 +100,7 @@ export async function verifyApiToken(token: string): Promise<{ userId: number; t
   const db = await getDb();
   if (!db) return null;
 
-  const tokenHash = await hashToken(token);
+  const tokenHash = hashToken(token);
   const record = await db
     .select()
     .from(apiTokens)
@@ -120,13 +121,9 @@ export async function verifyApiToken(token: string): Promise<{ userId: number; t
   return { userId: tokenRecord.userId, type: tokenRecord.type };
 }
 
-// 简单的 token 哈希函数（生产环境应使用 bcrypt）
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+// Token 哈希函数 - 使用 Node.js 原生 crypto 避免运行时差异
+export function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
 }
 
 export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -200,6 +197,27 @@ export async function getUserByOpenId(openId: string) {
     if (!db) return undefined;
     const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
     return result.length > 0 ? result[0] : undefined;
+  });
+}
+
+export async function getUserById(userId: number) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return undefined;
+    const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  });
+}
+
+export async function updateApiTokenLastUsed(token: string): Promise<void> {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return;
+    const tokenHash = await hashToken(token);
+    await db
+      .update(apiTokens)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiTokens.tokenHash, tokenHash));
   });
 }
 

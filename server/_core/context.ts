@@ -13,11 +13,21 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
-  try {
+  // If an Authorization header is present, the caller explicitly wants API Token auth.
+  // In that case, propagate any auth errors (don't swallow them silently).
+  const hasAuthHeader = !!(opts.req.headers.authorization || opts.req.headers["x-api-token"]);
+
+  if (hasAuthHeader) {
+    // Let auth errors propagate — invalid token should return 401, not silently fail
     user = await sdk.authenticateRequest(opts.req);
-  } catch (error) {
-    // Authentication is optional for public procedures.
-    user = null;
+  } else {
+    // No auth header — try cookie auth, but silently fall back to null for public procedures
+    try {
+      user = await sdk.authenticateRequest(opts.req);
+    } catch (error) {
+      // Authentication is optional for public procedures.
+      user = null;
+    }
   }
 
   return {

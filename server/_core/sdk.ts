@@ -257,13 +257,48 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
+    // Try API Token authentication first (for OpenClaw and third-party integrations)
+    const authHeader = req.headers.authorization || req.headers["x-api-token"];
+    console.log("[Auth] authHeader:", authHeader ? String(authHeader).substring(0, 20) + "..." : "none");
+    if (authHeader) {
+      const token = typeof authHeader === "string" 
+        ? authHeader.replace(/^Bearer\s+/i, "").trim()
+        : null;
+      
+      console.log("[Auth] Extracted token:", token ? token.substring(0, 20) + "..." : "none");
+      if (token) {
+        try {
+          console.log("[Auth] Attempting API Token verification...");
+          const tokenInfo = await db.verifyApiToken(token);
+          console.log("[Auth] Token verification result:", tokenInfo);
+          if (tokenInfo) {
+            const user = await db.getUserById(tokenInfo.userId);
+            console.log("[Auth] User lookup result:", user ? `User ${user.id}` : "null");
+            if (user) {
+              // Update last used time
+              const tokenHash = db.hashToken(token);
+              await db.updateApiTokenLastUsed(tokenHash);
+              console.log(`[Auth] API Token authenticated for user ${tokenInfo.userId}`);
+              return user;
+            }
+          } else {
+            console.log("[Auth] Token verification returned null - invalid token");
+            throw ForbiddenError("Invalid API token");
+          }
+        } catch (error) {
+          console.warn("[Auth] API Token verification failed:", String(error));
+          throw error;
+        }
+      }
+    }
+
+    // Fall back to session cookie authentication
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
 
     if (!session) {
-      throw ForbiddenError("Invalid session cookie");
+      throw ForbiddenError("Invalid session cookie or API token");
     }
 
     const sessionUserId = session.openId;

@@ -807,3 +807,11 @@
 - [x] 提供 API 调用示例和错误处理说明
 - [x] 添加 Token 获取指引
 - [x] 测试验证并提供公开链接
+
+## API Token 认证修复
+- [x] 修改 sdk.ts 中的 authenticateRequest 方法，支持 API Token 认证
+- [x] 在 db.ts 中添加 API Token 验证函数
+- [x] 修复 hashToken 一致性问题（统一使用 Node.js crypto.createHash）
+- [x] 修复 context.ts 区分“无认证信息”和“认证信息无效”两种情况
+- [x] 测试 API Token 认证成功（curl 返回正确结果）
+- [x] 保存检查点
