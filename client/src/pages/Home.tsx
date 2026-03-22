@@ -105,7 +105,7 @@ export default function Home() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard title="进行中项目" value={statsLoading ? null : (stats?.activeProjects ?? 0)} icon={<FolderKanban className="h-4 w-4" />} unit="个" onClick={() => setLocation("/projects")} />
-        <StatCard title="我的待办" value={myTasksLoading ? null : (myTasks?.length ?? 0)} icon={<Clock className="h-4 w-4" />} unit="项" />
+        <StatCard title="我的待办" value={myTasksLoading ? null : (myTasks?.length ?? 0)} icon={<Clock className="h-4 w-4" />} unit="项" onClick={() => document.getElementById('my-tasks-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         <StatCard title="本周完成" value={statsLoading ? null : (stats?.completedThisWeek ?? 0)} icon={<CheckCircle2 className="h-4 w-4" />} unit="任务" />
         <StatCard title="AI 调用（本月）" value={statsLoading ? null : (stats?.aiToolCalls ?? 0)} icon={<Sparkles className="h-4 w-4" />} unit="次" onClick={() => setLocation("/history")} />
       </div>
@@ -208,7 +208,9 @@ export default function Home() {
       </div>
 
       {/* My Tasks Panel */}
-      <MyTasksPanel myTasks={myTasks || []} isLoading={myTasksLoading} urgentTasks={urgentTasks} onNavigate={setLocation} />
+      <div id="my-tasks-panel">
+        <MyTasksPanel myTasks={myTasks || []} isLoading={myTasksLoading} urgentTasks={urgentTasks} onNavigate={setLocation} />
+      </div>
     </div>
   );
 }
