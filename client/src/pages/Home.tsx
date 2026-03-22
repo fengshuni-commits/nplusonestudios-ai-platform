@@ -22,8 +22,12 @@ import {
   ListTodo,
   BarChart2,
   Bell,
+  Users,
+  UserCheck,
+  ChevronDown,
+  X,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 
 const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -131,6 +135,11 @@ export default function Home() {
         </div>
       </div>
 
+      {/* My Tasks Panel — moved above recent grid */}
+      <div id="my-tasks-panel">
+        <MyTasksPanel myTasks={myTasks || []} isLoading={myTasksLoading} urgentTasks={urgentTasks} onNavigate={setLocation} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -190,7 +199,7 @@ export default function Home() {
                         <div className={`h-9 w-9 rounded-md flex items-center justify-center shrink-0 ${meta.color}`}>{meta.icon}</div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{item.title}</p>
+                        <p className="text-sm font-medium truncate">{item.title || "未命名"}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className={`text-xs px-1.5 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
                           <span className="text-xs text-muted-foreground">{formatRelativeTime(item.createdAt)}</span>
@@ -205,11 +214,6 @@ export default function Home() {
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* My Tasks Panel */}
-      <div id="my-tasks-panel">
-        <MyTasksPanel myTasks={myTasks || []} isLoading={myTasksLoading} urgentTasks={urgentTasks} onNavigate={setLocation} />
       </div>
     </div>
   );
@@ -229,9 +233,63 @@ function MyTasksPanel({
 }) {
   const [view, setView] = useState<"list" | "gantt">("list");
   const [activeTab, setActiveTab] = useState<"assignee" | "reviewer">("assignee");
-  const assigneeTasks = myTasks.filter((t: any) => t.role === 'assignee');
-  const reviewerTasks = myTasks.filter((t: any) => t.role === 'reviewer');
-  const displayedTasks = activeTab === "assignee" ? assigneeTasks : reviewerTasks;
+
+  // Member view state
+  const [memberViewMode, setMemberViewMode] = useState<"mine" | "all" | "specific">("mine");
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch all members (for dropdown)
+  const { data: allUsers } = trpc.tasks.listTeamMembers.useQuery(undefined, {
+    staleTime: 60 * 1000,
+  });
+
+  // Fetch all tasks (when memberViewMode === "all")
+  const { data: allTasksData, isLoading: allTasksLoading } = trpc.tasks.listAll.useQuery(undefined, {
+    enabled: memberViewMode === "all",
+  });
+
+  // Fetch specific member tasks
+  const { data: memberTasksData, isLoading: memberTasksLoading } = trpc.tasks.listByUser.useQuery(
+    { userId: selectedMemberId! },
+    { enabled: memberViewMode === "specific" && selectedMemberId !== null }
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setMemberDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Determine which tasks to display based on mode
+  const activeTasks = useMemo(() => {
+    if (memberViewMode === "all") return allTasksData || [];
+    if (memberViewMode === "specific") return memberTasksData || [];
+    return myTasks;
+  }, [memberViewMode, allTasksData, memberTasksData, myTasks]);
+
+  const assigneeTasks = memberViewMode === "mine"
+    ? myTasks.filter((t: any) => t.role === 'assignee')
+    : activeTasks;
+  const reviewerTasks = memberViewMode === "mine"
+    ? myTasks.filter((t: any) => t.role === 'reviewer')
+    : [];
+
+  const displayedTasks = (memberViewMode === "mine" && activeTab === "reviewer")
+    ? reviewerTasks
+    : assigneeTasks;
+
+  const isLoadingTasks = isLoading ||
+    (memberViewMode === "all" && allTasksLoading) ||
+    (memberViewMode === "specific" && memberTasksLoading);
+
+  const selectedMember = allUsers?.find((u: any) => u.id === selectedMemberId);
 
   if (isLoading) {
     return (
@@ -244,8 +302,8 @@ function MyTasksPanel({
 
   return (
     <div className="space-y-3">
-      {/* Deadline warnings */}
-      {urgentTasks.length > 0 && (
+      {/* Deadline warnings (only in "mine" mode) */}
+      {memberViewMode === "mine" && urgentTasks.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700/40 p-3">
           <div className="flex items-center gap-2 mb-2">
             <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -270,14 +328,93 @@ function MyTasksPanel({
       )}
 
       <Card>
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-sm font-medium">我的待办任务</CardTitle>
-            {myTasks.length > 0 && (
-              <Badge variant="secondary" className="text-xs h-5">{myTasks.length}</Badge>
+            <CardTitle className="text-sm font-medium">
+              {memberViewMode === "mine" ? "我的待办任务" :
+               memberViewMode === "all" ? "所有成员任务" :
+               `${selectedMember?.name || "成员"} 的任务`}
+            </CardTitle>
+            {displayedTasks.length > 0 && (
+              <Badge variant="secondary" className="text-xs h-5">{displayedTasks.length}</Badge>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
+            {/* Member view buttons */}
+            <Button
+              variant={memberViewMode === "mine" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => { setMemberViewMode("mine"); setSelectedMemberId(null); }}
+            >
+              我的
+            </Button>
+            <Button
+              variant={memberViewMode === "all" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => { setMemberViewMode("all"); setSelectedMemberId(null); }}
+            >
+              <Users className="h-3 w-3 mr-1" />
+              所有成员
+            </Button>
+            {/* Specific member dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <Button
+                variant={memberViewMode === "specific" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setMemberDropdownOpen(v => !v)}
+              >
+                <UserCheck className="h-3 w-3 mr-1" />
+                {memberViewMode === "specific" && selectedMember ? selectedMember.name : "指定成员"}
+                <ChevronDown className="h-3 w-3 ml-1" />
+              </Button>
+              {memberDropdownOpen && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-popover border border-border rounded-lg shadow-lg z-50 py-1">
+                  {allUsers && allUsers.length > 0 ? (
+                    allUsers.map((u: any) => (
+                      <button
+                        key={u.id}
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors flex items-center gap-2 ${
+                          selectedMemberId === u.id ? "text-primary font-medium" : "text-foreground"
+                        }`}
+                        onClick={() => {
+                          setSelectedMemberId(u.id);
+                          setMemberViewMode("specific");
+                          setMemberDropdownOpen(false);
+                        }}
+                      >
+                        {u.avatar ? (
+                          <img src={u.avatar} alt={u.name} className="h-5 w-5 rounded-full object-cover" />
+                        ) : (
+                          <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium text-primary">
+                            {u.name?.charAt(0) || "?"}
+                          </div>
+                        )}
+                        <span className="truncate">{u.name || u.email}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">暂无成员数据</div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Clear member filter */}
+            {memberViewMode !== "mine" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => { setMemberViewMode("mine"); setSelectedMemberId(null); }}
+                title="返回我的任务"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {/* View toggle */}
+            <div className="w-px h-5 bg-border mx-0.5" />
             <Button
               variant={view === "list" ? "secondary" : "ghost"}
               size="sm"
@@ -297,46 +434,62 @@ function MyTasksPanel({
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {/* Tab: 执行中 / 待审核 */}
-          <div className="flex items-center gap-1 mb-3 border-b">
-            <button
-              onClick={() => setActiveTab("assignee")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === "assignee"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              执行中
-              {assigneeTasks.length > 0 && (
-                <span className={`inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] ${
-                  activeTab === "assignee" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                }`}>{assigneeTasks.length}</span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("reviewer")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === "reviewer"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              待我审核
-              {reviewerTasks.length > 0 && (
-                <span className={`inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] ${
-                  activeTab === "reviewer" ? "bg-primary text-primary-foreground" : "bg-orange-100 text-orange-600"
-                }`}>{reviewerTasks.length}</span>
-              )}
-            </button>
-          </div>
-          {displayedTasks.length === 0 ? (
+          {/* Tab: 执行中 / 待审核 — only shown in "mine" mode */}
+          {memberViewMode === "mine" && (
+            <div className="flex items-center gap-1 mb-3 border-b">
+              <button
+                onClick={() => setActiveTab("assignee")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                  activeTab === "assignee"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                执行中
+                {assigneeTasks.length > 0 && (
+                  <span className={`inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] ${
+                    activeTab === "assignee" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}>{assigneeTasks.length}</span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("reviewer")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                  activeTab === "reviewer"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                待我审核
+                {reviewerTasks.length > 0 && (
+                  <span className={`inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] ${
+                    activeTab === "reviewer" ? "bg-primary text-primary-foreground" : "bg-orange-100 text-orange-600"
+                  }`}>{reviewerTasks.length}</span>
+                )}
+              </button>
+            </div>
+          )}
+
+          {isLoadingTasks ? (
+            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : displayedTasks.length === 0 ? (
             <EmptyState
-              message={activeTab === "assignee" ? "暂无分配给你的任务" : "暂无待审核的任务"}
+              message={
+                memberViewMode === "mine"
+                  ? (activeTab === "assignee" ? "暂无分配给你的任务" : "暂无待审核的任务")
+                  : memberViewMode === "all"
+                    ? "所有成员暂无进行中的任务"
+                    : `${selectedMember?.name || "该成员"} 暂无进行中的任务`
+              }
               action={{ label: "查看项目", onClick: () => onNavigate("/projects") }}
             />
           ) : view === "list" ? (
-            <TaskListView tasks={displayedTasks} onNavigate={onNavigate} isReviewMode={activeTab === "reviewer"} />
+            <TaskListView
+              tasks={displayedTasks}
+              onNavigate={onNavigate}
+              isReviewMode={memberViewMode === "mine" && activeTab === "reviewer"}
+              showAssignee={memberViewMode !== "mine"}
+            />
           ) : (
             <GanttView tasks={displayedTasks} />
           )}
@@ -347,10 +500,23 @@ function MyTasksPanel({
 }
 
 // ─── Task List View ──────────────────────────────────────
-function TaskListView({ tasks, onNavigate, isReviewMode }: { tasks: any[]; onNavigate: (path: string) => void; isReviewMode?: boolean }) {
+function TaskListView({
+  tasks,
+  onNavigate,
+  isReviewMode,
+  showAssignee,
+}: {
+  tasks: any[];
+  onNavigate: (path: string) => void;
+  isReviewMode?: boolean;
+  showAssignee?: boolean;
+}) {
   const utils = trpc.useUtils();
   const updateTask = trpc.tasks.update.useMutation({
-    onSuccess: () => utils.tasks.listMine.invalidate(),
+    onSuccess: () => {
+      utils.tasks.listMine.invalidate();
+      utils.tasks.listAll.invalidate();
+    },
   });
 
   return (
@@ -378,7 +544,20 @@ function TaskListView({ tasks, onNavigate, isReviewMode }: { tasks: any[]; onNav
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {/* Assignee avatar (shown in team view) */}
+                {showAssignee && task.assigneeName && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    {task.assigneeAvatar ? (
+                      <img src={task.assigneeAvatar} alt={task.assigneeName} className="h-3.5 w-3.5 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-3.5 w-3.5 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-medium text-primary">
+                        {task.assigneeName.charAt(0)}
+                      </div>
+                    )}
+                    {task.assigneeName}
+                  </span>
+                )}
                 {task.dueDate && (
                   <span className={`text-[10px] flex items-center gap-0.5 ${
                     isOverdue ? "text-red-500" : isUrgent ? "text-amber-600" : "text-muted-foreground"

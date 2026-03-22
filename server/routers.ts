@@ -980,6 +980,19 @@ const tasksRouter = router({
       await db.deleteTask(input.id);
       return { success: true };
     }),
+  listAll: protectedProcedure
+    .query(async () => {
+      return db.listAllTasks();
+    }),
+  listByUser: protectedProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ input }) => {
+      return db.listTasksByUser(input.userId);
+    }),
+  listTeamMembers: protectedProcedure
+    .query(async () => {
+      return db.listUsers();
+    }),
 });
 
 // ─── Documents ───────────────────────────────────────────

@@ -583,6 +583,76 @@ export async function deleteTask(id: number) {
   await db.delete(tasks).where(eq(tasks.id, id));
 }
 
+// 查询所有成员任务（管理员视图）
+export async function listAllTasks() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: tasks.id,
+      projectId: tasks.projectId,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      category: tasks.category,
+      assigneeId: tasks.assigneeId,
+      assigneeName: users.name,
+      assigneeAvatar: users.avatar,
+      reviewerId: tasks.reviewerId,
+      startDate: tasks.startDate,
+      dueDate: tasks.dueDate,
+      progress: tasks.progress,
+      parentId: tasks.parentId,
+      createdBy: tasks.createdBy,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      projectName: projects.name,
+    })
+    .from(tasks)
+    .leftJoin(users, eq(tasks.assigneeId, users.id))
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .where(sql`${tasks.status} != 'done' AND ${tasks.parentId} IS NULL`)
+    .orderBy(tasks.dueDate, desc(tasks.createdAt));
+}
+
+// 查询指定成员的任务
+export async function listTasksByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: tasks.id,
+      projectId: tasks.projectId,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      category: tasks.category,
+      assigneeId: tasks.assigneeId,
+      assigneeName: users.name,
+      assigneeAvatar: users.avatar,
+      reviewerId: tasks.reviewerId,
+      startDate: tasks.startDate,
+      dueDate: tasks.dueDate,
+      progress: tasks.progress,
+      parentId: tasks.parentId,
+      createdBy: tasks.createdBy,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      projectName: projects.name,
+    })
+    .from(tasks)
+    .leftJoin(users, eq(tasks.assigneeId, users.id))
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .where(and(
+      eq(tasks.assigneeId, userId),
+      sql`${tasks.status} != 'done'`,
+      isNull(tasks.parentId)
+    ))
+    .orderBy(tasks.dueDate, desc(tasks.createdAt));
+}
+
 export async function getRecentTasks(limit = 5) {
   const db = await getDb();
   if (!db) return [];
