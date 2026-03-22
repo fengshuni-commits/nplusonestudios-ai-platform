@@ -908,6 +908,11 @@ const tasksRouter = router({
       parentId: z.number().nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      // 权限检查：仅项目创建者可以创建任务
+      const project = await db.getProjectById(input.projectId);
+      if (!project || project.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限创建任务" });
+      }
       const { startDate, dueDate, ...rest } = input;
       return db.createTask({
         ...rest,
@@ -918,7 +923,15 @@ const tasksRouter = router({
     }),
   updateStatus: protectedProcedure
     .input(z.object({ id: z.number(), status: z.enum(["backlog", "todo", "in_progress", "review", "done"]) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // 权限检查：仅项目创建者和任务负责人可修改状态
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      const project = await db.getProjectById(task.projectId);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND" });
+      if (project.createdBy !== ctx.user.id && task.assigneeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限修改任务" });
+      }
       await db.updateTaskStatus(input.id, input.status);
       return { success: true };
     }),
@@ -937,7 +950,15 @@ const tasksRouter = router({
       progress: z.number().min(0).max(100).optional(),
       parentId: z.number().nullable().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // 权限检查：仅项目创建者和任务负责人可修改
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      const project = await db.getProjectById(task.projectId);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND" });
+      if (project.createdBy !== ctx.user.id && task.assigneeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限修改任务" });
+      }
       const { id, startDate, dueDate, ...rest } = input;
       await db.updateTask(id, {
         ...rest,
@@ -948,7 +969,14 @@ const tasksRouter = router({
     }),
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // 权限检查：仅项目创建者可以删除任务
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      const project = await db.getProjectById(task.projectId);
+      if (!project || project.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限删除任务" });
+      }
       await db.deleteTask(input.id);
       return { success: true };
     }),

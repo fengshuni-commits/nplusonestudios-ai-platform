@@ -472,6 +472,12 @@ export async function deleteGenerationHistory(id: number, userId: number, isAdmi
 }
 
 /// ─── Tasks ───────────────────────────────────────────────
+export async function getTaskById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  return await db.select().from(tasks).where(eq(tasks.id, id)).limit(1).then(rows => rows[0] || null);
+}
+
 export async function listTasksByProject(projectId: number) {
   const db = await getDb();
   if (!db) return [];

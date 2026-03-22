@@ -1034,6 +1034,13 @@ const statusColumns = [
 ];
 
 function TaskKanbanTab({ projectId }: { projectId: number }) {
+  const { currentUser } = useAuth();
+  const { data: project } = trpc.projects.getById.useQuery({ id: projectId });
+  const isCreator = project?.createdBy === currentUser?.id;
+  const canCreateTask = isCreator;
+  const canEditTask = (task: any) => isCreator || task.assigneeId === currentUser?.id;
+  const canDeleteTask = isCreator;
+
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
@@ -1109,6 +1116,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
               <BarChart3 className="h-3.5 w-3.5 mr-1" />甘特图
             </Button>
           </div>
+          {canCreateTask && (
           <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="h-4 w-4 mr-1" />新建任务</Button>
@@ -1220,6 +1228,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
             </div>
           </DialogContent>
         </Dialog>
+          )}
         </div>
       </div>
 
