@@ -19,7 +19,11 @@ import {
   Newspaper,
   RefreshCw,
   Presentation,
+  ListTodo,
+  BarChart2,
+  Bell,
 } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 
 const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -52,6 +56,18 @@ export default function Home() {
     { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false }
   );
   const { data: recentGenerations, isLoading: genLoading } = trpc.dashboard.recentGenerations.useQuery();
+  const { data: myTasks, isLoading: myTasksLoading } = trpc.tasks.listMine.useQuery();
+
+  // Deadline warnings: tasks due within 3 days
+  const urgentTasks = useMemo(() => {
+    if (!myTasks) return [];
+    const now = Date.now();
+    return myTasks.filter((t: any) => {
+      if (!t.dueDate || t.status === "done") return false;
+      const daysLeft = Math.ceil((new Date(t.dueDate).getTime() - now) / 86400000);
+      return daysLeft >= 0 && daysLeft <= 3;
+    });
+  }, [myTasks]);
 
   return (
     <div className="space-y-6 pb-8">
@@ -89,7 +105,7 @@ export default function Home() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard title="进行中项目" value={statsLoading ? null : (stats?.activeProjects ?? 0)} icon={<FolderKanban className="h-4 w-4" />} unit="个" onClick={() => setLocation("/projects")} />
-        <StatCard title="待办任务" value={statsLoading ? null : (stats?.pendingTasks ?? 0)} icon={<Clock className="h-4 w-4" />} unit="项" onClick={() => setLocation("/projects")} />
+        <StatCard title="我的待办" value={myTasksLoading ? null : (myTasks?.length ?? 0)} icon={<Clock className="h-4 w-4" />} unit="项" />
         <StatCard title="本周完成" value={statsLoading ? null : (stats?.completedThisWeek ?? 0)} icon={<CheckCircle2 className="h-4 w-4" />} unit="任务" />
         <StatCard title="AI 调用（本月）" value={statsLoading ? null : (stats?.aiToolCalls ?? 0)} icon={<Sparkles className="h-4 w-4" />} unit="次" onClick={() => setLocation("/history")} />
       </div>
@@ -191,30 +207,331 @@ export default function Home() {
         </Card>
       </div>
 
-      {stats?.recentTasks && stats.recentTasks.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-medium">待办任务</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => setLocation("/projects")} className="text-xs h-7 px-2">
-              全部 <ArrowRight className="h-3 w-3 ml-1" />
-            </Button>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
-              {stats.recentTasks.map((task: any) => (
-                <div key={task.id} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-accent/50 transition-colors">
-                  <PriorityDot priority={task.priority} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{task.title}</p>
-                    <p className="text-xs text-muted-foreground">{task.dueDate ? `截止 ${new Date(task.dueDate).toLocaleDateString("zh-CN")}` : "无截止日期"}</p>
-                  </div>
-                  <Badge variant="outline" className="text-xs shrink-0">{taskStatusLabel(task.status)}</Badge>
+      {/* My Tasks Panel */}
+      <MyTasksPanel myTasks={myTasks || []} isLoading={myTasksLoading} urgentTasks={urgentTasks} onNavigate={setLocation} />
+    </div>
+  );
+}
+
+// ─── My Tasks Panel ──────────────────────────────────────
+function MyTasksPanel({
+  myTasks,
+  isLoading,
+  urgentTasks,
+  onNavigate,
+}: {
+  myTasks: any[];
+  isLoading: boolean;
+  urgentTasks: any[];
+  onNavigate: (path: string) => void;
+}) {
+  const [view, setView] = useState<"list" | "gantt">("list");
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader className="pb-3"><CardTitle className="text-sm font-medium">我的待办任务</CardTitle></CardHeader>
+        <CardContent><div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div></CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Deadline warnings */}
+      {urgentTasks.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700/40 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              {urgentTasks.length} 项任务即将到期（3 天内）
+            </span>
+          </div>
+          <div className="space-y-1">
+            {urgentTasks.map((t: any) => {
+              const daysLeft = Math.ceil((new Date(t.dueDate).getTime() - Date.now()) / 86400000);
+              return (
+                <div key={t.id} className="flex items-center justify-between text-xs text-amber-700 dark:text-amber-400">
+                  <span className="truncate flex-1 mr-2">{t.title}</span>
+                  <span className="shrink-0 font-medium">
+                    {daysLeft === 0 ? "今天到期" : `还剩 ${daysLeft} 天`}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
+
+      <Card>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-medium">我的待办任务</CardTitle>
+            {myTasks.length > 0 && (
+              <Badge variant="secondary" className="text-xs h-5">{myTasks.length}</Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant={view === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setView("list")}
+            >
+              <ListTodo className="h-3.5 w-3.5 mr-1" />列表
+            </Button>
+            <Button
+              variant={view === "gantt" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setView("gantt")}
+            >
+              <BarChart2 className="h-3.5 w-3.5 mr-1" />甘特图
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {myTasks.length === 0 ? (
+            <EmptyState message="暂无分配给你的任务" action={{ label: "查看项目", onClick: () => onNavigate("/projects") }} />
+          ) : view === "list" ? (
+            <TaskListView tasks={myTasks} onNavigate={onNavigate} />
+          ) : (
+            <GanttView tasks={myTasks} />
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Task List View ──────────────────────────────────────
+function TaskListView({ tasks, onNavigate }: { tasks: any[]; onNavigate: (path: string) => void }) {
+  const utils = trpc.useUtils();
+  const updateTask = trpc.tasks.update.useMutation({
+    onSuccess: () => utils.tasks.listMine.invalidate(),
+  });
+
+  return (
+    <div className="space-y-1">
+      {tasks.map((task: any) => {
+        const daysLeft = task.dueDate ? Math.ceil((new Date(task.dueDate).getTime() - Date.now()) / 86400000) : null;
+        const isOverdue = daysLeft !== null && daysLeft < 0;
+        const isUrgent = daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
+
+        return (
+          <div
+            key={task.id}
+            className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer group"
+            onClick={() => task.projectId && onNavigate(`/projects/${task.projectId}`)}
+          >
+            {/* Priority dot */}
+            <PriorityDot priority={task.priority} />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium truncate">{task.title}</p>
+                {task.projectName && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 hidden sm:block">
+                    {task.projectName}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                {task.dueDate && (
+                  <span className={`text-[10px] flex items-center gap-0.5 ${
+                    isOverdue ? "text-red-500" : isUrgent ? "text-amber-600" : "text-muted-foreground"
+                  }`}>
+                    <Clock className="h-2.5 w-2.5" />
+                    {isOverdue
+                      ? `已超期 ${Math.abs(daysLeft!)}d`
+                      : isUrgent
+                        ? `还剩 ${daysLeft}d`
+                        : `截止 ${new Date(task.dueDate).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}`
+                    }
+                  </span>
+                )}
+                {/* Progress */}
+                {(task.progress ?? 0) > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{task.progress}%</span>
+                )}
+              </div>
+              {/* Progress bar */}
+              {(task.progress ?? 0) > 0 && (
+                <div className="h-1 bg-muted rounded-full overflow-hidden mt-1.5 w-full max-w-[160px]">
+                  <div className="h-full bg-primary rounded-full" style={{ width: `${task.progress}%` }} />
+                </div>
+              )}
+            </div>
+
+            {/* Status badge */}
+            <div className="shrink-0 flex items-center gap-2">
+              <select
+                className="text-[10px] border rounded px-1 py-0.5 bg-background text-foreground cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                value={task.status}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  updateTask.mutate({ id: task.id, status: e.target.value as any });
+                }}
+              >
+                <option value="backlog">待排期</option>
+                <option value="todo">待开始</option>
+                <option value="in_progress">进行中</option>
+                <option value="review">待审核</option>
+                <option value="done">已完成</option>
+              </select>
+              <Badge variant="outline" className="text-[10px] h-5">{taskStatusLabel(task.status)}</Badge>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Gantt View ──────────────────────────────────────────
+function GanttView({ tasks }: { tasks: any[] }) {
+  // Only show tasks with at least a dueDate
+  const ganttTasks = useMemo(() => {
+    const now = new Date();
+    return tasks
+      .filter((t: any) => t.dueDate || t.startDate)
+      .map((t: any) => {
+        const start = t.startDate ? new Date(t.startDate) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const end = t.dueDate ? new Date(t.dueDate) : new Date(start.getTime() + 86400000);
+        return { ...t, _start: start, _end: end };
+      })
+      .sort((a: any, b: any) => a._start.getTime() - b._start.getTime());
+  }, [tasks]);
+
+  if (ganttTasks.length === 0) {
+    return (
+      <div className="text-center py-8 text-sm text-muted-foreground">
+        暂无设置了时间范围的任务。<br />
+        <span className="text-xs">在任务看板中为任务设置开始/截止日期后，甘特图将自动显示。</span>
+      </div>
+    );
+  }
+
+  // Compute date range: from earliest start to latest end + padding
+  const minDate = ganttTasks.reduce((m: Date, t: any) => t._start < m ? t._start : m, ganttTasks[0]._start);
+  const maxDate = ganttTasks.reduce((m: Date, t: any) => t._end > m ? t._end : m, ganttTasks[0]._end);
+
+  // Add 2-day padding on each side
+  const rangeStart = new Date(minDate.getTime() - 2 * 86400000);
+  const rangeEnd = new Date(maxDate.getTime() + 2 * 86400000);
+  const totalDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
+
+  // Generate day headers
+  const days: Date[] = [];
+  for (let i = 0; i < totalDays; i++) {
+    days.push(new Date(rangeStart.getTime() + i * 86400000));
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const dayWidth = 32; // px per day
+  const rowHeight = 36; // px per row
+
+  const priorityColors: Record<string, string> = {
+    urgent: "bg-red-400",
+    high: "bg-orange-400",
+    medium: "bg-primary",
+    low: "bg-muted-foreground/40",
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <div style={{ minWidth: `${totalDays * dayWidth + 160}px` }}>
+        {/* Header: day labels */}
+        <div className="flex" style={{ marginLeft: "160px" }}>
+          {days.map((d, i) => {
+            const isToday = d.getTime() === today.getTime();
+            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            const showLabel = d.getDate() === 1 || i === 0 || d.getDay() === 1;
+            return (
+              <div
+                key={i}
+                style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
+                className={`text-center border-r border-border/30 relative ${isWeekend ? "bg-muted/30" : ""} ${isToday ? "bg-primary/10" : ""}`}
+              >
+                {showLabel && (
+                  <span className="text-[9px] text-muted-foreground absolute top-0 left-0.5 leading-none pt-0.5">
+                    {d.getDate() === 1 ? `${d.getMonth() + 1}月` : `${d.getDate()}`}
+                  </span>
+                )}
+                {isToday && (
+                  <span className="text-[9px] font-bold text-primary absolute top-0 left-0.5 leading-none pt-0.5">今</span>
+                )}
+                <div className="h-5" />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Rows */}
+        {ganttTasks.map((task: any) => {
+          const startOffset = Math.floor((task._start.getTime() - rangeStart.getTime()) / 86400000);
+          const duration = Math.max(1, Math.ceil((task._end.getTime() - task._start.getTime()) / 86400000));
+          const daysLeft = Math.ceil((task._end.getTime() - Date.now()) / 86400000);
+          const isOverdue = daysLeft < 0;
+          const isUrgent = daysLeft >= 0 && daysLeft <= 3;
+          const barColor = isOverdue ? "bg-red-400" : isUrgent ? "bg-amber-400" : (priorityColors[task.priority] || "bg-primary");
+
+          return (
+            <div key={task.id} className="flex items-center border-b border-border/20" style={{ height: `${rowHeight}px` }}>
+              {/* Task label */}
+              <div className="shrink-0 flex items-center gap-1.5 px-2" style={{ width: "160px" }}>
+                <PriorityDot priority={task.priority} />
+                <span className="text-xs truncate">{task.title}</span>
+              </div>
+              {/* Bar area */}
+              <div className="relative flex-1" style={{ height: `${rowHeight}px` }}>
+                {/* Today line */}
+                {(() => {
+                  const todayOffset = Math.floor((today.getTime() - rangeStart.getTime()) / 86400000);
+                  return (
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-primary/40 z-10"
+                      style={{ left: `${todayOffset * dayWidth + dayWidth / 2}px` }}
+                    />
+                  );
+                })()}
+                {/* Weekend shading */}
+                {days.map((d, i) => (
+                  (d.getDay() === 0 || d.getDay() === 6) ? (
+                    <div key={i} className="absolute top-0 bottom-0 bg-muted/20" style={{ left: `${i * dayWidth}px`, width: `${dayWidth}px` }} />
+                  ) : null
+                ))}
+                {/* Task bar */}
+                <div
+                  className={`absolute top-1/2 -translate-y-1/2 rounded ${barColor} flex items-center px-1.5`}
+                  style={{
+                    left: `${startOffset * dayWidth}px`,
+                    width: `${duration * dayWidth - 2}px`,
+                    height: "20px",
+                  }}
+                >
+                  {/* Progress fill */}
+                  {(task.progress ?? 0) > 0 && (
+                    <div
+                      className="absolute left-0 top-0 bottom-0 rounded bg-white/30"
+                      style={{ width: `${task.progress}%` }}
+                    />
+                  )}
+                  <span className="text-[9px] text-white font-medium truncate relative z-10">
+                    {duration > 2 ? task.title : ""}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-2">
+        仅显示已设置时间范围的任务 · 竖线为今日 · 悬停查看详情请前往项目看板
+      </p>
     </div>
   );
 }
@@ -239,7 +556,7 @@ function StatCard({ title, value, icon, unit, onClick }: { title: string; value:
 }
 
 function PriorityDot({ priority }: { priority: string }) {
-  const colors: Record<string, string> = { urgent: "bg-primary", high: "bg-primary/70", medium: "bg-muted-foreground/40", low: "bg-muted-foreground/20" };
+  const colors: Record<string, string> = { urgent: "bg-red-500", high: "bg-orange-400", medium: "bg-primary/70", low: "bg-muted-foreground/30" };
   return <div className={`h-2 w-2 rounded-full shrink-0 ${colors[priority] || colors.medium}`} />;
 }
 

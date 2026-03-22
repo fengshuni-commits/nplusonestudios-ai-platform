@@ -1035,30 +1035,65 @@ const statusColumns = [
 
 function TaskKanbanTab({ projectId }: { projectId: number }) {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
+  const [subTaskTitle, setSubTaskTitle] = useState("");
   const { data: tasks } = trpc.tasks.listByProject.useQuery({ projectId });
+  const { data: members } = trpc.projects.listMembers.useQuery({ projectId });
   const utils = trpc.useUtils();
+
+  const { data: subTasks } = trpc.tasks.listSubTasks.useQuery(
+    { parentId: selectedTask?.id ?? 0 },
+    { enabled: !!selectedTask?.id }
+  );
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
       utils.tasks.listByProject.invalidate({ projectId });
       setTaskDialogOpen(false);
+      setTaskForm({ title: "", description: "", priority: "medium", category: "design", assigneeId: "", startDate: "", dueDate: "" });
       toast.success("任务创建成功");
+    },
+  });
+
+  const updateTask = trpc.tasks.update.useMutation({
+    onSuccess: () => {
+      utils.tasks.listByProject.invalidate({ projectId });
+      if (selectedTask) utils.tasks.listSubTasks.invalidate({ parentId: selectedTask.id });
+    },
+  });
+
+  const createSubTask = trpc.tasks.create.useMutation({
+    onSuccess: () => {
+      if (selectedTask) utils.tasks.listSubTasks.invalidate({ parentId: selectedTask.id });
+      utils.tasks.listByProject.invalidate({ projectId });
+      setSubTaskTitle("");
+      toast.success("子任务已添加");
     },
   });
 
   const [taskForm, setTaskForm] = useState({
     title: "", description: "", priority: "medium" as string, category: "design" as string,
+    assigneeId: "", startDate: "", dueDate: "",
   });
+
+  const memberOptions = (members || []).map((m: any) => ({
+    id: m.userId,
+    name: m.userName || m.userEmail || "未知用户",
+    avatar: m.userAvatar,
+  }));
+
+  const topLevelTasks = (tasks || []).filter((t: any) => !t.parentId);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">{tasks?.length || 0} 个任务</p>
+        <p className="text-sm text-muted-foreground">{topLevelTasks.length} 个任务</p>
         <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4 mr-1" />新建任务</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>新建任务</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
@@ -1067,9 +1102,9 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
               </div>
               <div className="space-y-2">
                 <Label>描述</Label>
-                <Textarea value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={3} />
+                <Textarea value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={2} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>优先级</Label>
                   <Select value={taskForm.priority} onValueChange={(v) => setTaskForm({ ...taskForm, priority: v })}>
@@ -1095,9 +1130,47 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                   </Select>
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>负责人</Label>
+                <Select value={taskForm.assigneeId} onValueChange={(v) => setTaskForm({ ...taskForm, assigneeId: v })}>
+                  <SelectTrigger><SelectValue placeholder="选择负责人" /></SelectTrigger>
+                  <SelectContent>
+                    {memberOptions.map((m: any) => (
+                      <SelectItem key={m.id} value={String(m.id)}>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={m.avatar} />
+                            <AvatarFallback className="text-[9px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          {m.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>开始日期</Label>
+                  <Input type="date" value={taskForm.startDate} onChange={(e) => setTaskForm({ ...taskForm, startDate: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>截止日期</Label>
+                  <Input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} />
+                </div>
+              </div>
               <Button onClick={() => {
                 if (!taskForm.title.trim()) { toast.error("请输入任务标题"); return; }
-                createTask.mutate({ ...taskForm, projectId, priority: taskForm.priority as any, category: taskForm.category as any });
+                createTask.mutate({
+                  projectId,
+                  title: taskForm.title,
+                  description: taskForm.description || undefined,
+                  priority: taskForm.priority as any,
+                  category: taskForm.category as any,
+                  assigneeId: taskForm.assigneeId ? Number(taskForm.assigneeId) : undefined,
+                  startDate: taskForm.startDate || undefined,
+                  dueDate: taskForm.dueDate || undefined,
+                });
               }} disabled={createTask.isPending} className="w-full">
                 {createTask.isPending ? "创建中..." : "创建任务"}
               </Button>
@@ -1106,9 +1179,10 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
         </Dialog>
       </div>
 
+      {/* Kanban Board */}
       <div className="grid grid-cols-5 gap-3 overflow-x-auto">
         {statusColumns.map((col) => {
-          const columnTasks = (tasks || []).filter((t: any) => t.status === col.key);
+          const columnTasks = topLevelTasks.filter((t: any) => t.status === col.key);
           return (
             <div key={col.key} className={`rounded-lg p-3 min-h-[300px] ${col.color}`}>
               <div className="flex items-center justify-between mb-3">
@@ -1116,28 +1190,207 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                 <Badge variant="secondary" className="text-xs h-5">{columnTasks.length}</Badge>
               </div>
               <div className="space-y-2">
-                {columnTasks.map((task: any) => (
-                  <Card key={task.id} className="shadow-sm">
-                    <CardContent className="p-3">
-                      <p className="text-sm font-medium">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <PriorityBadge priority={task.priority} />
-                        <CategoryBadge category={task.category} />
-                      </div>
-                      {task.dueDate && (
-                        <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(task.dueDate).toLocaleDateString("zh-CN")}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                {columnTasks.map((task: any) => {
+                  const daysLeft = task.dueDate ? Math.ceil((new Date(task.dueDate).getTime() - Date.now()) / 86400000) : null;
+                  const isUrgent = daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
+                  const isOverdue = daysLeft !== null && daysLeft < 0;
+                  return (
+                    <Card key={task.id}
+                      className={`shadow-sm cursor-pointer hover:shadow-md transition-shadow ${
+                        isOverdue ? 'border-red-300' : isUrgent ? 'border-amber-300' : ''
+                      }`}
+                      onClick={() => { setSelectedTask(task); setTaskDetailOpen(true); }}
+                    >
+                      <CardContent className="p-3">
+                        <p className="text-sm font-medium leading-snug">{task.title}</p>
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          <PriorityBadge priority={task.priority} />
+                          <CategoryBadge category={task.category} />
+                        </div>
+                        {(task.progress ?? 0) > 0 && (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
+                              <span>进度</span><span>{task.progress}%</span>
+                            </div>
+                            <div className="h-1 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full bg-primary rounded-full" style={{ width: `${task.progress}%` }} />
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between mt-2">
+                          {task.dueDate && (
+                            <p className={`text-[10px] flex items-center gap-0.5 ${
+                              isOverdue ? 'text-red-500' : isUrgent ? 'text-amber-600' : 'text-muted-foreground'
+                            }`}>
+                              <Calendar className="h-2.5 w-2.5" />
+                              {isOverdue
+                                ? `超期 ${Math.abs(daysLeft!)}d`
+                                : isUrgent
+                                  ? `还剩 ${daysLeft}d`
+                                  : new Date(task.dueDate).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
+                              }
+                            </p>
+                          )}
+                          {task.assigneeId && (
+                            <Avatar className="h-5 w-5 ml-auto">
+                              <AvatarImage src={task.assigneeAvatar} />
+                              <AvatarFallback className="text-[8px]">{(task.assigneeName || "?").charAt(0)}</AvatarFallback>
+                            </Avatar>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Task Detail Dialog */}
+      <Dialog open={taskDetailOpen} onOpenChange={setTaskDetailOpen}>
+        <DialogContent className="max-w-lg">
+          {selectedTask && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-base pr-6">{selectedTask.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-1 max-h-[70vh] overflow-y-auto pr-1">
+                {/* Status */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select value={selectedTask.status} onValueChange={(v) => {
+                    updateTask.mutate({ id: selectedTask.id, status: v as any });
+                    setSelectedTask({ ...selectedTask, status: v });
+                  }}>
+                    <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="backlog">待排期</SelectItem>
+                      <SelectItem value="todo">待开始</SelectItem>
+                      <SelectItem value="in_progress">进行中</SelectItem>
+                      <SelectItem value="review">待审核</SelectItem>
+                      <SelectItem value="done">已完成</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <PriorityBadge priority={selectedTask.priority} />
+                  <CategoryBadge category={selectedTask.category} />
+                </div>
+
+                {/* Assignee */}
+                <div className="space-y-1">
+                  <Label className="text-xs">负责人</Label>
+                  <Select
+                    value={selectedTask.assigneeId ? String(selectedTask.assigneeId) : "none"}
+                    onValueChange={(v) => {
+                      const newId = v === "none" ? null : Number(v);
+                      updateTask.mutate({ id: selectedTask.id, assigneeId: newId });
+                      setSelectedTask({ ...selectedTask, assigneeId: newId });
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="未分配" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">未分配</SelectItem>
+                      {memberOptions.map((m: any) => (
+                        <SelectItem key={m.id} value={String(m.id)}>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-4 w-4">
+                              <AvatarImage src={m.avatar} />
+                              <AvatarFallback className="text-[8px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            {m.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">开始日期</Label>
+                    <Input type="date" className="h-8 text-xs"
+                      value={selectedTask.startDate ? new Date(selectedTask.startDate).toISOString().split('T')[0] : ""}
+                      onChange={(e) => {
+                        updateTask.mutate({ id: selectedTask.id, startDate: e.target.value || null });
+                        setSelectedTask({ ...selectedTask, startDate: e.target.value ? new Date(e.target.value) : null });
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">截止日期</Label>
+                    <Input type="date" className="h-8 text-xs"
+                      value={selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : ""}
+                      onChange={(e) => {
+                        updateTask.mutate({ id: selectedTask.id, dueDate: e.target.value || null });
+                        setSelectedTask({ ...selectedTask, dueDate: e.target.value ? new Date(e.target.value) : null });
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Progress */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">完成进度</Label>
+                    <span className="text-xs font-medium text-primary">{selectedTask.progress ?? 0}%</span>
+                  </div>
+                  <input
+                    type="range" min={0} max={100} step={5}
+                    value={selectedTask.progress ?? 0}
+                    onChange={(e) => setSelectedTask({ ...selectedTask, progress: Number(e.target.value) })}
+                    onMouseUp={(e) => updateTask.mutate({ id: selectedTask.id, progress: Number((e.target as HTMLInputElement).value) })}
+                    onTouchEnd={(e) => updateTask.mutate({ id: selectedTask.id, progress: Number((e.target as HTMLInputElement).value) })}
+                    className="w-full accent-primary"
+                  />
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${selectedTask.progress ?? 0}%` }} />
+                  </div>
+                </div>
+
+                {/* Sub-tasks */}
+                <div className="space-y-2">
+                  <Label className="text-xs">子任务 ({subTasks?.length ?? 0})</Label>
+                  <div className="space-y-1 max-h-36 overflow-y-auto">
+                    {(subTasks || []).map((st: any) => (
+                      <div key={st.id} className="flex items-center gap-2 p-2 rounded border bg-muted/30">
+                        <button
+                          onClick={() => {
+                            const newStatus = st.status === "done" ? "todo" : "done";
+                            updateTask.mutate({ id: st.id, status: newStatus });
+                          }}
+                          className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                            st.status === "done" ? "bg-primary border-primary" : "border-muted-foreground/40"
+                          }`}
+                        >
+                          {st.status === "done" && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                        </button>
+                        <span className={`text-xs flex-1 ${st.status === "done" ? "line-through text-muted-foreground" : ""}`}>{st.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      className="h-7 text-xs" placeholder="添加子任务..."
+                      value={subTaskTitle}
+                      onChange={(e) => setSubTaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && subTaskTitle.trim()) {
+                          createSubTask.mutate({ projectId, title: subTaskTitle.trim(), parentId: selectedTask.id });
+                        }
+                      }}
+                    />
+                    <Button size="sm" className="h-7 px-2" disabled={!subTaskTitle.trim() || createSubTask.isPending}
+                      onClick={() => createSubTask.mutate({ projectId, title: subTaskTitle.trim(), parentId: selectedTask.id })}>
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

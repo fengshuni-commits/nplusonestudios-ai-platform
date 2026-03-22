@@ -885,7 +885,15 @@ const tasksRouter = router({
     .query(async ({ input }) => {
       return db.listTasksByProject(input.projectId);
     }),
-
+  listMine: protectedProcedure
+    .query(async ({ ctx }) => {
+      return db.listMyTasks(ctx.user.id);
+    }),
+  listSubTasks: protectedProcedure
+    .input(z.object({ parentId: z.number() }))
+    .query(async ({ input }) => {
+      return db.listSubTasks(input.parentId);
+    }),
   create: protectedProcedure
     .input(z.object({
       projectId: z.number(),
@@ -893,19 +901,26 @@ const tasksRouter = router({
       description: z.string().optional(),
       priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
       category: z.enum(["design", "construction", "management", "other"]).optional(),
-      assigneeId: z.number().optional(),
+      assigneeId: z.number().nullable().optional(),
+      startDate: z.string().optional(),
+      dueDate: z.string().optional(),
+      parentId: z.number().nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      return db.createTask({ ...input, createdBy: ctx.user.id });
+      const { startDate, dueDate, ...rest } = input;
+      return db.createTask({
+        ...rest,
+        startDate: startDate ? new Date(startDate) : undefined,
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        createdBy: ctx.user.id,
+      });
     }),
-
   updateStatus: protectedProcedure
     .input(z.object({ id: z.number(), status: z.enum(["backlog", "todo", "in_progress", "review", "done"]) }))
     .mutation(async ({ input }) => {
       await db.updateTaskStatus(input.id, input.status);
       return { success: true };
     }),
-
   update: protectedProcedure
     .input(z.object({
       id: z.number(),
@@ -915,13 +930,20 @@ const tasksRouter = router({
       category: z.enum(["design", "construction", "management", "other"]).optional(),
       status: z.enum(["backlog", "todo", "in_progress", "review", "done"]).optional(),
       assigneeId: z.number().nullable().optional(),
+      startDate: z.string().nullable().optional(),
+      dueDate: z.string().nullable().optional(),
+      progress: z.number().min(0).max(100).optional(),
+      parentId: z.number().nullable().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { id, ...data } = input;
-      await db.updateTask(id, data as any);
+      const { id, startDate, dueDate, ...rest } = input;
+      await db.updateTask(id, {
+        ...rest,
+        startDate: startDate === null ? null : startDate ? new Date(startDate) : undefined,
+        dueDate: dueDate === null ? null : dueDate ? new Date(dueDate) : undefined,
+      } as any);
       return { success: true };
     }),
-
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

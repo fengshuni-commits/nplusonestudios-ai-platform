@@ -471,12 +471,70 @@ export async function deleteGenerationHistory(id: number, userId: number, isAdmi
   await db.delete(generationHistory).where(and(...conditions));
 }
 
-// ─── Tasks ───────────────────────────────────────────────
-
+/// ─── Tasks ───────────────────────────────────────────────
 export async function listTasksByProject(projectId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(tasks.sortOrder, desc(tasks.createdAt));
+  const rows = await db
+    .select({
+      id: tasks.id,
+      projectId: tasks.projectId,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      category: tasks.category,
+      assigneeId: tasks.assigneeId,
+      assigneeName: users.name,
+      assigneeAvatar: users.avatar,
+      startDate: tasks.startDate,
+      dueDate: tasks.dueDate,
+      progress: tasks.progress,
+      parentId: tasks.parentId,
+      sortOrder: tasks.sortOrder,
+      createdBy: tasks.createdBy,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+    })
+    .from(tasks)
+    .leftJoin(users, eq(tasks.assigneeId, users.id))
+    .where(eq(tasks.projectId, projectId))
+    .orderBy(tasks.sortOrder, desc(tasks.createdAt));
+  return rows;
+}
+
+export async function listMyTasks(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: tasks.id,
+      projectId: tasks.projectId,
+      title: tasks.title,
+      description: tasks.description,
+      status: tasks.status,
+      priority: tasks.priority,
+      category: tasks.category,
+      assigneeId: tasks.assigneeId,
+      startDate: tasks.startDate,
+      dueDate: tasks.dueDate,
+      progress: tasks.progress,
+      parentId: tasks.parentId,
+      createdAt: tasks.createdAt,
+      updatedAt: tasks.updatedAt,
+      projectName: projects.name,
+    })
+    .from(tasks)
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .where(and(eq(tasks.assigneeId, userId), inArray(tasks.status, ["todo", "in_progress", "backlog", "review"])))
+    .orderBy(tasks.dueDate, desc(tasks.createdAt));
+  return rows;
+}
+
+export async function listSubTasks(parentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tasks).where(eq(tasks.parentId, parentId)).orderBy(tasks.sortOrder, desc(tasks.createdAt));
 }
 
 export async function createTask(data: InsertTask) {
