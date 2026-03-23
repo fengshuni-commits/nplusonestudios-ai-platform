@@ -169,6 +169,13 @@
       "when": 1774185842049,
       "tag": "0023_lush_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1774239448181,
+      "tag": "0024_chemical_nick_fury",
+      "breakpoints": true
     }
   ]
 }

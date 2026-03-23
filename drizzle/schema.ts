@@ -120,6 +120,10 @@ export const documents = mysqlTable("documents", {
   version: int("version").default(1),
   parentId: int("parentId"),
   createdBy: int("createdBy"),
+  // AI analysis fields for URL documents
+  aiSummary: text("aiSummary"),
+  aiKeywords: text("aiKeywords"),
+  urlMeta: text("urlMeta"), // JSON: { favicon, siteName, ogImage, ... }
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

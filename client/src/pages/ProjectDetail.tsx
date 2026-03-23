@@ -592,37 +592,61 @@ function ProjectDocumentsTab({
     onError: (err) => toast.error(`上传失败：${err.message}`),
   });
 
-  // ─── Feishu link state ───────────────────────────────────
+  // ─── URL link + AI analysis state ───────────────────────────────────
   const [feishuOpen, setFeishuOpen] = useState(false);
   const [feishuUrl, setFeishuUrl] = useState("");
   const [feishuTitle, setFeishuTitle] = useState("");
   const [feishuType, setFeishuType] = useState<"brief" | "report" | "minutes" | "specification" | "checklist" | "schedule" | "other">("other");
   const [feishuCategory, setFeishuCategory] = useState<"design" | "construction" | "management">("design");
+  const [urlAnalysis, setUrlAnalysis] = useState<{ summary: string; keywords: string; urlMeta: Record<string, string> } | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const createDocMutation = trpc.documents.create.useMutation({
+  const analyzeUrlMutation = trpc.documents.analyzeUrl.useMutation({
+    onSuccess: (data) => {
+      setUrlAnalysis({ summary: data.analysis.summary, keywords: data.analysis.keywords, urlMeta: data.urlMeta });
+      // Auto-fill title and type if empty
+      if (!feishuTitle && data.analysis.title) setFeishuTitle(data.analysis.title);
+      setFeishuType(data.analysis.docType as any);
+      setFeishuCategory(data.analysis.category as any);
+      setIsAnalyzing(false);
+    },
+    onError: () => setIsAnalyzing(false),
+  });
+
+  const handleUrlPasteOrBlur = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed || !/^https?:\/\//i.test(trimmed)) return;
+    setIsAnalyzing(true);
+    setUrlAnalysis(null);
+    analyzeUrlMutation.mutate({ url: trimmed });
+  };
+
+  const saveUrlDocMutation = trpc.documents.saveUrlDoc.useMutation({
     onSuccess: () => {
       utils.documents.listByProject.invalidate({ projectId });
-      toast.success("飞书链接已保存");
+      toast.success("链接已保存");
       setFeishuOpen(false);
       setFeishuUrl("");
       setFeishuTitle("");
+      setUrlAnalysis(null);
     },
     onError: (err) => toast.error(`保存失败：${err.message}`),
   });
 
   const handleSaveFeishuLink = () => {
     const url = feishuUrl.trim();
-    if (!url) { toast.error("请输入飞书文档链接"); return; }
+    if (!url) { toast.error("请输入链接地址"); return; }
     if (!feishuTitle.trim()) { toast.error("请输入文档名称"); return; }
-    // Accept feishu/lark doc links
-    const isFeishu = /feishu\.cn|larksuite\.com/.test(url);
-    if (!isFeishu) { toast.error("请输入有效的飞书文档链接（feishu.cn 或 larksuite.com）"); return; }
-    createDocMutation.mutate({
+    if (!/^https?:\/\//i.test(url)) { toast.error("请输入有效的网址（以 http:// 或 https:// 开头）"); return; }
+    saveUrlDocMutation.mutate({
       projectId,
       title: feishuTitle.trim(),
       type: feishuType,
       category: feishuCategory,
-      fileUrl: url,
+      url,
+      aiSummary: urlAnalysis?.summary,
+      aiKeywords: urlAnalysis?.keywords,
+      urlMeta: urlAnalysis?.urlMeta ? JSON.stringify(urlAnalysis.urlMeta) : undefined,
     });
   };
 
@@ -998,7 +1022,7 @@ function ProjectDocumentsTab({
           )}
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setFeishuOpen(true)}>
-              <ExternalLink className="h-3.5 w-3.5" />飞书链接
+              <ExternalLink className="h-3.5 w-3.5" />添加链接
             </Button>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setUploadOpen(true)}>
               <Upload className="h-3.5 w-3.5" />上传文件
@@ -1010,46 +1034,60 @@ function ProjectDocumentsTab({
             <CardContent className="p-4">
               <div className="space-y-1.5">
                 {documents.map((doc: any) => {
-                  const isFeishuLink = doc.fileUrl && /feishu\.cn|larksuite\.com/.test(doc.fileUrl);
+                  const isUrlLink = doc.fileUrl && !doc.fileKey; // URL links have no fileKey
+                  const urlMeta = doc.urlMeta ? (() => { try { return JSON.parse(doc.urlMeta); } catch { return {}; } })() : {};
                   return (
-                  <div key={doc.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 group">
-                    <div className={`h-8 w-8 rounded flex items-center justify-center shrink-0 ${isFeishuLink ? "bg-blue-50" : "bg-muted"}`}>
-                      {isFeishuLink
-                        ? <ExternalLink className="h-4 w-4 text-blue-500" />
-                        : <FileText className="h-4 w-4 text-muted-foreground" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{doc.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        <Badge variant="outline" className="text-[10px] mr-1.5 py-0">{docTypeLabel(doc.type)}</Badge>
-                        {new Date(doc.updatedAt).toLocaleDateString("zh-CN")}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {doc.fileUrl && (
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title={isFeishuLink ? "打开飞书" : "下载"} onClick={() => window.open(doc.fileUrl, "_blank")}>
-                          {isFeishuLink ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                        </Button>
-                      )}
-                      {(isAdmin || currentUser?.id === doc.createdBy) && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>确认删除</AlertDialogTitle>
-                              <AlertDialogDescription>将删除文件「{doc.title}」，不可恢复。</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteFileMutation.mutate({ id: doc.id })} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">删除</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
+                  <div key={doc.id} className="p-2 rounded-md hover:bg-accent/50 group">
+                    <div className="flex items-start gap-3">
+                      <div className={`h-8 w-8 rounded flex items-center justify-center shrink-0 mt-0.5 ${isUrlLink ? "bg-blue-50" : "bg-muted"}`}>
+                        {isUrlLink
+                          ? <ExternalLink className="h-4 w-4 text-blue-500" />
+                          : <FileText className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {urlMeta.siteName && <span className="mr-1.5 text-blue-600">{urlMeta.siteName}</span>}
+                          <Badge variant="outline" className="text-[10px] mr-1.5 py-0">{docTypeLabel(doc.type)}</Badge>
+                          {new Date(doc.updatedAt).toLocaleDateString("zh-CN")}
+                        </p>
+                        {doc.aiSummary && (
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">{doc.aiSummary}</p>
+                        )}
+                        {doc.aiKeywords && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {doc.aiKeywords.split(/[,，]/).slice(0, 4).map((kw: string, i: number) => (
+                              <span key={i} className="inline-flex items-center rounded-full bg-blue-50 border border-blue-100 px-1.5 py-0 text-[10px] text-blue-600">{kw.trim()}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {doc.fileUrl && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title={isUrlLink ? "打开链接" : "下载"} onClick={() => window.open(doc.fileUrl, "_blank")}>
+                            {isUrlLink ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                          </Button>
+                        )}
+                        {(isAdmin || currentUser?.id === doc.createdBy) && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                <AlertDialogDescription>将删除「{doc.title}」，不可恢复。</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteFileMutation.mutate({ id: doc.id })} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">删除</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
                     </div>
                   </div>
                   );
@@ -1188,50 +1226,73 @@ function ProjectDocumentsTab({
         </DialogContent>
       </Dialog>
 
-      {/* ─── Feishu Link Dialog ─── */}
-      <Dialog open={feishuOpen} onOpenChange={(open) => { setFeishuOpen(open); if (!open) { setFeishuUrl(""); setFeishuTitle(""); } }}>
-        <DialogContent className="max-w-md">
+      {/* ─── URL Link Dialog (with AI analysis) ─── */}
+      <Dialog open={feishuOpen} onOpenChange={(open) => { setFeishuOpen(open); if (!open) { setFeishuUrl(""); setFeishuTitle(""); setUrlAnalysis(null); setIsAnalyzing(false); } }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ExternalLink className="h-4 w-4 text-blue-500" />添加飞书文档链接
+              <ExternalLink className="h-4 w-4 text-blue-500" />添加链接
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* URL Input */}
             <div className="space-y-1.5">
-              <Label className="text-xs">飞书文档链接</Label>
-              <Input
-                value={feishuUrl}
-                onChange={e => setFeishuUrl(e.target.value)}
-                placeholder="粘贴 feishu.cn 或 larksuite.com 链接"
-                className="h-8 text-sm"
-                onPaste={e => {
-                  const pasted = e.clipboardData.getData("text");
-                  // Auto-extract title from feishu URL path if title is empty
-                  setTimeout(() => {
-                    if (!feishuTitle) {
-                      try {
-                        const url = new URL(pasted.trim());
-                        const parts = url.pathname.split("/").filter(Boolean);
-                        const lastPart = parts[parts.length - 1];
-                        if (lastPart && !/^[a-zA-Z0-9]{20,}$/.test(lastPart)) {
-                          setFeishuTitle(decodeURIComponent(lastPart));
-                        }
-                      } catch {}
-                    }
-                  }, 50);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">支持飞书文档、多维表格、小程序等各类飞书链接</p>
+              <Label className="text-xs">网址链接</Label>
+              <div className="relative">
+                <Input
+                  value={feishuUrl}
+                  onChange={e => { setFeishuUrl(e.target.value); setUrlAnalysis(null); }}
+                  placeholder="粘贴任意网址（企业官网、飞书文档、行业资讯等）"
+                  className="h-8 text-sm pr-20"
+                  onBlur={e => handleUrlPasteOrBlur(e.target.value)}
+                  onPaste={e => {
+                    const pasted = e.clipboardData.getData("text");
+                    setTimeout(() => handleUrlPasteOrBlur(pasted), 50);
+                  }}
+                />
+                {isAnalyzing && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />AI 分析中
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">粘贴链接后 AI 将自动分析页面内容并提取关键信息</p>
             </div>
+
+            {/* AI Analysis Result */}
+            {urlAnalysis && (
+              <div className="rounded-lg border bg-blue-50/50 p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-blue-700">
+                  <Sparkles className="h-3.5 w-3.5" />AI 分析结果
+                </div>
+                {urlAnalysis.urlMeta?.siteName && (
+                  <p className="text-xs text-muted-foreground">来源：{urlAnalysis.urlMeta.siteName}</p>
+                )}
+                {urlAnalysis.summary && (
+                  <p className="text-xs leading-relaxed">{urlAnalysis.summary}</p>
+                )}
+                {urlAnalysis.keywords && (
+                  <div className="flex flex-wrap gap-1">
+                    {urlAnalysis.keywords.split(/[,，]/).map((kw, i) => (
+                      <span key={i} className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] text-blue-700">{kw.trim()}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Title */}
             <div className="space-y-1.5">
-              <Label className="text-xs">文档名称</Label>
+              <Label className="text-xs">标题名称</Label>
               <Input
                 value={feishuTitle}
                 onChange={e => setFeishuTitle(e.target.value)}
-                placeholder="输入文档名称"
+                placeholder="输入标题（AI 分析后自动填充）"
                 className="h-8 text-sm"
               />
             </div>
+
+            {/* Type + Category */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">文档类型</Label>
@@ -1260,14 +1321,16 @@ function ProjectDocumentsTab({
                 </Select>
               </div>
             </div>
+
+            {/* Actions */}
             <div className="flex gap-2 pt-1">
               <Button variant="outline" className="flex-1" onClick={() => setFeishuOpen(false)}>取消</Button>
               <Button
                 className="flex-1"
                 onClick={handleSaveFeishuLink}
-                disabled={createDocMutation.isPending}
+                disabled={saveUrlDocMutation.isPending || isAnalyzing}
               >
-                {createDocMutation.isPending ? (
+                {saveUrlDocMutation.isPending ? (
                   <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />保存中...</>
                 ) : (
                   <><Check className="h-3.5 w-3.5 mr-1.5" />保存链接</>

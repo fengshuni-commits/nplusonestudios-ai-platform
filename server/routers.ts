@@ -1090,6 +1090,127 @@ const documentsRouter = router({
       return { doc, asset, url, key };
     }),
 
+  // Analyze a URL with AI: fetch page content and extract key info
+  analyzeUrl: protectedProcedure
+    .input(z.object({ url: z.string().url() }))
+    .mutation(async ({ input }) => {
+      // 1. Fetch page HTML
+      let pageText = "";
+      let urlMeta: Record<string, string> = {};
+      try {
+        const resp = await fetch(input.url, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; N1Bot/1.0)" },
+          signal: AbortSignal.timeout(10000),
+        });
+        const html = await resp.text();
+
+        // Extract meta tags
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+        const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+        const metaDesc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+        const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        const ogSite = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i);
+        const favicon = html.match(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/i);
+
+        urlMeta = {
+          title: (ogTitle?.[1] || titleMatch?.[1] || "").trim(),
+          description: (ogDesc?.[1] || metaDesc?.[1] || "").trim(),
+          ogImage: ogImage?.[1] || "",
+          siteName: ogSite?.[1] || new URL(input.url).hostname,
+          favicon: favicon?.[1] || "",
+        };
+
+        // Extract readable text (strip tags, limit to 3000 chars)
+        pageText = html
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 3000);
+      } catch (e) {
+        // If fetch fails (e.g. feishu auth required), still allow AI to work with URL
+        urlMeta = { title: "", description: "", ogImage: "", siteName: new URL(input.url).hostname, favicon: "" };
+        pageText = `无法报取页面内容（可能需要登录权限）。URL: ${input.url}`;
+      }
+
+      // 2. AI analysis
+      const aiResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `你是一个内容分析助手，層于建筑设计事务所内部工作平台。用户收藏了一个 URL，请分析其内容并返回 JSON。
+要求：
+- title: 简洁的中文标题（如果原标题是英文则翻译），不超过 50 字
+- summary: 2-3 句中文摘要，说明该页面的主要内容和价值
+- keywords: 3-6 个中文关键词，用逗号分隔
+- docType: 从 [brief, report, minutes, specification, checklist, schedule, other] 中选择最匹配的类型
+- category: 从 [design, construction, management] 中选择最匹配的分类
+返回纯 JSON，无需其他文字。`,
+          },
+          {
+            role: "user",
+            content: `URL: ${input.url}\n站点名: ${urlMeta.siteName}\n页面标题: ${urlMeta.title}\n页面描述: ${urlMeta.description}\n页面正文摘录:\n${pageText}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "url_analysis",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                summary: { type: "string" },
+                keywords: { type: "string" },
+                docType: { type: "string", enum: ["brief", "report", "minutes", "specification", "checklist", "schedule", "other"] },
+                category: { type: "string", enum: ["design", "construction", "management"] },
+              },
+              required: ["title", "summary", "keywords", "docType", "category"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      let analysis = { title: urlMeta.title || "", summary: "", keywords: "", docType: "other", category: "design" };
+      try {
+        const rawContent = aiResp.choices?.[0]?.message?.content;
+        const raw = typeof rawContent === "string" ? rawContent : null;
+        if (raw) analysis = { ...analysis, ...JSON.parse(raw) };
+      } catch {}
+
+      return { analysis, urlMeta };
+    }),
+
+  // Save a URL document with AI analysis results
+  saveUrlDoc: protectedProcedure
+    .input(z.object({
+      projectId: z.number(),
+      title: z.string().min(1),
+      url: z.string().url(),
+      type: z.enum(["brief", "report", "minutes", "specification", "checklist", "schedule", "other"]).optional(),
+      category: z.enum(["design", "construction", "management"]).optional(),
+      aiSummary: z.string().optional(),
+      aiKeywords: z.string().optional(),
+      urlMeta: z.string().optional(), // JSON string
+    }))
+    .mutation(async ({ input, ctx }) => {
+      return db.createDocument({
+        projectId: input.projectId,
+        title: input.title,
+        type: input.type ?? "other",
+        category: input.category ?? "design",
+        fileUrl: input.url,
+        aiSummary: input.aiSummary,
+        aiKeywords: input.aiKeywords,
+        urlMeta: input.urlMeta,
+        createdBy: ctx.user.id,
+      });
+    }),
+
   // Delete an uploaded document
   deleteFile: protectedProcedure
     .input(z.object({ id: z.number() }))
