@@ -592,6 +592,40 @@ function ProjectDocumentsTab({
     onError: (err) => toast.error(`上传失败：${err.message}`),
   });
 
+  // ─── Feishu link state ───────────────────────────────────
+  const [feishuOpen, setFeishuOpen] = useState(false);
+  const [feishuUrl, setFeishuUrl] = useState("");
+  const [feishuTitle, setFeishuTitle] = useState("");
+  const [feishuType, setFeishuType] = useState<"brief" | "report" | "minutes" | "specification" | "checklist" | "schedule" | "other">("other");
+  const [feishuCategory, setFeishuCategory] = useState<"design" | "construction" | "management">("design");
+
+  const createDocMutation = trpc.documents.create.useMutation({
+    onSuccess: () => {
+      utils.documents.listByProject.invalidate({ projectId });
+      toast.success("飞书链接已保存");
+      setFeishuOpen(false);
+      setFeishuUrl("");
+      setFeishuTitle("");
+    },
+    onError: (err) => toast.error(`保存失败：${err.message}`),
+  });
+
+  const handleSaveFeishuLink = () => {
+    const url = feishuUrl.trim();
+    if (!url) { toast.error("请输入飞书文档链接"); return; }
+    if (!feishuTitle.trim()) { toast.error("请输入文档名称"); return; }
+    // Accept feishu/lark doc links
+    const isFeishu = /feishu\.cn|larksuite\.com/.test(url);
+    if (!isFeishu) { toast.error("请输入有效的飞书文档链接（feishu.cn 或 larksuite.com）"); return; }
+    createDocMutation.mutate({
+      projectId,
+      title: feishuTitle.trim(),
+      type: feishuType,
+      category: feishuCategory,
+      fileUrl: url,
+    });
+  };
+
   const deleteFileMutation = trpc.documents.deleteFile.useMutation({
     onSuccess: () => {
       utils.documents.listByProject.invalidate({ projectId });
@@ -708,17 +742,7 @@ function ProjectDocumentsTab({
     }).catch(() => toast.error("复制失败"));
   }, []);
 
-  if (generationHistory.length === 0 && (!documents || documents.length === 0)) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
-          <p className="text-muted-foreground text-sm">暂无生成记录</p>
-          <p className="text-xs text-muted-foreground mt-1">在 AI 模块中导入此项目信息并生成内容后，记录将显示在这里</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // No early return — always render the file upload section even when empty
 
   return (
     <div className="space-y-6">
@@ -972,7 +996,10 @@ function ProjectDocumentsTab({
           {documents && documents.length > 0 && (
             <span className="text-xs text-muted-foreground">{documents.length} 个</span>
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setFeishuOpen(true)}>
+              <ExternalLink className="h-3.5 w-3.5" />飞书链接
+            </Button>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setUploadOpen(true)}>
               <Upload className="h-3.5 w-3.5" />上传文件
             </Button>
@@ -982,10 +1009,14 @@ function ProjectDocumentsTab({
           <Card>
             <CardContent className="p-4">
               <div className="space-y-1.5">
-                {documents.map((doc: any) => (
+                {documents.map((doc: any) => {
+                  const isFeishuLink = doc.fileUrl && /feishu\.cn|larksuite\.com/.test(doc.fileUrl);
+                  return (
                   <div key={doc.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 group">
-                    <div className="h-8 w-8 rounded flex items-center justify-center bg-muted shrink-0">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    <div className={`h-8 w-8 rounded flex items-center justify-center shrink-0 ${isFeishuLink ? "bg-blue-50" : "bg-muted"}`}>
+                      {isFeishuLink
+                        ? <ExternalLink className="h-4 w-4 text-blue-500" />
+                        : <FileText className="h-4 w-4 text-muted-foreground" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{doc.title}</p>
@@ -996,8 +1027,8 @@ function ProjectDocumentsTab({
                     </div>
                     <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       {doc.fileUrl && (
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title="下载" onClick={() => window.open(doc.fileUrl, "_blank")}>
-                          <Download className="h-3.5 w-3.5" />
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title={isFeishuLink ? "打开飞书" : "下载"} onClick={() => window.open(doc.fileUrl, "_blank")}>
+                          {isFeishuLink ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
                         </Button>
                       )}
                       {(isAdmin || currentUser?.id === doc.createdBy) && (
@@ -1021,7 +1052,8 @@ function ProjectDocumentsTab({
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -1149,6 +1181,96 @@ function ProjectDocumentsTab({
                   <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />上传中...</>
                 ) : (
                   <><Upload className="h-3.5 w-3.5 mr-1.5" />确认上传</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Feishu Link Dialog ─── */}
+      <Dialog open={feishuOpen} onOpenChange={(open) => { setFeishuOpen(open); if (!open) { setFeishuUrl(""); setFeishuTitle(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ExternalLink className="h-4 w-4 text-blue-500" />添加飞书文档链接
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">飞书文档链接</Label>
+              <Input
+                value={feishuUrl}
+                onChange={e => setFeishuUrl(e.target.value)}
+                placeholder="粘贴 feishu.cn 或 larksuite.com 链接"
+                className="h-8 text-sm"
+                onPaste={e => {
+                  const pasted = e.clipboardData.getData("text");
+                  // Auto-extract title from feishu URL path if title is empty
+                  setTimeout(() => {
+                    if (!feishuTitle) {
+                      try {
+                        const url = new URL(pasted.trim());
+                        const parts = url.pathname.split("/").filter(Boolean);
+                        const lastPart = parts[parts.length - 1];
+                        if (lastPart && !/^[a-zA-Z0-9]{20,}$/.test(lastPart)) {
+                          setFeishuTitle(decodeURIComponent(lastPart));
+                        }
+                      } catch {}
+                    }
+                  }, 50);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">支持飞书文档、多维表格、小程序等各类飞书链接</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">文档名称</Label>
+              <Input
+                value={feishuTitle}
+                onChange={e => setFeishuTitle(e.target.value)}
+                placeholder="输入文档名称"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">文档类型</Label>
+                <Select value={feishuType} onValueChange={(v: any) => setFeishuType(v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="brief">任务书</SelectItem>
+                    <SelectItem value="report">报告</SelectItem>
+                    <SelectItem value="minutes">会议纪要</SelectItem>
+                    <SelectItem value="specification">规范</SelectItem>
+                    <SelectItem value="checklist">检查清单</SelectItem>
+                    <SelectItem value="schedule">排期</SelectItem>
+                    <SelectItem value="other">其他</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">分类</Label>
+                <Select value={feishuCategory} onValueChange={(v: any) => setFeishuCategory(v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="design">设计</SelectItem>
+                    <SelectItem value="construction">施工</SelectItem>
+                    <SelectItem value="management">管理</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setFeishuOpen(false)}>取消</Button>
+              <Button
+                className="flex-1"
+                onClick={handleSaveFeishuLink}
+                disabled={createDocMutation.isPending}
+              >
+                {createDocMutation.isPending ? (
+                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />保存中...</>
+                ) : (
+                  <><Check className="h-3.5 w-3.5 mr-1.5" />保存链接</>
                 )}
               </Button>
             </div>
