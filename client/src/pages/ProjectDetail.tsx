@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Compass, Ruler, FileText, Megaphone,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -574,6 +575,83 @@ function ProjectDocumentsTab({
     }
   };
 
+  // ─── File upload state ───────────────────────────────────
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadType, setUploadType] = useState<"brief" | "report" | "minutes" | "specification" | "checklist" | "schedule" | "other">("other");
+  const [uploadCategory, setUploadCategory] = useState<"design" | "construction" | "management">("design");
+  const [syncToAssets, setSyncToAssets] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, "pending" | "uploading" | "done" | "error">>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFileMutation = trpc.documents.uploadFile.useMutation({
+    onSuccess: () => {
+      utils.documents.listByProject.invalidate({ projectId });
+    },
+    onError: (err) => toast.error(`上传失败：${err.message}`),
+  });
+
+  const deleteFileMutation = trpc.documents.deleteFile.useMutation({
+    onSuccess: () => {
+      utils.documents.listByProject.invalidate({ projectId });
+      toast.success("文件已删除");
+    },
+    onError: (err) => toast.error(`删除失败：${err.message}`),
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploadFiles(files);
+    if (!uploadTitle && files.length === 1) {
+      setUploadTitle(files[0].name.replace(/\.[^.]+$/, ""));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (uploadFiles.length === 0) { toast.error("请选择文件"); return; }
+    const newProgress: Record<string, "pending" | "uploading" | "done" | "error"> = {};
+    uploadFiles.forEach(f => { newProgress[f.name] = "pending"; });
+    setUploadProgress(newProgress);
+
+    let successCount = 0;
+    for (const file of uploadFiles) {
+      setUploadProgress(p => ({ ...p, [file.name]: "uploading" }));
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        let binary = "";
+        for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+        const base64 = btoa(binary);
+        const title = uploadFiles.length === 1 && uploadTitle ? uploadTitle : file.name.replace(/\.[^.]+$/, "");
+        await uploadFileMutation.mutateAsync({
+          projectId,
+          title,
+          fileName: file.name,
+          fileData: base64,
+          contentType: file.type || "application/octet-stream",
+          fileSize: file.size,
+          type: uploadType,
+          category: uploadCategory,
+          syncToAssets,
+        });
+        setUploadProgress(p => ({ ...p, [file.name]: "done" }));
+        successCount++;
+      } catch {
+        setUploadProgress(p => ({ ...p, [file.name]: "error" }));
+      }
+    }
+    if (successCount > 0) {
+      toast.success(`成功上传 ${successCount} 个文件${syncToAssets ? "，已同步到素材库" : ""}`);
+      setUploadOpen(false);
+      setUploadFiles([]);
+      setUploadTitle("");
+      setUploadProgress({});
+      setSyncToAssets(false);
+    }
+  };
+
   // Edit chain dialog state
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -884,32 +962,199 @@ function ProjectDocumentsTab({
         </div>
       )}
 
-      {/* ─── Traditional documents ─── */}
-      {documents && documents.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-7 w-7 rounded-md flex items-center justify-center bg-gray-100 text-gray-700">
-              <FileText className="h-3.5 w-3.5" />
-            </div>
-            <h3 className="text-sm font-medium">其他文档</h3>
+      {/* ─── Uploaded project files ─── */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-7 w-7 rounded-md flex items-center justify-center bg-gray-100 text-gray-700">
+            <FolderOpen className="h-3.5 w-3.5" />
           </div>
+          <h3 className="text-sm font-medium">项目文件</h3>
+          {documents && documents.length > 0 && (
+            <span className="text-xs text-muted-foreground">{documents.length} 个</span>
+          )}
+          <div className="ml-auto">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setUploadOpen(true)}>
+              <Upload className="h-3.5 w-3.5" />上传文件
+            </Button>
+          </div>
+        </div>
+        {documents && documents.length > 0 ? (
           <Card>
             <CardContent className="p-4">
               <div className="space-y-1.5">
                 {documents.map((doc: any) => (
-                  <div key={doc.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent/50">
-                    <div>
-                      <p className="text-sm font-medium">{doc.title}</p>
-                      <p className="text-xs text-muted-foreground">v{doc.version} · {new Date(doc.updatedAt).toLocaleDateString("zh-CN")}</p>
+                  <div key={doc.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/50 group">
+                    <div className="h-8 w-8 rounded flex items-center justify-center bg-muted shrink-0">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <Badge variant="outline" className="text-xs">{docTypeLabel(doc.type)}</Badge>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-[10px] mr-1.5 py-0">{docTypeLabel(doc.type)}</Badge>
+                        {new Date(doc.updatedAt).toLocaleDateString("zh-CN")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {doc.fileUrl && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="下载" onClick={() => window.open(doc.fileUrl, "_blank")}>
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {(isAdmin || currentUser?.id === doc.createdBy) && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确认删除</AlertDialogTitle>
+                              <AlertDialogDescription>将删除文件「{doc.title}」，不可恢复。</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteFileMutation.mutate({ id: doc.id })} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">删除</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-8">
+              <FolderOpen className="h-8 w-8 text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">暂无项目文件</p>
+              <p className="text-xs text-muted-foreground mt-1">点击「上传文件」添加图纸、报告、设计说明书等项目文件</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ─── Upload File Dialog ─── */}
+      <Dialog open={uploadOpen} onOpenChange={(open) => { setUploadOpen(open); if (!open) { setUploadFiles([]); setUploadTitle(""); setUploadProgress({}); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-4 w-4" />上传项目文件
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Drop zone */}
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length > 0) {
+                  setUploadFiles(files);
+                  if (!uploadTitle && files.length === 1) setUploadTitle(files[0].name.replace(/\.[^.]+$/, ""));
+                }
+              }}
+            >
+              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+              {uploadFiles.length === 0 ? (
+                <>
+                  <FolderOpen className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">点击或拖拽文件到此处</p>
+                  <p className="text-xs text-muted-foreground mt-1">支持 PDF、Word、Excel、图片等各类文件</p>
+                </>
+              ) : (
+                <div className="space-y-1.5 text-left">
+                  {uploadFiles.map(f => (
+                    <div key={f.name} className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-xs truncate flex-1">{f.name}</span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                      {uploadProgress[f.name] === "uploading" && <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                      {uploadProgress[f.name] === "done" && <Check className="h-3 w-3 text-green-500 shrink-0" />}
+                      {uploadProgress[f.name] === "error" && <X className="h-3 w-3 text-destructive shrink-0" />}
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground mt-2 cursor-pointer hover:text-primary" onClick={() => fileInputRef.current?.click()}>点击重新选择</p>
+                </div>
+              )}
+            </div>
+
+            {/* Title (only for single file) */}
+            {uploadFiles.length === 1 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">文件名称</Label>
+                <Input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="输入文件名称" className="h-8 text-sm" />
+              </div>
+            )}
+
+            {/* Type & Category */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">文档类型</Label>
+                <Select value={uploadType} onValueChange={(v: any) => setUploadType(v)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="brief">任务书</SelectItem>
+                    <SelectItem value="report">报告</SelectItem>
+                    <SelectItem value="minutes">会议纪要</SelectItem>
+                    <SelectItem value="specification">规范</SelectItem>
+                    <SelectItem value="checklist">检查清单</SelectItem>
+                    <SelectItem value="schedule">排期</SelectItem>
+                    <SelectItem value="other">其他</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">分类</Label>
+                <Select value={uploadCategory} onValueChange={(v: any) => setUploadCategory(v)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="design">设计</SelectItem>
+                    <SelectItem value="construction">施工</SelectItem>
+                    <SelectItem value="management">管理</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Sync to assets */}
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+              <Checkbox
+                id="sync-assets"
+                checked={syncToAssets}
+                onCheckedChange={(checked) => setSyncToAssets(!!checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="sync-assets" className="text-sm cursor-pointer">同步到素材库</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">将文件同时保存到素材库，方便在其他项目中复用</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setUploadOpen(false)}>取消</Button>
+              <Button
+                className="flex-1"
+                onClick={handleUpload}
+                disabled={uploadFiles.length === 0 || uploadFileMutation.isPending}
+              >
+                {uploadFileMutation.isPending ? (
+                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />上传中...</>
+                ) : (
+                  <><Upload className="h-3.5 w-3.5 mr-1.5" />确认上传</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── Edit Chain Dialog for AI Render ─── */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>

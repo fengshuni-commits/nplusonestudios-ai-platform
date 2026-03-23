@@ -1039,6 +1039,69 @@ const documentsRouter = router({
       await db.updateDocument(id, data);
       return { success: true };
     }),
+
+  // Upload a local file to S3 and create a document record
+  uploadFile: protectedProcedure
+    .input(z.object({
+      projectId: z.number(),
+      title: z.string().min(1),
+      fileName: z.string(),
+      fileData: z.string(), // base64
+      contentType: z.string(),
+      fileSize: z.number().optional(),
+      type: z.enum(["brief", "report", "minutes", "specification", "checklist", "schedule", "other"]).optional(),
+      category: z.enum(["design", "construction", "management"]).optional(),
+      syncToAssets: z.boolean().optional().default(false),
+      assetCategory: z.string().optional(),
+      assetTags: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const buffer = Buffer.from(input.fileData, "base64");
+      const key = `project-docs/${input.projectId}/${nanoid()}-${input.fileName}`;
+      const { url } = await storagePut(key, buffer, input.contentType);
+
+      // Create document record
+      const doc = await db.createDocument({
+        projectId: input.projectId,
+        title: input.title,
+        type: input.type ?? "other",
+        category: input.category ?? "design",
+        fileUrl: url,
+        fileKey: key,
+        createdBy: ctx.user.id,
+      });
+
+      // Optionally sync to assets library
+      let asset = null;
+      if (input.syncToAssets) {
+        asset = await db.createAsset({
+          name: input.title,
+          fileUrl: url,
+          fileKey: key,
+          fileType: input.contentType,
+          fileSize: input.fileSize,
+          category: input.assetCategory || "project_doc",
+          tags: input.assetTags,
+          uploadedBy: ctx.user.id,
+          projectId: input.projectId,
+        });
+      }
+
+      return { doc, asset, url, key };
+    }),
+
+  // Delete an uploaded document
+  deleteFile: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const doc = await db.getDocumentById(input.id);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "文档不存在" });
+      if (doc.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "无权删除此文档" });
+      }
+      await db.deleteDocument(input.id);
+      return { success: true };
+    }),
 });
 
 // ─── Assets ──────────────────────────────────────────────

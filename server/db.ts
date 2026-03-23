@@ -687,6 +687,12 @@ export async function updateDocument(id: number, data: Partial<InsertDocument>) 
   await db.update(documents).set(data).where(eq(documents.id, id));
 }
 
+export async function deleteDocument(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(documents).where(eq(documents.id, id));
+}
+
 // ─── Assets ──────────────────────────────────────────────
 
 export async function listAssets(opts?: { category?: string; search?: string }) {
