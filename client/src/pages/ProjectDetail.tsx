@@ -1739,74 +1739,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
       </div>
       </div>
       ) : (
-      <div>
-      {/* Gantt Chart View */}
-      <div className="overflow-x-auto border rounded-lg bg-white">
-        <div className="min-w-max">
-          {/* Timeline Header */}
-          <div className="flex border-b bg-muted/50 sticky top-0">
-            <div className="w-40 p-2 border-r text-xs font-medium flex-shrink-0 sticky left-0 bg-muted/50">任务名称</div>
-            <div className="flex flex-1">
-              {Array.from({ length: 30 }).map((_, i) => {
-                const date = new Date();
-                date.setDate(date.getDate() - 14 + i);
-                const isToday = date.toDateString() === new Date().toDateString();
-                return (
-                  <div key={i} className={`w-8 h-8 border-r text-[10px] flex items-center justify-center flex-shrink-0 ${isToday ? 'bg-red-100 text-red-700 font-bold' : 'text-muted-foreground'}`}>
-                    {date.getDate()}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          {/* Tasks */}
-          {topLevelTasks.map((task: any) => {
-            const startDate = task.startDate ? new Date(task.startDate) : null;
-            const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            let startOffset = 0;
-            let duration = 0;
-            
-            if (startDate && dueDate) {
-              const baseDate = new Date(today);
-              baseDate.setDate(baseDate.getDate() - 14);
-              baseDate.setHours(0, 0, 0, 0);
-              startOffset = Math.max(0, Math.floor((startDate.getTime() - baseDate.getTime()) / 86400000));
-              duration = Math.max(1, Math.ceil((dueDate.getTime() - startDate.getTime()) / 86400000));
-            }
-            
-            return (
-              <div key={task.id} className="flex border-b hover:bg-muted/30 transition-colors">
-                <div className="w-40 p-2 border-r text-xs truncate flex-shrink-0 sticky left-0 bg-white cursor-pointer hover:text-primary" onClick={() => { setSelectedTask(task); setTaskDetailOpen(true); }}>
-                  {task.title}
-                </div>
-                <div className="flex flex-1 relative h-8">
-                  {/* Task bar */}
-                  {startDate && dueDate && (
-                    <div
-                      className="absolute top-1 bottom-1 bg-primary/70 rounded text-[9px] text-white flex items-center px-1 overflow-hidden cursor-pointer hover:bg-primary transition-colors"
-                      style={{
-                        left: `${startOffset * 32}px`,
-                        width: `${Math.max(20, duration * 32)}px`,
-                      }}
-                      onClick={() => { setSelectedTask(task); setTaskDetailOpen(true); }}
-                      title={task.title}
-                    >
-                      <div className="truncate flex-1">{task.title}</div>
-                      {(task.progress ?? 0) > 0 && (
-                        <div className="absolute inset-0 bg-primary/40 rounded" style={{ width: `${task.progress}%` }} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      </div>
+      <ProjectGanttChart tasks={topLevelTasks} onTaskClick={(task) => { setSelectedTask(task); setTaskDetailOpen(true); }} />
       )}
 
       {/* Task Detail Dialog */}
@@ -2263,6 +2196,225 @@ function ProjectMembersTab({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Project Gantt Chart ──────────────────────────────────────────────────────
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: "#ef4444",
+  high:   "#f97316",
+  medium: "#6366f1",
+  low:    "#94a3b8",
+};
+
+function ProjectGanttChart({
+  tasks,
+  onTaskClick,
+}: {
+  tasks: any[];
+  onTaskClick: (task: any) => void;
+}) {
+  // Only tasks that have at least one date
+  const ganttTasks = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return tasks
+      .filter((t: any) => t.dueDate || t.startDate)
+      .map((t: any) => {
+        const start = t.startDate
+          ? new Date(t.startDate)
+          : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const end = t.dueDate
+          ? new Date(t.dueDate)
+          : new Date(start.getTime() + 86400000);
+        return { ...t, _start: start, _end: end };
+      })
+      .sort((a: any, b: any) => a._start.getTime() - b._start.getTime());
+  }, [tasks]);
+
+  // Memoize date range to avoid rebuilding every render
+  const { rangeStart, totalDays, days, today } = useMemo(() => {
+    if (ganttTasks.length === 0) {
+      const t = new Date();
+      t.setHours(0, 0, 0, 0);
+      return { rangeStart: t, totalDays: 30, days: [] as Date[], today: t };
+    }
+    const minDate = ganttTasks.reduce(
+      (m: Date, t: any) => (t._start < m ? t._start : m),
+      ganttTasks[0]._start
+    );
+    const maxDate = ganttTasks.reduce(
+      (m: Date, t: any) => (t._end > m ? t._end : m),
+      ganttTasks[0]._end
+    );
+    const rs = new Date(minDate.getTime() - 3 * 86400000);
+    const re = new Date(maxDate.getTime() + 3 * 86400000);
+    const td = Math.ceil((re.getTime() - rs.getTime()) / 86400000);
+    const d: Date[] = [];
+    for (let i = 0; i < td; i++) d.push(new Date(rs.getTime() + i * 86400000));
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return { rangeStart: rs, totalDays: td, days: d, today: t };
+  }, [ganttTasks]);
+
+  if (ganttTasks.length === 0) {
+    return (
+      <div className="border rounded-lg p-8 text-center text-sm text-muted-foreground">
+        暂无设置了时间范围的任务。<br />
+        <span className="text-xs">为任务设置开始/截止日期后，甘特图将自动显示。</span>
+      </div>
+    );
+  }
+
+  const dayWidth = 32;
+  const rowHeight = 40;
+  const labelWidth = 176;
+
+  return (
+    <div className="overflow-x-auto border rounded-lg bg-background">
+      <div style={{ minWidth: `${totalDays * dayWidth + labelWidth}px` }}>
+        {/* Header */}
+        <div className="flex sticky top-0 z-20 bg-muted/80 border-b border-border/40" style={{ height: "28px" }}>
+          <div
+            className="shrink-0 flex items-center px-2 border-r border-border/40 bg-muted/80"
+            style={{ width: `${labelWidth}px`, position: "sticky", left: 0, zIndex: 21 }}
+          >
+            <span className="text-[10px] font-medium text-muted-foreground">任务名称</span>
+          </div>
+          <div className="flex flex-1">
+            {days.map((d, i) => {
+              const isToday = d.getTime() === today.getTime();
+              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+              const showLabel = d.getDate() === 1 || i === 0 || d.getDay() === 1;
+              return (
+                <div
+                  key={i}
+                  style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
+                  className={`relative border-r border-border/20 ${isWeekend ? "bg-muted/40" : ""} ${isToday ? "bg-primary/10" : ""}`}
+                >
+                  {showLabel && (
+                    <span className="text-[9px] text-muted-foreground absolute top-0.5 left-0.5 leading-none">
+                      {d.getDate() === 1 ? `${d.getMonth() + 1}月` : `${d.getDate()}`}
+                    </span>
+                  )}
+                  {isToday && (
+                    <span className="text-[9px] font-bold text-primary absolute top-0.5 left-0.5 leading-none">今</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Task rows */}
+        {ganttTasks.map((task: any) => {
+          const startOffset = Math.floor(
+            (task._start.getTime() - rangeStart.getTime()) / 86400000
+          );
+          const duration = Math.max(
+            1,
+            Math.ceil((task._end.getTime() - task._start.getTime()) / 86400000)
+          );
+          const daysLeft = Math.ceil((task._end.getTime() - Date.now()) / 86400000);
+          const isOverdue = daysLeft < 0;
+          const isUrgent = daysLeft >= 0 && daysLeft <= 3;
+          const barColor = isOverdue
+            ? "#ef4444"
+            : isUrgent
+            ? "#f59e0b"
+            : PRIORITY_COLORS[task.priority] || "#6366f1";
+
+          const tooltipLabel = [
+            task.title,
+            task.assigneeName ? `负责人：${task.assigneeName}` : "",
+            `${task._start.toLocaleDateString("zh-CN")} → ${task._end.toLocaleDateString("zh-CN")}`,
+            isOverdue ? "⚠ 已逾期" : isUrgent ? "⚡ 即将到期" : "",
+          ].filter(Boolean).join("\n");
+
+          const todayOffset = Math.floor(
+            (today.getTime() - rangeStart.getTime()) / 86400000
+          );
+
+          return (
+            <div
+              key={task.id}
+              className="flex border-b border-border/20 hover:bg-muted/20 transition-colors"
+              style={{ height: `${rowHeight}px` }}
+            >
+              {/* Sticky label */}
+              <div
+                className="shrink-0 flex items-center gap-1.5 px-2 bg-background border-r border-border/20 cursor-pointer hover:text-primary"
+                style={{ width: `${labelWidth}px`, position: "sticky", left: 0, zIndex: 10, height: `${rowHeight}px` }}
+                title={tooltipLabel}
+                onClick={() => onTaskClick(task)}
+              >
+                <div
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: barColor }}
+                />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs truncate block leading-tight">{task.title}</span>
+                  {task.assigneeName && (
+                    <span className="text-[9px] text-blue-600/80 truncate block leading-tight font-medium">
+                      {task.assigneeName}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Bar area */}
+              <div className="relative flex-1" style={{ height: `${rowHeight}px` }}>
+                {/* Today line */}
+                <div
+                  className="absolute top-0 bottom-0 w-px bg-primary/40 z-10"
+                  style={{ left: `${todayOffset * dayWidth + dayWidth / 2}px` }}
+                />
+                {/* Weekend shading */}
+                {days.map((d, i) =>
+                  d.getDay() === 0 || d.getDay() === 6 ? (
+                    <div
+                      key={i}
+                      className="absolute top-0 bottom-0 bg-muted/20"
+                      style={{ left: `${i * dayWidth}px`, width: `${dayWidth}px` }}
+                    />
+                  ) : null
+                )}
+                {/* Task bar */}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 rounded px-1.5 cursor-pointer overflow-hidden"
+                  style={{
+                    left: `${startOffset * dayWidth}px`,
+                    width: `${Math.max(20, duration * dayWidth - 2)}px`,
+                    height: "24px",
+                    backgroundColor: barColor,
+                  }}
+                  title={tooltipLabel}
+                  onClick={() => onTaskClick(task)}
+                >
+                  {(task.progress ?? 0) > 0 && (
+                    <div
+                      className="absolute left-0 top-0 bottom-0 rounded bg-white/30"
+                      style={{ width: `${task.progress}%` }}
+                    />
+                  )}
+                  {duration > 2 && (
+                    <div className="flex flex-col justify-center h-full relative z-10 min-w-0 leading-none">
+                      <span className="text-[9px] text-white font-medium truncate">{task.title}</span>
+                      {task.assigneeName && (
+                        <span className="text-[8px] text-white/80 truncate">{task.assigneeName}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-muted-foreground px-2 py-1.5">
+        仅显示已设置时间范围的任务 · 竖线为今日 · 点击任务可查看详情
+      </p>
     </div>
   );
 }
