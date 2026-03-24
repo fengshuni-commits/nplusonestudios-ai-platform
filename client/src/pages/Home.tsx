@@ -26,6 +26,12 @@ import {
   UserCheck,
   ChevronDown,
   X,
+  Plus,
+  CheckSquare,
+  Square,
+  Trash2,
+  Edit3,
+  Calendar,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -234,6 +240,31 @@ function MyTasksPanel({
   const [view, setView] = useState<"list" | "gantt">("list");
   const [activeTab, setActiveTab] = useState<"assignee" | "reviewer">("assignee");
 
+  // Personal tasks state
+  const [personalTaskMode, setPersonalTaskMode] = useState(false);
+  const [ptView, setPtView] = useState<"list" | "gantt">("list");
+  const [ptStatusFilter, setPtStatusFilter] = useState<"all" | "todo" | "in_progress" | "done">("all");
+  const [ptDialogOpen, setPtDialogOpen] = useState(false);
+  const [ptForm, setPtForm] = useState({ title: "", notes: "", priority: "medium" as "urgent"|"high"|"medium"|"low", startDate: "", dueDate: "" });
+  const [ptEditingId, setPtEditingId] = useState<number | null>(null);
+  const [ptEditTitle, setPtEditTitle] = useState("");
+  const utils = trpc.useUtils();
+
+  const { data: personalTasksData, isLoading: ptLoading } = trpc.personalTasks.list.useQuery(
+    { status: ptStatusFilter },
+    { enabled: personalTaskMode, staleTime: 30 * 1000, refetchOnWindowFocus: false }
+  );
+
+  const createPersonalTask = trpc.personalTasks.create.useMutation({
+    onSuccess: () => { utils.personalTasks.list.invalidate(); setPtDialogOpen(false); setPtForm({ title: "", notes: "", priority: "medium", startDate: "", dueDate: "" }); },
+  });
+  const updatePersonalTask = trpc.personalTasks.update.useMutation({
+    onSuccess: () => { utils.personalTasks.list.invalidate(); setPtEditingId(null); },
+  });
+  const deletePersonalTask = trpc.personalTasks.delete.useMutation({
+    onSuccess: () => utils.personalTasks.list.invalidate(),
+  });
+
   // Member view state
   const [memberViewMode, setMemberViewMode] = useState<"mine" | "all" | "specific">("mine");
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
@@ -346,12 +377,23 @@ function MyTasksPanel({
             )}
           </div>
           <div className="flex items-center gap-1 flex-wrap">
-            {/* Member view buttons */}
+            {/* Personal tasks toggle */}
             <Button
-              variant={memberViewMode === "mine" ? "secondary" : "ghost"}
+              variant={personalTaskMode ? "secondary" : "ghost"}
               size="sm"
               className="h-7 px-2 text-xs"
-              onClick={() => { setMemberViewMode("mine"); setSelectedMemberId(null); }}
+              onClick={() => setPersonalTaskMode(v => !v)}
+            >
+              <Square className="h-3 w-3 mr-1" />
+              个人
+            </Button>
+            <div className="w-px h-5 bg-border mx-0.5" />
+            {/* Member view buttons */}
+            <Button
+              variant={!personalTaskMode && memberViewMode === "mine" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => { setMemberViewMode("mine"); setSelectedMemberId(null); setPersonalTaskMode(false); }}
             >
               我的
             </Button>
@@ -440,6 +482,240 @@ function MyTasksPanel({
           </div>
         </CardHeader>
         <CardContent className="pt-0">
+          {/* Personal Tasks UI */}
+          {personalTaskMode ? (
+            <div>
+              {/* Personal tasks toolbar */}
+              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                <div className="flex items-center gap-1">
+                  {(["all", "todo", "in_progress", "done"] as const).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setPtStatusFilter(s)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                        ptStatusFilter === s
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {s === "all" ? "全部" : s === "todo" ? "待办" : s === "in_progress" ? "进行中" : "已完成"}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant={ptView === "list" ? "secondary" : "ghost"} size="sm" className="h-7 px-2 text-xs" onClick={() => setPtView("list")}>
+                    <ListTodo className="h-3.5 w-3.5 mr-1" />列表
+                  </Button>
+                  <Button variant={ptView === "gantt" ? "secondary" : "ghost"} size="sm" className="h-7 px-2 text-xs" onClick={() => setPtView("gantt")}>
+                    <BarChart2 className="h-3.5 w-3.5 mr-1" />甘特图
+                  </Button>
+                  <Button size="sm" className="h-7 px-2 text-xs" onClick={() => setPtDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />新建
+                  </Button>
+                </div>
+              </div>
+
+              {/* Personal tasks content */}
+              {ptLoading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : !personalTasksData || personalTasksData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <CheckSquare className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">暂无个人任务</p>
+                  <Button variant="outline" size="sm" className="mt-3 text-xs" onClick={() => setPtDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />创建第一个个人任务
+                  </Button>
+                </div>
+              ) : ptView === "gantt" ? (
+                <GanttView
+                  tasks={(personalTasksData || []).map((t: any) => ({
+                    id: t.id,
+                    title: t.title,
+                    status: t.status,
+                    priority: t.priority,
+                    startDate: t.startDate,
+                    dueDate: t.dueDate,
+                    projectName: "个人任务",
+                    projectId: -1,
+                    assigneeName: "我",
+                  }))}
+                  colorByProject={false}
+                />
+              ) : (
+                <div className="space-y-1">
+                  {(personalTasksData || []).map((task: any) => (
+                    <div key={task.id} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-muted/50 group transition-colors">
+                      {/* Status toggle */}
+                      <button
+                        className="flex-shrink-0"
+                        onClick={() => updatePersonalTask.mutate({
+                          id: task.id,
+                          status: task.status === "done" ? "todo" : task.status === "todo" ? "in_progress" : "done",
+                        })}
+                        title="切换状态"
+                      >
+                        {task.status === "done" ? (
+                          <CheckSquare className="h-4 w-4 text-green-500" />
+                        ) : task.status === "in_progress" ? (
+                          <Square className="h-4 w-4 text-blue-500" />
+                        ) : (
+                          <Square className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+
+                      {/* Title (inline edit) */}
+                      {ptEditingId === task.id ? (
+                        <input
+                          autoFocus
+                          className="flex-1 text-xs bg-background border border-border rounded px-2 py-0.5 outline-none"
+                          value={ptEditTitle}
+                          onChange={e => setPtEditTitle(e.target.value)}
+                          onBlur={() => {
+                            if (ptEditTitle.trim() && ptEditTitle !== task.title) {
+                              updatePersonalTask.mutate({ id: task.id, title: ptEditTitle.trim() });
+                            } else {
+                              setPtEditingId(null);
+                            }
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            if (e.key === "Escape") { setPtEditingId(null); }
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className={`flex-1 text-xs cursor-pointer ${
+                            task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
+                          }`}
+                          onDoubleClick={() => { setPtEditingId(task.id); setPtEditTitle(task.title); }}
+                          title="双击编辑"
+                        >
+                          {task.title}
+                        </span>
+                      )}
+
+                      {/* Priority badge */}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        task.priority === "urgent" ? "bg-red-100 text-red-600" :
+                        task.priority === "high" ? "bg-orange-100 text-orange-600" :
+                        task.priority === "medium" ? "bg-blue-100 text-blue-600" :
+                        "bg-muted text-muted-foreground"
+                      }`}>
+                        {task.priority === "urgent" ? "紧急" : task.priority === "high" ? "高" : task.priority === "medium" ? "中" : "低"}
+                      </span>
+
+                      {/* Due date */}
+                      {task.dueDate && (
+                        <span className={`text-[10px] flex-shrink-0 flex items-center gap-0.5 ${
+                          new Date(task.dueDate) < new Date() && task.status !== "done" ? "text-red-500" : "text-muted-foreground"
+                        }`}>
+                          <Calendar className="h-3 w-3" />
+                          {new Date(task.dueDate).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
+                        </span>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                          onClick={() => { setPtEditingId(task.id); setPtEditTitle(task.title); }}
+                          title="编辑"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                        </button>
+                        <button
+                          className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-red-500"
+                          onClick={() => { if (confirm("确认删除这个个人任务？")) deletePersonalTask.mutate({ id: task.id }); }}
+                          title="删除"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Create personal task dialog */}
+              {ptDialogOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                  <div className="bg-background rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
+                    <h3 className="text-base font-semibold mb-4">新建个人任务</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">任务名称 *</label>
+                        <input
+                          autoFocus
+                          className="w-full text-sm bg-muted/50 border border-border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
+                          placeholder="输入任务名称"
+                          value={ptForm.title}
+                          onChange={e => setPtForm(f => ({ ...f, title: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter" && ptForm.title.trim()) createPersonalTask.mutate(ptForm); }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">备注</label>
+                        <textarea
+                          className="w-full text-sm bg-muted/50 border border-border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                          placeholder="可选备注"
+                          rows={2}
+                          value={ptForm.notes}
+                          onChange={e => setPtForm(f => ({ ...f, notes: e.target.value }))}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground mb-1 block">优先级</label>
+                          <select
+                            className="w-full text-sm bg-muted/50 border border-border rounded-lg px-3 py-2 outline-none"
+                            value={ptForm.priority}
+                            onChange={e => setPtForm(f => ({ ...f, priority: e.target.value as any }))}
+                          >
+                            <option value="urgent">紧急</option>
+                            <option value="high">高</option>
+                            <option value="medium">中</option>
+                            <option value="low">低</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground mb-1 block">截止日期</label>
+                          <input
+                            type="date"
+                            className="w-full text-sm bg-muted/50 border border-border rounded-lg px-3 py-2 outline-none"
+                            value={ptForm.dueDate}
+                            onChange={e => setPtForm(f => ({ ...f, dueDate: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">开始日期</label>
+                        <input
+                          type="date"
+                          className="w-full text-sm bg-muted/50 border border-border rounded-lg px-3 py-2 outline-none"
+                          value={ptForm.startDate}
+                          onChange={e => setPtForm(f => ({ ...f, startDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 mt-5">
+                      <Button variant="outline" size="sm" onClick={() => setPtDialogOpen(false)}>取消</Button>
+                      <Button
+                        size="sm"
+                        disabled={!ptForm.title.trim() || createPersonalTask.isPending}
+                        onClick={() => createPersonalTask.mutate(ptForm)}
+                      >
+                        {createPersonalTask.isPending ? "创建中..." : "创建任务"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* Regular tasks (hidden when personalTaskMode) */}
+          {!personalTaskMode && (
+            <div>
           {/* Tab: 执行中 / 待审核 — only shown in "mine" mode */}
           {memberViewMode === "mine" && (
             <div className="flex items-center gap-1 mb-3 border-b">
@@ -498,6 +774,8 @@ function MyTasksPanel({
             />
           ) : (
             <GanttView tasks={displayedTasks} colorByProject={memberViewMode !== "mine"} />
+          )}
+          </div>
           )}
         </CardContent>
       </Card>

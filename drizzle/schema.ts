@@ -499,3 +499,20 @@ export const videoHistory = mysqlTable("video_history", {
 
 export type VideoHistory = typeof videoHistory.$inferSelect;
 export type InsertVideoHistory = typeof videoHistory.$inferInsert;
+
+// ─── Personal Tasks ──────────────────────────────────────
+// 个人任务：仅对创建者可见，不关联项目，不在团队视图中显示
+export const personalTasks = mysqlTable("personal_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 512 }).notNull(),
+  notes: text("notes"),
+  priority: mysqlEnum("priority", ["urgent", "high", "medium", "low"]).default("medium").notNull(),
+  status: mysqlEnum("status", ["todo", "in_progress", "done"]).default("todo").notNull(),
+  startDate: timestamp("startDate"),
+  dueDate: timestamp("dueDate"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PersonalTask = typeof personalTasks.$inferSelect;
+export type InsertPersonalTask = typeof personalTasks.$inferInsert;

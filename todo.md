@@ -943,3 +943,13 @@
 - [x] 修复项目看板甘特图闪退（日期计算移入 useMemo，动态时间窗口）
 - [x] 项目看板甘特图显示任务负责人名称（左侧名称栏和时间条内均显示）
 - [x] 验证并保存检查点
+
+## 个人任务功能
+- [x] 数据库：新增 personal_tasks 表（id, userId, title, notes, priority, status, startDate, dueDate, createdAt, updatedAt）
+- [x] 后端： personalTasks.list / create / update / delete 路由（protectedProcedure，仅返回自己的任务）
+- [x] 前端：工作台待办面板新增「个人」按钮（与「我的」「所有成员」「指定成员」并列）
+- [x] 前端：个人任务列表视图（含状态筛选、优先级标签、完成勾选）
+- [x] 前端：个人任务甘特图视图（复用 GanttView 组件）
+- [x] 前端：新建个人任务 Dialog（标题、备注、优先级、开始/截止日期）
+- [x] 验证个人任务不在「所有成员」和「指定成员」视图中显示（后端 protectedProcedure 仅返回当前用户自己的任务）
+- [x] 验证并保存检查点

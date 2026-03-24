@@ -3466,6 +3466,94 @@ const presentationRouter = router({
     }),
 });
 
+// ─── Personal Tasks Router ──────────────────────────────────────────────────
+const personalTasksRouter = router({
+  list: protectedProcedure
+    .input(z.object({
+      status: z.enum(["todo", "in_progress", "done", "all"]).optional().default("all"),
+    }))
+    .query(async ({ ctx, input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return [];
+      const { personalTasks: pt } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and, desc: _desc } = await import("drizzle-orm");
+      const rows = await drizzleDb
+        .select()
+        .from(pt)
+        .where(
+          input.status === "all"
+            ? _eq(pt.userId, ctx.user.id)
+            : _and(_eq(pt.userId, ctx.user.id), _eq(pt.status, input.status))
+        )
+        .orderBy(_desc(pt.createdAt));
+      return rows;
+    }),
+
+  create: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1).max(512),
+      notes: z.string().optional(),
+      priority: z.enum(["urgent", "high", "medium", "low"]).optional().default("medium"),
+      startDate: z.string().optional(),
+      dueDate: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { personalTasks: pt } = await import("../drizzle/schema");
+      const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+      await drizzleDb.insert(pt).values({
+        userId: ctx.user.id,
+        title: input.title,
+        notes: input.notes,
+        priority: input.priority,
+        startDate: input.startDate ? new Date(input.startDate) : undefined,
+        dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
+      });
+      const [created] = await drizzleDb.select().from(pt).where(_eq(pt.userId, ctx.user.id)).orderBy(_desc(pt.createdAt)).limit(1);
+      return created;
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().min(1).max(512).optional(),
+      notes: z.string().optional(),
+      priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+      status: z.enum(["todo", "in_progress", "done"]).optional(),
+      startDate: z.string().nullable().optional(),
+      dueDate: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { personalTasks: pt } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const { id, startDate, dueDate, ...rest } = input;
+      await drizzleDb.update(pt)
+        .set({
+          ...rest,
+          ...(startDate !== undefined ? { startDate: startDate ? new Date(startDate) : null } : {}),
+          ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
+        })
+        .where(_and(_eq(pt.id, id), _eq(pt.userId, ctx.user.id)));
+      const [updated] = await drizzleDb.select().from(pt).where(_eq(pt.id, id));
+      return updated;
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { personalTasks: pt } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      await drizzleDb.delete(pt)
+        .where(_and(_eq(pt.id, input.id), _eq(pt.userId, ctx.user.id)));
+      return { success: true };
+    }),
+});
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -3497,6 +3585,7 @@ export const appRouter = router({system: systemRouter,
   enhance: enhanceRouter,
   presentation: presentationRouter,
   fieldTemplates: fieldTemplatesRouter,
+  personalTasks: personalTasksRouter,
   video: router({
     generate: protectedProcedure
       .input(
