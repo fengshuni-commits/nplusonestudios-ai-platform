@@ -3,6 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import {
   FolderKanban,
@@ -32,8 +36,11 @@ import {
   Trash2,
   Edit3,
   Calendar,
+  ExternalLink,
+  Lock,
+  ChevronRight,
 } from "lucide-react";
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 
 const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -239,6 +246,35 @@ function MyTasksPanel({
 }) {
   const [view, setView] = useState<"list" | "gantt">("list");
   const [activeTab, setActiveTab] = useState<"assignee" | "reviewer">("assignee");
+  const { user: currentUser } = useAuth();
+
+  // Task detail dialog state
+  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
+  const [taskEditForm, setTaskEditForm] = useState({ title: "", status: "", priority: "", progress: 0, startDate: "", dueDate: "", description: "" });
+
+  const updateTaskDetail = trpc.tasks.update.useMutation({
+    onSuccess: () => {
+      utils.tasks.listMine.invalidate();
+      utils.tasks.listAll.invalidate();
+      utils.tasks.listByUser.invalidate();
+      setTaskDetailOpen(false);
+    },
+  });
+
+  const openTaskDetail = useCallback((task: any) => {
+    setSelectedTask(task);
+    setTaskEditForm({
+      title: task.title || "",
+      status: task.status || "todo",
+      priority: task.priority || "medium",
+      progress: task.progress ?? 0,
+      startDate: task.startDate ? new Date(task.startDate).toISOString().split("T")[0] : "",
+      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
+      description: task.description || "",
+    });
+    setTaskDetailOpen(true);
+  }, []);
 
   // Personal tasks state
   const [personalTaskMode, setPersonalTaskMode] = useState(false);
@@ -771,14 +807,188 @@ function MyTasksPanel({
               onNavigate={onNavigate}
               isReviewMode={memberViewMode === "mine" && activeTab === "reviewer"}
               showAssignee={memberViewMode !== "mine"}
+              onTaskClick={openTaskDetail}
             />
           ) : (
-            <GanttView tasks={displayedTasks} colorByProject={memberViewMode !== "mine"} />
+            <GanttView tasks={displayedTasks} colorByProject={memberViewMode !== "mine"} onTaskClick={openTaskDetail} />
           )}
           </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Task Detail Dialog */}
+      {selectedTask && (() => {
+        const canEdit = currentUser && (
+          currentUser.role === "admin" ||
+          selectedTask.assigneeId === currentUser.id ||
+          selectedTask.createdBy === currentUser.id
+        );
+        return (
+          <Dialog open={taskDetailOpen} onOpenChange={setTaskDetailOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  {canEdit ? (
+                    <Input
+                      value={taskEditForm.title}
+                      onChange={e => setTaskEditForm(f => ({ ...f, title: e.target.value }))}
+                      className="text-base font-semibold h-8 border-0 border-b rounded-none px-0 focus-visible:ring-0 shadow-none"
+                    />
+                  ) : (
+                    <span>{selectedTask.title}</span>
+                  )}
+                  {!canEdit && <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-3 py-1">
+                {/* Project & assignee info */}
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  {selectedTask.projectName && (
+                    <button
+                      className="flex items-center gap-1 hover:text-primary transition-colors"
+                      onClick={() => { setTaskDetailOpen(false); onNavigate(`/projects/${selectedTask.projectId}`); }}
+                    >
+                      <FolderKanban className="h-3.5 w-3.5" />
+                      {selectedTask.projectName}
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                  )}
+                  {selectedTask.assigneeName && (
+                    <span className="flex items-center gap-1">
+                      <div className="h-3.5 w-3.5 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-medium text-primary">
+                        {selectedTask.assigneeName.charAt(0)}
+                      </div>
+                      {selectedTask.assigneeName}
+                    </span>
+                  )}
+                </div>
+
+                {/* Status & Priority */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">状态</Label>
+                    {canEdit ? (
+                      <select
+                        className="w-full text-xs border rounded px-2 py-1.5 bg-background text-foreground"
+                        value={taskEditForm.status}
+                        onChange={e => setTaskEditForm(f => ({ ...f, status: e.target.value }))}
+                      >
+                        <option value="backlog">待排期</option>
+                        <option value="todo">待开始</option>
+                        <option value="in_progress">进行中</option>
+                        <option value="review">待审核</option>
+                        <option value="done">已完成</option>
+                      </select>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">{taskStatusLabel(taskEditForm.status)}</Badge>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">优先级</Label>
+                    {canEdit ? (
+                      <select
+                        className="w-full text-xs border rounded px-2 py-1.5 bg-background text-foreground"
+                        value={taskEditForm.priority}
+                        onChange={e => setTaskEditForm(f => ({ ...f, priority: e.target.value }))}
+                      >
+                        <option value="urgent">紧急</option>
+                        <option value="high">高</option>
+                        <option value="medium">中</option>
+                        <option value="low">低</option>
+                      </select>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">{taskEditForm.priority}</Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Progress */}
+                <div className="space-y-1">
+                  <Label className="text-xs">进度 {taskEditForm.progress}%</Label>
+                  {canEdit ? (
+                    <input
+                      type="range" min="0" max="100" step="5"
+                      value={taskEditForm.progress}
+                      onChange={e => setTaskEditForm(f => ({ ...f, progress: Number(e.target.value) }))}
+                      className="w-full h-1.5 accent-primary"
+                    />
+                  ) : (
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${taskEditForm.progress}%` }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">开始日期</Label>
+                    {canEdit ? (
+                      <Input type="date" className="text-xs h-7" value={taskEditForm.startDate} onChange={e => setTaskEditForm(f => ({ ...f, startDate: e.target.value }))} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{taskEditForm.startDate || "未设置"}</span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">截止日期</Label>
+                    {canEdit ? (
+                      <Input type="date" className="text-xs h-7" value={taskEditForm.dueDate} onChange={e => setTaskEditForm(f => ({ ...f, dueDate: e.target.value }))} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{taskEditForm.dueDate || "未设置"}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Description */}
+                {canEdit && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">备注</Label>
+                    <Textarea
+                      placeholder="添加备注..."
+                      className="text-xs min-h-[60px] resize-none"
+                      value={taskEditForm.description}
+                      onChange={e => setTaskEditForm(f => ({ ...f, description: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {!canEdit && selectedTask.description && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">备注</Label>
+                    <p className="text-xs text-muted-foreground">{selectedTask.description}</p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2">
+                {selectedTask.projectId && (
+                  <Button variant="ghost" size="sm" className="text-xs mr-auto" onClick={() => { setTaskDetailOpen(false); onNavigate(`/projects/${selectedTask.projectId}`); }}>
+                    <ExternalLink className="h-3.5 w-3.5 mr-1" />前往项目
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => setTaskDetailOpen(false)}>关闭</Button>
+                {canEdit && (
+                  <Button size="sm" className="text-xs" disabled={updateTaskDetail.isPending} onClick={() => {
+                    updateTaskDetail.mutate({
+                      id: selectedTask.id,
+                      title: taskEditForm.title,
+                      status: taskEditForm.status as any,
+                      priority: taskEditForm.priority as any,
+                      progress: taskEditForm.progress,
+                      startDate: taskEditForm.startDate || undefined,
+                      dueDate: taskEditForm.dueDate || undefined,
+                      description: taskEditForm.description,
+                    });
+                  }}>
+                    {updateTaskDetail.isPending ? "保存中..." : "保存"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
@@ -789,11 +999,13 @@ function TaskListView({
   onNavigate,
   isReviewMode,
   showAssignee,
+  onTaskClick,
 }: {
   tasks: any[];
   onNavigate: (path: string) => void;
   isReviewMode?: boolean;
   showAssignee?: boolean;
+  onTaskClick?: (task: any) => void;
 }) {
   const utils = trpc.useUtils();
   const updateTask = trpc.tasks.update.useMutation({
@@ -813,15 +1025,17 @@ function TaskListView({
         return (
           <div
             key={task.id}
-            className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer group"
-            onClick={() => task.projectId && onNavigate(`/projects/${task.projectId}`)}
+            className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-accent/50 transition-colors group"
           >
             {/* Priority dot */}
             <PriorityDot priority={task.priority} />
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium truncate">{task.title}</p>
+                <p
+                  className="text-sm font-medium truncate cursor-pointer hover:text-primary hover:underline underline-offset-2 transition-colors"
+                  onClick={() => onTaskClick ? onTaskClick(task) : (task.projectId && onNavigate(`/projects/${task.projectId}`))}
+                >{task.title}</p>
                 {task.projectName && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 hidden sm:block">
                     {task.projectName}
@@ -921,7 +1135,7 @@ const PROJECT_COLORS = [
   { bar: "#a16207" }, // yellow-800
 ];
 
-function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByProject?: boolean }) {
+function GanttView({ tasks, colorByProject = false, onTaskClick }: { tasks: any[]; colorByProject?: boolean; onTaskClick?: (task: any) => void }) {
   // Only show tasks with at least a dueDate
   const ganttTasks = useMemo(() => {
     const now = new Date();
@@ -1057,13 +1271,14 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
               <div key={task.id} className="flex items-center border-b border-border/20" style={{ height: `${rowHeight}px` }}>
                 {/* Sticky label column */}
                 <div
-                  className="shrink-0 flex items-center gap-1.5 px-2 bg-background border-r border-border/20 z-10"
+                  className={`shrink-0 flex items-center gap-1.5 px-2 bg-background border-r border-border/20 z-10 ${onTaskClick ? "cursor-pointer hover:bg-accent/50" : ""}`}
                   style={{ width: `${labelWidth}px`, position: "sticky", left: 0, height: `${rowHeight}px` }}
                   title={tooltipLabel}
+                  onClick={() => onTaskClick && onTaskClick(task)}
                 >
                   <PriorityDot priority={task.priority} />
                   <div className="min-w-0 flex-1">
-                    <span className="text-xs truncate block leading-tight">{task.title}</span>
+                    <span className={`text-xs truncate block leading-tight ${onTaskClick ? "hover:text-primary hover:underline underline-offset-2" : ""}`}>{task.title}</span>
                     {colorByProject && task.assigneeName && (
                       <span className="text-[9px] text-blue-600/80 truncate block leading-tight font-medium">{task.assigneeName}</span>
                     )}
@@ -1092,7 +1307,8 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
                   ))}
                   {/* Task bar */}
                   <div
-                    className="absolute top-1/2 -translate-y-1/2 rounded flex items-center px-1.5 cursor-default overflow-hidden"
+                    className={`absolute top-1/2 -translate-y-1/2 rounded flex items-center px-1.5 overflow-hidden ${onTaskClick ? "cursor-pointer" : "cursor-default"}`}
+                  onClick={() => onTaskClick && onTaskClick(task)}
                     style={{
                       left: `${startOffset * dayWidth}px`,
                       width: `${Math.max(20, duration * dayWidth - 2)}px`,
