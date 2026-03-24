@@ -248,12 +248,18 @@ function MyTasksPanel({
   // Fetch all tasks (when memberViewMode === "all")
   const { data: allTasksData, isLoading: allTasksLoading } = trpc.tasks.listAll.useQuery(undefined, {
     enabled: memberViewMode === "all",
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // Fetch specific member tasks
   const { data: memberTasksData, isLoading: memberTasksLoading } = trpc.tasks.listByUser.useQuery(
-    { userId: selectedMemberId! },
-    { enabled: memberViewMode === "specific" && selectedMemberId !== null }
+    { userId: selectedMemberId ?? 0 },
+    {
+      enabled: memberViewMode === "specific" && selectedMemberId !== null,
+      staleTime: 30 * 1000,
+      refetchOnWindowFocus: false,
+    }
   );
 
   // Close dropdown when clicking outside
@@ -665,6 +671,21 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
     return map;
   }, [ganttTasks]);
 
+  // Memoize date range and day array to avoid re-creating on every render
+  const { rangeStart, totalDays, days, today } = useMemo(() => {
+    if (ganttTasks.length === 0) return { rangeStart: new Date(), totalDays: 0, days: [], today: new Date() };
+    const minDate = ganttTasks.reduce((m: Date, t: any) => t._start < m ? t._start : m, ganttTasks[0]._start);
+    const maxDate = ganttTasks.reduce((m: Date, t: any) => t._end > m ? t._end : m, ganttTasks[0]._end);
+    const rs = new Date(minDate.getTime() - 2 * 86400000);
+    const re = new Date(maxDate.getTime() + 2 * 86400000);
+    const td = Math.ceil((re.getTime() - rs.getTime()) / 86400000);
+    const d: Date[] = [];
+    for (let i = 0; i < td; i++) d.push(new Date(rs.getTime() + i * 86400000));
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return { rangeStart: rs, totalDays: td, days: d, today: t };
+  }, [ganttTasks]);
+
   if (ganttTasks.length === 0) {
     return (
       <div className="text-center py-8 text-sm text-muted-foreground">
@@ -673,24 +694,6 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
       </div>
     );
   }
-
-  // Compute date range: from earliest start to latest end + padding
-  const minDate = ganttTasks.reduce((m: Date, t: any) => t._start < m ? t._start : m, ganttTasks[0]._start);
-  const maxDate = ganttTasks.reduce((m: Date, t: any) => t._end > m ? t._end : m, ganttTasks[0]._end);
-
-  // Add 2-day padding on each side
-  const rangeStart = new Date(minDate.getTime() - 2 * 86400000);
-  const rangeEnd = new Date(maxDate.getTime() + 2 * 86400000);
-  const totalDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86400000);
-
-  // Generate day headers
-  const days: Date[] = [];
-  for (let i = 0; i < totalDays; i++) {
-    days.push(new Date(rangeStart.getTime() + i * 86400000));
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   const dayWidth = 32; // px per day
   const rowHeight = 36; // px per row
@@ -783,6 +786,9 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
                   <PriorityDot priority={task.priority} />
                   <div className="min-w-0 flex-1">
                     <span className="text-xs truncate block leading-tight">{task.title}</span>
+                    {colorByProject && task.assigneeName && (
+                      <span className="text-[9px] text-blue-600/80 truncate block leading-tight font-medium">{task.assigneeName}</span>
+                    )}
                     {task.projectName && (
                       <span className="text-[9px] text-muted-foreground truncate block leading-tight">{task.projectName}</span>
                     )}
@@ -808,11 +814,11 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
                   ))}
                   {/* Task bar */}
                   <div
-                    className="absolute top-1/2 -translate-y-1/2 rounded flex items-center px-1.5 cursor-default"
+                    className="absolute top-1/2 -translate-y-1/2 rounded flex items-center px-1.5 cursor-default overflow-hidden"
                     style={{
                       left: `${startOffset * dayWidth}px`,
                       width: `${Math.max(20, duration * dayWidth - 2)}px`,
-                      height: "20px",
+                      height: "22px",
                       backgroundColor: barColor,
                     }}
                     title={tooltipLabel}
@@ -824,9 +830,14 @@ function GanttView({ tasks, colorByProject = false }: { tasks: any[]; colorByPro
                         style={{ width: `${task.progress}%` }}
                       />
                     )}
-                    <span className="text-[9px] text-white font-medium truncate relative z-10">
-                      {duration > 2 ? task.title : ""}
-                    </span>
+                    {duration > 2 ? (
+                      <div className="flex flex-col justify-center relative z-10 min-w-0 leading-none">
+                        <span className="text-[9px] text-white font-medium truncate">{task.title}</span>
+                        {colorByProject && task.assigneeName && (
+                          <span className="text-[8px] text-white/80 truncate">{task.assigneeName}</span>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
