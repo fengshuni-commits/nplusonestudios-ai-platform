@@ -39,43 +39,6 @@ type ApiDef = {
 // ── 同步 API ──────────────────────────────────────────────
 const syncApis: ApiDef[] = [
   {
-    name: "AI 效果图生成",
-    endpoint: "rendering.generate",
-    description: "根据设计描述生成效果图，支持多种风格",
-    method: "POST",
-    generationTime: "约 20-40 秒",
-    params: [
-      { name: "prompt", type: "string", required: true, description: "设计描述（中英文均可）" },
-      { name: "style", type: "string", required: false, description: "风格名称，如 minimalist、modern、industrial 等" },
-      { name: "projectId", type: "number | null", required: false, default: "null", description: "关联项目 ID（可选）" },
-    ],
-    responseFields: [
-      { name: "url", type: "string", description: "生成的图片 CDN URL" },
-      { name: "prompt", type: "string", description: "实际使用的提示词" },
-      { name: "historyId", type: "number", description: "生成记录 ID，可用于后续查询" },
-    ],
-    requestExample: {
-      prompt: "现代办公空间，采用玻璃和木材元素，自然采光",
-      style: "minimalist",
-      projectId: null,
-    },
-    responseExample: {
-      result: {
-        data: {
-          json: {
-            url: "https://d2xsxph8kpxj0f.cloudfront.net/rendering/xxx.jpg",
-            prompt: "现代办公空间，采用玻璃和木材元素，自然采光",
-            historyId: 840001,
-          }
-        }
-      }
-    },
-    curlExample: `curl -X POST '${BASE_URL}/api/trpc/rendering.generate' \\
-  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
-  -H 'Content-Type: application/json' \\
-  -d '{"json":{"prompt":"现代办公空间，采用玻璃和木材元素","style":"minimalist","projectId":null}}'`,
-  },
-  {
     name: "AI 视频生成",
     endpoint: "video.generate",
     description: "根据文本描述或参考图片生成设计视频，支持文生视频和图生视频两种模式",
@@ -405,6 +368,139 @@ export default function ApiDocs() {
               copyToClipboard={copyToClipboard}
             />
           ))}
+        </div>
+
+        {/* ── 效果图生成 API（异步两步流程）── */}
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">AI 效果图生成 API</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            效果图生成耗时较长（约 30-90 秒），采用<strong>异步任务模式</strong>：先提交任务获取 jobId，再轮询状态，完成后获取图片 URL。
+          </p>
+
+          {/* 流程示意 */}
+          <div className="flex items-center gap-2 p-4 bg-orange-50 border border-orange-200 rounded-xl mb-6 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-semibold">
+              <span>1</span> POST /api/v1/ai/render
+            </div>
+            <ArrowRight className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-100 text-orange-800 rounded-lg text-sm font-semibold">
+              <Clock className="w-3.5 h-3.5" /> 每 3s 轮询
+            </div>
+            <ArrowRight className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-100 text-orange-800 rounded-lg text-sm font-semibold">
+              <span>2</span> GET /api/v1/ai/render/:jobId
+            </div>
+            <ArrowRight className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">
+              status = done → 获取图片 URL
+            </div>
+          </div>
+
+          {/* 接口说明 */}
+          <div className="space-y-4 mb-6">
+            {/* Step 1 */}
+            <Card className="p-5 bg-white border-slate-200">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="px-2 py-0.5 bg-orange-500 text-white rounded text-xs font-bold">POST</span>
+                <code className="text-sm font-mono text-slate-700">{BASE_URL}/api/v1/ai/render</code>
+              </div>
+              <p className="text-sm text-slate-600 mb-3">提交效果图生成任务，立即返回 jobId，后台异步生成（约 30-90 秒）</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">请求体（JSON）</p>
+                  <pre className="p-3 bg-slate-900 text-green-300 rounded text-xs font-mono overflow-x-auto">{`{
+  "prompt": "现代办公空间，玻璃和木材元素",
+  "style": "minimalist"  // 可选
+}`}</pre>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">返回（立即）</p>
+                  <pre className="p-3 bg-slate-900 text-green-300 rounded text-xs font-mono overflow-x-auto">{`{
+  "data": {
+    "jobId": "V1StGXR8_Z5jdHi6B-myT",
+    "status": "pending"
+  }
+}`}</pre>
+                </div>
+              </div>
+            </Card>
+
+            {/* Step 2 */}
+            <Card className="p-5 bg-white border-slate-200">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="px-2 py-0.5 bg-green-600 text-white rounded text-xs font-bold">GET</span>
+                <code className="text-sm font-mono text-slate-700">{BASE_URL}/api/v1/ai/render/:jobId</code>
+              </div>
+              <p className="text-sm text-slate-600 mb-3">轮询任务状态，建议每 3 秒查询一次，直到 status = done 或 failed</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">生成中返回</p>
+                  <pre className="p-3 bg-slate-900 text-green-300 rounded text-xs font-mono overflow-x-auto">{`{
+  "data": { "status": "processing" }
+}`}</pre>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">完成后返回</p>
+                  <pre className="p-3 bg-slate-900 text-green-300 rounded text-xs font-mono overflow-x-auto">{`{
+  "data": {
+    "status": "done",
+    "url": "https://cdn.../rendering/xxx.jpg",
+    "prompt": "现代办公空间...",
+    "historyId": 840001
+  }
+}`}</pre>
+                </div>
+              </div>
+            </Card>
+
+            {/* History */}
+            <Card className="p-5 bg-white border-slate-200">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="px-2 py-0.5 bg-green-600 text-white rounded text-xs font-bold">GET</span>
+                <code className="text-sm font-mono text-slate-700">{BASE_URL}/api/v1/ai/render/history</code>
+              </div>
+              <p className="text-sm text-slate-600 mb-3">获取当前用户的效果图生成历史记录，支持分页</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">查询参数（可选）</p>
+                  <pre className="p-3 bg-slate-900 text-green-300 rounded text-xs font-mono overflow-x-auto">{`?limit=20&offset=0`}</pre>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">返回</p>
+                  <pre className="p-3 bg-slate-900 text-green-300 rounded text-xs font-mono overflow-x-auto">{`{
+  "data": [ { "id": 840001, "outputUrl": "...", ... } ],
+  "total": 42
+}`}</pre>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* 轮询代码示例 */}
+          <Card className="mb-6 p-5 bg-white border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-orange-500" /> 轮询示例代码（JavaScript）
+            </h3>
+            <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">{`async function generateRendering(prompt, style, token) {
+  const base = '${BASE_URL}/api/v1';
+  const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+  // Step 1: Submit job
+  const submitRes = await fetch(base + '/ai/render', {
+    method: 'POST', headers, body: JSON.stringify({ prompt, style })
+  });
+  const { data: { jobId } } = await submitRes.json();
+
+  // Step 2: Poll until done
+  while (true) {
+    const pollRes = await fetch(base + '/ai/render/' + jobId, { headers });
+    const { data } = await pollRes.json();
+    if (data.status === 'done') return data.url;  // CDN URL
+    if (data.status === 'failed') throw new Error(data.error);
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}`}</pre>
+          </Card>
         </div>
 
         {/* ── 案例调研 API（异步三步流程）── */}

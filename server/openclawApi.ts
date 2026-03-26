@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
+import { nanoid } from "nanoid";
 import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
@@ -292,13 +293,67 @@ router.post("/ai/render", async (req: Request, res: Response) => {
     if (!prompt) {
       return res.status(400).json({ error: "prompt is required", code: "VALIDATION_ERROR" });
     }
-
+    const user = (req as any).apiUser;
     const fullPrompt = style ? `${prompt}, style: ${style}` : prompt;
-    const result = await generateImage({ prompt: fullPrompt });
 
-    res.json({ data: { url: result.url, prompt: fullPrompt } });
+    // Async mode: create job and return jobId
+    const jobId = nanoid();
+    await db.createRenderingJob({ id: jobId, userId: user.id, inputParams: { prompt: fullPrompt } });
+
+    // Fire-and-forget background generation
+    (async () => {
+      try {
+        await db.updateRenderingJob(jobId, { status: "processing" });
+        const result = await generateImage({ prompt: fullPrompt });
+        const history = await db.createGenerationHistory({
+          userId: user.id,
+          module: "rendering",
+          title: fullPrompt.substring(0, 100),
+          outputUrl: result.url,
+          status: "success",
+          createdByName: user.name || "API",
+        });
+        await db.updateRenderingJob(jobId, { status: "done", resultUrl: result.url, resultPrompt: fullPrompt, historyId: history.id });
+      } catch (err) {
+        await db.updateRenderingJob(jobId, { status: "failed", error: String(err) });
+      }
+    })();
+
+    res.json({ data: { jobId, status: "pending" } });
   } catch (error) {
     res.status(500).json({ error: "Image generation failed", code: "AI_ERROR" });
+  }
+});
+
+// List rendering history (must be before /:jobId to avoid route conflict)
+router.get("/ai/render/history", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const result = await db.listGenerationHistory(user.id, { module: "rendering", limit, offset });
+    res.json({ data: result.items, total: result.total });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get history", code: "INTERNAL_ERROR" });
+  }
+});
+
+// Poll rendering job status
+router.get("/ai/render/:jobId", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    const job = await db.getRenderingJob(req.params.jobId);
+    if (!job) return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
+    if (job.userId !== user.id) return res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" });
+    if (job.status === "done") {
+      return res.json({ data: { status: "done", url: job.resultUrl, prompt: job.resultPrompt, historyId: job.historyId } });
+    }
+    if (job.status === "failed") {
+      return res.json({ data: { status: "failed", error: job.error } });
+    }
+    res.json({ data: { status: job.status } });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get job status", code: "INTERNAL_ERROR" });
   }
 });
 

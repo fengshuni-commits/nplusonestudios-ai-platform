@@ -999,3 +999,10 @@
 ## Bug 修复：OpenClaw API 认证失败
 - [x] 修复 openclawApi.ts 中间件：支持 sk_ 前缀 token（api_tokens 表）和旧版 nplus1_ 前缀 key 双认证
 - [x] 验证并保存检查点
+
+## Bug 修复：rendering API 接口缺失与文档不一致
+- [x] 后端：/api/v1/ai/render 改为异步模式（立即返回 jobId）
+- [x] 后端：新增 GET /api/v1/ai/render/history 历史查询接口
+- [x] 后端：新增 GET /api/v1/ai/render/:jobId 轮询接口
+- [x] 前端：ApiDocs.tsx 更新效果图 API 文档（异步两步流程、轮询示例代码）
+- [x] 验证并保存检查点
