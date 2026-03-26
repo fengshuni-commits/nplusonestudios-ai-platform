@@ -995,3 +995,7 @@
 - [x] 根本原因：Express 未设置 trust proxy，生产环境 req.protocol 返回 http，导致 cookie 以 secure=false 设置，浏览器拒绝存储
 - [x] 修复：在 server/_core/index.ts 中添加 app.set("trust proxy", 1)
 - [x] 验证并保存检查点
+
+## Bug 修复：OpenClaw API 认证失败
+- [x] 修复 openclawApi.ts 中间件：支持 sk_ 前缀 token（api_tokens 表）和旧版 nplus1_ 前缀 key 双认证
+- [x] 验证并保存检查点

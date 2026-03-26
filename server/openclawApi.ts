@@ -15,6 +15,23 @@ async function authenticateApiKey(req: Request, res: Response, next: NextFunctio
   }
 
   const rawKey = authHeader.substring(7);
+
+  // Support sk_ prefixed API tokens (generated from the API management page)
+  if (rawKey.startsWith("sk_")) {
+    const tokenInfo = await db.verifyApiToken(rawKey);
+    if (!tokenInfo) {
+      return res.status(401).json({ error: "Invalid or expired API token", code: "UNAUTHORIZED" });
+    }
+    const user = await db.getUserById(tokenInfo.userId);
+    if (!user) {
+      return res.status(401).json({ error: "User not found", code: "UNAUTHORIZED" });
+    }
+    (req as any).apiKey = { id: tokenInfo.userId, userId: tokenInfo.userId, type: tokenInfo.type };
+    (req as any).apiUser = user;
+    return next();
+  }
+
+  // Legacy nplus1_ prefixed API keys
   const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
   const apiKey = await db.getApiKeyByHash(keyHash);
 
