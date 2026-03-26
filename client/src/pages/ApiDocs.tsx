@@ -7,6 +7,279 @@ import { Badge } from "@/components/ui/badge";
 
 const BASE_URL = "https://platform.nplusonestudios.com";
 
+// ── 完整调用示例代码 ──────────────────────────────────────
+const NODE_EXAMPLE = `/**
+ * N+1 STUDIOS AI API - Node.js 完整调用示例
+ * 需要 Node.js 18+（内置 fetch），无需额外依赖
+ */
+
+const BASE_URL = 'https://platform.nplusonestudios.com';
+const API_TOKEN = 'sk_1774xxxxxxxxx_xxxxxxxxxx'; // 替换为你的 Token
+
+const headers = {
+  'Authorization': 'Bearer ' + API_TOKEN,
+  'Content-Type': 'application/json',
+};
+
+// ── 1. 获取项目列表 ──────────────────────────────────────
+async function getProjects() {
+  const res = await fetch(
+    BASE_URL + '/api/trpc/projects.list?input=' +
+    encodeURIComponent(JSON.stringify({ json: {} })),
+    { headers }
+  );
+  const data = await res.json();
+  return data.result.data.json; // Array of projects
+}
+
+// ── 2. 获取项目任务列表 ──────────────────────────────────
+async function getProjectTasks(projectId) {
+  const res = await fetch(
+    BASE_URL + '/api/trpc/tasks.listByProject?input=' +
+    encodeURIComponent(JSON.stringify({ json: { projectId } })),
+    { headers }
+  );
+  const data = await res.json();
+  return data.result.data.json; // Array of tasks
+}
+
+// ── 3. AI 效果图生成（异步轮询）──────────────────────────
+async function generateRendering(prompt, style) {
+  // Step 1: 提交任务
+  const submitRes = await fetch(BASE_URL + '/api/v1/ai/render', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ prompt, style }),
+  });
+  const submitData = await submitRes.json();
+  const { jobId } = submitData.data;
+  console.log('任务已提交，jobId:', jobId);
+
+  // Step 2: 轮询结果（每 3 秒）
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(BASE_URL + '/api/v1/ai/render/' + jobId, { headers });
+    const pollData = await pollRes.json();
+    const { status, url, error } = pollData.data;
+
+    if (status === 'done') {
+      console.log('效果图生成完成:', url);
+      return url; // CDN 图片 URL
+    }
+    if (status === 'failed') {
+      throw new Error('生成失败: ' + error);
+    }
+    console.log('生成中，继续等待...');
+  }
+}
+
+// ── 4. 案例调研报告生成（异步轮询）──────────────────────
+async function generateBenchmarkReport(projectName, requirements) {
+  // Step 1: 提交任务
+  const submitRes = await fetch(BASE_URL + '/api/trpc/benchmark.generate', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ json: { projectName, requirements, referenceCount: 5 } }),
+  });
+  const submitData = await submitRes.json();
+  const { jobId } = submitData.result.data.json;
+  console.log('调研任务已提交，jobId:', jobId);
+
+  // Step 2: 轮询结果（每 3 秒）
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(
+      BASE_URL + '/api/trpc/benchmark.pollStatus?input=' +
+      encodeURIComponent(JSON.stringify({ json: { jobId } })),
+      { headers }
+    );
+    const pollData = await pollRes.json();
+    const { status, content, historyId, error } = pollData.result.data.json;
+
+    if (status === 'done') {
+      console.log('报告生成完成，historyId:', historyId);
+      return content; // Markdown 格式报告
+    }
+    if (status === 'failed') {
+      throw new Error('生成失败: ' + error);
+    }
+    console.log('生成中，继续等待...');
+  }
+}
+
+// ── 主函数示例 ───────────────────────────────────────────
+async function main() {
+  // 获取项目列表
+  const projects = await getProjects();
+  console.log('项目数量:', projects.length);
+
+  if (projects.length > 0) {
+    // 获取第一个项目的任务
+    const tasks = await getProjectTasks(projects[0].id);
+    console.log('任务数量:', tasks.length);
+  }
+
+  // 生成效果图
+  const imageUrl = await generateRendering(
+    '现代科技办公空间，开放式布局，玻璃隔断，北欧风格',
+    'minimalist'
+  );
+  console.log('效果图 URL:', imageUrl);
+
+  // 生成案例调研报告
+  const report = await generateBenchmarkReport(
+    '百悦科技园办公空间',
+    '工业风科技感办公空间，面积约3000㎡，需要展示科技公司的创新文化'
+  );
+  console.log('报告内容（前200字）:', report.slice(0, 200));
+}
+
+main().catch(console.error);`;
+
+const PYTHON_EXAMPLE = `"""
+N+1 STUDIOS AI API - Python 完整调用示例
+需要 Python 3.8+，安装依赖：pip install requests
+"""
+
+import time
+import requests
+
+BASE_URL = 'https://platform.nplusonestudios.com'
+API_TOKEN = 'sk_1774xxxxxxxxx_xxxxxxxxxx'  # 替换为你的 Token
+
+HEADERS = {
+    'Authorization': f'Bearer {API_TOKEN}',
+    'Content-Type': 'application/json',
+}
+
+
+# ── 1. 获取项目列表 ──────────────────────────────────────
+def get_projects():
+    import json, urllib.parse
+    params = urllib.parse.urlencode({'input': json.dumps({'json': {}})})
+    res = requests.get(f'{BASE_URL}/api/trpc/projects.list?{params}', headers=HEADERS)
+    res.raise_for_status()
+    return res.json()['result']['data']['json']
+
+
+# ── 2. 获取项目任务列表 ──────────────────────────────────
+def get_project_tasks(project_id):
+    import json, urllib.parse
+    params = urllib.parse.urlencode({'input': json.dumps({'json': {'projectId': project_id}})})
+    res = requests.get(f'{BASE_URL}/api/trpc/tasks.listByProject?{params}', headers=HEADERS)
+    res.raise_for_status()
+    return res.json()['result']['data']['json']
+
+
+# ── 3. AI 效果图生成（异步轮询）──────────────────────────
+def generate_rendering(prompt, style=None):
+    # Step 1: 提交任务
+    payload = {'prompt': prompt}
+    if style:
+        payload['style'] = style
+    res = requests.post(f'{BASE_URL}/api/v1/ai/render', json=payload, headers=HEADERS)
+    res.raise_for_status()
+    job_id = res.json()['data']['jobId']
+    print(f'任务已提交，jobId: {job_id}')
+
+    # Step 2: 轮询结果（每 3 秒）
+    while True:
+        time.sleep(3)
+        poll_res = requests.get(f'{BASE_URL}/api/v1/ai/render/{job_id}', headers=HEADERS)
+        poll_res.raise_for_status()
+        data = poll_res.json()['data']
+
+        if data['status'] == 'done':
+            print(f'效果图生成完成: {data["url"]}')
+            return data['url']  # CDN 图片 URL
+        if data['status'] == 'failed':
+            raise RuntimeError(f'生成失败: {data.get("error")}')
+        print('生成中，继续等待...')
+
+
+# ── 4. 案例调研报告生成（异步轮询）──────────────────────
+def generate_benchmark_report(project_name, requirements):
+    import json, urllib.parse
+
+    # Step 1: 提交任务
+    payload = {'json': {'projectName': project_name, 'requirements': requirements, 'referenceCount': 5}}
+    res = requests.post(f'{BASE_URL}/api/trpc/benchmark.generate', json=payload, headers=HEADERS)
+    res.raise_for_status()
+    job_id = res.json()['result']['data']['json']['jobId']
+    print(f'调研任务已提交，jobId: {job_id}')
+
+    # Step 2: 轮询结果（每 3 秒）
+    while True:
+        time.sleep(3)
+        params = urllib.parse.urlencode({'input': json.dumps({'json': {'jobId': job_id}})})
+        poll_res = requests.get(
+            f'{BASE_URL}/api/trpc/benchmark.pollStatus?{params}',
+            headers=HEADERS
+        )
+        poll_res.raise_for_status()
+        result = poll_res.json()['result']['data']['json']
+
+        if result['status'] == 'done':
+            print(f'报告生成完成，historyId: {result["historyId"]}')
+            return result['content']  # Markdown 格式报告
+        if result['status'] == 'failed':
+            raise RuntimeError(f'生成失败: {result.get("error")}')
+        print('生成中，继续等待...')
+
+
+# ── 主函数示例 ───────────────────────────────────────────
+if __name__ == '__main__':
+    # 获取项目列表
+    projects = get_projects()
+    print(f'项目数量: {len(projects)}')
+
+    if projects:
+        # 获取第一个项目的任务
+        tasks = get_project_tasks(projects[0]['id'])
+        print(f'任务数量: {len(tasks)}')
+
+    # 生成效果图
+    image_url = generate_rendering(
+        '现代科技办公空间，开放式布局，玻璃隔断，北欧风格',
+        style='minimalist'
+    )
+    print(f'效果图 URL: {image_url}')
+
+    # 生成案例调研报告
+    report = generate_benchmark_report(
+        '百悦科技园办公空间',
+        '工业风科技感办公空间，面积约3000㎡，需要展示科技公司的创新文化'
+    )
+    print(f'报告内容（前200字）: {report[:200]}')`;
+
+// ── CopyButton 辅助组件 ──────────────────────────────────
+function CopyButton({
+  text,
+  copyKey,
+  copiedKey,
+  copyToClipboard,
+}: {
+  text: string;
+  copyKey: string;
+  copiedKey: string | null;
+  copyToClipboard: (text: string, key: string) => void;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => copyToClipboard(text, copyKey)}
+      className="gap-1 text-xs shrink-0"
+    >
+      {copiedKey === copyKey ? (
+        <><Check className="w-3 h-3" /> 已复制</>
+      ) : (
+        <><Copy className="w-3 h-3" /> 复制全部</>
+      )}
+    </Button>
+  );
+}
+
 type ApiParam = {
   name: string;
   type: string;
@@ -603,6 +876,52 @@ export default function ApiDocs() {
               copyToClipboard={copyToClipboard}
             />
           ))}
+        </div>
+
+        {/* ── 完整调用示例 ── */}
+        <div className="mb-10">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">完整调用示例</h2>
+          <p className="text-sm text-slate-500 mb-5">
+            以下示例覆盖认证、项目查询、任务查询、AI 效果图生成全流程，可直接复制使用。
+          </p>
+          <Tabs defaultValue="nodejs" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="nodejs">Node.js</TabsTrigger>
+              <TabsTrigger value="python">Python</TabsTrigger>
+            </TabsList>
+
+            {/* Node.js */}
+            <TabsContent value="nodejs">
+              <Card className="p-5 bg-white border-slate-200">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500">需要 Node.js 18+，无需额外依赖（使用内置 fetch）</p>
+                  <CopyButton
+                    text={NODE_EXAMPLE}
+                    copyKey="nodejs-full"
+                    copiedKey={copiedKey}
+                    copyToClipboard={copyToClipboard}
+                  />
+                </div>
+                <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">{NODE_EXAMPLE}</pre>
+              </Card>
+            </TabsContent>
+
+            {/* Python */}
+            <TabsContent value="python">
+              <Card className="p-5 bg-white border-slate-200">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500">需要 Python 3.8+，安装依赖：<code className="font-mono bg-slate-100 px-1 rounded">pip install requests</code></p>
+                  <CopyButton
+                    text={PYTHON_EXAMPLE}
+                    copyKey="python-full"
+                    copiedKey={copiedKey}
+                    copyToClipboard={copyToClipboard}
+                  />
+                </div>
+                <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">{PYTHON_EXAMPLE}</pre>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Error Handling */}

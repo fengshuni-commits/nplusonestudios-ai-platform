@@ -1006,3 +1006,9 @@
 - [x] 后端：新增 GET /api/v1/ai/render/:jobId 轮询接口
 - [x] 前端：ApiDocs.tsx 更新效果图 API 文档（异步两步流程、轮询示例代码）
 - [x] 验证并保存检查点
+
+## API 文档：Node.js 和 Python 完整调用示例
+- [x] ApiDocs.tsx 新增「完整调用示例」区域（语言切换 Tab：Node.js / Python）
+- [x] Node.js 示例：认证、项目列表、任务查询、AI 效果图生成（异步轮询）、案例调研报告生成
+- [x] Python 示例：认证、项目列表、任务查询、AI 效果图生成（异步轮询）、案例调研报告生成
+- [x] 验证并保存检查点
