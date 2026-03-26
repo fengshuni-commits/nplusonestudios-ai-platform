@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play } from "lucide-react";
+import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
@@ -19,6 +19,9 @@ export default function MeetingMinutes() {
   const [transcript, setTranscript] = useState("");
   const [projectName, setProjectName] = useState("");
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split("T")[0]);
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [meetingAttendees, setMeetingAttendees] = useState("");
   const [minutes, setMinutes] = useState("");
   const [minutesHistoryId, setMinutesHistoryId] = useState<number | undefined>(undefined);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -239,7 +242,7 @@ export default function MeetingMinutes() {
       return;
     }
     setIsGenerating(true);
-    generateMutation.mutate({ transcript, projectName, meetingDate, toolId, projectId: importedProjectId || undefined });
+    generateMutation.mutate({ transcript, projectName, meetingDate, meetingTitle, meetingLocation, meetingAttendees, toolId, projectId: importedProjectId || undefined });
   };
 
   const handleCopy = () => {
@@ -274,6 +277,45 @@ export default function MeetingMinutes() {
                   if (ctx.project.name) setProjectName(ctx.project.name);
                 }}
               />
+              {/* Meeting title */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  会议名称
+                </Label>
+                <Input
+                  value={meetingTitle}
+                  onChange={(e) => setMeetingTitle(e.target.value)}
+                  placeholder="例：方案汇报会、施工协调会…"
+                />
+              </div>
+
+              {/* Location */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  会议地点
+                </Label>
+                <Input
+                  value={meetingLocation}
+                  onChange={(e) => setMeetingLocation(e.target.value)}
+                  placeholder="例：N+1 STUDIOS 会议室、腾讯会议…"
+                />
+              </div>
+
+              {/* Attendees */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                  参会人员
+                </Label>
+                <Input
+                  value={meetingAttendees}
+                  onChange={(e) => setMeetingAttendees(e.target.value)}
+                  placeholder="例：张三、李四（甲方）、王五（结构顾问）…"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>项目名称</Label>

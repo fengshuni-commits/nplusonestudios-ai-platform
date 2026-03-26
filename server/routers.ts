@@ -2435,6 +2435,9 @@ const meetingRouter = router({
       transcript: z.string(),
       projectName: z.string().optional(),
       meetingDate: z.string().optional(),
+      meetingTitle: z.string().optional(),
+      meetingLocation: z.string().optional(),
+      meetingAttendees: z.string().optional(),
       toolId: z.number().optional(),
       projectId: z.number().optional(),
     }))
@@ -2459,7 +2462,16 @@ const meetingRouter = router({
             },
             {
               role: "user",
-              content: `项目：${input.projectName || "未指定"}\n日期：${input.meetingDate || new Date().toLocaleDateString("zh-CN")}\n\n录音转写文本：\n${input.transcript}`
+              content: [
+                `会议名称：${input.meetingTitle || "未命名"}`,
+                `项目：${input.projectName || "未指定"}`,
+                `日期：${input.meetingDate || new Date().toLocaleDateString("zh-CN")}`,
+                input.meetingLocation ? `地点：${input.meetingLocation}` : null,
+                input.meetingAttendees ? `参会人员：${input.meetingAttendees}` : null,
+                ``,
+                `录音转写文本：`,
+                input.transcript,
+              ].filter(Boolean).join("\n")
             }
           ],
         }, ctx.user.id);
@@ -2472,7 +2484,7 @@ const meetingRouter = router({
           toolId: input.toolId || 0,
           userId: ctx.user.id,
           action: "meeting_minutes",
-          inputSummary: `${input.projectName || "会议"} - ${input.meetingDate || "今日"}`,
+          inputSummary: `${input.meetingTitle || input.projectName || "会议"} - ${input.meetingDate || "今日"}`,
           outputSummary: content.substring(0, 200),
           status: "success",
           durationMs: Date.now() - startTime,
@@ -2482,9 +2494,9 @@ const meetingRouter = router({
         const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,
           module: "meeting_minutes",
-          title: `${input.projectName || "会议"} - 会议纪要`,
-          summary: `${input.meetingDate || "今日"} | ${content.substring(0, 100)}`,
-          inputParams: { projectName: input.projectName, meetingDate: input.meetingDate },
+          title: `${input.meetingTitle || input.projectName || "会议"} - 会议纪要`,
+          summary: `${input.meetingDate || "今日"} | ${input.meetingLocation ? input.meetingLocation + " | " : ""}${content.substring(0, 100)}`,
+          inputParams: { projectName: input.projectName, meetingDate: input.meetingDate, meetingTitle: input.meetingTitle, meetingLocation: input.meetingLocation, meetingAttendees: input.meetingAttendees },
           status: "success",
           durationMs: Date.now() - startTime,
           projectId: null,
