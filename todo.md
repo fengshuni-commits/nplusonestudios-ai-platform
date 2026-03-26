@@ -974,3 +974,12 @@
 - [x] 前端：Home.tsx 挂载时全量触发（不传 taskIds），更新后刷新任务列表
 - [x] 前端：ProjectDetail.tsx 项目任务看板加载后也触发 applyAutoStatus
 - [x] 验证并保存检查点
+
+## 任务权限限制
+- [x] 数据库：tasks 表新增 progressNote（text）字段
+- [x] 后端：新增 tasks.submitProgress 接口（负责人提交进度）
+- [x] 后端：tasks.update 接口增加权限检查，负责人只能更新 progress/progressNote
+- [x] 前端：ProjectDetail.tsx 任务详情弹窗中，负责人隐藏状态下拉编辑，显示提交进度表单
+- [x] 前端：Home.tsx 任务弹窗中，负责人隐藏状态编辑，显示提交进度表单
+- [x] 项目创建者保留完整状态编辑权限
+- [x] 验证并保存检查点

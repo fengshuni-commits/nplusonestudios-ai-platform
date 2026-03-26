@@ -948,16 +948,28 @@ const tasksRouter = router({
       startDate: z.string().nullable().optional(),
       dueDate: z.string().nullable().optional(),
       progress: z.number().min(0).max(100).optional(),
+      progressNote: z.string().nullable().optional(),
       parentId: z.number().nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      // 权限检查：仅项目创建者和任务负责人可修改
       const task = await db.getTaskById(input.id);
       if (!task) throw new TRPCError({ code: "NOT_FOUND" });
       const project = await db.getProjectById(task.projectId);
       if (!project) throw new TRPCError({ code: "NOT_FOUND" });
-      if (project.createdBy !== ctx.user.id && task.assigneeId !== ctx.user.id) {
+      const isCreator = project.createdBy === ctx.user.id;
+      const isAssignee = task.assigneeId === ctx.user.id;
+      const isReviewer = task.reviewerId === ctx.user.id;
+      if (!isCreator && !isAssignee && !isReviewer) {
         throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限修改任务" });
+      }
+      // Assignees can only update progress/progressNote, not status or other fields
+      if (isAssignee && !isCreator) {
+        const allowedFields = ["progress", "progressNote"];
+        const attemptedFields = Object.keys(input).filter(k => k !== "id" && input[k as keyof typeof input] !== undefined);
+        const forbidden = attemptedFields.filter(f => !allowedFields.includes(f));
+        if (forbidden.length > 0) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "任务负责人只能更新完成进度" });
+        }
       }
       const { id, startDate, dueDate, ...rest } = input;
       await db.updateTask(id, {
@@ -965,6 +977,30 @@ const tasksRouter = router({
         startDate: startDate === null ? null : startDate ? new Date(startDate) : undefined,
         dueDate: dueDate === null ? null : dueDate ? new Date(dueDate) : undefined,
       } as any);
+      return { success: true };
+    }),
+  // Dedicated endpoint for assignees to submit progress
+  submitProgress: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      progress: z.number().min(0).max(100),
+      progressNote: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      if (task.assigneeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "只有任务负责人可以提交进度" });
+      }
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { eq } = await import('drizzle-orm');
+      const { tasks } = await import('../drizzle/schema');
+      await drizzleDb.update(tasks).set({
+        progress: input.progress,
+        progressNote: input.progressNote ?? null,
+        updatedAt: new Date(),
+      }).where(eq(tasks.id, input.id));
       return { success: true };
     }),
   delete: protectedProcedure

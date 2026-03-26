@@ -277,6 +277,18 @@ function MyTasksPanel({
     },
   });
 
+  const submitProgressHome = trpc.tasks.submitProgress.useMutation({
+    onSuccess: () => {
+      utils.tasks.listMine.invalidate();
+      utils.tasks.listAll.invalidate();
+      utils.tasks.listByUser.invalidate();
+      setTaskDetailOpen(false);
+    },
+  });
+
+  const [homeProgressDraft, setHomeProgressDraft] = useState(0);
+  const [homeProgressNote, setHomeProgressNote] = useState("");
+
   const openTaskDetail = useCallback((task: any) => {
     setSelectedTask(task);
     setTaskEditForm({
@@ -288,6 +300,8 @@ function MyTasksPanel({
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
       description: task.description || "",
     });
+    setHomeProgressDraft(task.progress ?? 0);
+    setHomeProgressNote(task.progressNote || "");
     setTaskDetailOpen(true);
   }, []);
 
@@ -834,11 +848,14 @@ function MyTasksPanel({
 
       {/* Task Detail Dialog */}
       {selectedTask && (() => {
-        const canEdit = currentUser && (
+        const isTaskCreator = currentUser && (
           currentUser.role === "admin" ||
-          selectedTask.assigneeId === currentUser.id ||
           selectedTask.createdBy === currentUser.id
         );
+        const isTaskAssigneeOnly = currentUser &&
+          selectedTask.assigneeId === currentUser.id &&
+          !isTaskCreator;
+        const canEdit = isTaskCreator;
         return (
           <Dialog open={taskDetailOpen} onOpenChange={setTaskDetailOpen}>
             <DialogContent className="max-w-lg">
@@ -914,27 +931,53 @@ function MyTasksPanel({
                         <option value="low">低</option>
                       </select>
                     ) : (
-                      <Badge variant="outline" className="text-xs">{taskEditForm.priority}</Badge>
+                      <Badge variant="outline" className="text-xs">{taskStatusLabel(taskEditForm.status)}</Badge>
                     )}
                   </div>
                 </div>
 
-                {/* Progress */}
-                <div className="space-y-1">
-                  <Label className="text-xs">进度 {taskEditForm.progress}%</Label>
-                  {canEdit ? (
+                {/* Progress: assignee-only sees submit form; creator sees slider */}
+                {isTaskAssigneeOnly ? (
+                  <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                    <Label className="text-xs font-semibold text-primary">提交完成进度</Label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">当前进度</span>
+                      <span className="text-sm font-bold text-primary">{homeProgressDraft}%</span>
+                    </div>
                     <input
                       type="range" min="0" max="100" step="5"
-                      value={taskEditForm.progress}
-                      onChange={e => setTaskEditForm(f => ({ ...f, progress: Number(e.target.value) }))}
+                      value={homeProgressDraft}
+                      onChange={e => setHomeProgressDraft(Number(e.target.value))}
                       className="w-full h-1.5 accent-primary"
                     />
-                  ) : (
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full" style={{ width: `${taskEditForm.progress}%` }} />
+                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${homeProgressDraft}%` }} />
                     </div>
-                  )}
-                </div>
+                    <textarea
+                      className="w-full text-xs rounded-md border bg-background px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                      rows={2}
+                      placeholder="进度说明（可选）"
+                      value={homeProgressNote}
+                      onChange={e => setHomeProgressNote(e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Label className="text-xs">进度 {taskEditForm.progress}%</Label>
+                    {canEdit ? (
+                      <input
+                        type="range" min="0" max="100" step="5"
+                        value={taskEditForm.progress}
+                        onChange={e => setTaskEditForm(f => ({ ...f, progress: Number(e.target.value) }))}
+                        className="w-full h-1.5 accent-primary"
+                      />
+                    ) : (
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${taskEditForm.progress}%` }} />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Dates */}
                 <div className="grid grid-cols-2 gap-3">
@@ -983,6 +1026,17 @@ function MyTasksPanel({
                   </Button>
                 )}
                 <Button variant="outline" size="sm" className="text-xs" onClick={() => setTaskDetailOpen(false)}>关闭</Button>
+                {isTaskAssigneeOnly && (
+                  <Button size="sm" className="text-xs" disabled={submitProgressHome.isPending} onClick={() => {
+                    submitProgressHome.mutate({
+                      id: selectedTask.id,
+                      progress: homeProgressDraft,
+                      progressNote: homeProgressNote || undefined,
+                    });
+                  }}>
+                    {submitProgressHome.isPending ? "提交中..." : "提交进度"}
+                  </Button>
+                )}
                 {canEdit && (
                   <Button size="sm" className="text-xs" disabled={updateTaskDetail.isPending} onClick={() => {
                     updateTaskDetail.mutate({

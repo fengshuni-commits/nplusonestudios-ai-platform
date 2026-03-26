@@ -1470,6 +1470,8 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const canCreateTask = isCreator;
   const canEditTask = (task: any) => isCreator || task.assigneeId === currentUser?.id;
   const canDeleteTask = isCreator;
+  // True when current user is the assignee but NOT the project creator
+  const isAssigneeOnly = (task: any) => !isCreator && task.assigneeId === currentUser?.id;
 
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
@@ -1513,6 +1515,17 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
       if (selectedTask) utils.tasks.listSubTasks.invalidate({ parentId: selectedTask.id });
     },
   });
+
+  const submitProgress = trpc.tasks.submitProgress.useMutation({
+    onSuccess: () => {
+      utils.tasks.listByProject.invalidate({ projectId });
+      toast.success("进度已提交");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [progressDraft, setProgressDraft] = useState<number | null>(null);
+  const [progressNoteDraft, setProgressNoteDraft] = useState("");
 
   const createSubTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
@@ -1797,125 +1810,224 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                 </div>
               </DialogHeader>
               <div className="space-y-4 pt-1 max-h-[70vh] overflow-y-auto pr-1">
-                {/* Status */}
+                {/* Status row: creator sees editable select, assignee-only sees read-only badge */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Select value={selectedTask.status} onValueChange={(v) => {
-                    updateTask.mutate({ id: selectedTask.id, status: v as any });
-                    setSelectedTask({ ...selectedTask, status: v });
-                  }}>
-                    <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="backlog">待排期</SelectItem>
-                      <SelectItem value="todo">待开始</SelectItem>
-                      <SelectItem value="in_progress">进行中</SelectItem>
-                      <SelectItem value="review">待审核</SelectItem>
-                      <SelectItem value="done">已完成</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {isAssigneeOnly(selectedTask) ? (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+                      selectedTask.status === 'done' ? 'bg-green-50 text-green-700 border-green-200' :
+                      selectedTask.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                      selectedTask.status === 'review' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                      'bg-muted text-muted-foreground border-border'
+                    }`}>
+                      {selectedTask.status === 'backlog' ? '待排期' :
+                       selectedTask.status === 'todo' ? '待开始' :
+                       selectedTask.status === 'in_progress' ? '进行中' :
+                       selectedTask.status === 'review' ? '待审核' : '已完成'}
+                    </span>
+                  ) : (
+                    <Select value={selectedTask.status} onValueChange={(v) => {
+                      updateTask.mutate({ id: selectedTask.id, status: v as any });
+                      setSelectedTask({ ...selectedTask, status: v });
+                    }}>
+                      <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="backlog">待排期</SelectItem>
+                        <SelectItem value="todo">待开始</SelectItem>
+                        <SelectItem value="in_progress">进行中</SelectItem>
+                        <SelectItem value="review">待审核</SelectItem>
+                        <SelectItem value="done">已完成</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   <PriorityBadge priority={selectedTask.priority} />
                   <CategoryBadge category={selectedTask.category} />
                 </div>
 
-                {/* Assignee */}
+                {/* Assignee — read-only for assignee-only */}
                 <div className="space-y-1">
                   <Label className="text-xs">负责人</Label>
-                  <Select
-                    value={selectedTask.assigneeId ? String(selectedTask.assigneeId) : "none"}
-                    onValueChange={(v) => {
-                      const newId = v === "none" ? null : Number(v);
-                      updateTask.mutate({ id: selectedTask.id, assigneeId: newId });
-                      setSelectedTask({ ...selectedTask, assigneeId: newId });
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="未分配" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">未分配</SelectItem>
-                      {memberOptions.map((m: any) => (
-                        <SelectItem key={m.id} value={String(m.id)}>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-4 w-4">
-                              <AvatarImage src={m.avatar} />
-                              <AvatarFallback className="text-[8px]">{(m.name || "?").charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            {m.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {isAssigneeOnly(selectedTask) ? (
+                    <div className="flex items-center gap-2 h-8 px-2 rounded-md border bg-muted/40 text-xs">
+                      {(() => {
+                        const m = memberOptions.find((u: any) => u.id === selectedTask.assigneeId);
+                        return m ? (
+                          <><Avatar className="h-4 w-4"><AvatarImage src={m.avatar} /><AvatarFallback className="text-[8px]">{(m.name||'?').charAt(0)}</AvatarFallback></Avatar>{m.name}</>
+                        ) : <span className="text-muted-foreground">未分配</span>;
+                      })()}
+                    </div>
+                  ) : (
+                    <Select
+                      value={selectedTask.assigneeId ? String(selectedTask.assigneeId) : "none"}
+                      onValueChange={(v) => {
+                        const newId = v === "none" ? null : Number(v);
+                        updateTask.mutate({ id: selectedTask.id, assigneeId: newId });
+                        setSelectedTask({ ...selectedTask, assigneeId: newId });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="未分配" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">未分配</SelectItem>
+                        {memberOptions.map((m: any) => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-4 w-4">
+                                <AvatarImage src={m.avatar} />
+                                <AvatarFallback className="text-[8px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              {m.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
-                {/* Reviewer */}
+                {/* Reviewer — read-only for assignee-only */}
                 <div className="space-y-1">
                   <Label className="text-xs">审核人</Label>
-                  <Select
-                    value={selectedTask.reviewerId ? String(selectedTask.reviewerId) : "none"}
-                    onValueChange={(v) => {
-                      const newId = v === "none" ? null : Number(v);
-                      updateTask.mutate({ id: selectedTask.id, reviewerId: newId });
-                      setSelectedTask({ ...selectedTask, reviewerId: newId });
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="不设审核人" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">不设审核人</SelectItem>
-                      {memberOptions.map((m: any) => (
-                        <SelectItem key={m.id} value={String(m.id)}>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-4 w-4">
-                              <AvatarImage src={m.avatar} />
-                              <AvatarFallback className="text-[8px]">{(m.name || "?").charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            {m.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {isAssigneeOnly(selectedTask) ? (
+                    <div className="flex items-center gap-2 h-8 px-2 rounded-md border bg-muted/40 text-xs">
+                      {(() => {
+                        const m = memberOptions.find((u: any) => u.id === selectedTask.reviewerId);
+                        return m ? (
+                          <><Avatar className="h-4 w-4"><AvatarImage src={m.avatar} /><AvatarFallback className="text-[8px]">{(m.name||'?').charAt(0)}</AvatarFallback></Avatar>{m.name}</>
+                        ) : <span className="text-muted-foreground">未设审核人</span>;
+                      })()}
+                    </div>
+                  ) : (
+                    <Select
+                      value={selectedTask.reviewerId ? String(selectedTask.reviewerId) : "none"}
+                      onValueChange={(v) => {
+                        const newId = v === "none" ? null : Number(v);
+                        updateTask.mutate({ id: selectedTask.id, reviewerId: newId });
+                        setSelectedTask({ ...selectedTask, reviewerId: newId });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="不设审核人" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">不设审核人</SelectItem>
+                        {memberOptions.map((m: any) => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-4 w-4">
+                                <AvatarImage src={m.avatar} />
+                                <AvatarFallback className="text-[8px]">{(m.name || "?").charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              {m.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
-                {/* Dates */}
+                {/* Dates — read-only for assignee-only */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">开始日期</Label>
-                    <Input type="date" className="h-8 text-xs"
-                      value={selectedTask.startDate ? new Date(selectedTask.startDate).toISOString().split('T')[0] : ""}
-                      onChange={(e) => {
-                        updateTask.mutate({ id: selectedTask.id, startDate: e.target.value || null });
-                        setSelectedTask({ ...selectedTask, startDate: e.target.value ? new Date(e.target.value) : null });
-                      }}
-                    />
+                    {isAssigneeOnly(selectedTask) ? (
+                      <div className="h-8 px-2 flex items-center rounded-md border bg-muted/40 text-xs">
+                        {selectedTask.startDate ? new Date(selectedTask.startDate).toLocaleDateString('zh-CN') : <span className="text-muted-foreground">未设置</span>}
+                      </div>
+                    ) : (
+                      <Input type="date" className="h-8 text-xs"
+                        value={selectedTask.startDate ? new Date(selectedTask.startDate).toISOString().split('T')[0] : ""}
+                        onChange={(e) => {
+                          updateTask.mutate({ id: selectedTask.id, startDate: e.target.value || null });
+                          setSelectedTask({ ...selectedTask, startDate: e.target.value ? new Date(e.target.value) : null });
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">截止日期</Label>
-                    <Input type="date" className="h-8 text-xs"
-                      value={selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : ""}
-                      onChange={(e) => {
-                        updateTask.mutate({ id: selectedTask.id, dueDate: e.target.value || null });
-                        setSelectedTask({ ...selectedTask, dueDate: e.target.value ? new Date(e.target.value) : null });
-                      }}
-                    />
+                    {isAssigneeOnly(selectedTask) ? (
+                      <div className="h-8 px-2 flex items-center rounded-md border bg-muted/40 text-xs">
+                        {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString('zh-CN') : <span className="text-muted-foreground">未设置</span>}
+                      </div>
+                    ) : (
+                      <Input type="date" className="h-8 text-xs"
+                        value={selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : ""}
+                        onChange={(e) => {
+                          updateTask.mutate({ id: selectedTask.id, dueDate: e.target.value || null });
+                          setSelectedTask({ ...selectedTask, dueDate: e.target.value ? new Date(e.target.value) : null });
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 
-                {/* Progress */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">完成进度</Label>
-                    <span className="text-xs font-medium text-primary">{selectedTask.progress ?? 0}%</span>
+                {/* Progress: creator sees slider; assignee-only sees submit form */}
+                {isAssigneeOnly(selectedTask) ? (
+                  <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                    <Label className="text-xs font-semibold text-primary">提交完成进度</Label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">当前进度</span>
+                      <span className="text-sm font-bold text-primary">{progressDraft ?? selectedTask.progress ?? 0}%</span>
+                    </div>
+                    <input
+                      type="range" min={0} max={100} step={5}
+                      value={progressDraft ?? selectedTask.progress ?? 0}
+                      onChange={(e) => setProgressDraft(Number(e.target.value))}
+                      className="w-full accent-primary"
+                    />
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progressDraft ?? selectedTask.progress ?? 0}%` }} />
+                    </div>
+                    <textarea
+                      className="w-full text-xs rounded-md border bg-background px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                      rows={2}
+                      placeholder="进度说明（可选）"
+                      value={progressNoteDraft}
+                      onChange={(e) => setProgressNoteDraft(e.target.value)}
+                    />
+                    <button
+                      className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      disabled={submitProgress.isPending}
+                      onClick={() => {
+                        submitProgress.mutate({
+                          id: selectedTask.id,
+                          progress: progressDraft ?? selectedTask.progress ?? 0,
+                          progressNote: progressNoteDraft || undefined,
+                        }, {
+                          onSuccess: () => {
+                            setSelectedTask({ ...selectedTask, progress: progressDraft ?? selectedTask.progress ?? 0 });
+                            setProgressDraft(null);
+                            setProgressNoteDraft("");
+                          }
+                        });
+                      }}
+                    >
+                      {submitProgress.isPending ? "提交中..." : "提交进度"}
+                    </button>
+                    {selectedTask.progressNote && (
+                      <p className="text-xs text-muted-foreground">上次说明：{selectedTask.progressNote}</p>
+                    )}
                   </div>
-                  <input
-                    type="range" min={0} max={100} step={5}
-                    value={selectedTask.progress ?? 0}
-                    onChange={(e) => setSelectedTask({ ...selectedTask, progress: Number(e.target.value) })}
-                    onMouseUp={(e) => updateTask.mutate({ id: selectedTask.id, progress: Number((e.target as HTMLInputElement).value) })}
-                    onTouchEnd={(e) => updateTask.mutate({ id: selectedTask.id, progress: Number((e.target as HTMLInputElement).value) })}
-                    className="w-full accent-primary"
-                  />
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${selectedTask.progress ?? 0}%` }} />
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">完成进度</Label>
+                      <span className="text-xs font-medium text-primary">{selectedTask.progress ?? 0}%</span>
+                    </div>
+                    <input
+                      type="range" min={0} max={100} step={5}
+                      value={selectedTask.progress ?? 0}
+                      onChange={(e) => setSelectedTask({ ...selectedTask, progress: Number(e.target.value) })}
+                      onMouseUp={(e) => updateTask.mutate({ id: selectedTask.id, progress: Number((e.target as HTMLInputElement).value) })}
+                      onTouchEnd={(e) => updateTask.mutate({ id: selectedTask.id, progress: Number((e.target as HTMLInputElement).value) })}
+                      className="w-full accent-primary"
+                    />
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${selectedTask.progress ?? 0}%` }} />
+                    </div>
+                    {selectedTask.progressNote && (
+                      <p className="text-xs text-muted-foreground">负责人说明：{selectedTask.progressNote}</p>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Sub-tasks */}
                 <div className="space-y-2">

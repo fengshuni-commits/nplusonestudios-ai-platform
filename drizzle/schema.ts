@@ -96,6 +96,7 @@ export const tasks = mysqlTable("tasks", {
   startDate: timestamp("startDate"),
   dueDate: timestamp("dueDate"),
   progress: int("progress").default(0),
+  progressNote: text("progressNote"),
   parentId: int("parentId"),
   reviewerId: int("reviewerId"),
   sortOrder: int("sortOrder").default(0),
