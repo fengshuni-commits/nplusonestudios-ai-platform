@@ -967,3 +967,10 @@
 - [x] 前端：查询任务列表后自动调用 applyAutoStatus 更新状态
 - [x] 后端：定时任务（可选）每小时批量更新过旧任务状态
 - [x] 验证并保存检查点
+
+## 任务自动状态更新修复
+- [x] 后端：修复 applyAutoStatus 逻辑（开始日期当天即触发，比较日期部分而非精确时间）
+- [x] 后端：applyAutoStatus 默认查询所有未完成任务（不限 taskIds），确保全量更新
+- [x] 前端：Home.tsx 挂载时全量触发（不传 taskIds），更新后刷新任务列表
+- [x] 前端：ProjectDetail.tsx 项目任务看板加载后也触发 applyAutoStatus
+- [x] 验证并保存检查点

@@ -999,30 +999,42 @@ const tasksRouter = router({
       const drizzleDb = await db.getDb();
       if (!drizzleDb) return { updated: 0 };
       
-      const { eq, inArray } = await import('drizzle-orm');
+      const { eq, inArray, ne } = await import('drizzle-orm');
       const { tasks } = await import('../drizzle/schema');
-      const now = new Date();
       
+      // Today's date string in Beijing time (UTC+8), e.g. "2026-03-26"
+      const now = new Date();
+      const todayStr = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      
+      // If specific taskIds provided, filter to those; otherwise scan all non-done tasks
       let query = drizzleDb.select().from(tasks) as any;
       if (input.taskIds?.length) {
         query = query.where(inArray(tasks.id, input.taskIds));
+      } else {
+        query = query.where(ne(tasks.status, 'done'));
       }
       const allTasks = await query;
       
       let updated = 0;
       for (const task of allTasks) {
-        let newStatus = task.status;
+        let newStatus: string = task.status;
         
-        if (task.startDate && new Date(task.startDate) <= now && task.status === 'todo') {
-          newStatus = 'in_progress';
+        // Rule 1: startDate is today or earlier and status is 'todo' → mark as 'in_progress'
+        if (task.startDate && task.status === 'todo') {
+          // Convert stored UTC timestamp to date string in Beijing time
+          const startStr = new Date(new Date(task.startDate).getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          if (startStr <= todayStr) {
+            newStatus = 'in_progress';
+          }
         }
         
-        if (task.approval === true && task.status === 'in_progress') {
+        // Rule 2: approval is true → mark as 'done' (regardless of current status)
+        if (task.approval === true && task.status !== 'done') {
           newStatus = 'done';
         }
         
         if (newStatus !== task.status) {
-          await drizzleDb.update(tasks).set({ status: newStatus }).where(eq(tasks.id, task.id));
+          await drizzleDb.update(tasks).set({ status: newStatus as any, updatedAt: new Date() }).where(eq(tasks.id, task.id));
           updated++;
         }
       }

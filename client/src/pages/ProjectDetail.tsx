@@ -1483,6 +1483,15 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const { data: tasks } = trpc.tasks.listByProject.useQuery({ projectId });
   const { data: members } = trpc.projects.listMembers.useQuery({ projectId });
   const utils = trpc.useUtils();
+  const applyAutoStatus = trpc.tasks.applyAutoStatus.useMutation();
+
+  // Auto-apply status updates when project tasks are loaded
+  useEffect(() => {
+    if (tasks && tasks.length > 0) {
+      const taskIds = tasks.map((t: any) => t.id);
+      applyAutoStatus.mutate({ taskIds });
+    }
+  }, [tasks?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: subTasks } = trpc.tasks.listSubTasks.useQuery(
     { parentId: selectedTask?.id ?? 0 },

@@ -74,15 +74,21 @@ export default function Home() {
   );
   const { data: recentGenerations, isLoading: genLoading } = trpc.dashboard.recentGenerations.useQuery();
   const { data: myTasks, isLoading: myTasksLoading } = trpc.tasks.listMine.useQuery();
-  const applyAutoStatus = trpc.tasks.applyAutoStatus.useMutation();
+  const utils = trpc.useUtils();
+  const applyAutoStatus = trpc.tasks.applyAutoStatus.useMutation({
+    onSuccess: (data) => {
+      // If any tasks were updated, refresh the task lists
+      if (data.updated > 0) {
+        utils.tasks.listMine.invalidate();
+        utils.tasks.listAll.invalidate();
+      }
+    },
+  });
 
-  // Auto-apply status updates when tasks are loaded
+  // Auto-apply status updates on mount (full scan, no taskIds needed)
   useEffect(() => {
-    if (myTasks && myTasks.length > 0) {
-      const taskIds = myTasks.map((t: any) => t.id);
-      applyAutoStatus.mutate({ taskIds });
-    }
-  }, [myTasks?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    applyAutoStatus.mutate({});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deadline warnings: tasks due within 3 days
   const urgentTasks = useMemo(() => {
