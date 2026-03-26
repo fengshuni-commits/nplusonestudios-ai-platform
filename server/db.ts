@@ -23,6 +23,7 @@ import {
   generationHistory,
   InsertGenerationHistory,
   benchmarkJobs,
+  renderingJobs,
   renderStyles, InsertRenderStyle,
   aiToolDefaults,
   videoHistory, InsertVideoHistory,
@@ -1769,4 +1770,61 @@ export async function getVideoHistoryById(id: number, userId: number) {
     .where(and(eq(videoHistory.id, id), eq(videoHistory.userId, userId)))
     .limit(1);
   return rows[0] || null;
+}
+
+// ─── Rendering Jobs (async image generation) ─────────────────────────────────
+export async function createRenderingJob(data: {
+  id: string;
+  userId: number;
+  inputParams: Record<string, unknown>;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(renderingJobs).values({
+    id: data.id,
+    userId: data.userId,
+    status: "pending",
+    inputParams: data.inputParams,
+  });
+}
+
+export async function getRenderingJob(id: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.execute(
+    sql`SELECT id, userId, status, resultUrl, resultPrompt, error, historyId, createdAt, updatedAt FROM rendering_jobs WHERE id = ${id} LIMIT 1`
+  );
+  const rows = result[0] as unknown as any[];
+  if (!rows || rows.length === 0) return undefined;
+  const row = rows[0];
+  return {
+    id: row.id as string,
+    userId: row.userId as number,
+    status: row.status as "pending" | "processing" | "done" | "failed",
+    resultUrl: row.resultUrl as string | null,
+    resultPrompt: row.resultPrompt as string | null,
+    error: row.error as string | null,
+    historyId: row.historyId as number | null,
+    createdAt: row.createdAt ? new Date(row.createdAt as string) : new Date(),
+    updatedAt: row.updatedAt ? new Date(row.updatedAt as string) : new Date(),
+  };
+}
+
+export async function updateRenderingJob(id: string, updates: {
+  status?: "pending" | "processing" | "done" | "failed";
+  resultUrl?: string | null;
+  resultPrompt?: string | null;
+  error?: string | null;
+  historyId?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  const set: Record<string, unknown> = {};
+  if (updates.status !== undefined) set.status = updates.status;
+  if (updates.resultUrl !== undefined) set.resultUrl = updates.resultUrl;
+  if (updates.resultPrompt !== undefined) set.resultPrompt = updates.resultPrompt;
+  if (updates.error !== undefined) set.error = updates.error;
+  if (updates.historyId !== undefined) set.historyId = updates.historyId;
+  if (Object.keys(set).length === 0) return;
+  await db.update(renderingJobs).set(set).where(eq(renderingJobs.id, id));
 }

@@ -2022,6 +2022,165 @@ const benchmarkRouter = router({
 
 // ─── AI Module: Rendering / Sketch ───────────────────────
 
+async function generateRenderingInBackground(
+  jobId: string,
+  input: {
+    prompt: string;
+    style?: string;
+    styleId?: number;
+    toolId?: number;
+    referenceImageUrl?: string;
+    parentHistoryId?: number;
+    materialImageUrl?: string;
+    maskImageData?: string;
+    aspectRatio?: string;
+    resolution?: string;
+  },
+  userId: number,
+  userName: string | null
+) {
+  const startTime = Date.now();
+  try {
+    await db.updateRenderingJob(jobId, { status: "processing" });
+
+    let fullPrompt = input.prompt;
+    let styleRefImageUrl: string | null = null;
+
+    if (input.styleId) {
+      try {
+        const renderStyle = await db.getRenderStyleById(input.styleId);
+        if (renderStyle) {
+          fullPrompt += `, ${renderStyle.promptHint}`;
+          if (renderStyle.referenceImageUrl) styleRefImageUrl = renderStyle.referenceImageUrl;
+        }
+      } catch { /* ignore */ }
+    } else if (input.style) {
+      fullPrompt += `, style: ${input.style}`;
+    }
+
+    const ratioLabels: Record<string, string> = {
+      "1:1": "square composition (1:1 aspect ratio)",
+      "4:3": "4:3 aspect ratio landscape composition",
+      "3:2": "3:2 aspect ratio landscape composition",
+      "16:9": "wide cinematic 16:9 aspect ratio panoramic composition",
+      "9:16": "tall portrait 9:16 aspect ratio vertical composition",
+      "3:4": "3:4 aspect ratio portrait composition",
+    };
+    if (input.aspectRatio && ratioLabels[input.aspectRatio]) {
+      fullPrompt = `[IMPORTANT: Generate image with ${ratioLabels[input.aspectRatio]}] ${fullPrompt}`;
+    }
+
+    const resolutionMap: Record<string, number> = { standard: 1024, hd: 1536, ultra: 2048 };
+    const baseSize = resolutionMap[input.resolution || "standard"] || 1024;
+    const aspectRatioMap: Record<string, [number, number]> = {
+      "1:1": [1, 1], "4:3": [4, 3], "3:2": [3, 2],
+      "16:9": [16, 9], "9:16": [9, 16], "3:4": [3, 4],
+    };
+    let imageSize: string | undefined;
+    const ratioEntry = input.aspectRatio ? aspectRatioMap[input.aspectRatio] : undefined;
+    if (ratioEntry) {
+      const [rw, rh] = ratioEntry;
+      const ratio = rw / rh;
+      let w: number, h: number;
+      if (ratio >= 1) { w = baseSize; h = Math.round(baseSize / ratio); }
+      else { h = baseSize; w = Math.round(baseSize * ratio); }
+      w = Math.round(w / 64) * 64;
+      h = Math.round(h / 64) * 64;
+      imageSize = `${w}x${h}`;
+    } else if (input.resolution && input.resolution !== "standard") {
+      imageSize = `${baseSize}x${baseSize}`;
+    }
+
+    let resolvedModelName = "内置图像生成";
+    if (input.toolId) {
+      try { const tool = await db.getAiToolById(input.toolId); if (tool?.name) resolvedModelName = tool.name; } catch { /* ignore */ }
+    }
+
+    const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
+    const originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
+
+    if (input.referenceImageUrl && input.maskImageData) {
+      try {
+        const composite = await compositeMaskOnImage(input.referenceImageUrl, input.maskImageData);
+        originalImages.push({ b64Json: composite.b64, mimeType: composite.mimeType });
+        fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${fullPrompt}`;
+      } catch {
+        originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
+      }
+    } else if (input.referenceImageUrl) {
+      if (imageSize && ratioEntry) {
+        try {
+          const targetRatio = ratioEntry[0] / ratioEntry[1];
+          const cropped = await cropToAspectRatio(input.referenceImageUrl, targetRatio);
+          originalImages.push({ b64Json: cropped.buffer.toString("base64"), mimeType: cropped.mimeType });
+        } catch { originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" }); }
+      } else {
+        originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
+      }
+    }
+    if (input.materialImageUrl) originalImages.push({ url: input.materialImageUrl, mimeType: "image/png" });
+    if (styleRefImageUrl) originalImages.push({ url: styleRefImageUrl, mimeType: "image/png" });
+    if (originalImages.length > 0) genOpts.originalImages = originalImages;
+    if (imageSize) genOpts.size = imageSize;
+
+    const result = await generateImageWithTool({ ...genOpts, toolId: input.toolId });
+
+    await db.createAiToolLog({
+      toolId: input.toolId || 0,
+      userId,
+      action: "rendering_generate",
+      inputSummary: fullPrompt.substring(0, 200),
+      outputSummary: result.url || "",
+      status: "success",
+      durationMs: Date.now() - startTime,
+    });
+
+    const historyResult = await db.createGenerationHistory({
+      userId,
+      module: "ai_render",
+      title: input.referenceImageUrl
+        ? (input.maskImageData ? `局部重绘 - ${input.prompt.substring(0, 40)}` : `图生图 - ${input.prompt.substring(0, 40)}`)
+        : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
+      summary: fullPrompt.substring(0, 200),
+      inputParams: {
+        prompt: input.prompt,
+        style: input.style,
+        referenceImageUrl: input.referenceImageUrl || null,
+        materialImageUrl: input.materialImageUrl || null,
+        hasMask: !!input.maskImageData,
+        aspectRatio: input.aspectRatio || null,
+        resolution: input.resolution || null,
+      },
+      outputUrl: result.url,
+      status: "success",
+      durationMs: Date.now() - startTime,
+      parentId: input.parentHistoryId || null,
+      projectId: null,
+      createdByName: userName,
+      modelName: resolvedModelName,
+    }).catch(() => ({ id: 0 }));
+
+    await db.updateRenderingJob(jobId, {
+      status: "done",
+      resultUrl: result.url,
+      resultPrompt: fullPrompt,
+      historyId: historyResult.id || null,
+    });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Rendering] Job ${jobId} failed:`, errMsg);
+    await db.updateRenderingJob(jobId, { status: "failed", error: errMsg.substring(0, 500) });
+    await db.createAiToolLog({
+      toolId: input.toolId || 0,
+      userId,
+      action: "rendering_generate",
+      inputSummary: input.prompt.substring(0, 200),
+      status: "failed",
+      durationMs: Date.now() - startTime,
+    });
+  }
+}
+
 const renderingRouter = router({
   generate: protectedProcedure
      .input(z.object({
@@ -2037,198 +2196,34 @@ const renderingRouter = router({
       resolution: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const startTime = Date.now();
-      // Build prompt with style and aspect ratio instruction
-      let fullPrompt = input.prompt;
-      let styleRefImageUrl: string | null = null;
-      // Prefer styleId (from render_styles table) over legacy style string
-      if (input.styleId) {
-        try {
-          const renderStyle = await db.getRenderStyleById(input.styleId);
-          if (renderStyle) {
-            fullPrompt += `, ${renderStyle.promptHint}`;
-            if (renderStyle.referenceImageUrl) styleRefImageUrl = renderStyle.referenceImageUrl;
-          }
-        } catch { /* ignore */ }
-      } else if (input.style) {
-        fullPrompt += `, style: ${input.style}`;
+      // Async mode: create job immediately and return jobId
+      const jobId = nanoid();
+      await db.createRenderingJob({
+        id: jobId,
+        userId: ctx.user.id,
+        inputParams: input as Record<string, unknown>,
+      });
+      // Fire-and-forget background generation
+      generateRenderingInBackground(jobId, input, ctx.user.id, ctx.user.name || null).catch(err => {
+        console.error("[Rendering] Unhandled error:", err);
+      });
+      return { jobId };
+    }),
+
+  /** Poll status of a rendering generation job */
+  pollJob: protectedProcedure
+    .input(z.object({ jobId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const job = await db.getRenderingJob(input.jobId);
+      if (!job) return { status: "not_found" as const };
+      if (job.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (job.status === "done") {
+        return { status: "done" as const, url: job.resultUrl || "", prompt: job.resultPrompt || "", historyId: job.historyId };
       }
-
-      // Strongly enforce aspect ratio in prompt for better compliance
-      const ratioLabels: Record<string, string> = {
-        "1:1": "square composition (1:1 aspect ratio)",
-        "4:3": "4:3 aspect ratio landscape composition",
-        "3:2": "3:2 aspect ratio landscape composition",
-        "16:9": "wide cinematic 16:9 aspect ratio panoramic composition",
-        "9:16": "tall portrait 9:16 aspect ratio vertical composition",
-        "3:4": "3:4 aspect ratio portrait composition",
-      };
-      if (input.aspectRatio && ratioLabels[input.aspectRatio]) {
-        fullPrompt = `[IMPORTANT: Generate image with ${ratioLabels[input.aspectRatio]}] ${fullPrompt}`;
+      if (job.status === "failed") {
+        return { status: "failed" as const, error: job.error || "生成失败" };
       }
-
-      // Calculate image size from aspect ratio and resolution
-      const resolutionMap: Record<string, number> = {
-        standard: 1024,
-        hd: 1536,
-        ultra: 2048,
-      };
-      const baseSize = resolutionMap[input.resolution || "standard"] || 1024;
-
-      const aspectRatioMap: Record<string, [number, number]> = {
-        "1:1": [1, 1],
-        "4:3": [4, 3],
-        "3:2": [3, 2],
-        "16:9": [16, 9],
-        "9:16": [9, 16],
-        "3:4": [3, 4],
-      };
-
-      let imageSize: string | undefined;
-      const ratioEntry = input.aspectRatio ? aspectRatioMap[input.aspectRatio] : undefined;
-      if (ratioEntry) {
-        const [rw, rh] = ratioEntry;
-        const ratio = rw / rh;
-        let w: number, h: number;
-        if (ratio >= 1) {
-          w = baseSize;
-          h = Math.round(baseSize / ratio);
-        } else {
-          h = baseSize;
-          w = Math.round(baseSize * ratio);
-        }
-        // Round to nearest 64 for model compatibility
-        w = Math.round(w / 64) * 64;
-        h = Math.round(h / 64) * 64;
-        imageSize = `${w}x${h}`;
-      } else if (input.resolution && input.resolution !== "standard") {
-        imageSize = `${baseSize}x${baseSize}`;
-      }
-
-      // Resolve tool name for modelName annotation
-      let resolvedModelName = "内置图像生成";
-      if (input.toolId) {
-        try {
-          const tool = await db.getAiToolById(input.toolId);
-          if (tool?.name) resolvedModelName = tool.name;
-        } catch { /* ignore */ }
-      } else {
-        // Try to get the default tool name
-        try {
-          const { getDb: _getDb } = await import("./db");
-          const { aiTools: _aiTools } = await import("../drizzle/schema");
-          const { eq: _eq, and: _and } = await import("drizzle-orm");
-          const _db = await _getDb();
-          if (_db) {
-            const defaults = await _db.select().from(_aiTools).where(_and(_eq(_aiTools.isDefault, true), _eq(_aiTools.isActive, true))).limit(1);
-            if (defaults[0]?.name) resolvedModelName = defaults[0].name;
-          }
-        } catch { /* ignore */ }
-      }
-
-      try {
-        const genOpts: Parameters<typeof generateImage>[0] = { prompt: fullPrompt };
-
-        // Collect original images: reference + optional material
-        const originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
-
-        // Handle inpainting: composite mask onto original image
-        if (input.referenceImageUrl && input.maskImageData) {
-          // Inpainting mode: merge mask with original image as visual guide
-          try {
-            const composite = await compositeMaskOnImage(input.referenceImageUrl, input.maskImageData);
-            originalImages.push({ b64Json: composite.b64, mimeType: composite.mimeType });
-            // Enhance prompt to instruct AI about the marked region
-            fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${fullPrompt}`;
-          } catch (maskErr) {
-            // Fallback: send original image + mask separately
-            console.error("Mask composite failed, falling back:", maskErr);
-            originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
-          }
-        } else if (input.referenceImageUrl) {
-          // Normal image-to-image: crop reference to target aspect ratio if needed
-          if (imageSize && ratioEntry) {
-            try {
-              const targetRatio = ratioEntry[0] / ratioEntry[1];
-              const cropped = await cropToAspectRatio(input.referenceImageUrl, targetRatio);
-              const croppedB64 = cropped.buffer.toString("base64");
-              originalImages.push({ b64Json: croppedB64, mimeType: cropped.mimeType });
-            } catch (cropErr) {
-              console.error("Crop failed, using original:", cropErr);
-              originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
-            }
-          } else {
-            originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
-          }
-        }
-
-        if (input.materialImageUrl) {
-          originalImages.push({ url: input.materialImageUrl, mimeType: "image/png" });
-        }
-        // Append style reference image (from render_styles table) as the last reference
-        if (styleRefImageUrl) {
-          originalImages.push({ url: styleRefImageUrl, mimeType: "image/png" });
-        }
-
-        if (originalImages.length > 0) {
-          genOpts.originalImages = originalImages;
-        }
-
-        // Always pass size when aspect ratio is specified
-        if (imageSize) {
-          genOpts.size = imageSize;
-        }
-
-        const result = await generateImageWithTool({ ...genOpts, toolId: input.toolId });
-
-        await db.createAiToolLog({
-          toolId: input.toolId || 0,
-          userId: ctx.user.id,
-          action: "rendering_generate",
-          inputSummary: fullPrompt.substring(0, 200),
-          outputSummary: result.url || "",
-          status: "success",
-          durationMs: Date.now() - startTime,
-        });
-
-        // Record in generation history with edit chain support
-        const historyResult = await db.createGenerationHistory({
-          userId: ctx.user.id,
-          module: "ai_render",
-          title: input.referenceImageUrl
-            ? (input.maskImageData ? `局部重绘 - ${input.prompt.substring(0, 40)}` : `图生图 - ${input.prompt.substring(0, 40)}`)
-            : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
-          summary: fullPrompt.substring(0, 200),
-          inputParams: {
-            prompt: input.prompt,
-            style: input.style,
-            referenceImageUrl: input.referenceImageUrl || null,
-            materialImageUrl: input.materialImageUrl || null,
-            hasMask: !!input.maskImageData,
-            aspectRatio: input.aspectRatio || null,
-            resolution: input.resolution || null,
-          },
-          outputUrl: result.url,
-          status: "success",
-          durationMs: Date.now() - startTime,
-          parentId: input.parentHistoryId || null,
-          projectId: null,
-          createdByName: ctx.user.name || null,
-          modelName: resolvedModelName,
-        }).catch(() => ({ id: 0 }));
-
-        return { url: result.url, prompt: fullPrompt, historyId: historyResult.id };
-      } catch (error) {
-        await db.createAiToolLog({
-          toolId: input.toolId || 0,
-          userId: ctx.user.id,
-          action: "rendering_generate",
-          inputSummary: fullPrompt.substring(0, 200),
-          status: "failed",
-          durationMs: Date.now() - startTime,
-        });
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "图像生成失败，请稍后重试" });
-      }
+      return { status: job.status as "pending" | "processing" };
     }),
 
   edit: protectedProcedure

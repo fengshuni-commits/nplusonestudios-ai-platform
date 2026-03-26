@@ -518,3 +518,25 @@ export const personalTasks = mysqlTable("personal_tasks", {
 });
 export type PersonalTask = typeof personalTasks.$inferSelect;
 export type InsertPersonalTask = typeof personalTasks.$inferInsert;
+
+// ─── Rendering Jobs (async image generation) ────────────────────────────────
+// 异步图像生成任务，避免长时间 HTTP 连接超时
+export const renderingJobs = mysqlTable("rendering_jobs", {
+  id: varchar("id", { length: 64 }).primaryKey(), // nanoid job ID
+  userId: int("userId").notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  /** Input params JSON */
+  inputParams: json("inputParams").notNull(),
+  /** Generated image URL (S3) */
+  resultUrl: text("resultUrl"),
+  /** Full prompt used for generation */
+  resultPrompt: text("resultPrompt"),
+  /** Error message if failed */
+  error: text("error"),
+  /** Related generation history ID (set on completion) */
+  historyId: int("historyId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type RenderingJob = typeof renderingJobs.$inferSelect;
+export type InsertRenderingJob = typeof renderingJobs.$inferInsert;

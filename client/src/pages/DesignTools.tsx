@@ -233,16 +233,47 @@ export default function DesignTools() {
     }
   }, [searchString]);
 
-  const generateMutation = trpc.rendering.generate.useMutation({
-    onSuccess: (data) => {
-      if (data.url) {
-        setGeneratedImages((prev) => [{ url: data.url!, prompt: data.prompt, historyId: data.historyId }, ...prev]);
-        if (data.historyId) setParentHistoryId(data.historyId);
-      }
+  // Async rendering job polling
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const pollJobQuery = trpc.rendering.pollJob.useQuery(
+    { jobId: currentJobId! },
+    {
+      enabled: currentJobId !== null,
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return 2000;
+        if (data.status === "done" || data.status === "failed" || data.status === "not_found") return false;
+        return 2000;
+      },
+      staleTime: 0,
+    }
+  );
+  useEffect(() => {
+    if (!currentJobId || !pollJobQuery.data) return;
+    const data = pollJobQuery.data;
+    if (data.status === "done") {
+      const url = (data as any).url as string;
+      const prompt = (data as any).prompt as string;
+      const historyId = (data as any).historyId as number | undefined;
+      setGeneratedImages((prev) => [{ url, prompt, historyId }, ...prev]);
+      if (historyId) setParentHistoryId(historyId);
+      setCurrentJobId(null);
       setIsGenerating(false);
       setEditingImageIdx(null);
       setMaskDataUrl(null);
       toast.success("图像生成完成");
+    } else if (data.status === "failed") {
+      const error = (data as any).error as string;
+      setCurrentJobId(null);
+      setIsGenerating(false);
+      toast.error(error || "生成失败，请重试");
+    }
+  }, [currentJobId, pollJobQuery.data]);
+
+  const generateMutation = trpc.rendering.generate.useMutation({
+    onSuccess: (data) => {
+      // data.jobId returned — start polling
+      setCurrentJobId(data.jobId);
     },
     onError: (err) => {
       setIsGenerating(false);

@@ -983,3 +983,10 @@
 - [x] 前端：Home.tsx 任务弹窗中，负责人隐藏状态编辑，显示提交进度表单
 - [x] 项目创建者保留完整状态编辑权限
 - [x] 验证并保存检查点
+
+## Bug 修复：AI 效果图生成超时（Failed to fetch）
+- [x] 数据库：新增 rendering_jobs 表
+- [x] 后端：rendering.generate 改为异步模式（立即返回 jobId，后台生成）
+- [x] 后端：新增 rendering.pollJob 接口（轮询生成状态）
+- [x] 前端：DesignTools.tsx 改为提交后轮询结果，显示进度状态
+- [x] 验证并保存检查点
