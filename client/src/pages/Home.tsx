@@ -285,6 +285,13 @@ function MyTasksPanel({
       setTaskDetailOpen(false);
     },
   });
+  const approveTaskHome = trpc.tasks.approveTask.useMutation({
+    onSuccess: () => {
+      utils.tasks.listMine.invalidate();
+      utils.tasks.listAll.invalidate();
+      utils.tasks.listByUser.invalidate();
+    },
+  });
 
   const [homeProgressDraft, setHomeProgressDraft] = useState(0);
   const [homeProgressNote, setHomeProgressNote] = useState("");
@@ -855,6 +862,9 @@ function MyTasksPanel({
         const isTaskAssigneeOnly = currentUser &&
           selectedTask.assigneeId === currentUser.id &&
           !isTaskCreator;
+        const isTaskReviewer = currentUser &&
+          selectedTask.reviewerId === currentUser.id &&
+          selectedTask.status !== 'done';
         const canEdit = isTaskCreator;
         return (
           <Dialog open={taskDetailOpen} onOpenChange={setTaskDetailOpen}>
@@ -1035,6 +1045,23 @@ function MyTasksPanel({
                     });
                   }}>
                     {submitProgressHome.isPending ? "提交中..." : "提交进度"}
+                  </Button>
+                )}
+                {isTaskReviewer && (
+                  <Button
+                    size="sm"
+                    className="text-xs bg-green-600 hover:bg-green-700 text-white"
+                    disabled={approveTaskHome.isPending}
+                    onClick={() => {
+                      approveTaskHome.mutate({ id: selectedTask.id }, {
+                        onSuccess: () => {
+                          setSelectedTask((prev: any) => prev ? { ...prev, status: 'done', approval: true } : prev);
+                          import('sonner').then(({ toast }) => toast.success('审核已通过，任务已标记为已完成'));
+                        },
+                      });
+                    }}
+                  >
+                    {approveTaskHome.isPending ? '处理中...' : '✓ 通过审核'}
                   </Button>
                 )}
                 {canEdit && (

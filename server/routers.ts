@@ -1003,6 +1003,28 @@ const tasksRouter = router({
       }).where(eq(tasks.id, input.id));
       return { success: true };
     }),
+
+  approveTask: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      // 权限检查：只有任务的审核人可以通过审核
+      if (task.reviewerId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "只有任务审核人可以通过审核" });
+      }
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { eq } = await import('drizzle-orm');
+      const { tasks } = await import('../drizzle/schema');
+      await drizzleDb.update(tasks).set({
+        approval: true,
+        status: 'done',
+        updatedAt: new Date(),
+      }).where(eq(tasks.id, input.id));
+      return { success: true };
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {

@@ -1523,6 +1523,12 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
     },
     onError: (err) => toast.error(err.message),
   });
+  const approveTask = trpc.tasks.approveTask.useMutation({
+    onSuccess: () => {
+      utils.tasks.listByProject.invalidate({ projectId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const [progressDraft, setProgressDraft] = useState<number | null>(null);
   const [progressNoteDraft, setProgressNoteDraft] = useState("");
@@ -2026,6 +2032,31 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                     {selectedTask.progressNote && (
                       <p className="text-xs text-muted-foreground">负责人说明：{selectedTask.progressNote}</p>
                     )}
+                  </div>
+                )}
+
+                {/* Approve button — visible only to reviewer when task is not yet done */}
+                {selectedTask.reviewerId === currentUser?.id && selectedTask.status !== 'done' && (
+                  <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-green-500" />
+                      <span className="text-xs font-semibold text-green-700 dark:text-green-400">审核人操作</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">确认任务已按要求完成，点击下方按钮将自动通过审核并标记任务为已完成。</p>
+                    <button
+                      className="w-full h-8 rounded-md bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      disabled={approveTask.isPending}
+                      onClick={() => {
+                        approveTask.mutate({ id: selectedTask.id }, {
+                          onSuccess: () => {
+                            setSelectedTask({ ...selectedTask, status: 'done', approval: true });
+                            toast.success('审核已通过，任务已标记为已完成');
+                          },
+                        });
+                      }}
+                    >
+                      {approveTask.isPending ? '处理中...' : '✓ 通过审核'}
+                    </button>
                   </div>
                 )}
 
