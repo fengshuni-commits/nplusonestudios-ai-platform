@@ -990,3 +990,8 @@
 - [x] 后端：新增 rendering.pollJob 接口（轮询生成状态）
 - [x] 前端：DesignTools.tsx 改为提交后轮询结果，显示进度状态
 - [x] 验证并保存检查点
+
+## Bug 修复：登录后跳转回登录页
+- [x] 根本原因：Express 未设置 trust proxy，生产环境 req.protocol 返回 http，导致 cookie 以 secure=false 设置，浏览器拒绝存储
+- [x] 修复：在 server/_core/index.ts 中添加 app.set("trust proxy", 1)
+- [x] 验证并保存检查点

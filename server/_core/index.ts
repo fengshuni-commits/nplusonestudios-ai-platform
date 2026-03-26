@@ -31,6 +31,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // Trust reverse proxy (nginx/Cloudflare/Manus edge) so req.protocol reflects
+  // the original HTTPS scheme. Without this, sameSite=none cookies are set with
+  // secure=false and browsers silently reject them, causing login loops.
+  app.set("trust proxy", 1);
   // Extend timeout for long-running AI inference requests (e.g. reasoning models)
   server.timeout = 300000; // 5 minutes
   server.keepAliveTimeout = 305000;
