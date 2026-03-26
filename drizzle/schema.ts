@@ -100,6 +100,7 @@ export const tasks = mysqlTable("tasks", {
   reviewerId: int("reviewerId"),
   sortOrder: int("sortOrder").default(0),
   createdBy: int("createdBy"),
+  approval: boolean("approval").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

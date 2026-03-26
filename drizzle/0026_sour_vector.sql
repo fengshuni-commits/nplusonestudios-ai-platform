@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `approval` boolean DEFAULT false NOT NULL;

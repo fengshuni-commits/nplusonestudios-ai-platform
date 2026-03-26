@@ -183,6 +183,13 @@
       "when": 1774332418844,
       "tag": "0025_lying_the_watchers",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1774505957513,
+      "tag": "0026_sour_vector",
+      "breakpoints": true
     }
   ]
 }

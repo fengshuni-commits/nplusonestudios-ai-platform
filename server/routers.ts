@@ -993,6 +993,42 @@ const tasksRouter = router({
     .query(async () => {
       return db.listUsers();
     }),
+  applyAutoStatus: protectedProcedure
+    .input(z.object({ taskIds: z.array(z.number()).optional() }))
+    .mutation(async ({ input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return { updated: 0 };
+      
+      const { eq, inArray } = await import('drizzle-orm');
+      const { tasks } = await import('../drizzle/schema');
+      const now = new Date();
+      
+      let query = drizzleDb.select().from(tasks) as any;
+      if (input.taskIds?.length) {
+        query = query.where(inArray(tasks.id, input.taskIds));
+      }
+      const allTasks = await query;
+      
+      let updated = 0;
+      for (const task of allTasks) {
+        let newStatus = task.status;
+        
+        if (task.startDate && new Date(task.startDate) <= now && task.status === 'todo') {
+          newStatus = 'in_progress';
+        }
+        
+        if (task.approval === true && task.status === 'in_progress') {
+          newStatus = 'done';
+        }
+        
+        if (newStatus !== task.status) {
+          await drizzleDb.update(tasks).set({ status: newStatus }).where(eq(tasks.id, task.id));
+          updated++;
+        }
+      }
+      
+      return { updated };
+    }),
 });
 
 // ─── Documents ───────────────────────────────────────────
