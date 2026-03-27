@@ -1034,3 +1034,11 @@
 - [x] 后端：generateMinutes 接口支持 meetingTitle、meetingLocation、meetingAttendees 字段
 - [x] 后端：将新字段传入 AI 提示词，生成纪要时包含完整会议信息
 - [x] 验证并保存检查点
+
+## 功能：会议纪要参会人员多选
+- [x] 前端：构建 AttendeeSelector 组件（内部成员多选 + 外部客户手动添加）
+- [x] 前端：调用 tasks.listTeamMembers 获取团队成员列表供选择
+- [x] 前端：已选人员以 Tag 形式展示，可逐个删除（外部客户显示琥珀色标签）
+- [x] 前端：替换 MeetingMinutes.tsx 中的参会人员文本输入框
+- [x] 后端：序列化参会人员数组为可读字符串传入 AI 提示词
+- [x] 验证并保存检查点

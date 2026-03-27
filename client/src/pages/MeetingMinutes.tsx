@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 import ImportProjectInfo, { type ProjectContext } from "@/components/ImportProjectInfo";
+import AttendeeSelector, { type Attendee } from "@/components/AttendeeSelector";
 
 type RecordingState = "idle" | "recording" | "paused" | "processing";
 
@@ -21,7 +22,7 @@ export default function MeetingMinutes() {
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split("T")[0]);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [meetingLocation, setMeetingLocation] = useState("");
-  const [meetingAttendees, setMeetingAttendees] = useState("");
+  const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [minutes, setMinutes] = useState("");
   const [minutesHistoryId, setMinutesHistoryId] = useState<number | undefined>(undefined);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -242,6 +243,10 @@ export default function MeetingMinutes() {
       return;
     }
     setIsGenerating(true);
+    // Serialize attendees to a readable string for the AI prompt
+    const meetingAttendees = attendees.length > 0
+      ? attendees.map(a => a.label ? `${a.name}（${a.label}）` : a.name).join("、")
+      : undefined;
     generateMutation.mutate({ transcript, projectName, meetingDate, meetingTitle, meetingLocation, meetingAttendees, toolId, projectId: importedProjectId || undefined });
   };
 
@@ -304,17 +309,7 @@ export default function MeetingMinutes() {
               </div>
 
               {/* Attendees */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                  参会人员
-                </Label>
-                <Input
-                  value={meetingAttendees}
-                  onChange={(e) => setMeetingAttendees(e.target.value)}
-                  placeholder="例：张三、李四（甲方）、王五（结构顾问）…"
-                />
-              </div>
+              <AttendeeSelector value={attendees} onChange={setAttendees} />
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
