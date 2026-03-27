@@ -104,7 +104,26 @@ export async function transcribeAudio(
       }
       
       audioBuffer = Buffer.from(await response.arrayBuffer());
-      mimeType = response.headers.get('content-type') || 'audio/mpeg';
+      // Prefer content-type from response, but fall back to inferring from URL path
+      const rawContentType = response.headers.get('content-type') || '';
+      // Strip charset/boundary params and handle octet-stream fallback
+      const cleanContentType = rawContentType.split(';')[0].trim();
+      if (cleanContentType && cleanContentType !== 'application/octet-stream') {
+        mimeType = cleanContentType;
+      } else {
+        // Infer from URL extension
+        const urlPath = new URL(options.audioUrl).pathname;
+        const ext = urlPath.split('.').pop()?.toLowerCase() ?? '';
+        const extToMime: Record<string, string> = {
+          webm: 'audio/webm',
+          ogg: 'audio/ogg',
+          mp3: 'audio/mpeg',
+          mp4: 'audio/mp4',
+          m4a: 'audio/mp4',
+          wav: 'audio/wav',
+        };
+        mimeType = extToMime[ext] || 'audio/webm';
+      }
       
       // Check file size (16MB limit)
       const sizeMB = audioBuffer.length / (1024 * 1024);

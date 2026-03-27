@@ -35,6 +35,7 @@ export default function MeetingMinutes() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [liveSegmentCount, setLiveSegmentCount] = useState(0);
   const [isProcessingSegment, setIsProcessingSegment] = useState(false);
+  const [pendingSegments, setPendingSegments] = useState(0);
   const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,17 +65,47 @@ export default function MeetingMinutes() {
     },
   });
 
+  // Helper: convert Blob to base64 string safely (avoids btoa RangeError on binary data)
+  const blobToBase64 = useCallback((blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // result is "data:<mime>;base64,<data>"
+        const base64 = result.split(",")[1];
+        if (base64) resolve(base64);
+        else reject(new Error("Failed to read blob as base64"));
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }, []);
+
   // Process a chunk of audio: upload → transcribe → append
-  const processAudioChunk = useCallback(async (chunks: Blob[], mimeType: string) => {
+  const processAudioChunk = useCallback(async (chunks: Blob[], rawMimeType: string) => {
     if (chunks.length === 0) return;
+    // Normalize mimeType: strip codec params (e.g. "audio/webm;codecs=opus" → "audio/webm")
+    const mimeType = rawMimeType.split(";")[0].trim();
+    const extMap: Record<string, string> = {
+      "audio/webm": "webm",
+      "audio/ogg": "ogg",
+      "audio/mp4": "mp4",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+    };
+    const ext = extMap[mimeType] ?? "webm";
+
     setIsProcessingSegment(true);
+    setPendingSegments(c => c + 1);
     try {
       const blob = new Blob(chunks, { type: mimeType });
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-      );
-      const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "mp4" : "webm";
+      if (blob.size < 1000) {
+        // Too small to be meaningful audio, skip silently
+        setPendingSegments(c => Math.max(0, c - 1));
+        setIsProcessingSegment(false);
+        return;
+      }
+      const base64 = await blobToBase64(blob);
       const uploadResult = await uploadAudio.mutateAsync({
         fileName: `live-segment-${Date.now()}.${ext}`,
         fileData: base64,
@@ -89,12 +120,15 @@ export default function MeetingMinutes() {
         setTranscript(prev => prev ? `${prev} ${newText}` : newText);
         setLiveSegmentCount(c => c + 1);
       }
-    } catch {
-      // silently skip failed segment
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "转录失败";
+      toast.error(`音频转录失败：${msg}`);
+      console.error("[processAudioChunk] error:", err);
     } finally {
       setIsProcessingSegment(false);
+      setPendingSegments(c => Math.max(0, c - 1));
     }
-  }, [uploadAudio, transcribeMutation]);
+  }, [uploadAudio, transcribeMutation, blobToBase64]);
 
   const startSegmentTimer = useCallback((recorder: MediaRecorder, mimeType: string) => {
     segmentTimerRef.current = setInterval(() => {
@@ -173,7 +207,7 @@ export default function MeetingMinutes() {
   const stopRecording = useCallback(() => {
     clearTimers();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      // Request final data before stopping
+      // Request final data before stopping - this triggers one last ondataavailable
       mediaRecorderRef.current.requestData();
       mediaRecorderRef.current.stop();
     }
@@ -182,7 +216,7 @@ export default function MeetingMinutes() {
       streamRef.current = null;
     }
     setRecordingState("idle");
-    toast.success("录音已停止");
+    toast.success("录音已停止，正在转录最后一段音频…");
   }, [clearTimers]);
 
   // Cleanup on unmount
@@ -483,11 +517,13 @@ export default function MeetingMinutes() {
                 placeholder="录音转写结果将实时显示在此处，您也可以手动输入或编辑会议内容…"
                 rows={10}
               />
-              <Button onClick={handleGenerate} disabled={isGenerating || !transcript.trim() || isRecordingActive} className="w-full">
+              <Button onClick={handleGenerate} disabled={isGenerating || !transcript.trim() || isRecordingActive || pendingSegments > 0} className="w-full">
                 {isGenerating ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中…</>
                 ) : isRecordingActive ? (
                   <><Mic className="h-4 w-4 mr-2" />录音结束后可生成纪要</>
+                ) : pendingSegments > 0 ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />正在转录最后一段音频…</>
                 ) : (
                   <><Sparkles className="h-4 w-4 mr-2" />生成会议纪要</>
                 )}

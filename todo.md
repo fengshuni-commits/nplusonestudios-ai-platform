@@ -1042,3 +1042,12 @@
 - [x] 前端：替换 MeetingMinutes.tsx 中的参会人员文本输入框
 - [x] 后端：序列化参会人员数组为可读字符串传入 AI 提示词
 - [x] 验证并保存检查点
+
+## Bug 修复：会议纪要录音功能
+- [x] 排查录音分段上传 S3 失败原因
+- [x] 修复：btoa 对二进制音频数据抛 RangeError，改用 FileReader.readAsDataURL 安全转换
+- [x] 修复：mimeType 带参数（audio/webm;codecs=opus）导致文件名后缀错误，改为裁剪主类型
+- [x] 修复：voiceTranscription.ts 不再依赖 S3 返回的 content-type，改为从 URL 路径推断扩展名
+- [x] 修复：录音错误被静默吐掉，改为显示 toast 错误提示
+- [x] 修复：停止录音后按鈕立即可点导致 transcript 为空，添加 pendingSegments 计数器，转录完成前禁用按鈕
+- [x] 验证并保存检查点
