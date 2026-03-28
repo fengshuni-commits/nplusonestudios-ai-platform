@@ -14,7 +14,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -1063,6 +1063,11 @@ function ProjectDocumentsTab({
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {doc.audioUrl && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-blue-500" title="下载录音" onClick={() => window.open(doc.audioUrl, "_blank")}>
+                            <Mic className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {doc.fileUrl && (
                           <Button size="icon" variant="ghost" className="h-7 w-7" title={isUrlLink ? "打开链接" : "下载"} onClick={() => window.open(doc.fileUrl, "_blank")}>
                             {isUrlLink ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}

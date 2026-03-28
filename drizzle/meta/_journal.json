@@ -204,6 +204,13 @@
       "when": 1774516320849,
       "tag": "0028_married_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1774674108184,
+      "tag": "0029_petite_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

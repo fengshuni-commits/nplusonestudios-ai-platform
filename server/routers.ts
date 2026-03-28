@@ -2440,6 +2440,9 @@ const meetingRouter = router({
       meetingAttendees: z.string().optional(),
       toolId: z.number().optional(),
       projectId: z.number().optional(),
+      // Audio archive fields
+      audioUrl: z.string().optional(),
+      audioKey: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -2504,7 +2507,24 @@ const meetingRouter = router({
           modelName: response.model || null,
         }).catch(() => ({ id: 0 }));
 
-        return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id };
+        // Archive to project documents library if projectId is provided
+        let documentId: number | undefined;
+        if (input.projectId) {
+          const docTitle = `${input.meetingTitle || "会议纪要"} · ${input.meetingDate || new Date().toLocaleDateString("zh-CN")}`;
+          const docResult = await db.createDocument({
+            projectId: input.projectId,
+            title: docTitle,
+            content,
+            type: "minutes",
+            category: "management",
+            audioUrl: input.audioUrl || null,
+            audioKey: input.audioKey || null,
+            createdBy: ctx.user.id,
+          }).catch(() => ({ id: 0 }));
+          documentId = docResult.id || undefined;
+        }
+
+        return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id, documentId };
       } catch (error) {
         await db.createAiToolLog({
           toolId: input.toolId || 0,

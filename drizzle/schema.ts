@@ -119,6 +119,9 @@ export const documents = mysqlTable("documents", {
   category: mysqlEnum("category", ["design", "construction", "management"]).default("design").notNull(),
   fileUrl: text("fileUrl"),
   fileKey: text("fileKey"),
+  // Audio recording fields for meeting minutes
+  audioUrl: text("audioUrl"),
+  audioKey: text("audioKey"),
   version: int("version").default(1),
   parentId: int("parentId"),
   createdBy: int("createdBy"),

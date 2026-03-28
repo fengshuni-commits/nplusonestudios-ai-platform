@@ -1058,3 +1058,13 @@
 - [x] 在录音控制区显示「下载录音」按鈕，文件名包含会议名称和日期
 - [x] 页面离开或重新开始录音时释放 Blob URL 内存
 - [x] 验证并保存检查点
+
+## 功能：会议纪要与录音联合存档
+- [x] 查看 schema，复用现有 documents 表（type=minutes）存档纪要
+- [x] 数据库：documents 表添加 audioUrl、audioKey 字段并迁移
+- [x] 后端：generateMinutes 接口支持 audioUrl/audioKey 输入，有 projectId 时自动写入 documents 表
+- [x] 前端：生成纪要前先上传录音到 S3，再一并传入 generateMinutes 存档
+- [x] 前端：生成按鈕在已关联项目时显示「生成并存入文档库」
+- [x] 前端：纪要生成后展示绿色存档成功提示，含「查看文档库 →」跳转链接
+- [x] 前端：ProjectDetail.tsx 文档库列表为 minutes 类型条目显示录音下载按鈕（话筒图标）
+- [x] 验证并保存检查点

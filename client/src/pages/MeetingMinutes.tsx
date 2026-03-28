@@ -39,6 +39,8 @@ export default function MeetingMinutes() {
   const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadMime, setDownloadMime] = useState<string>("audio/webm");
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [archivedDocId, setArchivedDocId] = useState<number | undefined>(undefined);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -61,11 +63,18 @@ export default function MeetingMinutes() {
     onSuccess: (data) => {
       setMinutes(data.content);
       setMinutesHistoryId(data.historyId || undefined);
+      setArchivedDocId(data.documentId);
       setIsGenerating(false);
-      toast.success("会议纪要生成完成");
+      setIsArchiving(false);
+      if (data.documentId) {
+        toast.success("会议纪要已生成并存入项目文档库");
+      } else {
+        toast.success("会议纪要生成完成");
+      }
     },
     onError: (err) => {
       setIsGenerating(false);
+      setIsArchiving(false);
       toast.error(err.message || "生成失败");
     },
   });
@@ -306,17 +315,52 @@ export default function MeetingMinutes() {
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!transcript.trim()) {
       toast.error("请先录音或上传音频，或手动输入会议内容");
       return;
     }
     setIsGenerating(true);
+    setArchivedDocId(undefined);
+
     // Serialize attendees to a readable string for the AI prompt
     const meetingAttendees = attendees.length > 0
       ? attendees.map(a => a.label ? `${a.name}（${a.label}）` : a.name).join("、")
       : undefined;
-    generateMutation.mutate({ transcript, projectName, meetingDate, meetingTitle, meetingLocation, meetingAttendees, toolId, projectId: importedProjectId || undefined });
+
+    // If there is a local recording, upload it to S3 first for archiving
+    let audioUrl: string | undefined;
+    let audioKey: string | undefined;
+    if (downloadUrl && importedProjectId) {
+      try {
+        setIsArchiving(true);
+        // Re-fetch the blob from the local Blob URL
+        const response = await fetch(downloadUrl);
+        const blob = await response.blob();
+        const base64 = await blobToBase64(blob);
+        const ext = downloadMime.includes("ogg") ? "ogg" : downloadMime.includes("mp4") ? "mp4" : "webm";
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const uploadResult = await uploadAudio.mutateAsync({
+          fileName: `会议录音_${meetingTitle || dateStr}.${ext}`,
+          fileData: base64,
+          contentType: downloadMime,
+        });
+        audioUrl = uploadResult.url;
+        audioKey = uploadResult.key;
+      } catch {
+        // Non-fatal: proceed without audio archive
+        setIsArchiving(false);
+        toast.error("录音上传失败，将仅存档纪要文本");
+      }
+    }
+
+    generateMutation.mutate({
+      transcript, projectName, meetingDate, meetingTitle, meetingLocation,
+      meetingAttendees, toolId,
+      projectId: importedProjectId || undefined,
+      audioUrl,
+      audioKey,
+    });
   };
 
   const handleCopy = () => {
@@ -571,14 +615,16 @@ export default function MeetingMinutes() {
                 rows={10}
               />
               <Button onClick={handleGenerate} disabled={isGenerating || !transcript.trim() || isRecordingActive || pendingSegments > 0} className="w-full">
-                {isGenerating ? (
+                {isArchiving ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />上传录音文件…</>
+                ) : isGenerating ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中…</>
                 ) : isRecordingActive ? (
                   <><Mic className="h-4 w-4 mr-2" />录音结束后可生成纪要</>
                 ) : pendingSegments > 0 ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />正在转录最后一段音频…</>
                 ) : (
-                  <><Sparkles className="h-4 w-4 mr-2" />生成会议纪要</>
+                  <><Sparkles className="h-4 w-4 mr-2" />{importedProjectId ? "生成并存入文档库" : "生成会议纪要"}</>
                 )}
               </Button>
             </CardContent>
@@ -602,7 +648,14 @@ export default function MeetingMinutes() {
                   <Streamdown>{minutes}</Streamdown>
                 </div>
                 {!isGenerating && (
-                  <div className="mt-6 pt-4 border-t">
+                  <div className="mt-6 pt-4 border-t space-y-3">
+                    {archivedDocId && importedProjectId && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <span>已存入项目文档库</span>
+                        <a href={`/projects/${importedProjectId}?tab=documents`} className="ml-auto underline underline-offset-2 hover:text-emerald-900 font-medium">查看文档库 →</a>
+                      </div>
+                    )}
                     <FeedbackButtons module="meeting_minutes" historyId={minutesHistoryId} />
                   </div>
                 )}
