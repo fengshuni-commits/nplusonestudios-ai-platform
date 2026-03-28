@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText } from "lucide-react";
+import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText, Download } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
@@ -37,10 +37,15 @@ export default function MeetingMinutes() {
   const [isProcessingSegment, setIsProcessingSegment] = useState(false);
   const [pendingSegments, setPendingSegments] = useState(0);
   const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadMime, setDownloadMime] = useState<string>("audio/webm");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  // Accumulate ALL chunks for full-recording download
+  const fullRecordingChunksRef = useRef<Blob[]>([]);
+  const downloadUrlRef = useRef<string | null>(null);
   const segmentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -166,8 +171,20 @@ export default function MeetingMinutes() {
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
 
+      // Reset full recording buffer and revoke any previous download URL
+      fullRecordingChunksRef.current = [];
+      if (downloadUrlRef.current) {
+        URL.revokeObjectURL(downloadUrlRef.current);
+        downloadUrlRef.current = null;
+      }
+      setDownloadUrl(null);
+      setDownloadMime(mimeType.split(";")[0].trim());
+
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0) {
+          // Accumulate for full download
+          fullRecordingChunksRef.current.push(e.data);
+          // Also process this segment for real-time transcription
           const chunks = [e.data];
           audioChunksRef.current = [];
           processAudioChunk(chunks, mimeType);
@@ -206,10 +223,24 @@ export default function MeetingMinutes() {
 
   const stopRecording = useCallback(() => {
     clearTimers();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      // Request final data before stopping - this triggers one last ondataavailable
-      mediaRecorderRef.current.requestData();
-      mediaRecorderRef.current.stop();
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      const rawMime = recorder.mimeType;
+      const mime = rawMime.split(";")[0].trim() || "audio/webm";
+
+      // When stop fires, ondataavailable delivers the final chunk first
+      recorder.addEventListener("stop", () => {
+        const allChunks = fullRecordingChunksRef.current;
+        if (allChunks.length > 0) {
+          const blob = new Blob(allChunks, { type: mime });
+          const url = URL.createObjectURL(blob);
+          downloadUrlRef.current = url;
+          setDownloadUrl(url);
+        }
+      }, { once: true });
+
+      recorder.requestData(); // triggers final ondataavailable
+      recorder.stop();
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
@@ -219,12 +250,16 @@ export default function MeetingMinutes() {
     toast.success("录音已停止，正在转录最后一段音频…");
   }, [clearTimers]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount: stop timers, release mic, revoke Blob URL
   useEffect(() => {
     return () => {
       clearTimers();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      if (downloadUrlRef.current) {
+        URL.revokeObjectURL(downloadUrlRef.current);
+        downloadUrlRef.current = null;
       }
     };
   }, [clearTimers]);
@@ -471,6 +506,24 @@ export default function MeetingMinutes() {
                       }
                     </div>
                   )}
+
+                  {/* Download button: shown after recording stops */}
+                  {!isRecordingActive && downloadUrl && (() => {
+                    const ext = downloadMime.includes("ogg") ? "ogg" : downloadMime.includes("mp4") ? "mp4" : "webm";
+                    const dateStr = new Date().toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-");
+                    const fileName = `会议录音_${meetingTitle || meetingDate || dateStr}.${ext}`;
+                    return (
+                      <a
+                        href={downloadUrl}
+                        download={fileName}
+                        className="flex items-center justify-center gap-2 w-full rounded-md border border-border bg-muted/30 hover:bg-accent/40 transition-colors px-4 py-2.5 text-sm text-foreground/80 hover:text-foreground"
+                      >
+                        <Download className="h-4 w-4 text-primary" />
+                        <span>下载录音文件</span>
+                        <span className="text-xs text-muted-foreground ml-1">({fileName})</span>
+                      </a>
+                    );
+                  })()}
                 </div>
               ) : (
                 /* Upload mode */
