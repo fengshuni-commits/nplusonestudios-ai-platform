@@ -368,8 +368,6 @@ function AILayoutLearning() {
     onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("版式包已删除"); },
     onError: (e) => toast.error("删除失败: " + e.message),
   });
-  const uploadFileMutation = trpc.upload.file.useMutation();
-
   const [uploading, setUploading] = useState(false);
   const [packName, setPackName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -405,18 +403,19 @@ function AILayoutLearning() {
     }
     setUploading(true);
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = (e) => resolve((e.target?.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
+      // Use multipart/form-data to avoid base64 size limits
+      const formData = new FormData();
+      formData.append("file", selectedFile, selectedFile.name);
+      const uploadRes = await fetch("/api/upload/layout-pack", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
-      const { url, key } = await uploadFileMutation.mutateAsync({
-        fileName: selectedFile.name,
-        fileData: base64,
-        contentType: selectedFile.type || "application/octet-stream",
-        folder: "layout-packs",
-      });
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errData.error || `上传失败 (${uploadRes.status})`);
+      }
+      const { url, key } = await uploadRes.json();
       await createMutation.mutateAsync({
         name: packName.trim(),
         sourceType: getSourceType(selectedFile),

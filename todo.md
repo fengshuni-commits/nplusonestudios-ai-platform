@@ -1116,3 +1116,9 @@
 - [x] 前端：Presentation.tsx 新增版式包选择器（默认内置版式 / 自定义版式包）
 - [x] 后端：presentation.generate 支持 layoutPackId，按版式包风格生成 PPT
 - [x] 验证并保存检查点
+
+## Bug 修复：AI 版式学习上传失败（413 PayloadTooLarge）
+- [x] 后端：新增 multipart/form-data 上传端点 /api/upload/layout-pack，绕过 tRPC JSON body 限制
+- [x] 前端：Standards.tsx 改用 FormData + fetch 直接上传文件，不经过 base64 编码
+- [x] 后端：提高 body-parser 限制到 200mb 作为保底（兼容其他模块）
+- [ ] 验证大文件（>50MB）上传成功
