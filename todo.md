@@ -1129,3 +1129,11 @@
 - [x] 新增 layoutPacks.retry 接口，失败的版式包可一键重试
 - [x] 前端卡片新增「重试」按鈕
 - [x] 验证并保存检查点
+
+## Bug 修复：演示文稿选择版式包后未应用到 PPT
+- [x] 排查前端 Presentation.tsx 正确传递 layoutPackId
+- [x] 排查后端 presentation.generate 正确读取并查询版式包数据
+- [x] 根本原因：PPT 生成时配色/字体常量硬编码，未读取版式包的 colorPalette/typography
+- [x] 修复：用版式包配色覆盖 C 常量，用版式包字体覆盖 F 常量
+- [x] 增强 LLM 提示词，包含具体配色和版式偏好指导
+- [x] 验证并保存检查点

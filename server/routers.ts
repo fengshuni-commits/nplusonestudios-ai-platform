@@ -3247,13 +3247,25 @@ async function generatePresentationInBackground(
 
     // Build layout pack style hint for LLM
     const layoutPackHint = input.layoutPackStyleGuide
-      ? `\n\n【参考版式包风格指南】
-该演示文稿应参考以下设计风格：
-- 设计风格关键词：${(input.layoutPackStyleGuide.styleKeywords || []).join("、")}
-- 整体调性：${input.layoutPackStyleGuide.tone === "dark" ? "深色系" : input.layoutPackStyleGuide.tone === "light" ? "浅色系" : "深浅混合"}
-- 正式程度：${input.layoutPackStyleGuide.formality === "formal" ? "正式专业" : input.layoutPackStyleGuide.formality === "creative" ? "创意活泼" : "中性平衡"}
-- 字体风格：${input.layoutPackStyleGuide.typography?.style || ""}
-请在版式选择和内容调性上尽量匹配该风格。`
+      ? (() => {
+          const sg = input.layoutPackStyleGuide;
+          const cp = sg.colorPalette || {};
+          const typo = sg.typography || {};
+          const isDark = sg.tone === "dark";
+          const layoutPreference = isDark
+            ? "偏好深色背景版式（section_intro、cover），减少浅色版式的比例"
+            : "偏好浅色背景版式（insight、case_study、toc），减少深色版式的比例";
+          return `\n\n【参考版式包风格指南 - 请严格遵守】
+该演示文稿的视觉风格已由版式包定义，请在内容结构和版式选择上严格参考：
+- 设计风格关键词：${(sg.styleKeywords || []).join("、")}
+- 整体调性：${isDark ? "深色系（深色背景为主）" : sg.tone === "light" ? "浅色系（浅色背景为主）" : "深浅混合"}
+- 正式程度：${sg.formality === "formal" ? "正式专业" : sg.formality === "creative" ? "创意活泼" : "中性平衡"}
+- 字体风格：${typo.style || ""}
+- 主色调：${cp.primary || ""} / 背景色：${cp.background || ""} / 强调色：${cp.accent || ""}
+- 版式偏好：${layoutPreference}
+- 已识别版式类型：${(sg.layouts || []).map((l: any) => l.name || l.type || "").filter(Boolean).join("、") || "通用版式"}
+请在版式选择比例和内容调性上严格匹配该风格，确保生成的 PPT 与参考版式包视觉一致。`;
+        })()
       : "";
 
     const structureResponse = await invokeLLMWithUserTool({
@@ -3410,13 +3422,60 @@ async function generatePresentationInBackground(
     pptx.title = input.title;
     pptx.layout = "LAYOUT_16x9";
 
-    const C = {
+    // Base color palette (N+1 STUDIOS default)
+    let C = {
       charcoal: "1A1A2E", slate: "2D2D3F", warmGray: "F5F0EB", cream: "FAF8F5",
       copper: "B87333", copperLight: "D4956B", copperDark: "8B5E3C",
       text: "2C2C2C", textLight: "6B6560", textOnDark: "E8E4DF",
       white: "FFFFFF", divider: "D4CFC8", tagBg: "EDE8E2",
     };
-    const F = { title: "Microsoft YaHei", body: "Microsoft YaHei" };
+    let F = { title: "Microsoft YaHei", body: "Microsoft YaHei" };
+
+    // Override with layout pack colors/fonts if provided
+    if (input.layoutPackStyleGuide) {
+      const sg = input.layoutPackStyleGuide;
+      const cp = sg.colorPalette;
+      if (cp) {
+        // Helper: strip leading # and ensure 6-char hex
+        const hex = (v: string) => v ? v.replace(/^#/, "").padEnd(6, "0").slice(0, 6).toUpperCase() : "";
+        if (cp.primary) {
+          C.copper = hex(cp.primary);
+          C.copperLight = hex(cp.primary); // use primary as accent
+          C.copperDark = hex(cp.primary);
+        }
+        if (cp.background) {
+          // Decide dark vs light theme based on tone
+          const isDark = sg.tone === "dark";
+          if (isDark) {
+            C.charcoal = hex(cp.background);
+            C.slate = hex(cp.background);
+            C.warmGray = hex(cp.secondary || cp.background);
+            C.cream = hex(cp.secondary || cp.background);
+          } else {
+            C.warmGray = hex(cp.background);
+            C.cream = hex(cp.background);
+            if (cp.secondary) {
+              C.charcoal = hex(cp.secondary);
+              C.slate = hex(cp.secondary);
+            }
+          }
+        }
+        if (cp.text) {
+          C.text = hex(cp.text);
+          C.textLight = hex(cp.text);
+        }
+        if (cp.accent) {
+          C.copper = hex(cp.accent);
+          C.copperLight = hex(cp.accent);
+        }
+      }
+      const typo = sg.typography;
+      if (typo) {
+        if (typo.titleFont) F.title = typo.titleFont;
+        if (typo.bodyFont) F.body = typo.bodyFont;
+      }
+      console.log(`[Presentation] Applied layout pack style: tone=${sg.tone}, primary=${C.copper}, font=${F.title}`);
+    }
     let caseIdx = 0;
 
     for (let i = 0; i < slideData.slides.length; i++) {
