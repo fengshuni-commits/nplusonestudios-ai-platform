@@ -85,6 +85,11 @@ export default function PresentationPage() {
   // AI tool selection
   const [selectedToolId, setSelectedToolId] = useState<number | undefined>(undefined);
 
+  // Layout pack selection
+  const [selectedLayoutPackId, setSelectedLayoutPackId] = useState<number | undefined>(undefined);
+  const { data: layoutPacks = [] } = trpc.layoutPacks.list.useQuery();
+  const doneLayoutPacks = (layoutPacks as any[]).filter((p: any) => p.status === "done");
+
   // Generation state
   const [jobId, setJobId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -251,6 +256,7 @@ export default function PresentationPage() {
         content: content.trim(),
         imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
         toolId: selectedToolId,
+        layoutPackId: selectedLayoutPackId,
       });
       setJobId(result.jobId);
     } catch (err: any) {
@@ -394,6 +400,40 @@ export default function PresentationPage() {
                   </div>
                 )}
               </div>
+
+              {/* Layout Pack Selector */}
+              {doneLayoutPacks.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">版式包（可选）</Label>
+                  <Select
+                    value={selectedLayoutPackId ? String(selectedLayoutPackId) : "none"}
+                    onValueChange={(v) => setSelectedLayoutPackId(v === "none" ? undefined : Number(v))}
+                    disabled={isGenerating}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="使用默认版式" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">默认版式（N+1 STUDIOS 标准）</SelectItem>
+                      {doneLayoutPacks.map((pack: any) => (
+                        <SelectItem key={pack.id} value={String(pack.id)}>
+                          {pack.name}
+                          {pack.styleGuide?.styleKeywords?.length > 0 && (
+                            <span className="text-muted-foreground ml-1 text-[10px]">
+                              · {pack.styleGuide.styleKeywords.slice(0, 2).join("、")}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedLayoutPackId && (
+                    <p className="text-[10px] text-muted-foreground">
+                      AI 将参考该版式包的设计风格生成 PPT
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* AI Tool Selector */}
               <div className="space-y-1.5">

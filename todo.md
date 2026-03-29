@@ -1105,3 +1105,14 @@
 - [x] 出品标准：每种版式展示小预览、使用场景、内容要素和配色说明
 - [x] 出品标准：页面底部添加版式使用规则说明卡片
 - [x] 验证并保存检查点
+
+## 功能：AI 学习版式 + 演示文稿版式包选择
+- [x] 数据库：新建 layout_packs 表（id, userId, name, description, sourceType, thumbnails, styleGuide, slides, status, createdAt）
+- [x] 后端：layoutPacks.upload 接口（接收 PPT/图片/PDF，上传 S3）
+- [x] 后端：layoutPacks.extract 接口（AI 分析文件，提取版式特征，生成版式包）
+- [x] 后端：layoutPacks.list / delete 接口
+- [x] 前端：Standards.tsx 版式标准页新增「AI 学习版式」区域（上传入口、提取进度、版式包卡片）
+- [x] 前端：版式包卡片展示缩略图、版式名称、幻灯片数量、AI 提取的风格描述
+- [x] 前端：Presentation.tsx 新增版式包选择器（默认内置版式 / 自定义版式包）
+- [x] 后端：presentation.generate 支持 layoutPackId，按版式包风格生成 PPT
+- [x] 验证并保存检查点

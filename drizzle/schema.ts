@@ -543,3 +543,32 @@ export const renderingJobs = mysqlTable("rendering_jobs", {
 });
 export type RenderingJob = typeof renderingJobs.$inferSelect;
 export type InsertRenderingJob = typeof renderingJobs.$inferInsert;
+
+// ─── Layout Packs (AI 学习版式包) ────────────────────────────────────────────
+// 用户上传 PPT/图片/PDF，AI 提取版式特征，生成可复用的版式包
+export const layoutPacks = mysqlTable("layout_packs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  // 来源文件类型：pptx / images / pdf
+  sourceType: mysqlEnum("sourceType", ["pptx", "images", "pdf"]).notNull(),
+  // 原始文件 URL（S3）
+  sourceFileUrl: text("sourceFileUrl"),
+  sourceFileKey: text("sourceFileKey"),
+  // 提取状态
+  status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  // AI 提取的版式特征（JSON 字符串）
+  // 包含：colorPalette, typography, layoutStyles[], slideCount, styleKeywords[]
+  styleGuide: json("styleGuide"),
+  // 每种版式的缩略图 URL 数组（JSON）
+  thumbnails: json("thumbnails"),
+  // 提取到的幻灯片版式列表（JSON）
+  // 每项：{ layoutType, description, colorScheme, hasImage }
+  layouts: json("layouts"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LayoutPack = typeof layoutPacks.$inferSelect;
+export type InsertLayoutPack = typeof layoutPacks.$inferInsert;

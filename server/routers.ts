@@ -3225,7 +3225,7 @@ const presentationJobStore = pptJobStore; // reuse same store, prefixed jobIds
 
 async function generatePresentationInBackground(
   jobId: string,
-  input: { title: string; content: string; imageUrls?: string[]; toolId?: number },
+  input: { title: string; content: string; imageUrls?: string[]; toolId?: number; layoutPackStyleGuide?: any },
   userId?: number
 ) {
   try {
@@ -3244,6 +3244,17 @@ async function generatePresentationInBackground(
         if (tool?.name) resolvedModelName = tool.name;
       } catch { /* ignore */ }
     }
+
+    // Build layout pack style hint for LLM
+    const layoutPackHint = input.layoutPackStyleGuide
+      ? `\n\n【参考版式包风格指南】
+该演示文稿应参考以下设计风格：
+- 设计风格关键词：${(input.layoutPackStyleGuide.styleKeywords || []).join("、")}
+- 整体调性：${input.layoutPackStyleGuide.tone === "dark" ? "深色系" : input.layoutPackStyleGuide.tone === "light" ? "浅色系" : "深浅混合"}
+- 正式程度：${input.layoutPackStyleGuide.formality === "formal" ? "正式专业" : input.layoutPackStyleGuide.formality === "creative" ? "创意活泼" : "中性平衡"}
+- 字体风格：${input.layoutPackStyleGuide.typography?.style || ""}
+请在版式选择和内容调性上尽量匹配该风格。`
+      : "";
 
     const structureResponse = await invokeLLMWithUserTool({
       messages: [
@@ -3277,7 +3288,7 @@ async function generatePresentationInBackground(
 - 版式要多样化，避免连续使用同一种版式
 - pexelsQuery 必须是英文，且要具体描述建筑/空间的视觉特征
 - 每页要点精炼，不超过 5 条
-- 内容忠实于用户提供的资料，不要编造${imageContext}`},
+- 内容忠实于用户提供的资料，不要编造${imageContext}${layoutPackHint}`},
         { role: "user", content: `演示标题：${input.title}\n\n演示内容：\n${input.content}` }
       ],
       response_format: {
@@ -3693,11 +3704,31 @@ const presentationRouter = router({
       content: z.string().min(1),
       imageUrls: z.array(z.string()).optional(),
       toolId: z.number().optional(),
+      layoutPackId: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const jobId = `pres_${nanoid()}`;
       presentationJobStore.set(jobId, { status: "processing", progress: 5, stage: "structuring" });
-      generatePresentationInBackground(jobId, input, ctx.user.id).catch(err => {
+
+      // Load layout pack style guide if provided
+      let layoutPackStyleGuide: any = null;
+      if (input.layoutPackId) {
+        try {
+          const drizzleDb = await db.getDb();
+          if (drizzleDb) {
+            const { layoutPacks } = await import("../drizzle/schema");
+            const { eq: _eq, and: _and } = await import("drizzle-orm");
+            const [pack] = await drizzleDb.select().from(layoutPacks)
+              .where(_and(_eq(layoutPacks.id, input.layoutPackId), _eq(layoutPacks.userId, ctx.user.id)))
+              .limit(1);
+            if (pack?.status === "done" && pack.styleGuide) {
+              layoutPackStyleGuide = pack.styleGuide;
+            }
+          }
+        } catch (e) { console.error("[Presentation] Failed to load layout pack:", e); }
+      }
+
+      generatePresentationInBackground(jobId, { ...input, layoutPackStyleGuide }, ctx.user.id).catch(err => {
         console.error("[Presentation] Background job failed:", err);
         presentationJobStore.set(jobId, { status: "failed", error: err?.message || "演示文稿生成失败" });
       });
@@ -3808,6 +3839,210 @@ const personalTasksRouter = router({
     }),
 });
 
+
+// ─── Layout Packs Router (AI 学习版式) ──────────────────────────────────────
+const layoutPacksRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return [];
+    const { layoutPacks } = await import("../drizzle/schema");
+    const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+    return drizzleDb
+      .select()
+      .from(layoutPacks)
+      .where(_eq(layoutPacks.userId, ctx.user.id))
+      .orderBy(_desc(layoutPacks.createdAt));
+  }),
+
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1).max(256),
+      sourceType: z.enum(["pptx", "images", "pdf"]),
+      sourceFileUrl: z.string().url(),
+      sourceFileKey: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { layoutPacks } = await import("../drizzle/schema");
+      const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+
+      await drizzleDb.insert(layoutPacks).values({
+        userId: ctx.user.id,
+        name: input.name,
+        sourceType: input.sourceType,
+        sourceFileUrl: input.sourceFileUrl,
+        sourceFileKey: input.sourceFileKey,
+        status: "pending",
+      });
+
+      const [newPack] = await drizzleDb
+        .select()
+        .from(layoutPacks)
+        .where(_eq(layoutPacks.userId, ctx.user.id))
+        .orderBy(_desc(layoutPacks.createdAt))
+        .limit(1);
+
+      if (!newPack) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建版式包失败" });
+
+      extractLayoutPackAsync(newPack.id, input.sourceType, input.sourceFileUrl).catch(console.error);
+
+      return { id: newPack.id, status: "pending" as const };
+    }),
+
+  get: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { layoutPacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [pack] = await drizzleDb
+        .select()
+        .from(layoutPacks)
+        .where(_and(_eq(layoutPacks.id, input.id), _eq(layoutPacks.userId, ctx.user.id)))
+        .limit(1);
+      if (!pack) throw new TRPCError({ code: "NOT_FOUND" });
+      return pack;
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { layoutPacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      await drizzleDb
+        .delete(layoutPacks)
+        .where(_and(_eq(layoutPacks.id, input.id), _eq(layoutPacks.userId, ctx.user.id)));
+      return { success: true };
+    }),
+});
+
+// ─── AI 版式提取后台任务 ──────────────────────────────────────────────────────
+async function extractLayoutPackAsync(
+  packId: number,
+  sourceType: "pptx" | "images" | "pdf",
+  fileUrl: string
+): Promise<void> {
+  const drizzleDb = await db.getDb();
+  if (!drizzleDb) return;
+  const { layoutPacks } = await import("../drizzle/schema");
+  const { eq: _eq } = await import("drizzle-orm");
+
+  try {
+    await drizzleDb.update(layoutPacks).set({ status: "processing" }).where(_eq(layoutPacks.id, packId));
+
+    const sourceDesc = sourceType === "pptx" ? "PowerPoint 演示文稿" : sourceType === "pdf" ? "PDF 文档" : "图片集";
+    const mimeType = sourceType === "pdf" ? "application/pdf" : sourceType === "pptx" ? "application/pdf" : "image/jpeg";
+
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `你是一个专业的演示文稿设计分析师。请分析上传的${sourceDesc}，提取其设计风格特征，生成可复用的版式包描述。分析维度：1.配色方案（hex格式）2.字体风格 3.版式类型 4.设计风格关键词 5.整体调性。返回JSON格式。`,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "file_url" as const,
+              file_url: { url: fileUrl, mime_type: mimeType as any },
+            },
+            {
+              type: "text" as const,
+              text: `请分析这个${sourceDesc}的设计风格，提取版式特征。`,
+            },
+          ],
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "layout_pack_analysis",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              packName: { type: "string" },
+              description: { type: "string" },
+              colorPalette: {
+                type: "object",
+                properties: {
+                  primary: { type: "string" },
+                  secondary: { type: "string" },
+                  background: { type: "string" },
+                  text: { type: "string" },
+                  accent: { type: "string" },
+                },
+                required: ["primary", "secondary", "background", "text", "accent"],
+                additionalProperties: false,
+              },
+              typography: {
+                type: "object",
+                properties: {
+                  titleFont: { type: "string" },
+                  bodyFont: { type: "string" },
+                  style: { type: "string" },
+                },
+                required: ["titleFont", "bodyFont", "style"],
+                additionalProperties: false,
+              },
+              styleKeywords: { type: "array", items: { type: "string" } },
+              tone: { type: "string", enum: ["dark", "light", "mixed"] },
+              formality: { type: "string", enum: ["formal", "creative", "neutral"] },
+              layouts: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    layoutType: { type: "string" },
+                    description: { type: "string" },
+                    hasImage: { type: "boolean" },
+                    colorScheme: { type: "string" },
+                  },
+                  required: ["layoutType", "description", "hasImage", "colorScheme"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["packName", "description", "colorPalette", "typography", "styleKeywords", "tone", "formality", "layouts"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("未获得 AI 分析结果");
+    const analysis = JSON.parse(typeof content === "string" ? content : JSON.stringify(content));
+
+    await drizzleDb.update(layoutPacks).set({
+      name: analysis.packName,
+      description: analysis.description,
+      status: "done",
+      styleGuide: {
+        colorPalette: analysis.colorPalette,
+        typography: analysis.typography,
+        styleKeywords: analysis.styleKeywords,
+        tone: analysis.tone,
+        formality: analysis.formality,
+      },
+      layouts: analysis.layouts,
+      thumbnails: [],
+    }).where(_eq(layoutPacks.id, packId));
+
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "未知错误";
+    console.error(`[LayoutPack] Extraction failed for pack ${packId}:`, msg);
+    await drizzleDb.update(layoutPacks).set({
+      status: "failed",
+      errorMessage: msg,
+    }).where(_eq(layoutPacks.id, packId));
+  }
+}
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -3840,6 +4075,7 @@ export const appRouter = router({system: systemRouter,
   presentation: presentationRouter,
   fieldTemplates: fieldTemplatesRouter,
   personalTasks: personalTasksRouter,
+  layoutPacks: layoutPacksRouter,
   video: router({
     generate: protectedProcedure
       .input(
@@ -4078,3 +4314,4 @@ export const appRouter = router({system: systemRouter,
 });
 
 export type AppRouter = typeof appRouter;
+

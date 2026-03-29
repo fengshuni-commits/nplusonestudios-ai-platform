@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout
+  Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout,
+  Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash
 } from "lucide-react";
 
 // ─── PPT Layout Standards ─────────────────────────────────────────────────────
@@ -223,6 +224,334 @@ function LayoutCard({ layout }: { layout: typeof PPT_LAYOUTS[0] }) {
   );
 }
 
+// ─── AI Layout Pack Component ───────────────────────────────────────────────
+
+type LayoutPack = {
+  id: number;
+  name: string;
+  description: string | null;
+  sourceType: "pptx" | "images" | "pdf";
+  sourceFileUrl: string | null;
+  status: "pending" | "processing" | "done" | "failed";
+  errorMessage: string | null;
+  styleGuide: any;
+  layouts: any;
+  thumbnails: any;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function LayoutPackCard({ pack, onDelete, onRefresh }: { pack: LayoutPack; onDelete: () => void; onRefresh: () => void }) {
+  const styleGuide = pack.styleGuide as any;
+  const layouts = (pack.layouts as any[]) || [];
+
+  // Auto-refresh while processing
+  useEffect(() => {
+    if (pack.status === "pending" || pack.status === "processing") {
+      const timer = setInterval(onRefresh, 3000);
+      return () => clearInterval(timer);
+    }
+  }, [pack.status, onRefresh]);
+
+  const statusIcon = {
+    pending: <Clock className="h-3.5 w-3.5 text-amber-500" />,
+    processing: <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />,
+    done: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
+    failed: <AlertCircle className="h-3.5 w-3.5 text-red-500" />,
+  }[pack.status];
+
+  const statusLabel = {
+    pending: "等待处理",
+    processing: "AI 分析中…",
+    done: "已完成",
+    failed: "处理失败",
+  }[pack.status];
+
+  const sourceTypeIcon = {
+    pptx: <FileText className="h-4 w-4" />,
+    pdf: <FileText className="h-4 w-4" />,
+    images: <Image className="h-4 w-4" />,
+  }[pack.sourceType];
+
+  const sourceTypeLabel = {
+    pptx: "PPTX 文件",
+    pdf: "PDF 文件",
+    images: "图片集",
+  }[pack.sourceType];
+
+  return (
+    <Card className="overflow-hidden">
+      {/* Color preview strip */}
+      {pack.status === "done" && styleGuide?.colorPalette ? (
+        <div className="flex h-2">
+          {[styleGuide.colorPalette.primary, styleGuide.colorPalette.secondary, styleGuide.colorPalette.background, styleGuide.colorPalette.accent].map((c: string, i: number) => (
+            <div key={i} className="flex-1" style={{ background: c }} />
+          ))}
+        </div>
+      ) : (
+        <div className="h-2 bg-muted" />
+      )}
+      <CardContent className="p-4 space-y-3">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              {sourceTypeIcon}
+              <span className="text-[10px] text-muted-foreground">{sourceTypeLabel}</span>
+            </div>
+            <h3 className="font-semibold text-sm truncate">{pack.name}</h3>
+            {pack.description && (
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{pack.description}</p>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive" onClick={onDelete}>
+            <Trash className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {/* Status */}
+        <div className="flex items-center gap-1.5">
+          {statusIcon}
+          <span className="text-xs text-muted-foreground">{statusLabel}</span>
+          {pack.status === "failed" && pack.errorMessage && (
+            <span className="text-xs text-red-500 truncate">: {pack.errorMessage}</span>
+          )}
+        </div>
+
+        {/* Style guide preview */}
+        {pack.status === "done" && styleGuide && (
+          <div className="space-y-2">
+            {/* Keywords */}
+            {styleGuide.styleKeywords?.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {styleGuide.styleKeywords.map((kw: string, i: number) => (
+                  <Badge key={i} variant="secondary" className="text-[10px] py-0">{kw}</Badge>
+                ))}
+              </div>
+            )}
+            {/* Color palette */}
+            {styleGuide.colorPalette && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">配色：</span>
+                {Object.entries(styleGuide.colorPalette).map(([k, v]: [string, any]) => (
+                  <div key={k} className="flex items-center gap-0.5" title={`${k}: ${v}`}>
+                    <div className="h-3 w-3 rounded-sm border border-border" style={{ background: v }} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Typography */}
+            {styleGuide.typography && (
+              <p className="text-[10px] text-muted-foreground">
+                字体：{styleGuide.typography.titleFont} · {styleGuide.typography.style}
+              </p>
+            )}
+            {/* Layouts count */}
+            {layouts.length > 0 && (
+              <p className="text-[10px] text-muted-foreground">识别 {layouts.length} 种版式</p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AILayoutLearning() {
+  const utils = trpc.useUtils();
+  const { data: packs = [], refetch } = trpc.layoutPacks.list.useQuery();
+  const createMutation = trpc.layoutPacks.create.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("版式包已创建，AI 正在分析…"); },
+    onError: (e) => toast.error("创建失败: " + e.message),
+  });
+  const deleteMutation = trpc.layoutPacks.delete.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("版式包已删除"); },
+    onError: (e) => toast.error("删除失败: " + e.message),
+  });
+  const uploadFileMutation = trpc.upload.file.useMutation();
+
+  const [uploading, setUploading] = useState(false);
+  const [packName, setPackName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function getSourceType(file: File): "pptx" | "images" | "pdf" {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "pptx" || ext === "ppt") return "pptx";
+    if (ext === "pdf") return "pdf";
+    return "images";
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    if (!packName) setPackName(file.name.replace(/\.[^.]+$/, ""));
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    if (!packName) setPackName(file.name.replace(/\.[^.]+$/, ""));
+  }
+
+  async function handleUpload() {
+    if (!selectedFile || !packName.trim()) {
+      toast.error("请选择文件并填写版式包名称"); return;
+    }
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = (e) => resolve((e.target?.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+      const { url, key } = await uploadFileMutation.mutateAsync({
+        fileName: selectedFile.name,
+        fileData: base64,
+        contentType: selectedFile.type || "application/octet-stream",
+        folder: "layout-packs",
+      });
+      await createMutation.mutateAsync({
+        name: packName.trim(),
+        sourceType: getSourceType(selectedFile),
+        sourceFileUrl: url,
+        sourceFileKey: key,
+      });
+      setSelectedFile(null);
+      setPackName("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (e: any) {
+      toast.error("上传失败: " + e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const processingCount = packs.filter(p => p.status === "pending" || p.status === "processing").length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-base font-semibold">AI 版式学习</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            上传 PPT、PDF 或图片，AI 自动提取设计风格，生成可复用的版式包。
+          </p>
+        </div>
+        {packs.length > 0 && (
+          <Badge variant="secondary" className="shrink-0">{packs.length} 个版式包</Badge>
+        )}
+      </div>
+
+      {/* Upload area */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+              dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pptx,.ppt,.pdf,.jpg,.jpeg,.png,.webp"
+              onChange={handleFileSelect}
+            />
+            {selectedFile ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-center gap-2 text-primary">
+                  <FileUp className="h-8 w-8" />
+                </div>
+                <p className="font-medium text-sm">{selectedFile.name}</p>
+                <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                <Button variant="ghost" size="sm" className="text-xs" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setPackName(""); }}>
+                  <X className="h-3 w-3 mr-1" />更换文件
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-center">
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium">拖放文件到此处，或点击选择</p>
+                <p className="text-xs text-muted-foreground">支持 PPTX、PDF、图片（JPG/PNG）</p>
+              </div>
+            )}
+          </div>
+
+          {selectedFile && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">版式包名称</Label>
+                <Input
+                  placeholder="例如：科技感深色版式"
+                  value={packName}
+                  onChange={(e) => setPackName(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <Button
+                className="w-full gap-2"
+                onClick={handleUpload}
+                disabled={uploading || !packName.trim()}
+              >
+                {uploading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" />上传并分析中…</>
+                ) : (
+                  <><Sparkles className="h-4 w-4" />上传并让 AI 提取版式</>
+                )}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pack list */}
+      {packs.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">版式包库</h3>
+            {processingCount > 0 && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />{processingCount} 个正在分析
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {packs.map((pack) => (
+              <LayoutPackCard
+                key={pack.id}
+                pack={pack as LayoutPack}
+                onDelete={() => deleteMutation.mutate({ id: pack.id })}
+                onRefresh={() => utils.layoutPacks.list.invalidate()}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {packs.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">还没有版式包</p>
+          <p className="text-xs mt-1">上传 PPT 或图片，AI 将自动提取设计风格</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type RenderStyle = {
   id: number;
   label: string;
@@ -372,6 +701,9 @@ export default function Standards() {
           </TabsTrigger>
           <TabsTrigger value="ppt-layouts" className="gap-1.5">
             <Layout className="h-4 w-4" />演示文稿版式标准
+          </TabsTrigger>
+          <TabsTrigger value="ai-layout-learning" className="gap-1.5">
+            <Sparkles className="h-4 w-4" />AI 版式学习
           </TabsTrigger>
         </TabsList>
 
@@ -560,6 +892,11 @@ export default function Standards() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        {/* ─── AI 版式学习 Tab ─── */}
+        <TabsContent value="ai-layout-learning">
+          <AILayoutLearning />
         </TabsContent>
       </Tabs>
     </div>
