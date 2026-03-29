@@ -1150,3 +1150,12 @@
 - [x] 内置版式作为「内置版式包」与 AI 学习版式包并列展示，统一用版式包卡片形式
 - [x] AI 版式包可点开查看每个版式详情（与内置版式 LayoutCard 一致的卡片形式）
 - [x] 版式标准 Tab 改为版式包列表视图（选中一个包后展示其版式详情）
+
+## 改进：AI 版式学习提取逻辑（Lovart 方向）
+- [x] 均匀采样：整份文件均匀取最多 10 张截图（替代原来只取前 3 页）
+- [x] 视觉参考描述：AI 描述「每张截图看起来像什么」，而非只提取参数
+- [x] 版式意图映射：每个版式明确映射到内置版式 ID（cover/toc/case_study 等）
+- [x] 改进 LLM prompt：加入内置版式 ID 列表和内容建议，输出 mappedLayoutId + visualDescription + contentSuggestion
+- [x] 更新 JSON schema：新字段结构，兼容旧数据
+- [x] 前端 AiLayoutSlideCard 展示新字段（版式标签 + 视觉描述 + 适用场景）
+- [x] 保存检查点

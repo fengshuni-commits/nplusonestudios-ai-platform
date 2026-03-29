@@ -4049,24 +4049,36 @@ async function extractLayoutPackAsync(
         execSync(`mkdir -p "${tmpImgDir}"`);
         tmpFiles.push(tmpImgDir);
 
-        // Convert first 3 pages to JPEG using pdftoppm (poppler-utils, pre-installed)
+        // Step 1: Convert ALL pages to JPEG at moderate resolution for uniform sampling
         try {
-          execSync(`pdftoppm -r 96 -l 3 -jpeg "${tmpFile}" "${tmpImgDir}/page"`, { timeout: 30000 });
+          execSync(`pdftoppm -r 72 -jpeg "${tmpFile}" "${tmpImgDir}/page"`, { timeout: 120000 });
         } catch (e1) {
           // Fallback: try ImageMagick
           try {
-            execSync(`convert -density 96 "${tmpFile}[0-2]" "${tmpImgDir}/page-%d.jpg"`, { timeout: 30000 });
+            execSync(`convert -density 72 "${tmpFile}" "${tmpImgDir}/page-%d.jpg"`, { timeout: 120000 });
           } catch (e2) {
             throw new Error(`文件转图失败: ${(e1 as any).message}`);
           }
         }
 
-        const imgFiles = readdirSync(tmpImgDir)
+        const allImgFiles = readdirSync(tmpImgDir)
           .filter(f => /\.(jpg|jpeg|png)$/i.test(f))
-          .sort()
-          .slice(0, 3);
+          .sort();
 
-        for (const imgFile of imgFiles) {
+        // Uniformly sample up to 10 pages across the entire document
+        const MAX_SAMPLES = 10;
+        let sampledFiles: string[];
+        if (allImgFiles.length <= MAX_SAMPLES) {
+          sampledFiles = allImgFiles;
+        } else {
+          sampledFiles = [];
+          for (let i = 0; i < MAX_SAMPLES; i++) {
+            const idx = Math.round(i * (allImgFiles.length - 1) / (MAX_SAMPLES - 1));
+            if (!sampledFiles.includes(allImgFiles[idx])) sampledFiles.push(allImgFiles[idx]);
+          }
+        }
+
+        for (const imgFile of sampledFiles) {
           const imgPath = join(tmpImgDir, imgFile);
           const imgBase64 = readFileSync(imgPath).toString("base64");
           const mime = imgFile.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
@@ -4091,12 +4103,27 @@ async function extractLayoutPackAsync(
       } catch {}
     }
 
+    const BUILT_IN_LAYOUT_IDS = [
+      { id: "cover", desc: "封面页：大标题 + 副标题 + 封面背景图" },
+      { id: "toc", desc: "目录页：章节列表和章节编号" },
+      { id: "section_intro", desc: "章节开头页：章节标题 + 简短说明文字" },
+      { id: "case_study", desc: "案例分析页：案例图片 + 标题 + 分析要点" },
+      { id: "insight", desc: "洞察观点页：标题 + 多条观点内容" },
+      { id: "quote", desc: "引用页：大字引语 + 来源" },
+      { id: "comparison", desc: "对比页：左右两列对比内容" },
+      { id: "timeline", desc: "时间轴页：时间线 + 节点事件" },
+      { id: "data_highlight", desc: "数据页：大数字高亮 + 指标说明" },
+      { id: "summary", desc: "总结页：要点列表 + 结论" },
+    ];
+
+    const layoutIdList = BUILT_IN_LAYOUT_IDS.map(l => `  - ${l.id}: ${l.desc}`).join("\n");
+
     const userContent: any[] = [
       ...imageContent,
       {
         type: "text" as const,
         text: imageContent.length > 0
-          ? `请分析这些${sourceDesc}页面截图的设计风格，提取版式特征。文件名：${fileUrl.split("/").pop()}`
+          ? `这是一份${sourceDesc}（文件：${fileUrl.split("/").pop()}）的均匀采样截图（共 ${imageContent.length} 张，按页码顺序排列）。\n请仔细观察每张截图的视觉设计，分析整份文件的设计风格。`
           : `请根据文件类型（${sourceDesc}）生成一个典型的建筑设计风格版式包。文件：${fileUrl.split("/").pop()}`,
       },
     ];
@@ -4105,7 +4132,26 @@ async function extractLayoutPackAsync(
       messages: [
         {
           role: "system",
-          content: `你是一个专业的演示文稿设计分析师。请分析提供的${sourceDesc}页面截图，提取其设计风格特征，生成可复用的版式包描述。分析维度：1.配色方案（hex格式）2.字体风格 3.版式类型 4.设计风格关键词 5.整体调性。返回JSON格式。`,
+          content: `你是一个专业的演示文稿设计分析师，擅长从视觉截图中学习品牌风格。
+
+你的任务：分析提供的${sourceDesc}页面截图，提取其设计风格特征，生成可复用的版式包。
+
+分析要求：
+1. 配色：从截图中识别主要配色，输出准确的 hex 色値
+2. 字体：判断标题和正文的字体风格（无衡山等线、几何、现代无衰线等）
+3. 调性：整体设计调性（深色/浅色/混合）和风格（正式/创意/中性）
+4. 版式映射：将每张截图映射到以下内置版式 ID 之一，并描述该截图看起来像什么、适合展示什么内容：
+${layoutIdList}
+
+输出要求：
+- packName: 版式包名称（简洁描述风格，如「深色几何风建筑风格」）
+- description: 2-3句话描述这份文件的设计风格
+- colorPalette: 从截图中识别的实际配色（hex）
+- typography: 字体风格判断
+- styleKeywords: 3-5个风格关键词
+- tone: dark/light/mixed
+- formality: formal/creative/neutral
+- layouts: 将每张截图映射为一个版式条目，包含 mappedLayoutId（内置版式 ID）、visualDescription（这张截图看起来像什么）、contentSuggestion（建议用于展示什么内容）`,
         },
         {
           role: "user",
@@ -4152,12 +4198,13 @@ async function extractLayoutPackAsync(
                 items: {
                   type: "object",
                   properties: {
-                    layoutType: { type: "string" },
-                    description: { type: "string" },
+                    mappedLayoutId: { type: "string", enum: ["cover", "toc", "section_intro", "case_study", "insight", "quote", "comparison", "timeline", "data_highlight", "summary"] },
+                    visualDescription: { type: "string" },
+                    contentSuggestion: { type: "string" },
                     hasImage: { type: "boolean" },
                     colorScheme: { type: "string" },
                   },
-                  required: ["layoutType", "description", "hasImage", "colorScheme"],
+                  required: ["mappedLayoutId", "visualDescription", "contentSuggestion", "hasImage", "colorScheme"],
                   additionalProperties: false,
                 },
               },

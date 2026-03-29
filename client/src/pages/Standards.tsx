@@ -365,31 +365,41 @@ function LayoutPackCard({ pack, onDelete, onRefresh, onRetry }: { pack: LayoutPa
 
 // ─── AI Layout Slide Card (same style as LayoutCard) ─────────────────────────
 
+// Layout ID → human-readable label
+const LAYOUT_ID_LABELS: Record<string, string> = {
+  cover: "封面页", toc: "目录页", section_intro: "章节开头",
+  case_study: "案例分析", insight: "洞察观点", quote: "引用页",
+  comparison: "对比页", timeline: "时间轴", data_highlight: "数据页", summary: "总结页",
+};
+
 function AiLayoutSlideCard({ layout, styleGuide }: { layout: any; styleGuide: any }) {
   const cp = styleGuide?.colorPalette || {};
   const bg = cp.background || "#1A1A2E";
   const accent = cp.accent || cp.primary || "#B87333";
-  const textColor = cp.text || (cp.background && cp.background.toLowerCase() < "#888888" ? "#FFFFFF" : "#2C2C2C");
+  const textColor = cp.text || (bg.toLowerCase() < "#888888" ? "#FFFFFF" : "#2C2C2C");
+  // Support both old (layoutType) and new (mappedLayoutId) schema
+  const layoutId = layout.mappedLayoutId || layout.layoutType || "insight";
+  const label = LAYOUT_ID_LABELS[layoutId] || layoutId;
+  const visualDesc = layout.visualDescription || layout.description || "";
+  const contentSuggestion = layout.contentSuggestion || "";
   return (
     <Card className="overflow-hidden">
       {/* Mini preview */}
       <div className="w-full relative" style={{ aspectRatio: '16/9', background: bg }}>
         <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: accent }} />
         <div className="absolute inset-0 flex flex-col justify-center px-6 py-4">
-          <div className="font-bold text-sm mb-1 truncate" style={{ color: textColor }}>
-            {layout.layoutType}
+          <div className="text-[9px] font-medium uppercase tracking-widest mb-1 opacity-60" style={{ color: accent }}>
+            {label}
           </div>
-          <div className="text-[10px] opacity-60 line-clamp-2" style={{ color: textColor }}>
-            {layout.description}
+          <div className="font-bold text-sm mb-1 truncate" style={{ color: textColor }}>
+            {visualDesc.slice(0, 40)}
           </div>
           <div className="mt-2 h-[2px] w-8" style={{ background: accent }} />
-          <div className="mt-2 flex items-center gap-1.5">
-            {layout.hasImage && (
-              <div className="text-[9px] opacity-50 flex items-center gap-1" style={{ color: textColor }}>
-                <Image className="h-2.5 w-2.5" />需要配图
-              </div>
-            )}
-          </div>
+          {layout.hasImage && (
+            <div className="mt-2 text-[9px] opacity-50 flex items-center gap-1" style={{ color: textColor }}>
+              <Image className="h-2.5 w-2.5" />需要配图
+            </div>
+          )}
         </div>
         {layout.hasImage && (
           <div className="absolute right-0 top-0 h-full w-2/5 opacity-20"
@@ -399,11 +409,18 @@ function AiLayoutSlideCard({ layout, styleGuide }: { layout: any; styleGuide: an
       {/* Info */}
       <CardContent className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-sm">{layout.layoutType}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{layout.description}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-[10px] shrink-0">{label}</Badge>
+              <Badge variant="outline" className="text-[10px] shrink-0">{layout.colorScheme || "mixed"}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{visualDesc}</p>
+            {contentSuggestion && (
+              <p className="text-[10px] text-muted-foreground/70 mt-1 line-clamp-1">
+                <span className="font-medium">适合：</span>{contentSuggestion}
+              </p>
+            )}
           </div>
-          <Badge variant="outline" className="text-[10px] shrink-0">{layout.colorScheme}</Badge>
         </div>
         <div className="flex items-center gap-2 pt-1">
           <div className="h-3 w-3 rounded-sm" style={{ background: bg, border: '1px solid #ccc' }} />
