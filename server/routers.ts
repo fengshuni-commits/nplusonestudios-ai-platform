@@ -37,9 +37,10 @@ async function getPptxGenJS() {
 import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 
 // ─── PPT Job Store (in-memory async queue) ──────────────
+type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string };
 type PptJob =
   | { status: "processing"; progress: number; stage: string }
-  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number }
+  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[] }
   | { status: "failed"; error: string };
 
 const pptJobStore = new Map<string, PptJob>();
@@ -2015,7 +2016,7 @@ const benchmarkRouter = router({
       if (job.status === "done") {
         // Clean up after delivering result (keep for 5 min)
         setTimeout(() => pptJobStore.delete(input.jobId), 5 * 60 * 1000);
-        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount };
+        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount, slides: job.slides };
       }
       if (job.status === "failed") {
         setTimeout(() => pptJobStore.delete(input.jobId), 60 * 1000);
@@ -3315,8 +3316,8 @@ async function generatePresentationInBackground(
 
     // Stage 2: Fetch images
     presentationJobStore.set(jobId, { status: "processing", progress: 25, stage: "generating_images" });
-    const imageBase64Map: Map<number, { data: string; ext: string }> = new Map();
-
+     const imageBase64Map: Map<number, { data: string; ext: string }> = new Map();
+    const imageUrlMap: Map<number, string> = new Map(); // slide index -> image URL for preview
     // First, load user-provided images
     if (input.imageUrls && input.imageUrls.length > 0) {
       for (let i = 0; i < input.imageUrls.length; i++) {
@@ -3352,6 +3353,7 @@ async function generatePresentationInBackground(
               const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpeg';
               const rawB64 = b64.replace(/^data:image\/\w+;base64,/, '');
               imageBase64Map.set(cs.index, { data: rawB64, ext });
+              imageUrlMap.set(cs.index, pr.url); // save URL for preview
               break;
             }
           }
@@ -3371,6 +3373,10 @@ async function generatePresentationInBackground(
         const userImg = imageBase64Map.get(-(userImgIdx + 1));
         if (userImg) {
           imageBase64Map.set(i, userImg);
+          // Use original user-provided URL for preview
+          if (input.imageUrls && input.imageUrls[userImgIdx]) {
+            imageUrlMap.set(i, input.imageUrls[userImgIdx]);
+          }
         }
       }
     });
@@ -3504,15 +3510,23 @@ async function generatePresentationInBackground(
     const fileKey = `pptx/pres_${nanoid()}-${input.title}.pptx`;
     const { url } = await storagePut(fileKey, pptxBuffer, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
 
+    // Build slide preview data (title, subtitle, bullets, layout, imageUrl)
+    const slidePreviews: PptSlidePreview[] = slideData.slides.map((s, i) => ({
+      title: s.title,
+      subtitle: s.subtitle,
+      bullets: s.bullets,
+      layout: s.layout,
+      imageUrl: imageUrlMap.get(i),
+    }));
     presentationJobStore.set(jobId, {
       status: "done",
       url,
       title: input.title,
       slideCount: slideData.slides.length,
       imageCount: imageBase64Map.size,
+      slides: slidePreviews,
     });
     console.log(`[Presentation] Job ${jobId} completed: ${slideData.slides.length} slides, ${imageBase64Map.size} images`);
-
     if (userId) {
       await db.createGenerationHistory({
         userId,
@@ -3597,7 +3611,7 @@ const presentationRouter = router({
       if (!job) return { status: "not_found" as const, progress: 0, stage: "" as const };
       if (job.status === "done") {
         setTimeout(() => presentationJobStore.delete(input.jobId), 5 * 60 * 1000);
-        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount };
+        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount, slides: job.slides };
       }
       if (job.status === "failed") {
         setTimeout(() => presentationJobStore.delete(input.jobId), 60 * 1000);

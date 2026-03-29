@@ -1083,3 +1083,10 @@
 - [x] 后端：invokeLLMWithUserTool 支持按 toolId 选择指定工具
 - [x] 前端：生成结果区嵌入 Office Online Viewer iframe 预览 PPT
 - [x] 验证并保存检查点
+
+## Bug 修复：演示文稿 PPT 预览失败
+- [x] 诊断原因：Office Online Viewer 嵌套 iframe 导致浏览器同源策略限制，无法正常渲染
+- [x] 改用自定义 React 幻灯片预览组件，直接渲染幻灯片数据（标题、要点、配图）
+- [x] 后端在 done 状态中返回 slides 数组（含 imageUrl）
+- [x] 前端支持翻页导航（上一页、下一页、圆点导航）
+- [x] 验证并保存检查点

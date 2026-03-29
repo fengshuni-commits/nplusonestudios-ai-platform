@@ -93,6 +93,8 @@ export default function PresentationPage() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultTitle, setResultTitle] = useState<string | null>(null);
   const [resultSlideCount, setResultSlideCount] = useState<number | null>(null);
+  const [resultSlides, setResultSlides] = useState<Array<{ title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string }>>([]);
+  const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   // History
@@ -131,6 +133,8 @@ export default function PresentationPage() {
       setResultUrl(jobStatus.url || null);
       setResultTitle(jobStatus.title || null);
       setResultSlideCount(jobStatus.slideCount || null);
+      setResultSlides((jobStatus.slides as any) || []);
+      setPreviewSlideIndex(0);
       setJobId(null);
       refetchHistory();
       toast.success(`演示文稿生成完成，共 ${jobStatus.slideCount} 页幻灯片`);
@@ -479,22 +483,98 @@ export default function PresentationPage() {
                   </div>
                 </div>
                 <Separator />
-                {/* PPT Preview via Office Online Viewer */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">在线预览</p>
-                  <div className="relative w-full rounded-lg overflow-hidden border border-border bg-muted" style={{ paddingBottom: '56.25%' }}>
-                    <iframe
-                      src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resultUrl)}`}
-                      className="absolute inset-0 w-full h-full"
-                      frameBorder="0"
-                      allowFullScreen
-                      title="PPT 预览"
-                    />
+                {/* PPT Slide Preview */}
+                {resultSlides.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>
+                      <p className="text-xs text-muted-foreground">{previewSlideIndex + 1} / {resultSlides.length}</p>
+                    </div>
+                    {/* Slide canvas */}
+                    <div className="relative w-full rounded-lg overflow-hidden border border-border bg-slate-900" style={{ aspectRatio: '16/9' }}>
+                      {(() => {
+                        const slide = resultSlides[previewSlideIndex];
+                        if (!slide) return null;
+                        return (
+                          <div className="absolute inset-0 flex">
+                            {/* Image panel (if layout has image) */}
+                            {slide.imageUrl && (slide.layout === 'image-right' || slide.layout === 'image-left' || slide.layout === 'full-image' || slide.layout === 'image-top') ? (
+                              <>
+                                <div className={`flex flex-col justify-center p-6 ${slide.layout === 'image-right' ? 'w-1/2' : slide.layout === 'image-left' ? 'w-1/2 order-2' : 'w-full'}`}>
+                                  <h2 className="text-white font-bold text-xl leading-tight mb-2">{slide.title}</h2>
+                                  {slide.subtitle && <p className="text-slate-300 text-sm mb-3">{slide.subtitle}</p>}
+                                  {slide.bullets.length > 0 && (
+                                    <ul className="space-y-1.5">
+                                      {slide.bullets.slice(0, 5).map((b, bi) => (
+                                        <li key={bi} className="flex items-start gap-2 text-slate-200 text-xs">
+                                          <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />
+                                          <span>{b}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                                <div className={`${slide.layout === 'image-left' ? 'w-1/2 order-1' : 'w-1/2'} overflow-hidden`}>
+                                  <img src={slide.imageUrl} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {slide.imageUrl && (
+                                  <div className="absolute inset-0">
+                                    <img src={slide.imageUrl} alt="" className="w-full h-full object-cover opacity-20" />
+                                  </div>
+                                )}
+                                <div className="relative z-10 flex flex-col justify-center items-center text-center p-8 w-full">
+                                  <h2 className="text-white font-bold text-2xl leading-tight mb-3">{slide.title}</h2>
+                                  {slide.subtitle && <p className="text-slate-300 text-sm mb-4">{slide.subtitle}</p>}
+                                  {slide.bullets.length > 0 && (
+                                    <ul className="space-y-2 text-left max-w-lg">
+                                      {slide.bullets.slice(0, 5).map((b, bi) => (
+                                        <li key={bi} className="flex items-start gap-2 text-slate-200 text-sm">
+                                          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />
+                                          <span>{b}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {/* Navigation */}
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        variant="outline" size="sm"
+                        disabled={previewSlideIndex === 0}
+                        onClick={() => setPreviewSlideIndex(i => Math.max(0, i - 1))}
+                      >
+                        上一页
+                      </Button>
+                      <div className="flex gap-1">
+                        {resultSlides.map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setPreviewSlideIndex(i)}
+                            className={`h-1.5 rounded-full transition-all ${
+                              i === previewSlideIndex ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/40'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline" size="sm"
+                        disabled={previewSlideIndex === resultSlides.length - 1}
+                        onClick={() => setPreviewSlideIndex(i => Math.min(resultSlides.length - 1, i + 1))}
+                      >
+                        下一页
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    预览由 Microsoft Office Online 提供，首次加载可能需要等待 10-20 秒
-                  </p>
-                </div>
+                )}
               </CardContent>
             </Card>
           )}
