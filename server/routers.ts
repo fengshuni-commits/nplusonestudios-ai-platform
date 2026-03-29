@@ -3918,6 +3918,27 @@ const layoutPacksRouter = router({
         .where(_and(_eq(layoutPacks.id, input.id), _eq(layoutPacks.userId, ctx.user.id)));
       return { success: true };
     }),
+
+  retry: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { layoutPacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [pack] = await drizzleDb
+        .select()
+        .from(layoutPacks)
+        .where(_and(_eq(layoutPacks.id, input.id), _eq(layoutPacks.userId, ctx.user.id)))
+        .limit(1);
+      if (!pack) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!pack.sourceFileUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "源文件 URL 不存在" });
+      await drizzleDb.update(layoutPacks)
+        .set({ status: "pending", errorMessage: null })
+        .where(_eq(layoutPacks.id, pack.id));
+      extractLayoutPackAsync(pack.id, pack.sourceType, pack.sourceFileUrl).catch(console.error);
+      return { success: true };
+    }),
 });
 
 // ─── AI 版式提取后台任务 ──────────────────────────────────────────────────────
@@ -3935,26 +3956,100 @@ async function extractLayoutPackAsync(
     await drizzleDb.update(layoutPacks).set({ status: "processing" }).where(_eq(layoutPacks.id, packId));
 
     const sourceDesc = sourceType === "pptx" ? "PowerPoint 演示文稿" : sourceType === "pdf" ? "PDF 文档" : "图片集";
-    const mimeType = sourceType === "pdf" ? "application/pdf" : sourceType === "pptx" ? "application/pdf" : "image/jpeg";
+
+    // Convert file to image(s) for LLM visual analysis
+    // The LLM API supports image_url but not file_url/file for PDFs
+    let imageContent: { type: "image_url"; image_url: { url: string; detail: "high" } }[] = [];
+    const tmpFiles: string[] = [];
+
+    try {
+      const { execSync } = await import("child_process");
+      const { writeFileSync, readFileSync, readdirSync } = await import("fs");
+      const { join } = await import("path");
+      const { tmpdir } = await import("os");
+
+      const tmpDir = tmpdir();
+      const uid = `lp_${packId}_${Date.now()}`;
+
+      if (sourceType === "images") {
+        // Direct image URL - use as-is
+        imageContent = [{ type: "image_url", image_url: { url: fileUrl, detail: "high" } }];
+      } else {
+        // PDF or PPTX: download and convert to images
+        const tmpFile = join(tmpDir, `${uid}.pdf`);
+        tmpFiles.push(tmpFile);
+
+        // Download the file
+        const fileResp = await fetch(fileUrl);
+        if (!fileResp.ok) throw new Error(`下载文件失败: ${fileResp.status}`);
+        const fileBuffer = Buffer.from(await fileResp.arrayBuffer());
+        writeFileSync(tmpFile, fileBuffer);
+
+        const tmpImgDir = join(tmpDir, uid);
+        execSync(`mkdir -p "${tmpImgDir}"`);
+        tmpFiles.push(tmpImgDir);
+
+        // Convert first 3 pages to JPEG using pdftoppm (poppler-utils, pre-installed)
+        try {
+          execSync(`pdftoppm -r 96 -l 3 -jpeg "${tmpFile}" "${tmpImgDir}/page"`, { timeout: 30000 });
+        } catch (e1) {
+          // Fallback: try ImageMagick
+          try {
+            execSync(`convert -density 96 "${tmpFile}[0-2]" "${tmpImgDir}/page-%d.jpg"`, { timeout: 30000 });
+          } catch (e2) {
+            throw new Error(`文件转图失败: ${(e1 as any).message}`);
+          }
+        }
+
+        const imgFiles = readdirSync(tmpImgDir)
+          .filter(f => /\.(jpg|jpeg|png)$/i.test(f))
+          .sort()
+          .slice(0, 3);
+
+        for (const imgFile of imgFiles) {
+          const imgPath = join(tmpImgDir, imgFile);
+          const imgBase64 = readFileSync(imgPath).toString("base64");
+          const mime = imgFile.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+          imageContent.push({
+            type: "image_url",
+            image_url: { url: `data:${mime};base64,${imgBase64}`, detail: "high" },
+          });
+        }
+
+        if (imageContent.length === 0) throw new Error("未能从文件中提取页面图片");
+      }
+    } catch (convErr: any) {
+      console.warn(`[LayoutPack] Image conversion failed, using text-only fallback:`, convErr.message);
+      // Fallback: text-only analysis (no visual)
+    } finally {
+      // Cleanup temp files
+      try {
+        const { execSync } = await import("child_process");
+        for (const f of tmpFiles) {
+          try { execSync(`rm -rf "${f}"`); } catch {}
+        }
+      } catch {}
+    }
+
+    const userContent: any[] = [
+      ...imageContent,
+      {
+        type: "text" as const,
+        text: imageContent.length > 0
+          ? `请分析这些${sourceDesc}页面截图的设计风格，提取版式特征。文件名：${fileUrl.split("/").pop()}`
+          : `请根据文件类型（${sourceDesc}）生成一个典型的建筑设计风格版式包。文件：${fileUrl.split("/").pop()}`,
+      },
+    ];
 
     const response = await invokeLLM({
       messages: [
         {
           role: "system",
-          content: `你是一个专业的演示文稿设计分析师。请分析上传的${sourceDesc}，提取其设计风格特征，生成可复用的版式包描述。分析维度：1.配色方案（hex格式）2.字体风格 3.版式类型 4.设计风格关键词 5.整体调性。返回JSON格式。`,
+          content: `你是一个专业的演示文稿设计分析师。请分析提供的${sourceDesc}页面截图，提取其设计风格特征，生成可复用的版式包描述。分析维度：1.配色方案（hex格式）2.字体风格 3.版式类型 4.设计风格关键词 5.整体调性。返回JSON格式。`,
         },
         {
           role: "user",
-          content: [
-            {
-              type: "file_url" as const,
-              file_url: { url: fileUrl, mime_type: mimeType as any },
-            },
-            {
-              type: "text" as const,
-              text: `请分析这个${sourceDesc}的设计风格，提取版式特征。`,
-            },
-          ],
+          content: userContent,
         },
       ],
       response_format: {

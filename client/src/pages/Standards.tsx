@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout,
-  Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash
+  Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash, RefreshCw
 } from "lucide-react";
 
 // ─── PPT Layout Standards ─────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ type LayoutPack = {
   updatedAt: Date;
 };
 
-function LayoutPackCard({ pack, onDelete, onRefresh }: { pack: LayoutPack; onDelete: () => void; onRefresh: () => void }) {
+function LayoutPackCard({ pack, onDelete, onRefresh, onRetry }: { pack: LayoutPack; onDelete: () => void; onRefresh: () => void; onRetry: () => void }) {
   const styleGuide = pack.styleGuide as any;
   const layouts = (pack.layouts as any[]) || [];
 
@@ -310,11 +310,16 @@ function LayoutPackCard({ pack, onDelete, onRefresh }: { pack: LayoutPack; onDel
         </div>
 
         {/* Status */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {statusIcon}
           <span className="text-xs text-muted-foreground">{statusLabel}</span>
           {pack.status === "failed" && pack.errorMessage && (
             <span className="text-xs text-red-500 truncate">: {pack.errorMessage}</span>
+          )}
+          {pack.status === "failed" && (
+            <Button variant="outline" size="sm" className="h-5 text-[10px] px-2 ml-auto" onClick={onRetry}>
+              <RefreshCw className="h-3 w-3 mr-1" />重试
+            </Button>
           )}
         </div>
 
@@ -367,6 +372,10 @@ function AILayoutLearning() {
   const deleteMutation = trpc.layoutPacks.delete.useMutation({
     onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("版式包已删除"); },
     onError: (e) => toast.error("删除失败: " + e.message),
+  });
+  const retryMutation = trpc.layoutPacks.retry.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("AI 重新分析中…"); },
+    onError: (e) => toast.error("重试失败: " + e.message),
   });
   const [uploading, setUploading] = useState(false);
   const [packName, setPackName] = useState("");
@@ -534,6 +543,7 @@ function AILayoutLearning() {
                 pack={pack as LayoutPack}
                 onDelete={() => deleteMutation.mutate({ id: pack.id })}
                 onRefresh={() => utils.layoutPacks.list.invalidate()}
+                onRetry={() => retryMutation.mutate({ id: pack.id })}
               />
             ))}
           </div>

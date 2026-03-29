@@ -1122,3 +1122,10 @@
 - [x] 前端：Standards.tsx 改用 FormData + fetch 直接上传文件，不经过 base64 编码
 - [x] 后端：提高 body-parser 限制到 200mb 作为保底（兼容其他模块）
 - [ ] 验证大文件（>50MB）上传成功
+
+## Bug 修复：AI 版式提取处理失败
+- [x] 排查原因：LLM API 不支持 file_url 类型，导致 choices[0] 为 undefined
+- [x] 修复：改用 pdftoppm 将 PDF/PPTX 转为截图，再以 image_url 方式传给 LLM 分析
+- [x] 新增 layoutPacks.retry 接口，失败的版式包可一键重试
+- [x] 前端卡片新增「重试」按鈕
+- [x] 验证并保存检查点
