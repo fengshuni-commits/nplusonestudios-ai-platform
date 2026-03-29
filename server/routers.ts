@@ -1637,10 +1637,10 @@ const aiToolsRouter = router({
       const updateData: any = { ...data };
       if (apiKey !== undefined) {
         updateData.apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : null;
+      }
       // 如果有 accessKeyId，更新 configJson
       if (accessKeyId !== undefined) {
         updateData.configJson = { ...(data.configJson || {}), accessKeyId };
-      }
       }
       await db.updateAiTool(id, updateData);
       return { success: true };
