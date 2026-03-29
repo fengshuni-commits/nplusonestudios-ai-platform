@@ -37,7 +37,7 @@ async function getPptxGenJS() {
 import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 
 // ─── PPT Job Store (in-memory async queue) ──────────────
-type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string };
+type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
 type PptJob =
   | { status: "processing"; progress: number; stage: string }
   | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[] }
@@ -3679,13 +3679,14 @@ async function generatePresentationInBackground(
     const fileKey = `pptx/pres_${nanoid()}-${input.title}.pptx`;
     const { url } = await storagePut(fileKey, pptxBuffer, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
 
-    // Build slide preview data (title, subtitle, bullets, layout, imageUrl)
+    // Build slide preview data (title, subtitle, bullets, layout, imageUrl, styleGuide)
     const slidePreviews: PptSlidePreview[] = slideData.slides.map((s, i) => ({
       title: s.title,
       subtitle: s.subtitle,
       bullets: s.bullets,
       layout: s.layout,
       imageUrl: imageUrlMap.get(i),
+      styleGuide: input.layoutPackStyleGuide || undefined,
     }));
     presentationJobStore.set(jobId, {
       status: "done",

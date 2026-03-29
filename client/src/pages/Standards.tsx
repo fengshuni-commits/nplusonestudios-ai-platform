@@ -362,6 +362,56 @@ function LayoutPackCard({ pack, onDelete, onRefresh, onRetry }: { pack: LayoutPa
   );
 }
 
+function LayoutPacksInStandards() {
+  const utils = trpc.useUtils();
+  const { data: packs = [] } = trpc.layoutPacks.list.useQuery();
+  const donePacks = (packs as LayoutPack[]).filter(p => p.status === "done");
+  const deleteMutation = trpc.layoutPacks.delete.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("版式包已删除"); },
+  });
+  const retryMutation = trpc.layoutPacks.retry.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("AI 重新分析中…"); },
+  });
+
+  if (donePacks.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI 学习版式包
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            已成功提取 {donePacks.length} 个自定义版式包，可在演示文稿生成时选用。
+          </p>
+        </div>
+        <Badge variant="secondary" className="shrink-0">{donePacks.length} 个版式包</Badge>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {donePacks.map((pack) => (
+          <LayoutPackCard
+            key={pack.id}
+            pack={pack}
+            onDelete={() => deleteMutation.mutate({ id: pack.id })}
+            onRefresh={() => utils.layoutPacks.list.invalidate()}
+            onRetry={() => retryMutation.mutate({ id: pack.id })}
+          />
+        ))}
+      </div>
+      <Card className="bg-muted/30">
+        <CardContent className="p-4">
+          <p className="text-sm text-muted-foreground">
+            在「演示文稿」模块生成 PPT 时，可选择上方任意一个版式包，AI 将参考其配色、字体和版式偏好来生成具有一致设计语言的演示文稿。
+            如需添加更多版式包，请前往「AI 版式学习」页面上传文件。
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function AILayoutLearning() {
   const utils = trpc.useUtils();
   const { data: packs = [], refetch } = trpc.layoutPacks.list.useQuery();
@@ -718,33 +768,39 @@ export default function Standards() {
 
         {/* ─── 演示文稿版式标准 Tab ─── */}
         <TabsContent value="ppt-layouts">
-          <div className="space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-semibold">演示文稿版式标准</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  共 {PPT_LAYOUTS.length} 种版式，AI 生成 PPT 时会从中选择合适的版式组合。版式 ID 与生成代码直接对应。
-                </p>
+          <div className="space-y-6">
+            {/* 内置版式标准 */}
+            <div className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">内置版式标准</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    共 {PPT_LAYOUTS.length} 种版式，AI 生成 PPT 时会从中选择合适的版式组合。版式 ID 与生成代码直接对应。
+                  </p>
+                </div>
+                <Badge variant="secondary" className="shrink-0">{PPT_LAYOUTS.length} 种版式</Badge>
               </div>
-              <Badge variant="secondary" className="shrink-0">{PPT_LAYOUTS.length} 种版式</Badge>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {PPT_LAYOUTS.map((layout) => (
+                  <LayoutCard key={layout.id} layout={layout} />
+                ))}
+              </div>
+              <Card className="bg-muted/30">
+                <CardContent className="p-4">
+                  <h3 className="text-sm font-semibold mb-2">版式使用规则</h3>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>每份 PPT 必须以 <code className="text-xs bg-muted px-1 py-0.5 rounded">cover</code> 开头，以 <code className="text-xs bg-muted px-1 py-0.5 rounded">summary</code> 结尾</li>
+                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>第 2 页固定为 <code className="text-xs bg-muted px-1 py-0.5 rounded">toc</code> 目录页</li>
+                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>避免连续使用同一种版式，保持视觉节奏多样性</li>
+                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span><code className="text-xs bg-muted px-1 py-0.5 rounded">quote</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">data_highlight</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">timeline</code> 版式不需要配图，pexelsQuery 可留空</li>
+                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>深色版式（cover / quote / timeline / data_highlight / summary）与浅色版式交替使用，形成节奏感</li>
+                  </ul>
+                </CardContent>
+              </Card>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {PPT_LAYOUTS.map((layout) => (
-                <LayoutCard key={layout.id} layout={layout} />
-              ))}
-            </div>
-            <Card className="bg-muted/30">
-              <CardContent className="p-4">
-                <h3 className="text-sm font-semibold mb-2">版式使用规则</h3>
-                <ul className="space-y-1.5 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>每份 PPT 必须以 <code className="text-xs bg-muted px-1 py-0.5 rounded">cover</code> 开头，以 <code className="text-xs bg-muted px-1 py-0.5 rounded">summary</code> 结尾</li>
-                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>第 2 页固定为 <code className="text-xs bg-muted px-1 py-0.5 rounded">toc</code> 目录页</li>
-                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>避免连续使用同一种版式，保持视觉节奏多样性</li>
-                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span><code className="text-xs bg-muted px-1 py-0.5 rounded">quote</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">data_highlight</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">timeline</code> 版式不需要配图，pexelsQuery 可留空</li>
-                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>深色版式（cover / quote / timeline / data_highlight / summary）与浅色版式交替使用，形成节奏感</li>
-                </ul>
-              </CardContent>
-            </Card>
+
+            {/* AI 学习版式包展示 */}
+            <LayoutPacksInStandards />
           </div>
         </TabsContent>
 

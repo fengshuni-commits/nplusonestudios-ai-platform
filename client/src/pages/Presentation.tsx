@@ -98,7 +98,7 @@ export default function PresentationPage() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultTitle, setResultTitle] = useState<string | null>(null);
   const [resultSlideCount, setResultSlideCount] = useState<number | null>(null);
-  const [resultSlides, setResultSlides] = useState<Array<{ title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string }>>([]);
+  const [resultSlides, setResultSlides] = useState<Array<{ title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any }>>([]); 
   const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
@@ -537,40 +537,68 @@ export default function PresentationPage() {
                         if (!slide) return null;
                         const layout = slide.layout;
 
+                        // Dynamic colors from layout pack styleGuide
+                        const sg = slide.styleGuide;
+                        const cp = sg?.colorPalette || {};
+                        const hex = (v: string | undefined, fallback: string) => v ? v.replace(/^#/, '') : fallback;
+                        const PC = {
+                          charcoal: '#' + hex(cp.background, '1A1A2E'),
+                          warmGray: '#' + hex(cp.secondary, 'F5F0EB'),
+                          cream: '#' + hex(cp.background, 'FAF8F5'),
+                          copper: '#' + hex(cp.accent || cp.primary, 'B87333'),
+                          copperLight: '#' + hex(cp.primary, 'D4956B'),
+                          text: '#' + hex(cp.text, '2C2C2C'),
+                          textLight: '#' + hex(cp.text, '6B6560'),
+                          white: '#FFFFFF',
+                          divider: '#D4CFC8',
+                        };
+                        // For dark tone, swap bg colors
+                        if (sg?.tone === 'dark' && cp.background) {
+                          PC.charcoal = '#' + hex(cp.background, '1A1A2E');
+                          PC.warmGray = '#' + hex(cp.secondary || cp.background, '2D2D3F');
+                          PC.cream = '#' + hex(cp.secondary || cp.background, '2D2D3F');
+                          PC.text = '#' + hex(cp.text, 'E8E4DF');
+                          PC.textLight = '#' + hex(cp.text, 'A09890');
+                        } else if (sg?.tone === 'light' && cp.background) {
+                          PC.charcoal = '#' + hex(cp.secondary, '2C2C2C');
+                          PC.warmGray = '#' + hex(cp.background, 'F5F0EB');
+                          PC.cream = '#' + hex(cp.background, 'FAF8F5');
+                        }
+
                         // ── cover ──────────────────────────────────────────
                         if (layout === 'cover') return (
-                          <div className="absolute inset-0 bg-[#1A1A2E] flex">
+                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.charcoal }}>
                             {slide.imageUrl && (
                               <>
                                 <img src={slide.imageUrl} alt="" className="absolute right-0 top-0 h-full w-1/2 object-cover" />
-                                <div className="absolute right-0 top-0 h-full w-[52%] bg-gradient-to-r from-[#1A1A2E] to-transparent" />
+                                <div className="absolute right-0 top-0 h-full w-[52%]" style={{ background: `linear-gradient(to right, ${PC.charcoal}, transparent)` }} />
                               </>
                             )}
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="absolute left-[8%] top-1/2 -translate-y-1/2 w-[50%] z-10">
-                              <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#B87333]" />
+                              <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: PC.copper }} />
                               <div className="pl-5">
-                                <h1 className="text-white font-bold text-3xl leading-tight mb-3">{slide.title}</h1>
-                                <p className="text-[#D4956B] text-base mb-5">{slide.subtitle || '演示文稿'}</p>
-                                <div className="h-[2px] w-20 bg-[#B87333] mb-4" />
-                                <p className="text-[#B87333] font-bold text-sm tracking-widest">N+1 STUDIOS</p>
+                                <h1 className="font-bold text-3xl leading-tight mb-3" style={{ color: PC.white }}>{slide.title}</h1>
+                                <p className="text-base mb-5" style={{ color: PC.copperLight }}>{slide.subtitle || '演示文稿'}</p>
+                                <div className="h-[2px] w-20 mb-4" style={{ backgroundColor: PC.copper }} />
+                                <p className="font-bold text-sm tracking-widest" style={{ color: PC.copper }}>N+1 STUDIOS</p>
                               </div>
                             </div>
                           </div>
                         );
 
-                        // ── toc ────────────────────────────────────────────
+                        // ── toc ──────────────────────────────────────────
                         if (layout === 'toc') return (
-                          <div className="absolute inset-0 bg-[#FAF8F5] flex">
-                            <div className="absolute left-0 top-0 bottom-0 w-[5px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.cream }}>
+                            <div className="absolute left-0 top-0 bottom-0 w-[5px]" style={{ backgroundColor: PC.copper }} />
                             <div className="pl-10 pt-8 pr-8 w-full">
-                              <p className="text-[#B87333] text-xs font-bold tracking-[0.2em] mb-1">目录</p>
-                              <h2 className="text-[#2C2C2C] font-bold text-xl mb-5">{slide.title}</h2>
+                              <p className="text-xs font-bold tracking-[0.2em] mb-1" style={{ color: PC.copper }}>目录</p>
+                              <h2 className="font-bold text-xl mb-5" style={{ color: PC.text }}>{slide.title}</h2>
                               <div className="space-y-3">
                                 {slide.bullets.map((b, bi) => (
                                   <div key={bi} className="flex items-center gap-3">
-                                    <span className="text-[#B87333] font-bold text-lg w-7 flex-shrink-0">{String(bi + 1).padStart(2, '0')}</span>
-                                    <span className="text-[#2C2C2C] text-sm">{b}</span>
+                                    <span className="font-bold text-lg w-7 flex-shrink-0" style={{ color: PC.copper }}>{String(bi + 1).padStart(2, '0')}</span>
+                                    <span className="text-sm" style={{ color: PC.text }}>{b}</span>
                                   </div>
                                 ))}
                               </div>
@@ -578,24 +606,24 @@ export default function PresentationPage() {
                           </div>
                         );
 
-                        // ── section_intro ──────────────────────────────────
+                        // ── section_intro ──────────────────────────
                         if (layout === 'section_intro') return (
-                          <div className="absolute inset-0 bg-[#F5F0EB] flex">
+                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.warmGray }}>
                             {slide.imageUrl && (
                               <>
                                 <img src={slide.imageUrl} alt="" className="absolute right-0 top-0 h-full w-2/5 object-cover" />
-                                <div className="absolute right-0 top-0 h-full w-[45%] bg-gradient-to-r from-[#F5F0EB] to-transparent" />
+                                <div className="absolute right-0 top-0 h-full w-[45%]" style={{ background: `linear-gradient(to right, ${PC.warmGray}, transparent)` }} />
                               </>
                             )}
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="pl-10 pt-10 w-3/5 z-10">
-                              <h2 className="text-[#2C2C2C] font-bold text-2xl mb-2">{slide.title}</h2>
-                              {slide.subtitle && <p className="text-[#6B6560] text-sm italic mb-3">{slide.subtitle}</p>}
-                              <div className="h-[2px] w-14 bg-[#B87333] mb-4" />
+                              <h2 className="font-bold text-2xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
+                              {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.textLight }}>{slide.subtitle}</p>}
+                              <div className="h-[2px] w-14 mb-4" style={{ backgroundColor: PC.copper }} />
                               <ul className="space-y-2">
                                 {slide.bullets.map((b, bi) => (
-                                  <li key={bi} className="flex items-start gap-2 text-[#2C2C2C] text-xs">
-                                    <span className="mt-1 text-[#B87333]">—</span><span>{b}</span>
+                                  <li key={bi} className="flex items-start gap-2 text-xs" style={{ color: PC.text }}>
+                                    <span className="mt-1" style={{ color: PC.copper }}>—</span><span>{b}</span>
                                   </li>
                                 ))}
                               </ul>
@@ -603,20 +631,20 @@ export default function PresentationPage() {
                           </div>
                         );
 
-                        // ── case_study ─────────────────────────────────────
+                        // ── case_study ─────────────────────────────────
                         if (layout === 'case_study') return (
-                          <div className="absolute inset-0 bg-[#FAF8F5] flex">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.cream }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             {slide.imageUrl ? (
                               <>
                                 <div className="w-1/2 p-6 flex flex-col justify-start">
-                                  <h2 className="text-[#2C2C2C] font-bold text-lg mb-1">{slide.title}</h2>
-                                  {slide.subtitle && <p className="text-[#B87333] text-xs italic mb-3">{slide.subtitle}</p>}
-                                  <div className="h-[1px] bg-[#D4CFC8] mb-3" />
+                                  <h2 className="font-bold text-lg mb-1" style={{ color: PC.text }}>{slide.title}</h2>
+                                  {slide.subtitle && <p className="text-xs italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
+                                  <div className="h-[1px] mb-3" style={{ backgroundColor: PC.divider }} />
                                   <ul className="space-y-2">
                                     {slide.bullets.map((b, bi) => (
-                                      <li key={bi} className="flex items-start gap-2 text-[#2C2C2C] text-xs">
-                                        <span className="text-[#B87333] mt-0.5">▪</span><span>{b}</span>
+                                      <li key={bi} className="flex items-start gap-2 text-xs" style={{ color: PC.text }}>
+                                        <span className="mt-0.5" style={{ color: PC.copper }}>▪</span><span>{b}</span>
                                       </li>
                                     ))}
                                   </ul>
@@ -627,13 +655,13 @@ export default function PresentationPage() {
                               </>
                             ) : (
                               <div className="p-8 w-full">
-                                <h2 className="text-[#2C2C2C] font-bold text-xl mb-2">{slide.title}</h2>
-                                {slide.subtitle && <p className="text-[#B87333] text-sm italic mb-3">{slide.subtitle}</p>}
-                                <div className="h-[1px] bg-[#D4CFC8] mb-4" />
+                                <h2 className="font-bold text-xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
+                                {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
+                                <div className="h-[1px] mb-4" style={{ backgroundColor: PC.divider }} />
                                 <ul className="space-y-2.5">
                                   {slide.bullets.map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-2 text-[#2C2C2C] text-sm">
-                                      <span className="text-[#B87333] mt-0.5">▪</span><span>{b}</span>
+                                    <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.text }}>
+                                      <span className="mt-0.5" style={{ color: PC.copper }}>▪</span><span>{b}</span>
                                     </li>
                                   ))}
                                 </ul>
@@ -642,22 +670,22 @@ export default function PresentationPage() {
                           </div>
                         );
 
-                        // ── insight ────────────────────────────────────────
+                        // ── insight ──────────────────────────────────────────
                         if (layout === 'insight') return (
-                          <div className="absolute inset-0 bg-[#F5F0EB] flex flex-col">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.warmGray }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             {slide.imageUrl ? (
                               <>
                                 <div className="h-[52%] overflow-hidden">
                                   <img src={slide.imageUrl} alt="" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="p-5 flex-1">
-                                  <h2 className="text-[#2C2C2C] font-bold text-base mb-1">{slide.title}</h2>
-                                  <div className="h-[2px] w-10 bg-[#B87333] mb-2" />
+                                  <h2 className="font-bold text-base mb-1" style={{ color: PC.text }}>{slide.title}</h2>
+                                  <div className="h-[2px] w-10 mb-2" style={{ backgroundColor: PC.copper }} />
                                   <ul className="flex flex-wrap gap-x-4 gap-y-1">
                                     {slide.bullets.map((b, bi) => (
-                                      <li key={bi} className="flex items-start gap-1.5 text-[#2C2C2C] text-xs">
-                                        <span className="text-[#B87333]">▸</span><span>{b}</span>
+                                      <li key={bi} className="flex items-start gap-1.5 text-xs" style={{ color: PC.text }}>
+                                        <span style={{ color: PC.copper }}>▸</span><span>{b}</span>
                                       </li>
                                     ))}
                                   </ul>
@@ -665,13 +693,13 @@ export default function PresentationPage() {
                               </>
                             ) : (
                               <div className="p-8 flex flex-col justify-center h-full">
-                                <h2 className="text-[#2C2C2C] font-bold text-2xl mb-2">{slide.title}</h2>
-                                {slide.subtitle && <p className="text-[#B87333] text-sm italic mb-3">{slide.subtitle}</p>}
-                                <div className="h-[2px] w-14 bg-[#B87333] mb-4" />
+                                <h2 className="font-bold text-2xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
+                                {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
+                                <div className="h-[2px] w-14 mb-4" style={{ backgroundColor: PC.copper }} />
                                 <ul className="space-y-2">
                                   {slide.bullets.map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-2 text-[#2C2C2C] text-sm">
-                                      <span className="text-[#B87333]">▸</span><span>{b}</span>
+                                    <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.text }}>
+                                      <span style={{ color: PC.copper }}>▸</span><span>{b}</span>
                                     </li>
                                   ))}
                                 </ul>
@@ -682,23 +710,23 @@ export default function PresentationPage() {
 
                         // ── quote ──────────────────────────────────────────
                         if (layout === 'quote') return (
-                          <div className="absolute inset-0 bg-[#1A1A2E] flex items-center">
+                          <div className="absolute inset-0 flex items-center" style={{ backgroundColor: PC.charcoal }}>
                             {slide.imageUrl && (
                               <>
                                 <img src={slide.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-[#1A1A2E]/70" />
+                                <div className="absolute inset-0" style={{ backgroundColor: `${PC.charcoal}B3` }} />
                               </>
                             )}
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
-                            <div className="absolute left-[7%] top-[15%] bottom-[15%] w-[5px] bg-[#B87333]" />
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
+                            <div className="absolute left-[7%] top-[15%] bottom-[15%] w-[5px]" style={{ backgroundColor: PC.copper }} />
                             <div className="relative z-10 pl-16 pr-10">
-                              <div className="text-[#B87333] text-6xl font-bold leading-none mb-2 opacity-80">&ldquo;</div>
-                              <h2 className="text-white font-bold text-2xl leading-relaxed mb-4">{slide.title}</h2>
-                              {slide.subtitle && <p className="text-[#D4956B] text-sm italic mb-3">{slide.subtitle}</p>}
+                              <div className="text-6xl font-bold leading-none mb-2 opacity-80" style={{ color: PC.copper }}>&ldquo;</div>
+                              <h2 className="font-bold text-2xl leading-relaxed mb-4" style={{ color: PC.white }}>{slide.title}</h2>
+                              {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
                               {slide.bullets[0] && (
                                 <>
-                                  <div className="h-[1px] w-24 bg-[#B87333]/50 mb-3" />
-                                  <p className="text-[#E8E4DF] text-xs">{slide.bullets[0]}</p>
+                                  <div className="h-[1px] w-24 mb-3" style={{ backgroundColor: `${PC.copper}80` }} />
+                                  <p className="text-xs" style={{ color: PC.textLight }}>{slide.bullets[0]}</p>
                                 </>
                               )}
                             </div>
@@ -707,37 +735,37 @@ export default function PresentationPage() {
 
                         // ── comparison ─────────────────────────────────────
                         if (layout === 'comparison') return (
-                          <div className="absolute inset-0 bg-[#FAF8F5] flex flex-col">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.cream }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="px-6 pt-4 pb-2 text-center">
-                              <h2 className="text-[#2C2C2C] font-bold text-lg">{slide.title}</h2>
-                              {slide.subtitle && <p className="text-[#6B6560] text-xs italic">{slide.subtitle}</p>}
+                              <h2 className="font-bold text-lg" style={{ color: PC.text }}>{slide.title}</h2>
+                              {slide.subtitle && <p className="text-xs italic" style={{ color: PC.textLight }}>{slide.subtitle}</p>}
                             </div>
                             <div className="flex flex-1 gap-0 px-4 pb-4">
                               {/* Left */}
                               <div className="flex-1 flex flex-col">
-                                <div className="bg-[#B87333] text-white text-sm font-bold text-center py-1.5 rounded-t mb-2">
+                                <div className="text-white text-sm font-bold text-center py-1.5 rounded-t mb-2" style={{ backgroundColor: PC.copper }}>
                                   {slide.bullets[0] || '方案 A'}
                                 </div>
                                 <ul className="space-y-1.5 flex-1">
                                   {slide.bullets.slice(1, Math.ceil(slide.bullets.length / 2) + 1).map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-1.5 text-[#2C2C2C] text-xs">
-                                      <span className="text-[#B87333] mt-0.5">▸</span><span>{b}</span>
+                                    <li key={bi} className="flex items-start gap-1.5 text-xs" style={{ color: PC.text }}>
+                                      <span className="mt-0.5" style={{ color: PC.copper }}>▸</span><span>{b}</span>
                                     </li>
                                   ))}
                                 </ul>
                               </div>
                               {/* Divider */}
-                              <div className="w-[2px] bg-[#B87333] mx-3 self-stretch" />
+                              <div className="w-[2px] mx-3 self-stretch" style={{ backgroundColor: PC.copper }} />
                               {/* Right */}
                               <div className="flex-1 flex flex-col">
-                                <div className="bg-[#2D2D3F] text-white text-sm font-bold text-center py-1.5 rounded-t mb-2">
+                                <div className="text-white text-sm font-bold text-center py-1.5 rounded-t mb-2" style={{ backgroundColor: PC.charcoal }}>
                                   {slide.bullets[Math.ceil(slide.bullets.length / 2)] || '方案 B'}
                                 </div>
                                 <ul className="space-y-1.5 flex-1">
                                   {slide.bullets.slice(Math.ceil(slide.bullets.length / 2) + 1).map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-1.5 text-[#2C2C2C] text-xs">
-                                      <span className="text-[#2D2D3F] mt-0.5">▸</span><span>{b}</span>
+                                    <li key={bi} className="flex items-start gap-1.5 text-xs" style={{ color: PC.text }}>
+                                      <span className="mt-0.5" style={{ color: PC.charcoal }}>▸</span><span>{b}</span>
                                     </li>
                                   ))}
                                 </ul>
@@ -746,18 +774,18 @@ export default function PresentationPage() {
                           </div>
                         );
 
-                        // ── timeline ───────────────────────────────────────
+                        // ── timeline ──────────────────────────────────────────
                         if (layout === 'timeline') return (
-                          <div className="absolute inset-0 bg-[#2D2D3F] flex flex-col">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.charcoal }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="px-8 pt-5 pb-3">
-                              <h2 className="text-white font-bold text-lg">{slide.title}</h2>
-                              {slide.subtitle && <p className="text-[#D4956B] text-xs italic">{slide.subtitle}</p>}
+                              <h2 className="font-bold text-lg" style={{ color: PC.white }}>{slide.title}</h2>
+                              {slide.subtitle && <p className="text-xs italic" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
                             </div>
                             {/* Timeline */}
                             <div className="flex-1 flex items-center px-6 pb-4">
                               <div className="relative w-full">
-                                <div className="absolute top-1/2 left-0 right-0 h-[3px] bg-[#B87333] -translate-y-1/2" />
+                                <div className="absolute top-1/2 left-0 right-0 h-[3px] -translate-y-1/2" style={{ backgroundColor: PC.copper }} />
                                 <div className="flex justify-around">
                                   {slide.bullets.slice(0, 5).map((b, bi) => {
                                     const parts = b.split(' — ');
@@ -765,9 +793,9 @@ export default function PresentationPage() {
                                     const desc = parts[1] || b;
                                     return (
                                       <div key={bi} className="flex flex-col items-center gap-2 w-1/5">
-                                        <p className="text-[#B87333] text-xs font-bold text-center">{label}</p>
-                                        <div className="h-3 w-3 rounded-full bg-[#B87333] z-10 flex-shrink-0" />
-                                        <p className="text-[#E8E4DF] text-[10px] text-center leading-tight">{desc}</p>
+                                        <p className="text-xs font-bold text-center" style={{ color: PC.copper }}>{label}</p>
+                                        <div className="h-3 w-3 rounded-full z-10 flex-shrink-0" style={{ backgroundColor: PC.copper }} />
+                                        <p className="text-[10px] text-center leading-tight" style={{ color: PC.textLight }}>{desc}</p>
                                       </div>
                                     );
                                   })}
@@ -779,12 +807,12 @@ export default function PresentationPage() {
 
                         // ── data_highlight ─────────────────────────────────
                         if (layout === 'data_highlight') return (
-                          <div className="absolute inset-0 bg-[#1A1A2E] flex flex-col">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.charcoal }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="px-8 pt-5">
-                              <h2 className="text-white font-bold text-lg">{slide.title}</h2>
-                              {slide.subtitle && <p className="text-[#D4956B] text-xs italic">{slide.subtitle}</p>}
-                              <div className="h-[1px] bg-[#B87333]/40 mt-2" />
+                              <h2 className="font-bold text-lg" style={{ color: PC.white }}>{slide.title}</h2>
+                              {slide.subtitle && <p className="text-xs italic" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
+                              <div className="h-[1px] mt-2" style={{ backgroundColor: `${PC.copper}66` }} />
                             </div>
                             <div className="flex-1 flex items-center justify-center px-8 pb-4">
                               <div className={`grid gap-4 w-full ${slide.bullets.length <= 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
@@ -794,8 +822,8 @@ export default function PresentationPage() {
                                   const desc = parts[1] || b;
                                   return (
                                     <div key={bi} className="text-center">
-                                      <div className="text-[#B87333] font-bold text-4xl leading-none mb-1">{num}</div>
-                                      <div className="text-[#E8E4DF] text-xs">{desc}</div>
+                                      <div className="font-bold text-4xl leading-none mb-1" style={{ color: PC.copper }}>{num}</div>
+                                      <div className="text-xs" style={{ color: PC.textLight }}>{desc}</div>
                                     </div>
                                   );
                                 })}
@@ -804,44 +832,44 @@ export default function PresentationPage() {
                           </div>
                         );
 
-                        // ── summary ────────────────────────────────────────
+                        // ── summary ──────────────────────────────────────────
                         if (layout === 'summary') return (
-                          <div className="absolute inset-0 bg-[#1A1A2E] flex flex-col">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.charcoal }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="flex-1 flex flex-col justify-center px-12">
-                              <div className="absolute left-[8%] top-[12%] bottom-[20%] w-[3px] bg-[#B87333]" />
+                              <div className="absolute left-[8%] top-[12%] bottom-[20%] w-[3px]" style={{ backgroundColor: PC.copper }} />
                               <div className="pl-6">
-                                <h2 className="text-white font-bold text-2xl mb-2">{slide.title}</h2>
-                                {slide.subtitle && <p className="text-[#D4956B] text-sm italic mb-4">{slide.subtitle}</p>}
-                                <div className="h-[1px] bg-[#B87333]/40 mb-4" />
+                                <h2 className="font-bold text-2xl mb-2" style={{ color: PC.white }}>{slide.title}</h2>
+                                {slide.subtitle && <p className="text-sm italic mb-4" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
+                                <div className="h-[1px] mb-4" style={{ backgroundColor: `${PC.copper}66` }} />
                                 <ul className="space-y-2">
                                   {slide.bullets.map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-2 text-[#E8E4DF] text-sm">
-                                      <span className="text-[#B87333]">▸</span><span>{b}</span>
+                                    <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.textLight }}>
+                                      <span style={{ color: PC.copper }}>▸</span><span>{b}</span>
                                     </li>
                                   ))}
                                 </ul>
                               </div>
                             </div>
-                            <div className="bg-[#2D2D3F] px-10 py-3 flex justify-between items-center">
-                              <span className="text-[#B87333] font-bold text-sm tracking-widest">N+1 STUDIOS</span>
-                              <span className="text-[#6B6560] text-xs">感谢您的关注</span>
+                            <div className="px-10 py-3 flex justify-between items-center" style={{ backgroundColor: PC.warmGray }}>
+                              <span className="font-bold text-sm tracking-widest" style={{ color: PC.copper }}>N+1 STUDIOS</span>
+                              <span className="text-xs" style={{ color: PC.textLight }}>感谢您的关注</span>
                             </div>
                           </div>
                         );
 
                         // ── default (fallback) ─────────────────────────────
                         return (
-                          <div className="absolute inset-0 bg-[#FAF8F5] flex flex-col">
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#B87333]" />
+                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.cream }}>
+                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
                             <div className="p-8 flex flex-col justify-center h-full">
-                              <h2 className="text-[#2C2C2C] font-bold text-xl mb-2">{slide.title}</h2>
-                              {slide.subtitle && <p className="text-[#B87333] text-sm italic mb-3">{slide.subtitle}</p>}
-                              <div className="h-[2px] w-14 bg-[#B87333] mb-4" />
+                              <h2 className="font-bold text-xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
+                              {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
+                              <div className="h-[2px] w-14 mb-4" style={{ backgroundColor: PC.copper }} />
                               <ul className="space-y-2">
                                 {slide.bullets.map((b, bi) => (
-                                  <li key={bi} className="flex items-start gap-2 text-[#2C2C2C] text-sm">
-                                    <span className="text-[#B87333]">—</span><span>{b}</span>
+                                  <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.text }}>
+                                    <span style={{ color: PC.copper }}>—</span><span>{b}</span>
                                   </li>
                                 ))}
                               </ul>
