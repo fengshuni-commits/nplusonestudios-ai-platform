@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,7 +12,8 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout,
-  Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash, RefreshCw
+  Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash, RefreshCw,
+  ChevronRight, Package, Cpu
 } from "lucide-react";
 
 // ─── PPT Layout Standards ─────────────────────────────────────────────────────
@@ -359,6 +360,258 @@ function LayoutPackCard({ pack, onDelete, onRefresh, onRetry }: { pack: LayoutPa
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── AI Layout Slide Card (same style as LayoutCard) ─────────────────────────
+
+function AiLayoutSlideCard({ layout, styleGuide }: { layout: any; styleGuide: any }) {
+  const cp = styleGuide?.colorPalette || {};
+  const bg = cp.background || "#1A1A2E";
+  const accent = cp.accent || cp.primary || "#B87333";
+  const textColor = cp.text || (cp.background && cp.background.toLowerCase() < "#888888" ? "#FFFFFF" : "#2C2C2C");
+  return (
+    <Card className="overflow-hidden">
+      {/* Mini preview */}
+      <div className="w-full relative" style={{ aspectRatio: '16/9', background: bg }}>
+        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: accent }} />
+        <div className="absolute inset-0 flex flex-col justify-center px-6 py-4">
+          <div className="font-bold text-sm mb-1 truncate" style={{ color: textColor }}>
+            {layout.layoutType}
+          </div>
+          <div className="text-[10px] opacity-60 line-clamp-2" style={{ color: textColor }}>
+            {layout.description}
+          </div>
+          <div className="mt-2 h-[2px] w-8" style={{ background: accent }} />
+          <div className="mt-2 flex items-center gap-1.5">
+            {layout.hasImage && (
+              <div className="text-[9px] opacity-50 flex items-center gap-1" style={{ color: textColor }}>
+                <Image className="h-2.5 w-2.5" />需要配图
+              </div>
+            )}
+          </div>
+        </div>
+        {layout.hasImage && (
+          <div className="absolute right-0 top-0 h-full w-2/5 opacity-20"
+            style={{ background: `linear-gradient(to left, ${accent}40, transparent)` }} />
+        )}
+      </div>
+      {/* Info */}
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-sm">{layout.layoutType}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{layout.description}</p>
+          </div>
+          <Badge variant="outline" className="text-[10px] shrink-0">{layout.colorScheme}</Badge>
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          <div className="h-3 w-3 rounded-sm" style={{ background: bg, border: '1px solid #ccc' }} />
+          <span className="text-[10px] text-muted-foreground">背景</span>
+          <div className="h-3 w-3 rounded-sm ml-2" style={{ background: accent }} />
+          <span className="text-[10px] text-muted-foreground">强调色</span>
+          {layout.hasImage && <Badge variant="secondary" className="text-[10px] ml-auto">需配图</Badge>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── PPT Layout Standards Tab ─────────────────────────────────────────────────
+
+function PptLayoutStandardsTab() {
+  const utils = trpc.useUtils();
+  const { data: packs = [] } = trpc.layoutPacks.list.useQuery();
+  const donePacks = (packs as LayoutPack[]).filter(p => p.status === "done");
+  const deleteMutation = trpc.layoutPacks.delete.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("版式包已删除"); },
+  });
+  const retryMutation = trpc.layoutPacks.retry.useMutation({
+    onSuccess: () => { utils.layoutPacks.list.invalidate(); toast.success("AI 重新分析中…"); },
+  });
+
+  // Selected pack: null = built-in, number = AI pack id
+  const [selectedPackId, setSelectedPackId] = React.useState<"builtin" | number>("builtin");
+
+  const selectedAiPack = selectedPackId !== "builtin" ? donePacks.find(p => p.id === selectedPackId) : null;
+  const selectedAiPackStyleGuide = selectedAiPack?.styleGuide as any;
+  const selectedAiPackLayouts = (selectedAiPack?.layouts as any[]) || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Pack selector row */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">版式包</h2>
+          <p className="text-sm text-muted-foreground">点击任意版式包查看其包含的版式详情</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {/* Built-in pack card */}
+          <button
+            onClick={() => setSelectedPackId("builtin")}
+            className={`group relative flex flex-col gap-2 rounded-lg border-2 p-4 text-left transition-all w-56 ${
+              selectedPackId === "builtin"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50 bg-card"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-md bg-[#1A1A2E] flex items-center justify-center shrink-0">
+                <Package className="h-4 w-4 text-[#B87333]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">内置版式包</p>
+                <p className="text-[10px] text-muted-foreground">N+1 STUDIOS 标准</p>
+              </div>
+            </div>
+            {/* Color strip */}
+            <div className="flex h-1.5 rounded-full overflow-hidden">
+              {["#1A1A2E", "#B87333", "#FAF8F5", "#F5F0EB"].map((c, i) => (
+                <div key={i} className="flex-1" style={{ background: c }} />
+              ))}
+            </div>
+            <div className="flex items-center justify-between">
+              <Badge variant="secondary" className="text-[10px]">{PPT_LAYOUTS.length} 种版式</Badge>
+              {selectedPackId === "builtin" && <ChevronRight className="h-3.5 w-3.5 text-primary" />}
+            </div>
+          </button>
+
+          {/* AI packs */}
+          {donePacks.map((pack) => {
+            const sg = pack.styleGuide as any;
+            const cp = sg?.colorPalette || {};
+            const colors = [cp.primary, cp.secondary, cp.background, cp.accent].filter(Boolean);
+            return (
+              <button
+                key={pack.id}
+                onClick={() => setSelectedPackId(pack.id)}
+                className={`group relative flex flex-col gap-2 rounded-lg border-2 p-4 text-left transition-all w-56 ${
+                  selectedPackId === pack.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50 bg-card"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-md flex items-center justify-center shrink-0"
+                    style={{ background: cp.background || "#1A1A2E" }}>
+                    <Cpu className="h-4 w-4" style={{ color: cp.accent || cp.primary || "#B87333" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate">{pack.name}</p>
+                    <p className="text-[10px] text-muted-foreground">AI 学习版式包</p>
+                  </div>
+                  <Button
+                    variant="ghost" size="icon"
+                    className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                    onClick={(e) => { e.stopPropagation(); deleteMutation.mutate({ id: pack.id }); }}
+                  >
+                    <Trash className="h-3 w-3" />
+                  </Button>
+                </div>
+                {colors.length > 0 && (
+                  <div className="flex h-1.5 rounded-full overflow-hidden">
+                    {colors.map((c, i) => <div key={i} className="flex-1" style={{ background: c }} />)}
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap gap-1">
+                    {sg?.styleKeywords?.slice(0, 2).map((kw: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="text-[10px] py-0">{kw}</Badge>
+                    ))}
+                  </div>
+                  {selectedPackId === pack.id && <ChevronRight className="h-3.5 w-3.5 text-primary" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Layouts detail for selected pack */}
+      {selectedPackId === "builtin" ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">内置版式包 — 版式详情</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">共 {PPT_LAYOUTS.length} 种版式，AI 生成 PPT 时会从中选择合适的版式组合</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {PPT_LAYOUTS.map((layout) => <LayoutCard key={layout.id} layout={layout} />)}
+          </div>
+          <Card className="bg-muted/30">
+            <CardContent className="p-4">
+              <h3 className="text-sm font-semibold mb-2">版式使用规则</h3>
+              <ul className="space-y-1.5 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>每份 PPT 必须以 <code className="text-xs bg-muted px-1 py-0.5 rounded">cover</code> 开头，以 <code className="text-xs bg-muted px-1 py-0.5 rounded">summary</code> 结尾</li>
+                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>第 2 页固定为 <code className="text-xs bg-muted px-1 py-0.5 rounded">toc</code> 目录页</li>
+                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>避免连续使用同一种版式，保持视觉节奏多样性</li>
+                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>深色版式（cover / quote / timeline / data_highlight / summary）与浅色版式交替使用，形成节奏感</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      ) : selectedAiPack ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">{selectedAiPack.name} — 版式详情</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                AI 提取了 {selectedAiPackLayouts.length} 种版式类型
+                {selectedAiPackStyleGuide?.typography?.titleFont && (
+                  <span> · 字体：{selectedAiPackStyleGuide.typography.titleFont}</span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedAiPackStyleGuide?.colorPalette && (
+                <div className="flex items-center gap-1">
+                  {Object.values(selectedAiPackStyleGuide.colorPalette).map((c: any, i: number) => (
+                    <div key={i} className="h-4 w-4 rounded-sm border border-border" style={{ background: c }} title={c} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {selectedAiPackLayouts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {selectedAiPackLayouts.map((layout: any, i: number) => (
+                <AiLayoutSlideCard key={i} layout={layout} styleGuide={selectedAiPackStyleGuide} />
+              ))}
+            </div>
+          ) : (
+            <Card className="bg-muted/30">
+              <CardContent className="p-8 text-center">
+                <p className="text-sm text-muted-foreground">AI 未识别到具体版式类型，可尝试重新提取</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => retryMutation.mutate({ id: selectedAiPack.id })}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />重新提取
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+          {selectedAiPackStyleGuide && (
+            <Card className="bg-muted/30">
+              <CardContent className="p-4 space-y-2">
+                <h3 className="text-sm font-semibold">风格指南</h3>
+                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  {selectedAiPackStyleGuide.tone && <div><span className="font-medium">调性：</span>{selectedAiPackStyleGuide.tone === "dark" ? "深色系" : selectedAiPackStyleGuide.tone === "light" ? "浅色系" : "深浅混合"}</div>}
+                  {selectedAiPackStyleGuide.formality && <div><span className="font-medium">风格：</span>{selectedAiPackStyleGuide.formality === "formal" ? "正式专业" : selectedAiPackStyleGuide.formality === "creative" ? "创意活泼" : "中性平衡"}</div>}
+                  {selectedAiPackStyleGuide.typography?.titleFont && <div><span className="font-medium">标题字体：</span>{selectedAiPackStyleGuide.typography.titleFont}</div>}
+                  {selectedAiPackStyleGuide.typography?.bodyFont && <div><span className="font-medium">正文字体：</span>{selectedAiPackStyleGuide.typography.bodyFont}</div>}
+                </div>
+                {selectedAiPackStyleGuide.styleKeywords?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {selectedAiPackStyleGuide.styleKeywords.map((kw: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="text-[10px]">{kw}</Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -768,40 +1021,7 @@ export default function Standards() {
 
         {/* ─── 演示文稿版式标准 Tab ─── */}
         <TabsContent value="ppt-layouts">
-          <div className="space-y-6">
-            {/* 内置版式标准 */}
-            <div className="space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-base font-semibold">内置版式标准</h2>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    共 {PPT_LAYOUTS.length} 种版式，AI 生成 PPT 时会从中选择合适的版式组合。版式 ID 与生成代码直接对应。
-                  </p>
-                </div>
-                <Badge variant="secondary" className="shrink-0">{PPT_LAYOUTS.length} 种版式</Badge>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {PPT_LAYOUTS.map((layout) => (
-                  <LayoutCard key={layout.id} layout={layout} />
-                ))}
-              </div>
-              <Card className="bg-muted/30">
-                <CardContent className="p-4">
-                  <h3 className="text-sm font-semibold mb-2">版式使用规则</h3>
-                  <ul className="space-y-1.5 text-sm text-muted-foreground">
-                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>每份 PPT 必须以 <code className="text-xs bg-muted px-1 py-0.5 rounded">cover</code> 开头，以 <code className="text-xs bg-muted px-1 py-0.5 rounded">summary</code> 结尾</li>
-                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>第 2 页固定为 <code className="text-xs bg-muted px-1 py-0.5 rounded">toc</code> 目录页</li>
-                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>避免连续使用同一种版式，保持视觉节奏多样性</li>
-                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span><code className="text-xs bg-muted px-1 py-0.5 rounded">quote</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">data_highlight</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">timeline</code> 版式不需要配图，pexelsQuery 可留空</li>
-                    <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>深色版式（cover / quote / timeline / data_highlight / summary）与浅色版式交替使用，形成节奏感</li>
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* AI 学习版式包展示 */}
-            <LayoutPacksInStandards />
-          </div>
+          <PptLayoutStandardsTab />
         </TabsContent>
 
         {/* ─── 渲染风格库 Tab ─── */}
