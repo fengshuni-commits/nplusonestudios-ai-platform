@@ -9,9 +9,219 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette
+  Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout
 } from "lucide-react";
+
+// ─── PPT Layout Standards ─────────────────────────────────────────────────────
+
+const PPT_LAYOUTS = [
+  {
+    id: "cover",
+    name: "封面页",
+    description: "演示文稿首页，大标题 + 副标题，右侧配图，左侧铜色竖线装饰",
+    bg: "#1A1A2E",
+    accent: "#B87333",
+    textColor: "#FFFFFF",
+    usage: "每份 PPT 必有，仅用于第 1 页",
+    bullets: ["主标题（项目名称）", "副标题（汇报类型、日期）", "右侧全出血配图（可选）"],
+  },
+  {
+    id: "toc",
+    name: "目录页",
+    description: "章节目录，编号列表，左侧铜色粗线装饰",
+    bg: "#FAF8F5",
+    accent: "#B87333",
+    textColor: "#2C2C2C",
+    usage: "PPT 第 2 页，列出所有章节标题",
+    bullets: ["目录标题", "章节编号（01、02…）", "各章节名称"],
+  },
+  {
+    id: "section_intro",
+    name: "章节过渡页",
+    description: "章节开篇，大标题 + 简短说明，右侧可配图",
+    bg: "#F5F0EB",
+    accent: "#B87333",
+    textColor: "#2C2C2C",
+    usage: "每个新章节的第一页",
+    bullets: ["章节标题", "章节简介（1-2 句）", "右侧配图（可选）"],
+  },
+  {
+    id: "case_study",
+    name: "案例分析页",
+    description: "左文右图布局，适合展示具体项目案例",
+    bg: "#FAF8F5",
+    accent: "#B87333",
+    textColor: "#2C2C2C",
+    usage: "项目案例、设计方案展示",
+    bullets: ["案例标题", "案例说明（副标题）", "要点列表（3-5 条）", "右侧配图"],
+  },
+  {
+    id: "insight",
+    name: "洞察/分析页",
+    description: "上图下文布局，适合数据分析和设计洞察",
+    bg: "#F5F0EB",
+    accent: "#B87333",
+    textColor: "#2C2C2C",
+    usage: "设计分析、市场洞察、研究结论",
+    bullets: ["分析标题", "上方配图（可选）", "要点列表（3-5 条）"],
+  },
+  {
+    id: "quote",
+    name: "引言页",
+    description: "深色全屏背景，大字引言，左侧铜色竖线，引号装饰",
+    bg: "#1A1A2E",
+    accent: "#B87333",
+    textColor: "#FFFFFF",
+    usage: "设计理念陈述、重要观点强调",
+    bullets: ["引言正文（1-2 句话）", "来源说明（副标题）", "背景图（可选，半透明叠加）"],
+  },
+  {
+    id: "comparison",
+    name: "对比页",
+    description: "左右分屏对比，中间铜色分隔线，两侧各有标题和要点",
+    bg: "#FAF8F5",
+    accent: "#B87333",
+    textColor: "#2C2C2C",
+    usage: "方案对比、前后对比、优劣分析",
+    bullets: ["对比主题（标题）", "左侧标题 + 要点（方案A）", "右侧标题 + 要点（方案B）"],
+  },
+  {
+    id: "timeline",
+    name: "时间轴页",
+    description: "深色背景，水平时间轴线，节点圆点，上方年份下方说明",
+    bg: "#2D2D3F",
+    accent: "#B87333",
+    textColor: "#FFFFFF",
+    usage: "项目进度、发展历程、设计阶段",
+    bullets: ["时间轴标题", "节点格式：年份/阶段 — 说明文字", "最多 5 个节点"],
+  },
+  {
+    id: "data_highlight",
+    name: "数据展示页",
+    description: "深色背景，超大铜色数字，2×2 网格布局",
+    bg: "#1A1A2E",
+    accent: "#B87333",
+    textColor: "#FFFFFF",
+    usage: "关键数据、项目指标、成果量化",
+    bullets: ["数据标题", "数据格式：数字 — 说明（如：12,000㎡ — 总建筑面积）", "最多 4 组数据"],
+  },
+  {
+    id: "summary",
+    name: "总结页",
+    description: "深色背景，左侧铜色竖线，底部品牌栏",
+    bg: "#1A1A2E",
+    accent: "#B87333",
+    textColor: "#FFFFFF",
+    usage: "PPT 最后一页，总结要点或致谢",
+    bullets: ["总结标题", "总结要点（3-5 条）", "底部品牌栏（N+1 STUDIOS）"],
+  },
+];
+
+function LayoutCard({ layout }: { layout: typeof PPT_LAYOUTS[0] }) {
+  return (
+    <Card className="overflow-hidden">
+      {/* Mini preview */}
+      <div
+        className="w-full relative"
+        style={{ aspectRatio: '16/9', background: layout.bg }}
+      >
+        {/* Top accent line */}
+        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: layout.accent }} />
+        {/* Left accent bar for some layouts */}
+        {["toc", "quote", "summary"].includes(layout.id) && (
+          <div className="absolute left-[8%] top-[10%] bottom-[10%] w-[3px]" style={{ background: layout.accent }} />
+        )}
+        {/* Center content preview */}
+        <div className="absolute inset-0 flex flex-col justify-center px-6 py-4">
+          <div
+            className="font-bold text-sm mb-1 truncate"
+            style={{ color: layout.textColor }}
+          >
+            {layout.name}
+          </div>
+          <div
+            className="text-[10px] opacity-60 line-clamp-2"
+            style={{ color: layout.textColor }}
+          >
+            {layout.description}
+          </div>
+          {/* Accent decoration */}
+          <div className="mt-2 h-[2px] w-8" style={{ background: layout.accent }} />
+          {/* Bullet preview */}
+          <div className="mt-2 space-y-1">
+            {layout.bullets.slice(0, 2).map((b, i) => (
+              <div key={i} className="flex items-center gap-1">
+                <div className="h-1 w-1 rounded-full flex-shrink-0" style={{ background: layout.accent }} />
+                <span className="text-[9px] opacity-50 truncate" style={{ color: layout.textColor }}>{b}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Right image placeholder for image layouts */}
+        {["cover", "case_study", "section_intro"].includes(layout.id) && (
+          <div
+            className="absolute right-0 top-0 h-full w-2/5 opacity-20"
+            style={{ background: `linear-gradient(to left, ${layout.accent}40, transparent)` }}
+          />
+        )}
+        {/* Comparison divider */}
+        {layout.id === "comparison" && (
+          <div className="absolute left-1/2 top-[15%] bottom-[15%] w-[2px]" style={{ background: layout.accent }} />
+        )}
+        {/* Timeline line */}
+        {layout.id === "timeline" && (
+          <div className="absolute left-[10%] right-[10%] top-1/2 h-[2px]" style={{ background: layout.accent }} />
+        )}
+        {/* Data highlight grid */}
+        {layout.id === "data_highlight" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="grid grid-cols-2 gap-3 px-6">
+              {["12K", "85%", "36", "A+"].map((n, i) => (
+                <div key={i} className="text-center">
+                  <div className="font-bold text-lg" style={{ color: layout.accent }}>{n}</div>
+                  <div className="text-[8px] opacity-40" style={{ color: layout.textColor }}>指标说明</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Info */}
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-sm">{layout.name}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{layout.description}</p>
+          </div>
+          <Badge variant="outline" className="text-[10px] shrink-0 font-mono">{layout.id}</Badge>
+        </div>
+        <div className="bg-muted/50 rounded p-2.5 space-y-1">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">使用场景</p>
+          <p className="text-xs text-foreground">{layout.usage}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">内容要素</p>
+          <ul className="space-y-0.5">
+            {layout.bullets.map((b, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <span className="text-primary mt-0.5">›</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          <div className="h-3 w-3 rounded-sm" style={{ background: layout.bg, border: '1px solid #ccc' }} />
+          <span className="text-[10px] text-muted-foreground">背景 {layout.bg}</span>
+          <div className="h-3 w-3 rounded-sm ml-2" style={{ background: layout.accent }} />
+          <span className="text-[10px] text-muted-foreground">强调色 {layout.accent}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 type RenderStyle = {
   id: number;
@@ -149,14 +359,56 @@ export default function Standards() {
   const isSaving = createMutation.isPending || updateMutation.isPending || uploadingImage;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">出品标准</h1>
-          <p className="text-sm text-muted-foreground mt-1">管理 AI 效果图的渲染风格库，包括风格名称、提示词和参考图</p>
-        </div>
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">出品标准</h1>
+        <p className="text-sm text-muted-foreground mt-1">管理 AI 效果图渲染风格库和演示文稿版式标准</p>
       </div>
 
+      <Tabs defaultValue="render-styles">
+        <TabsList className="mb-4">
+          <TabsTrigger value="render-styles" className="gap-1.5">
+            <Palette className="h-4 w-4" />渲染风格库
+          </TabsTrigger>
+          <TabsTrigger value="ppt-layouts" className="gap-1.5">
+            <Layout className="h-4 w-4" />演示文稿版式标准
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ─── 演示文稿版式标准 Tab ─── */}
+        <TabsContent value="ppt-layouts">
+          <div className="space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-semibold">演示文稿版式标准</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  共 {PPT_LAYOUTS.length} 种版式，AI 生成 PPT 时会从中选择合适的版式组合。版式 ID 与生成代码直接对应。
+                </p>
+              </div>
+              <Badge variant="secondary" className="shrink-0">{PPT_LAYOUTS.length} 种版式</Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {PPT_LAYOUTS.map((layout) => (
+                <LayoutCard key={layout.id} layout={layout} />
+              ))}
+            </div>
+            <Card className="bg-muted/30">
+              <CardContent className="p-4">
+                <h3 className="text-sm font-semibold mb-2">版式使用规则</h3>
+                <ul className="space-y-1.5 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>每份 PPT 必须以 <code className="text-xs bg-muted px-1 py-0.5 rounded">cover</code> 开头，以 <code className="text-xs bg-muted px-1 py-0.5 rounded">summary</code> 结尾</li>
+                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>第 2 页固定为 <code className="text-xs bg-muted px-1 py-0.5 rounded">toc</code> 目录页</li>
+                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>避免连续使用同一种版式，保持视觉节奏多样性</li>
+                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span><code className="text-xs bg-muted px-1 py-0.5 rounded">quote</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">data_highlight</code> / <code className="text-xs bg-muted px-1 py-0.5 rounded">timeline</code> 版式不需要配图，pexelsQuery 可留空</li>
+                  <li className="flex items-start gap-2"><span className="text-primary mt-0.5">›</span>深色版式（cover / quote / timeline / data_highlight / summary）与浅色版式交替使用，形成节奏感</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ─── 渲染风格库 Tab ─── */}
+        <TabsContent value="render-styles">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-4">
           <div className="flex items-center gap-2">
@@ -308,6 +560,8 @@ export default function Standards() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

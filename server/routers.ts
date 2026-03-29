@@ -3250,26 +3250,34 @@ async function generatePresentationInBackground(
         {
           role: "system",
           content: `你是 N+1 STUDIOS 的建筑设计演示文稿制作专家。请根据用户提供的演示内容，生成约 10-15 页的 PPT 结构。
-
 页面结构要求：
 - 第 1 页：封面（layout: cover），包含演示标题和副标题
 - 第 2 页：目录（layout: toc），列出主要章节
-- 中间页：内容页（layout: section_intro / case_study / insight），每页聚焦一个主题
+- 中间页：根据内容类型选择合适版式（见下方说明），每页聚焦一个主题
 - 最后 1 页：总结（layout: summary）
+
+版式选择指引（中间页）：
+- section_intro：章节导入页，适合介绍新主题或章节开头，深色背景，大标题
+- case_study：案例研究页，适合展示具体项目或案例，左文右图布局
+- insight：洞察/分析页，适合展示研究发现或设计理念，图片配文字
+- quote：引言页，适合展示核心观点或重要引用，大字排版，强视觉冲击
+- comparison：对比页，适合左右对比两个方案/概念/数据
+- timeline：时间轴页，适合展示项目进程、设计演变或历史脉络
+- data_highlight：数据展示页，适合突出关键数字或指标，大号数字配说明
 
 每页字段说明：
 - title: 页面标题
 - subtitle: 副标题或简短说明（可为空字符串）
-- bullets: 要点列表（每页 3-5 条，简洁精炼）
+- bullets: 要点列表（每页 3-5 条，简洁精炼；timeline 版式每条代表一个时间节点，格式为「年份/阶段 — 内容」；comparison 版式前半条为左侧内容，后半条为右侧内容；data_highlight 版式每条格式为「数字 — 说明」）
 - sourceName: 内容来源（可为空字符串）
-- pexelsQuery: 英文图片搜索关键词（描述建筑/空间视觉特征，如 "modern office interior minimalist design"）；如用户提供了图片，对应页面用 userImage:N 格式
-- layout: cover / toc / section_intro / case_study / insight / summary
+- pexelsQuery: 英文图片搜索关键词（描述建筑/空间视觉特征，如 "modern office interior minimalist design"）；如用户提供了图片，对应页面用 userImage:N 格式；quote/comparison/timeline/data_highlight 版式可留空字符串
+- layout: cover / toc / section_intro / case_study / insight / quote / comparison / timeline / data_highlight / summary
 
 重要：
+- 版式要多样化，避免连续使用同一种版式
 - pexelsQuery 必须是英文，且要具体描述建筑/空间的视觉特征
 - 每页要点精炼，不超过 5 条
-- 内容忠实于用户提供的资料，不要编造${imageContext}`,
-        },
+- 内容忠实于用户提供的资料，不要编造${imageContext}`},
         { role: "user", content: `演示标题：${input.title}\n\n演示内容：\n${input.content}` }
       ],
       response_format: {
@@ -3290,7 +3298,7 @@ async function generatePresentationInBackground(
                     bullets: { type: "array", items: { type: "string" } },
                     sourceName: { type: "string" },
                     pexelsQuery: { type: "string" },
-                    layout: { type: "string", enum: ["cover", "toc", "section_intro", "case_study", "insight", "summary"] }
+                    layout: { type: "string", enum: ["cover", "toc", "section_intro", "case_study", "insight", "quote", "comparison", "timeline", "data_highlight", "summary"] }
                   },
                   required: ["title", "subtitle", "bullets", "sourceName", "pexelsQuery", "layout"],
                   additionalProperties: false
@@ -3478,6 +3486,97 @@ async function generatePresentationInBackground(
           const insightBullets = sd.bullets.map(b => ({ text: b, options: { fontSize: 13, fontFace: F.body, color: C.text, bullet: { code: "25B8", color: C.copper }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5 } }));
           s.addText(insightBullets as any, { x: 0.8, y: 1.8, w: 8.4, h: 3.5, valign: "top" });
         }
+      } else if (sd.layout === "quote") {
+        // 引言页：全屏深色背景 + 大字引言 + 左侧铜色竖线
+        s.background = { color: C.charcoal };
+        if (hasImage) {
+          const imgData = imageBase64Map.get(i)!;
+          s.addImage({ data: `image/${imgData.ext};base64,${imgData.data}`, x: 0, y: 0, w: 10, h: 5.63 });
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 5.63, fill: { color: C.charcoal, transparency: 40 } });
+        }
+        s.addShape(pptx.ShapeType.rect, { x: 0.7, y: 1.0, w: 0.06, h: 3.5, fill: { color: C.copper } });
+        // 引号装饰
+        s.addText("“", { x: 1.0, y: 0.7, w: 1.5, h: 1.0, fontSize: 72, fontFace: F.title, color: C.copper, bold: true, valign: "top" });
+        s.addText(sd.title, { x: 1.1, y: 1.2, w: 8.0, h: 1.8, fontSize: 28, fontFace: F.title, color: C.white, bold: true, lineSpacingMultiple: 1.4 });
+        if (sd.subtitle) s.addText(sd.subtitle, { x: 1.1, y: 3.2, w: 8.0, h: 0.5, fontSize: 14, fontFace: F.body, color: C.copperLight, italic: true });
+        if (sd.bullets.length > 0) {
+          s.addShape(pptx.ShapeType.rect, { x: 1.1, y: 3.9, w: 3.0, h: 0.02, fill: { color: C.copper, transparency: 40 } });
+          s.addText(sd.bullets[0], { x: 1.1, y: 4.1, w: 8.0, h: 0.4, fontSize: 12, fontFace: F.body, color: C.textOnDark });
+        }
+        s.addText("N+1 STUDIOS", { x: 7.5, y: 5.25, w: 2.2, h: 0.2, fontSize: 7, fontFace: F.body, color: C.textLight, align: "right" });
+      } else if (sd.layout === "comparison") {
+        // 对比页：左右分屏，中间铜色分隔线
+        s.background = { color: C.cream };
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
+        s.addText(sd.title, { x: 0.5, y: 0.15, w: 9, h: 0.5, fontSize: 18, fontFace: F.title, color: C.text, bold: true, align: "center" });
+        if (sd.subtitle) s.addText(sd.subtitle, { x: 0.5, y: 0.65, w: 9, h: 0.3, fontSize: 11, fontFace: F.body, color: C.textLight, italic: true, align: "center" });
+        // 分隔线
+        s.addShape(pptx.ShapeType.rect, { x: 4.85, y: 1.1, w: 0.03, h: 4.2, fill: { color: C.copper } });
+        // 左侧标题
+        const midIdx = Math.ceil(sd.bullets.length / 2);
+        const leftBullets = sd.bullets.slice(0, midIdx);
+        const rightBullets = sd.bullets.slice(midIdx);
+        s.addShape(pptx.ShapeType.rect, { x: 0.4, y: 1.0, w: 4.2, h: 0.55, fill: { color: C.copper } });
+        s.addText(leftBullets[0] || "方案 A", { x: 0.4, y: 1.0, w: 4.2, h: 0.55, fontSize: 14, fontFace: F.title, color: C.white, bold: true, align: "center", valign: "middle" });
+        // 右侧标题
+        s.addShape(pptx.ShapeType.rect, { x: 5.1, y: 1.0, w: 4.2, h: 0.55, fill: { color: C.slate } });
+        s.addText(rightBullets[0] || "方案 B", { x: 5.1, y: 1.0, w: 4.2, h: 0.55, fontSize: 14, fontFace: F.title, color: C.white, bold: true, align: "center", valign: "middle" });
+        // 左侧内容
+        const leftContent = leftBullets.slice(1).map(b => ({ text: b, options: { fontSize: 12, fontFace: F.body, color: C.text, bullet: { code: "25B8", color: C.copper }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5 } }));
+        if (leftContent.length > 0) s.addText(leftContent as any, { x: 0.4, y: 1.7, w: 4.2, h: 3.5, valign: "top" });
+        // 右侧内容
+        const rightContent = rightBullets.slice(1).map(b => ({ text: b, options: { fontSize: 12, fontFace: F.body, color: C.text, bullet: { code: "25B8", color: C.slate }, paraSpaceAfter: 10, lineSpacingMultiple: 1.5 } }));
+        if (rightContent.length > 0) s.addText(rightContent as any, { x: 5.1, y: 1.7, w: 4.2, h: 3.5, valign: "top" });
+        s.addText("N+1 STUDIOS", { x: 7.5, y: 5.25, w: 2.2, h: 0.2, fontSize: 7, fontFace: F.body, color: C.textLight, align: "right" });
+      } else if (sd.layout === "timeline") {
+        // 时间轴页：深色背景 + 水平时间轴线 + 节点圆点
+        s.background = { color: C.slate };
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
+        s.addText(sd.title, { x: 0.8, y: 0.2, w: 8.4, h: 0.55, fontSize: 20, fontFace: F.title, color: C.white, bold: true });
+        if (sd.subtitle) s.addText(sd.subtitle, { x: 0.8, y: 0.75, w: 8.4, h: 0.3, fontSize: 11, fontFace: F.body, color: C.copperLight, italic: true });
+        // 时间轴主线
+        s.addShape(pptx.ShapeType.rect, { x: 0.5, y: 2.9, w: 9.0, h: 0.04, fill: { color: C.copper } });
+        const tlCount = Math.min(sd.bullets.length, 5);
+        const tlStep = 9.0 / (tlCount + 1);
+        for (let t = 0; t < tlCount; t++) {
+          const bx = 0.5 + tlStep * (t + 1);
+          const parts = sd.bullets[t].split(" — ");
+          const label = parts[0] || "";
+          const desc = parts[1] || sd.bullets[t];
+          // 节点圆点
+          s.addShape(pptx.ShapeType.ellipse, { x: bx - 0.15, y: 2.75, w: 0.3, h: 0.3, fill: { color: C.copper } });
+          // 年份标签（圆点上方）
+          s.addText(label, { x: bx - 0.7, y: 2.2, w: 1.4, h: 0.4, fontSize: 11, fontFace: F.title, color: C.copper, bold: true, align: "center" });
+          // 垂直连接线
+          s.addShape(pptx.ShapeType.rect, { x: bx - 0.01, y: 2.6, w: 0.02, h: 0.15, fill: { color: C.copper, transparency: 30 } });
+          // 描述文字（圆点下方）
+          s.addText(desc, { x: bx - 0.8, y: 3.1, w: 1.6, h: 1.8, fontSize: 10, fontFace: F.body, color: C.textOnDark, align: "center", lineSpacingMultiple: 1.4 });
+        }
+        s.addText("N+1 STUDIOS", { x: 7.5, y: 5.25, w: 2.2, h: 0.2, fontSize: 7, fontFace: F.body, color: C.textLight, align: "right" });
+      } else if (sd.layout === "data_highlight") {
+        // 数据展示页：深色背景 + 大号数字 + 说明文字
+        s.background = { color: C.charcoal };
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
+        s.addText(sd.title, { x: 0.8, y: 0.15, w: 8.4, h: 0.5, fontSize: 18, fontFace: F.title, color: C.white, bold: true });
+        if (sd.subtitle) s.addText(sd.subtitle, { x: 0.8, y: 0.65, w: 8.4, h: 0.3, fontSize: 11, fontFace: F.body, color: C.copperLight, italic: true });
+        s.addShape(pptx.ShapeType.rect, { x: 0.8, y: 1.1, w: 8.4, h: 0.01, fill: { color: C.copper, transparency: 50 } });
+        const dataItems = sd.bullets.slice(0, 4);
+        const cols = dataItems.length <= 2 ? dataItems.length : dataItems.length <= 4 ? 2 : 3;
+        const rows = Math.ceil(dataItems.length / cols);
+        const cellW = 8.4 / cols;
+        const cellH = rows === 1 ? 3.5 : 1.8;
+        dataItems.forEach((b, idx) => {
+          const parts = b.split(" — ");
+          const num = parts[0] || "";
+          const desc = parts[1] || b;
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const cx = 0.8 + col * cellW;
+          const cy = 1.3 + row * (cellH + 0.3);
+          s.addText(num, { x: cx, y: cy, w: cellW, h: cellH * 0.6, fontSize: rows === 1 ? 52 : 36, fontFace: F.title, color: C.copper, bold: true, align: "center", valign: "bottom" });
+          s.addText(desc, { x: cx, y: cy + cellH * 0.6, w: cellW, h: cellH * 0.4, fontSize: 12, fontFace: F.body, color: C.textOnDark, align: "center", valign: "top", lineSpacingMultiple: 1.3 });
+        });
+        s.addText("N+1 STUDIOS", { x: 7.5, y: 5.25, w: 2.2, h: 0.2, fontSize: 7, fontFace: F.body, color: C.textLight, align: "right" });
       } else if (sd.layout === "summary") {
         s.background = { color: C.charcoal };
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.04, fill: { color: C.copper } });
