@@ -609,6 +609,8 @@ export const graphicLayoutJobs = mysqlTable("graphic_layout_jobs", {
   docType: mysqlEnum("docType", ["brand_manual", "product_detail", "project_board", "custom"]).notNull(),
   // 页数：1-10
   pageCount: int("pageCount").notNull().default(1),
+  // 图幅比例：3:4 / 4:3 / 1:1 / 16:9 / 9:16 / A4 / A3
+  aspectRatio: varchar("aspectRatio", { length: 20 }).default("3:4"),
   // 用户输入的文字描述
   contentText: text("contentText").notNull(),
   // 用户上传的素材图 URL 数组（JSON）

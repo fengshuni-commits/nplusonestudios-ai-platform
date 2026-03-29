@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Pencil, Check, X, Palette,
-  BookOpen, Layers
+  BookOpen, Layers, Maximize2
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ interface TextLayer {
   fontWeight: string;
   color: string;
   align: "left" | "center" | "right";
+  position?: string; // "top-left" | "top-center" | "top-right" | "middle-left" | "middle-center" | "middle-right" | "bottom-left" | "bottom-center" | "bottom-right"
 }
 
 interface PageData {
@@ -60,6 +61,7 @@ interface LayoutJob {
   status: JobStatus;
   docType: string;
   title?: string;
+  aspectRatio?: string;
   pages?: PageData[];
   errorMessage?: string;
   createdAt: Date;
@@ -71,6 +73,43 @@ const DOC_TYPES = [
   { value: "project_board", label: "项目图板", icon: LayoutTemplate },
   { value: "custom", label: "自定义", icon: Sparkles },
 ];
+
+// 常用图幅选项
+const ASPECT_RATIOS = [
+  { value: "3:4", label: "3:4", desc: "竖版标准" },
+  { value: "4:3", label: "4:3", desc: "横版标准" },
+  { value: "1:1", label: "1:1", desc: "正方形" },
+  { value: "16:9", label: "16:9", desc: "宽屏" },
+  { value: "9:16", label: "9:16", desc: "竖屏" },
+  { value: "A4", label: "A4", desc: "297×210mm" },
+  { value: "A3", label: "A3", desc: "420×297mm" },
+];
+
+// 图幅比例 → CSS aspect-ratio
+const RATIO_CSS: Record<string, string> = {
+  "3:4": "3/4", "4:3": "4/3", "1:1": "1/1",
+  "16:9": "16/9", "9:16": "9/16",
+  "A4": "210/297", "A3": "297/420",
+};
+
+// 文字层 position → CSS 定位
+function getPositionStyle(position?: string): React.CSSProperties {
+  const pos = position || "bottom-left";
+  const [vert, horiz] = pos.split("-");
+  const style: React.CSSProperties = { position: "absolute" };
+  if (vert === "top") style.top = "8%";
+  else if (vert === "middle") { style.top = "50%"; style.transform = "translateY(-50%)"; }
+  else style.bottom = "8%";
+  if (horiz === "left") style.left = "6%";
+  else if (horiz === "center") { style.left = "50%"; style.transform = (style.transform || "") + " translateX(-50%)"; }
+  else style.right = "6%";
+  return style;
+}
+
+// 文字层 role → 字号比例
+const ROLE_FONT_SCALE: Record<string, number> = {
+  title: 1.0, subtitle: 0.65, body: 0.45, caption: 0.35, label: 0.35, quote: 0.8, number: 0.9,
+};
 
 // ─── Style Pack Card ──────────────────────────────────────────────────────────
 
@@ -135,7 +174,13 @@ function StylePackCard({
 
 // ─── Page Viewer ─────────────────────────────────────────────────────────────
 
-function PageViewer({ page, onTextEdit }: { page: PageData; onTextEdit: (layerId: string, text: string) => void }) {
+function PageViewer({
+  page, onTextEdit, aspectRatio,
+}: {
+  page: PageData;
+  onTextEdit: (layerId: string, text: string) => void;
+  aspectRatio?: string;
+}) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
 
@@ -143,55 +188,82 @@ function PageViewer({ page, onTextEdit }: { page: PageData; onTextEdit: (layerId
   const commitEdit = (layerId: string) => { onTextEdit(layerId, editText); setEditingId(null); };
   const cancelEdit = () => setEditingId(null);
 
+  const cssRatio = RATIO_CSS[aspectRatio || "3:4"] || "3/4";
+
   return (
-    <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden shadow-2xl">
+    <div
+      className="relative w-full rounded-xl overflow-hidden shadow-2xl"
+      style={{ aspectRatio: cssRatio }}
+    >
+      {/* 底图 */}
       {page.imageUrl ? (
         <img src={page.imageUrl} alt={`page-${page.pageIndex}`} className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <div className="absolute inset-0" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
       )}
-      <div className="absolute inset-0 p-6 flex flex-col justify-end gap-2">
-        {page.textLayers?.map((layer) => (
-          <div key={layer.id} className="group/layer relative">
+
+      {/* 文字层：按 position 绝对定位，点击文字本身即可编辑 */}
+      {page.textLayers?.map((layer) => {
+        const posStyle = getPositionStyle(layer.position);
+        const scale = ROLE_FONT_SCALE[layer.role] ?? 0.5;
+        const baseFontSize = Math.max(10, (layer.fontSize || 16) * scale);
+        const colorHex = `#${(layer.color || "ffffff").replace("#", "")}`;
+        const fontWeight = layer.fontWeight === "bold" ? 700 : layer.fontWeight === "semibold" ? 600 : layer.fontWeight === "medium" ? 500 : 400;
+
+        return (
+          <div key={layer.id} style={{ ...posStyle, maxWidth: "88%" }}>
             {editingId === layer.id ? (
-              <div className="flex gap-1 items-start">
+              <div className="flex gap-1 items-start" style={{ minWidth: "160px" }}>
                 <Textarea
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  className="text-white bg-black/60 border-[#B87333] resize-none min-h-[40px] text-sm"
+                  className="text-white bg-black/80 border-[#B87333] resize-none min-h-[40px] text-sm"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEdit(layer.id); }
                     if (e.key === "Escape") cancelEdit();
                   }}
                 />
-                <div className="flex flex-col gap-1">
-                  <div role="button" tabIndex={0} onClick={() => commitEdit(layer.id)}
-                    className="p-1 rounded bg-[#B87333] text-white cursor-pointer"><Check className="w-3 h-3" /></div>
-                  <div role="button" tabIndex={0} onClick={cancelEdit}
-                    className="p-1 rounded bg-white/20 text-white cursor-pointer"><X className="w-3 h-3" /></div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button onClick={() => commitEdit(layer.id)}
+                    className="p-1 rounded bg-[#B87333] text-white cursor-pointer hover:bg-[#D4956B]">
+                    <Check className="w-3 h-3" />
+                  </button>
+                  <button onClick={cancelEdit}
+                    className="p-1 rounded bg-white/20 text-white cursor-pointer hover:bg-white/30">
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
             ) : (
-              <div className="relative" style={{
-                fontSize: `${Math.max(10, (layer.fontSize || 16) * 0.6)}px`,
-                fontWeight: layer.fontWeight === "bold" ? 700 : layer.fontWeight === "semibold" ? 600 : layer.fontWeight === "medium" ? 500 : 400,
-                color: `#${(layer.color || "ffffff").replace("#", "")}`,
-                textAlign: layer.align || "left",
-                textShadow: "0 1px 3px rgba(0,0,0,0.8)",
-                lineHeight: 1.4,
-              }}>
-                {layer.text}
-                <div role="button" tabIndex={0} onClick={() => startEdit(layer)}
-                  className="absolute -right-1 -top-1 p-0.5 rounded bg-[#B87333]/80 text-white opacity-0 group-hover/layer:opacity-100 transition-opacity cursor-pointer">
-                  <Pencil className="w-2.5 h-2.5" />
-                </div>
+              <div
+                onClick={() => startEdit(layer)}
+                title="点击编辑文字"
+                className="group/text cursor-pointer relative"
+                style={{
+                  fontSize: `${baseFontSize}px`,
+                  fontWeight,
+                  color: colorHex,
+                  textAlign: layer.align || "left",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)",
+                  lineHeight: 1.35,
+                  padding: "2px 4px",
+                  borderRadius: "3px",
+                  transition: "background 0.15s",
+                }}
+              >
+                <span className="group-hover/text:bg-black/30 rounded px-0.5 transition-colors">{layer.text}</span>
+                <span className="absolute -top-1 -right-1 opacity-0 group-hover/text:opacity-100 transition-opacity">
+                  <Pencil className="w-2.5 h-2.5 text-[#B87333] drop-shadow" />
+                </span>
               </div>
             )}
           </div>
-        ))}
-      </div>
-      <div className="absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded bg-black/50 text-white/60">
+        );
+      })}
+
+      {/* 页码角标 */}
+      <div className="absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/60">
         {page.pageIndex + 1}
       </div>
     </div>
@@ -228,6 +300,7 @@ export default function MediaLayout() {
   // Generate Form
   const [docType, setDocType] = useState("brand_manual");
   const [pageCount, setPageCount] = useState(1);
+  const [aspectRatio, setAspectRatio] = useState("3:4");
   const [contentText, setContentText] = useState("");
   const [titleInput, setTitleInput] = useState("");
   const [assetUrls, setAssetUrls] = useState<string[]>([]);
@@ -260,8 +333,9 @@ export default function MediaLayout() {
     onSuccess: () => refetchActiveJob(),
   });
 
+  const activeJobQueryInput = useMemo(() => ({ id: activeJobId! }), [activeJobId]);
   const { data: activeJobData, refetch: refetchActiveJob } = trpc.graphicLayout.status.useQuery(
-    { id: activeJobId! },
+    activeJobQueryInput,
     { enabled: !!activeJobId, refetchInterval: activeJobId ? 3000 : false }
   );
 
@@ -320,7 +394,15 @@ export default function MediaLayout() {
   const handleGenerate = () => {
     if (!contentText.trim()) { toast.error("请输入内容描述"); return; }
     setGenerating(true);
-    generateMutation.mutate({ packId: selectedPackId, docType: docType as "brand_manual" | "product_detail" | "project_board" | "custom", pageCount, contentText: contentText.trim(), assetUrls, title: titleInput.trim() || undefined });
+    generateMutation.mutate({
+      packId: selectedPackId,
+      docType: docType as "brand_manual" | "product_detail" | "project_board" | "custom",
+      pageCount,
+      aspectRatio,
+      contentText: contentText.trim(),
+      assetUrls,
+      title: titleInput.trim() || undefined,
+    });
   };
 
   const handleTextEdit = (layerId: string, text: string) => {
@@ -332,6 +414,7 @@ export default function MediaLayout() {
 
   const pages = activeJob?.pages ?? [];
   const currentPageData = pages[currentPage];
+  const activeAspectRatio = activeJob?.aspectRatio || aspectRatio;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0F0F0F]">
@@ -395,6 +478,24 @@ export default function MediaLayout() {
                       docType === value ? "border-[#B87333]/60 bg-[#B87333]/8 text-white" : "border-white/8 text-white/40 hover:border-white/15"
                     }`}>
                     <Icon className="w-3 h-3 shrink-0" />{label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Aspect ratio */}
+            <div>
+              <Label className="text-xs text-white/50 mb-1.5 flex items-center gap-1.5">
+                <Maximize2 className="w-3 h-3" />图幅
+              </Label>
+              <div className="grid grid-cols-4 gap-1">
+                {ASPECT_RATIOS.map(({ value, label, desc }) => (
+                  <div key={value} onClick={() => setAspectRatio(value)}
+                    title={desc}
+                    className={`flex flex-col items-center justify-center px-1 py-1.5 rounded-lg border cursor-pointer text-[10px] transition-all ${
+                      aspectRatio === value ? "border-[#B87333]/60 bg-[#B87333]/8 text-white" : "border-white/8 text-white/40 hover:border-white/15"
+                    }`}>
+                    <span className="font-medium">{label}</span>
                   </div>
                 ))}
               </div>
@@ -495,6 +596,9 @@ export default function MediaLayout() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-white/60">{activeJob.title || DOC_TYPES.find(d => d.value === activeJob.docType)?.label}</span>
                   <Badge variant="outline" className="text-[10px] border-white/15 text-white/40">{pages.length} 页</Badge>
+                  {activeAspectRatio && (
+                    <Badge variant="outline" className="text-[10px] border-white/10 text-white/30">{activeAspectRatio}</Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
@@ -512,25 +616,35 @@ export default function MediaLayout() {
               {/* Page preview */}
               <div className="flex-1 overflow-y-auto p-6 flex items-start justify-center">
                 <div className="w-full max-w-sm">
-                  {currentPageData && <PageViewer page={currentPageData} onTextEdit={handleTextEdit} />}
+                  {currentPageData && (
+                    <PageViewer
+                      page={currentPageData}
+                      onTextEdit={handleTextEdit}
+                      aspectRatio={activeAspectRatio}
+                    />
+                  )}
                 </div>
               </div>
 
               {/* Page strip */}
               <div className="px-6 py-3 border-t border-white/8 flex gap-2 overflow-x-auto shrink-0">
-                {pages.map((page, i) => (
-                  <div key={i} onClick={() => setCurrentPage(i)}
-                    className={`relative shrink-0 w-14 aspect-[3/4] rounded overflow-hidden cursor-pointer border-2 transition-all ${
-                      i === currentPage ? "border-[#B87333]" : "border-transparent hover:border-white/20"
-                    }`}>
-                    {page.imageUrl ? (
-                      <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
-                    )}
-                    <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-1 rounded">{i + 1}</div>
-                  </div>
-                ))}
+                {pages.map((page, i) => {
+                  const thumbRatio = RATIO_CSS[activeAspectRatio] || "3/4";
+                  return (
+                    <div key={i} onClick={() => setCurrentPage(i)}
+                      className={`relative shrink-0 rounded overflow-hidden cursor-pointer border-2 transition-all ${
+                        i === currentPage ? "border-[#B87333]" : "border-transparent hover:border-white/20"
+                      }`}
+                      style={{ width: "56px", aspectRatio: thumbRatio }}>
+                      {page.imageUrl ? (
+                        <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
+                      )}
+                      <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-1 rounded">{i + 1}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -566,6 +680,9 @@ export default function MediaLayout() {
                       <Badge className="text-[9px] px-1.5 py-0 bg-red-500/20 text-red-400 border-0">失败</Badge>
                     ) : (
                       <Badge className="text-[9px] px-1.5 py-0 bg-[#B87333]/20 text-[#B87333] border-0">生成中</Badge>
+                    )}
+                    {job.aspectRatio && (
+                      <span className="text-[9px] text-white/25">{job.aspectRatio}</span>
                     )}
                     <span className="text-[9px] text-white/25">
                       {new Date(job.createdAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}

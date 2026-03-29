@@ -4313,6 +4313,7 @@ const graphicLayoutRouter = router({
       packId: z.number().optional(),
       docType: z.enum(["brand_manual", "product_detail", "project_board", "custom"]),
       pageCount: z.number().min(1).max(10).default(1),
+      aspectRatio: z.string().optional().default("3:4"),
       contentText: z.string().min(1),
       assetUrls: z.array(z.string()).optional(),
       title: z.string().optional(),
@@ -4324,7 +4325,7 @@ const graphicLayoutRouter = router({
       const { eq: _eq, desc: _desc } = await import("drizzle-orm");
       await drizzleDb.insert(graphicLayoutJobs).values({
         userId: ctx.user.id, packId: input.packId ?? null, docType: input.docType,
-        pageCount: input.pageCount, contentText: input.contentText,
+        pageCount: input.pageCount, aspectRatio: input.aspectRatio ?? "3:4", contentText: input.contentText,
         assetUrls: input.assetUrls ?? [], title: input.title ?? null, status: "pending",
       });
       const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
@@ -4519,18 +4520,30 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number) {
     const docTypeNames: Record<string, string> = { brand_manual: "品牌手册", product_detail: "商品详情页", project_board: "项目图板", custom: "自定义图文排版" };
     const docTypeName = docTypeNames[job.docType] ?? "图文排版";
     const assetUrls = (job.assetUrls as string[]) ?? [];
+    const aspectRatio = (job as any).aspectRatio ?? "3:4";
+    // 图幅比例 → 图像尺寸
+    const aspectRatioToSize: Record<string, string> = {
+      "3:4": "1024x1365", "4:3": "1365x1024", "1:1": "1024x1024",
+      "16:9": "1536x864", "9:16": "864x1536",
+      "A4": "794x1123", "A3": "1123x1587",
+    };
+    const imageSize = aspectRatioToSize[aspectRatio] ?? "1024x1365";
     // Step 1: LLM 规划每页排版结构
     const planResponse = await invokeLLM({
       messages: [
         { role: "system", content: `你是一个专业的图文排版设计师，擅长为建筑设计事务所制作高质量的品牌视觉内容。
 任务：根据用户内容描述，规划 ${job.pageCount} 页${docTypeName}的排版方案。
+重要说明：每页的文字内容将由前端直接叠加在图片上方，因此文字层的位置和内容需要设计合理。
 每页需要规划：
 1. 排版布局类型：hero_image(大图全屏+文字叠加) / text_left_image_right(左文右图) / image_left_text_right(左图右文) / full_text_grid(纯文字) / image_grid(图片网格) / quote_highlight(大字引语) / two_column(双栏) / timeline_strip(时间轴)
 2. 背景色(hex)
-3. 文字层：标题/副标题/正文/标注等，内容要真实填写
+3. 文字层：标题/副标题/正文/标注等，内容要真实填写。其中 position 字段表示文字在页面中的位置（top/middle/bottom）和左右对齐（left/center/right）
 4. 是否需要素材图
 5. 装饰元素（色块/线条/几何形）${styleGuideHint}` },
-        { role: "user", content: `文档类型：${docTypeName}\n内容描述：${job.contentText}\n页数：${job.pageCount}\n素材图数量：${assetUrls.length}` },
+        { role: "user", content: `文档类型：${docTypeName}
+内容描述：${job.contentText}
+页数：${job.pageCount}
+素材图数量：${assetUrls.length}` },
       ],
       response_format: {
         type: "json_schema",
@@ -4567,32 +4580,34 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number) {
     const planContent = planResponse.choices[0]?.message?.content;
     if (!planContent) throw new Error("未获得排版规划结果");
     const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
-    // Step 2: 为每页生成图片
+    // Step 2: 为每页生成纯视觉底图（不含文字，文字由前端 HTML 叠加）
     const generatedPages: any[] = [];
     for (const page of plan.pages) {
       const sg = packStyleGuide;
       const bgColor = page.backgroundColor || sg?.colorPalette?.background || "#1a1a1a";
-      const titleLayer = page.textLayers.find((l: any) => l.role === "title");
-      const layoutDescriptions: Record<string, string> = {
-        hero_image: "full-bleed background image with text overlay, large title",
-        text_left_image_right: "left half text area, right half image, minimal grid",
-        image_left_text_right: "left half image, right half text with margins",
-        full_text_grid: "clean typographic layout, structured text grid",
-        image_grid: "multiple images in grid with minimal text labels",
-        quote_highlight: "large typographic quote, minimal background, high contrast",
-        two_column: "two equal columns, clean dividing line",
-        timeline_strip: "horizontal timeline with nodes and text labels",
+      // 根据布局类型生成底图描述（不含文字，仅描述视觉元素）
+      const bgLayoutDescriptions: Record<string, string> = {
+        hero_image: "full-bleed atmospheric background photo, architectural space, no text, no typography",
+        text_left_image_right: "right half architectural photo, left half solid color background panel, clean split composition, no text",
+        image_left_text_right: "left half architectural photo, right half solid color background panel, clean split composition, no text",
+        full_text_grid: "clean solid color background with subtle geometric grid lines, minimal texture, no text",
+        image_grid: "2x2 or 3x2 grid of architectural photos separated by thin lines, no text",
+        quote_highlight: "minimal solid color background with a single thin horizontal accent line, no text",
+        two_column: "clean solid color background with a single vertical dividing line, no text",
+        timeline_strip: "clean solid color background with horizontal timeline dots and lines, no text",
       };
-      const layoutDesc = layoutDescriptions[page.layoutType] || "clean modern layout";
-      const titleText = titleLayer?.text || "";
-      const styleDesc = sg ? `${sg.tone === "dark" ? "dark" : "light"} color scheme, ${sg.styleKeywords?.slice(0, 3).join(", ")} style` : "modern architectural design style";
-      const imagePrompt = `Professional ${docTypeName} page design, ${layoutDesc}. Title: "${titleText}". Background color ${bgColor}. ${styleDesc}. Architecture and design studio aesthetic, clean typography, high-end brand identity. No watermarks, no borders.`;
+      const bgDesc = bgLayoutDescriptions[page.layoutType] || "clean minimal solid color background, no text";
+      const styleDesc = sg
+        ? `${sg.tone === "dark" ? "dark" : "light"} color scheme with ${sg.styleKeywords?.slice(0, 3).join(", ")} aesthetic`
+        : "modern minimalist architectural design studio aesthetic";
+      // 底图仅包含视觉元素，不含任何文字、标题、标注
+      const imagePrompt = `${bgDesc}. Background color ${bgColor}. ${styleDesc}. High quality, professional photography or graphic design. Absolutely NO text, NO words, NO letters, NO numbers, NO typography of any kind. Pure visual background only.`;
       let imageUrl = "";
       try {
         const originalImages = page.needsImage && assetUrls[page.assetIndex]
           ? [{ url: assetUrls[page.assetIndex], mimeType: "image/jpeg" as const }]
           : undefined;
-        const result = await generateImage({ prompt: imagePrompt, originalImages });
+        const result = await generateImage({ prompt: imagePrompt, originalImages, size: imageSize });
         imageUrl = result.url ?? "";
       } catch (imgErr: any) {
         console.warn(`[GraphicLayout] Image gen failed for page ${page.pageIndex}:`, imgErr.message);
