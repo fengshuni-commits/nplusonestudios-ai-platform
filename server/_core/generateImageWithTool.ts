@@ -207,7 +207,10 @@ export async function generateImageWithTool(
   const tool = await getAiToolById(toolId);
 
   // If tool has no external API configured, fall back to built-in AI
-  if (!tool || !tool.apiEndpoint || !tool.apiKeyEncrypted) {
+  // Exception: jimeng/volcengine uses HMAC auth and does NOT need apiEndpoint
+  const _toolProvider = tool?.provider?.toLowerCase() || "";
+  const _isJimeng = _toolProvider === "jimeng" || _toolProvider === "volcengine";
+  if (!tool || (!tool.apiEndpoint && !_isJimeng) || !tool.apiKeyEncrypted) {
     console.log(`[generateImageWithTool] Tool ${toolId} has no external API, using built-in AI`);
     const result = await generateImage(genOpts);
     return { url: result.url || "", modelName: tool?.name };
@@ -224,9 +227,10 @@ export async function generateImageWithTool(
   // Auto-detect provider from apiEndpoint if not explicitly set
   let provider = tool.provider?.toLowerCase() || "";
   if (!provider) {
-    if (tool.apiEndpoint.includes("dashscope.aliyuncs.com")) {
+    const ep = tool.apiEndpoint || "";
+    if (ep.includes("dashscope.aliyuncs.com")) {
       provider = "qwen";
-    } else if (tool.apiEndpoint.includes("generativelanguage.googleapis.com")) {
+    } else if (ep.includes("generativelanguage.googleapis.com")) {
       provider = "gemini";
     } else {
       provider = "unknown";
@@ -336,7 +340,7 @@ export async function generateImageWithTool(
       imageBuffer = await callGeminiImageApi({
         apiKey,
         modelName,
-        baseUrl: tool.apiEndpoint,
+        baseUrl: tool.apiEndpoint || "",
         prompt: genOpts.prompt,
         referenceImages: genOpts.originalImages,
         imageSize,

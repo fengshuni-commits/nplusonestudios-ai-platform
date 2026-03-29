@@ -1068,3 +1068,18 @@
 - [x] 前端：纪要生成后展示绿色存档成功提示，含「查看文档库 →」跳转链接
 - [x] 前端：ProjectDetail.tsx 文档库列表为 minutes 类型条目显示录音下载按鈕（话筒图标）
 - [x] 验证并保存检查点
+
+## Bug 修复：AI 平面图彩平图未显示
+- [ ] 排查生成接口调用是否成功
+- [ ] 排查图片 URL 是否正确返回
+- [ ] 排查前端图片展示逻辑
+- [ ] 修复并验证彩平图正常显示
+- [ ] 保存检查点
+
+## 功能：演示文稿 AI 工具选择 + PPT 预览
+- [x] 前端：左侧参数区添加 AiToolSelector（capability=document）
+- [x] 前端：生成按钮传入 toolId 参数
+- [x] 后端：presentation.generate 接口支持 toolId 参数
+- [x] 后端：invokeLLMWithUserTool 支持按 toolId 选择指定工具
+- [x] 前端：生成结果区嵌入 Office Online Viewer iframe 预览 PPT
+- [x] 验证并保存检查点

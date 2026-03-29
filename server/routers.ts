@@ -116,11 +116,9 @@ async function generatePptInBackground(
         }
       }
     }, userId);
-
     const structureContent = typeof structureResponse.choices[0]?.message?.content === 'string'
       ? structureResponse.choices[0].message.content
       : '{"slides":[]}';
-
     const slideData = JSON.parse(structureContent) as {
       slides: Array<{
         title: string; subtitle: string; bullets: string[];
@@ -3226,7 +3224,7 @@ const presentationJobStore = pptJobStore; // reuse same store, prefixed jobIds
 
 async function generatePresentationInBackground(
   jobId: string,
-  input: { title: string; content: string; imageUrls?: string[] },
+  input: { title: string; content: string; imageUrls?: string[]; toolId?: number },
   userId?: number
 ) {
   try {
@@ -3236,6 +3234,15 @@ async function generatePresentationInBackground(
     const imageContext = input.imageUrls && input.imageUrls.length > 0
       ? `\n\n用户提供了 ${input.imageUrls.length} 张项目图片，请在合适的幻灯片中引用它们（用 userImage:0, userImage:1 等占位符标注在 pexelsQuery 字段中，以便后续处理）。`
       : "";
+
+    // Resolve tool name for model logging
+    let resolvedModelName = "内置 AI";
+    if (input.toolId) {
+      try {
+        const tool = await db.getAiToolById(input.toolId);
+        if (tool?.name) resolvedModelName = tool.name;
+      } catch { /* ignore */ }
+    }
 
     const structureResponse = await invokeLLMWithUserTool({
       messages: [
@@ -3294,7 +3301,7 @@ async function generatePresentationInBackground(
           }
         }
       }
-    }, userId);
+    }, userId, input.toolId);
 
     const structureContent = typeof structureResponse.choices[0]?.message?.content === 'string'
       ? structureResponse.choices[0].message.content
@@ -3572,6 +3579,7 @@ const presentationRouter = router({
       title: z.string().min(1),
       content: z.string().min(1),
       imageUrls: z.array(z.string()).optional(),
+      toolId: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const jobId = `pres_${nanoid()}`;

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { AiToolSelector } from "@/components/AiToolSelector";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -80,6 +81,9 @@ export default function PresentationPage() {
   const [content, setContent] = useState("");
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+
+  // AI tool selection
+  const [selectedToolId, setSelectedToolId] = useState<number | undefined>(undefined);
 
   // Generation state
   const [jobId, setJobId] = useState<string | null>(null);
@@ -242,6 +246,7 @@ export default function PresentationPage() {
         title: title.trim(),
         content: content.trim(),
         imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+        toolId: selectedToolId,
       });
       setJobId(result.jobId);
     } catch (err: any) {
@@ -386,6 +391,17 @@ export default function PresentationPage() {
                 )}
               </div>
 
+              {/* AI Tool Selector */}
+              <div className="space-y-1.5">
+                <AiToolSelector
+                  capability="document"
+                  value={selectedToolId}
+                  onChange={setSelectedToolId}
+                  label="AI 模型"
+                  showBuiltIn={true}
+                />
+              </div>
+
               {/* Generate button */}
               <Button
                 className="w-full"
@@ -453,17 +469,32 @@ export default function PresentationPage() {
                       </p>
                     )}
                   </div>
-                  <Button asChild size="sm">
-                    <a href={resultUrl} download target="_blank" rel="noopener noreferrer">
-                      <FileDown className="h-4 w-4 mr-1.5" />
-                      下载 PPT
-                    </a>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button asChild size="sm">
+                      <a href={resultUrl} download target="_blank" rel="noopener noreferrer">
+                        <FileDown className="h-4 w-4 mr-1.5" />
+                        下载 PPT
+                      </a>
+                    </Button>
+                  </div>
                 </div>
                 <Separator />
-                <p className="text-xs text-muted-foreground">
-                  文件已保存至生成历史，可随时重新下载
-                </p>
+                {/* PPT Preview via Office Online Viewer */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">在线预览</p>
+                  <div className="relative w-full rounded-lg overflow-hidden border border-border bg-muted" style={{ paddingBottom: '56.25%' }}>
+                    <iframe
+                      src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resultUrl)}`}
+                      className="absolute inset-0 w-full h-full"
+                      frameBorder="0"
+                      allowFullScreen
+                      title="PPT 预览"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    预览由 Microsoft Office Online 提供，首次加载可能需要等待 10-20 秒
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}

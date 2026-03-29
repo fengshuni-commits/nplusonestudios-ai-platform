@@ -340,7 +340,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
  */
 export async function invokeLLMWithUserTool(
   params: InvokeParams,
-  userId?: number
+  userId?: number,
+  toolId?: number
 ): Promise<InvokeResult> {
   // Try to get user's default tool with an API key
   if (userId) {
@@ -349,15 +350,12 @@ export async function invokeLLMWithUserTool(
       const { aiTools } = await import("../../drizzle/schema");
       const { eq, and } = await import("drizzle-orm");
       const { decryptApiKey } = await import("./crypto");
-
       const db = await getDb();
       if (db) {
-        // Find the user's default active tool that has an API key
-        const defaultTools = await db
-          .select()
-          .from(aiTools)
-          .where(and(eq(aiTools.isDefault, true), eq(aiTools.isActive, true)))
-          .limit(1);
+        // If toolId is specified, use that specific tool; otherwise use default
+        const defaultTools = toolId
+          ? await db.select().from(aiTools).where(eq(aiTools.id, toolId)).limit(1)
+          : await db.select().from(aiTools).where(and(eq(aiTools.isDefault, true), eq(aiTools.isActive, true))).limit(1);
 
         if (defaultTools.length > 0) {
           const tool = defaultTools[0] as any;
