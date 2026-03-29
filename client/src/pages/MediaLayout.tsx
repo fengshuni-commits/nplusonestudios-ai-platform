@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
-  BookOpen, Layers, Maximize2, FolderOpen
+  BookOpen, Layers, Maximize2, FolderOpen, Pencil
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -38,12 +38,28 @@ interface StylePack {
   createdAt: Date;
 }
 
+interface TextBlock {
+  id: string;
+  role: "title" | "subtitle" | "body" | "caption" | "label";
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  color: string;
+  align: "left" | "center" | "right";
+}
+
 interface PageData {
   pageIndex: number;
-  layoutType: string;
   imageUrl: string;
-  textLayers: any[];
   backgroundColor: string;
+  textBlocks?: TextBlock[];
+  imageSize?: { width: number; height: number };
+  // legacy
+  layoutType?: string;
+  textLayers?: any[];
 }
 
 interface LayoutJob {
@@ -65,7 +81,6 @@ const DOC_TYPES = [
   { value: "custom", label: "自定义", icon: Sparkles },
 ];
 
-// 常用图幅选项
 const ASPECT_RATIOS = [
   { value: "3:4", label: "3:4", desc: "竖版标准" },
   { value: "4:3", label: "4:3", desc: "横版标准" },
@@ -76,18 +91,10 @@ const ASPECT_RATIOS = [
   { value: "A3", label: "A3", desc: "420×297mm" },
 ];
 
-// 图幅比例 → CSS aspect-ratio
 const RATIO_CSS: Record<string, string> = {
   "3:4": "3/4", "4:3": "4/3", "1:1": "1/1",
   "16:9": "16/9", "9:16": "9/16",
   "A4": "210/297", "A3": "297/420",
-};
-
-// 图幅比例 → 内部渲染尺寸（用于 iframe scale）
-const RATIO_DIMS: Record<string, { w: number; h: number }> = {
-  "3:4": { w: 750, h: 1000 }, "4:3": { w: 1000, h: 750 }, "1:1": { w: 800, h: 800 },
-  "16:9": { w: 1200, h: 675 }, "9:16": { w: 675, h: 1200 },
-  "A4": { w: 794, h: 1123 }, "A3": { w: 1123, h: 1587 },
 };
 
 // ─── Style Pack Card ──────────────────────────────────────────────────────────
@@ -151,60 +158,94 @@ function StylePackCard({
   );
 }
 
-// ─── HTML Page Viewer (iframe) ────────────────────────────────────────────────
+// ─── Page Image Viewer with Text Block Hotspots ───────────────────────────────
 
-function HtmlPageViewer({ html, aspectRatio }: { html: string; aspectRatio: string }) {
+function PageImageViewer({
+  page,
+  aspectRatio,
+  onClickBlock,
+  inpaintingBlockId,
+}: {
+  page: PageData;
+  aspectRatio: string;
+  onClickBlock: (block: TextBlock) => void;
+  inpaintingBlockId?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const dims = RATIO_DIMS[aspectRatio] || { w: 750, h: 1000 };
+  const [containerW, setContainerW] = useState(0);
+  const cssRatio = RATIO_CSS[aspectRatio] || "3/4";
+  const imgW = page.imageSize?.width ?? 1024;
+  const imgH = page.imageSize?.height ?? 1024;
 
   useEffect(() => {
-    const updateScale = () => {
-      if (containerRef.current) {
-        const containerW = containerRef.current.clientWidth;
-        setScale(containerW / dims.w);
-      }
+    const update = () => {
+      if (containerRef.current) setContainerW(containerRef.current.clientWidth);
     };
-    updateScale();
-    const ro = new ResizeObserver(updateScale);
+    update();
+    const ro = new ResizeObserver(update);
     if (containerRef.current) ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, [dims.w]);
+  }, []);
 
-  const cssRatio = RATIO_CSS[aspectRatio] || "3/4";
+  const scale = containerW > 0 ? containerW / imgW : 1;
+  const containerH = imgH * scale;
 
   return (
-    <div ref={containerRef} className="relative w-full rounded-xl overflow-hidden shadow-2xl" style={{ aspectRatio: cssRatio }}>
-      <div style={{ width: dims.w, height: dims.h, transform: `scale(${scale})`, transformOrigin: "top left", position: "absolute", top: 0, left: 0 }}>
-        <iframe
-          srcDoc={html}
-          style={{ width: dims.w, height: dims.h, border: "none", display: "block" }}
-          sandbox="allow-same-origin"
-          title="layout-preview"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Thumbnail (plain color or image) ────────────────────────────────────────
-
-function PageThumb({ page, html, aspectRatio, active, onClick }: {
-  page: PageData; html?: string; aspectRatio: string; active: boolean; onClick: () => void;
-}) {
-  const thumbRatio = RATIO_CSS[aspectRatio] || "3/4";
-  return (
-    <div onClick={onClick}
-      className={`relative shrink-0 rounded overflow-hidden cursor-pointer border-2 transition-all ${
-        active ? "border-[#B87333]" : "border-transparent hover:border-white/20"
-      }`}
-      style={{ width: "56px", aspectRatio: thumbRatio }}>
+    <div
+      ref={containerRef}
+      className="relative w-full rounded-xl overflow-hidden shadow-2xl"
+      style={{ aspectRatio: cssRatio }}
+    >
+      {/* 整页图片 */}
       {page.imageUrl ? (
-        <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
+        <img
+          src={page.imageUrl}
+          alt={`第 ${page.pageIndex + 1} 页`}
+          className="absolute inset-0 w-full h-full object-cover"
+          draggable={false}
+        />
       ) : (
-        <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
+        <div className="absolute inset-0" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
       )}
-      <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-1 rounded">{page.pageIndex + 1}</div>
+
+      {/* 文字块热区叠加 */}
+      {containerW > 0 && (page.textBlocks ?? []).map((block) => {
+        const left = block.x * scale;
+        const top = block.y * scale;
+        const width = block.width * scale;
+        const height = block.height * scale;
+        const isInpainting = inpaintingBlockId === block.id;
+
+        return (
+          <div
+            key={block.id}
+            onClick={() => onClickBlock(block)}
+            title={`点击编辑：${block.text}`}
+            className={`absolute group cursor-pointer transition-all ${
+              isInpainting
+                ? "ring-2 ring-[#B87333] bg-[#B87333]/20 animate-pulse"
+                : "hover:ring-2 hover:ring-white/40 hover:bg-white/10"
+            } rounded`}
+            style={{ left, top, width, height }}
+          >
+            {/* 编辑图标 */}
+            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center transition-opacity ${
+              isInpainting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}>
+              {isInpainting
+                ? <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
+                : <Pencil className="w-2 h-2 text-white" />
+              }
+            </div>
+            {/* 角色标签 */}
+            <div className={`absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap transition-opacity ${
+              isInpainting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}>
+              {block.role} · {block.text.slice(0, 20)}{block.text.length > 20 ? "…" : ""}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -254,6 +295,12 @@ export default function MediaLayout() {
   const [currentPage, setCurrentPage] = useState(0);
   const [generating, setGenerating] = useState(false);
 
+  // Inpainting state
+  const [editingBlock, setEditingBlock] = useState<TextBlock | null>(null);
+  const [editingPageIndex, setEditingPageIndex] = useState<number>(0);
+  const [newText, setNewText] = useState("");
+  const [inpaintingBlockId, setInpaintingBlockId] = useState<string | undefined>();
+
   const generateMutation = trpc.graphicLayout.generate.useMutation({
     onSuccess: (data) => {
       setActiveJobId(data.id);
@@ -271,6 +318,20 @@ export default function MediaLayout() {
     onSuccess: () => { refetchJobs(); setActiveJobId(undefined); toast.success("已删除"); },
   });
 
+  const inpaintMutation = trpc.graphicLayout.inpaintTextBlock.useMutation({
+    onSuccess: () => {
+      toast.success("文字已更新");
+      setEditingBlock(null);
+      setNewText("");
+      setInpaintingBlockId(undefined);
+      refetchActiveJob();
+    },
+    onError: (err) => {
+      toast.error("重绘失败：" + err.message);
+      setInpaintingBlockId(undefined);
+    },
+  });
+
   const activeJobQueryInput = useMemo(() => ({ id: activeJobId! }), [activeJobId]);
   const { data: activeJobData, refetch: refetchActiveJob } = trpc.graphicLayout.status.useQuery(
     activeJobQueryInput,
@@ -285,7 +346,6 @@ export default function MediaLayout() {
     }
   }, [activeJob?.status]);
 
-  // 上传单个文件到 /api/upload/layout-pack
   const uploadFile = useCallback(async (file: File): Promise<{ url: string; key: string }> => {
     const formData = new FormData();
     formData.append("file", file);
@@ -294,13 +354,11 @@ export default function MediaLayout() {
     return res.json();
   }, []);
 
-  // 版式包上传（支持多图 → 上传第一张作为代表，后续可扩展）
   const handlePackFilesUpload = async (files: FileList) => {
     if (!packNameInput.trim()) { toast.error("请先输入版式包名称"); return; }
     if (files.length === 0) return;
     setUploadingPack(true);
     try {
-      // 如果是多图，上传第一张作为版式参考（后续可扩展为多图分析）
       const file = files[0];
       const { url, key } = await uploadFile(file);
       const ext = file.name.split(".").pop()?.toLowerCase();
@@ -319,7 +377,6 @@ export default function MediaLayout() {
     }
   };
 
-  // 素材图上传（支持多图同时上传）
   const handleAssetFiles = async (files: FileList) => {
     if (files.length === 0) return;
     setUploadingAsset(true);
@@ -359,10 +416,27 @@ export default function MediaLayout() {
     });
   };
 
-  const pages = activeJob?.pages ?? [];
-  const htmlPages = activeJob?.htmlPages ?? [];
+  const handleClickBlock = (block: TextBlock) => {
+    setEditingBlock(block);
+    setEditingPageIndex(currentPage);
+    setNewText(block.text);
+  };
+
+  const handleConfirmEdit = () => {
+    if (!activeJobId || !editingBlock || !newText.trim()) return;
+    setInpaintingBlockId(editingBlock.id);
+    setEditingBlock(null);
+    inpaintMutation.mutate({
+      jobId: activeJobId,
+      pageIndex: editingPageIndex,
+      blockId: editingBlock.id,
+      newText: newText.trim(),
+      imageToolId: imageToolId ?? undefined,
+    });
+  };
+
+  const pages = (activeJob?.pages ?? []) as PageData[];
   const currentPageData = pages[currentPage];
-  const currentHtml = htmlPages[currentPage];
   const activeAspectRatio = activeJob?.aspectRatio || aspectRatio;
 
   return (
@@ -374,7 +448,7 @@ export default function MediaLayout() {
         </div>
         <div>
           <h1 className="text-base font-semibold text-white">图文排版</h1>
-          <p className="text-xs text-white/40">AI 学习参考版式，生成品牌图文内容</p>
+          <p className="text-xs text-white/40">AI 生成整页图文排版，点击文字区域可局部重绘编辑</p>
         </div>
       </div>
 
@@ -474,7 +548,7 @@ export default function MediaLayout() {
                 className="bg-white/5 border-white/10 text-white text-sm min-h-[100px] resize-none" />
             </div>
 
-            {/* Asset images — 支持多图同时选择 */}
+            {/* Asset images */}
             <div>
               <Label className="text-xs text-white/50 mb-1.5 flex items-center justify-between">
                 <span>素材图（可选）</span>
@@ -501,7 +575,6 @@ export default function MediaLayout() {
                   ) : <Plus className="w-3 h-3 text-white/30" />}
                 </div>
               </div>
-              {/* multiple 支持多图同时选择 */}
               <input ref={assetInputRef} type="file" accept="image/*" multiple className="hidden"
                 onChange={(e) => { if (e.target.files?.length) handleAssetFiles(e.target.files); e.target.value = ""; }} />
             </div>
@@ -534,7 +607,7 @@ export default function MediaLayout() {
               </div>
               <div>
                 <p className="text-white/40 text-sm">在左侧配置内容后点击「生成排版」</p>
-                <p className="text-white/20 text-xs mt-1">可选择版式包让 AI 学习参考风格</p>
+                <p className="text-white/20 text-xs mt-1">生成后可点击图片中的文字区域进行局部重绘编辑</p>
               </div>
             </div>
           ) : !activeJob ? (
@@ -546,7 +619,7 @@ export default function MediaLayout() {
               <Loader2 className="w-8 h-8 text-[#B87333] animate-spin" />
               <div className="text-center">
                 <p className="text-white/60 text-sm">AI 正在生成图文排版...</p>
-                <p className="text-white/30 text-xs mt-1">每页约需 10-20 秒，请耐心等待</p>
+                <p className="text-white/30 text-xs mt-1">每页约需 15-30 秒，请耐心等待</p>
               </div>
             </div>
           ) : activeJob.status === "failed" ? (
@@ -568,6 +641,11 @@ export default function MediaLayout() {
                   {activeAspectRatio && (
                     <Badge variant="outline" className="text-[10px] border-white/10 text-white/30">{activeAspectRatio}</Badge>
                   )}
+                  {currentPageData?.textBlocks && currentPageData.textBlocks.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] border-[#B87333]/30 text-[#B87333]/60">
+                      <Pencil className="w-2.5 h-2.5 mr-1" />悬停文字可编辑
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
@@ -582,33 +660,39 @@ export default function MediaLayout() {
                 </div>
               </div>
 
-              {/* Page preview — iframe 渲染 HTML，彻底解决文字重叠 */}
+              {/* Page preview */}
               <div className="flex-1 overflow-y-auto p-6 flex items-start justify-center">
                 <div className="w-full max-w-sm">
-                  {currentHtml ? (
-                    <HtmlPageViewer html={currentHtml} aspectRatio={activeAspectRatio} />
-                  ) : currentPageData ? (
-                    /* 兼容旧数据：无 HTML 时显示纯色底图 */
-                    <div className="relative w-full rounded-xl overflow-hidden shadow-2xl"
-                      style={{ aspectRatio: RATIO_CSS[activeAspectRatio] || "3/4", backgroundColor: currentPageData.backgroundColor || "#1a1a1a" }}>
-                      {currentPageData.imageUrl && (
-                        <img src={currentPageData.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                      )}
-                      <div className="absolute bottom-2 left-2 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/60">
-                        {currentPageData.pageIndex + 1}
-                      </div>
-                    </div>
-                  ) : null}
+                  {currentPageData && (
+                    <PageImageViewer
+                      page={currentPageData}
+                      aspectRatio={activeAspectRatio}
+                      onClickBlock={handleClickBlock}
+                      inpaintingBlockId={inpaintingBlockId}
+                    />
+                  )}
                 </div>
               </div>
 
               {/* Page strip */}
               <div className="px-6 py-3 border-t border-white/8 flex gap-2 overflow-x-auto shrink-0">
-                {pages.map((page, i) => (
-                  <PageThumb key={i} page={page} html={htmlPages[i]}
-                    aspectRatio={activeAspectRatio} active={i === currentPage}
-                    onClick={() => setCurrentPage(i)} />
-                ))}
+                {pages.map((page, i) => {
+                  const thumbRatio = RATIO_CSS[activeAspectRatio] || "3/4";
+                  return (
+                    <div key={i} onClick={() => setCurrentPage(i)}
+                      className={`relative shrink-0 rounded overflow-hidden cursor-pointer border-2 transition-all ${
+                        i === currentPage ? "border-[#B87333]" : "border-transparent hover:border-white/20"
+                      }`}
+                      style={{ width: "56px", aspectRatio: thumbRatio }}>
+                      {page.imageUrl ? (
+                        <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
+                      )}
+                      <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-1 rounded">{page.pageIndex + 1}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -674,7 +758,6 @@ export default function MediaLayout() {
             </div>
             <div>
               <Label className="text-xs text-white/50 mb-1.5 block">上传文件</Label>
-              {/* 两个上传按钮：单文件/多图 和 文件夹 */}
               <div className="grid grid-cols-2 gap-2">
                 <div role="button" tabIndex={0} onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-white/15 rounded-xl p-4 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
@@ -695,10 +778,8 @@ export default function MediaLayout() {
                   <p className="text-[10px] text-white/20 mt-0.5">上传整个文件夹</p>
                 </div>
               </div>
-              {/* 多图选择 */}
               <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden"
                 onChange={(e) => { if (e.target.files?.length) handlePackFilesUpload(e.target.files); e.target.value = ""; }} />
-              {/* 文件夹选择 */}
               <input ref={folderInputRef} type="file" accept="image/*,.pdf"
                 // @ts-ignore
                 webkitdirectory="" directory="" multiple className="hidden"
@@ -708,6 +789,51 @@ export default function MediaLayout() {
               AI 将分析文件的配色、字体、排版模式，生成可复用的版式风格包。
             </p>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Text Block Edit Dialog */}
+      <Dialog open={!!editingBlock} onOpenChange={(open) => { if (!open) { setEditingBlock(null); setNewText(""); } }}>
+        <DialogContent className="bg-[#1a1a1a] border-white/10 text-white max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-[#B87333]" />
+              编辑文字
+            </DialogTitle>
+          </DialogHeader>
+          {editingBlock && (
+            <div className="flex flex-col gap-4 pt-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] border-white/15 text-white/50 capitalize">
+                  {editingBlock.role}
+                </Badge>
+                <span className="text-[11px] text-white/30">原文字：{editingBlock.text}</span>
+              </div>
+              <div>
+                <Label className="text-xs text-white/50 mb-1.5 block">新文案</Label>
+                <Textarea
+                  value={newText}
+                  onChange={(e) => setNewText(e.target.value)}
+                  placeholder="输入新的文字内容..."
+                  className="bg-white/5 border-white/10 text-white text-sm min-h-[80px] resize-none"
+                  autoFocus
+                />
+              </div>
+              <p className="text-[11px] text-white/30">
+                AI 将对该文字区域进行局部重绘，保持周围图像不变，仅更新文字内容。
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => { setEditingBlock(null); setNewText(""); }}
+                  className="flex-1 border-white/15 text-white/60 bg-transparent hover:bg-white/5">
+                  取消
+                </Button>
+                <Button onClick={handleConfirmEdit} disabled={!newText.trim() || inpaintMutation.isPending}
+                  className="flex-1 bg-[#B87333] hover:bg-[#D4956B] text-white">
+                  {inpaintMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />重绘中...</> : "确认重绘"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

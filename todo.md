@@ -1211,3 +1211,13 @@
 - [x] 数据库新增 htmlPages 字段存储 LLM 生成的 HTML 页面
 - [x] 测试验证：18 项 Vitest 测试全部通过
 - [x] 保存检查点
+
+## 功能重构：图文排版第四轮 - 整页图像生成 + Inpainting 编辑
+- [x] 确认图像生成 API 的 inpainting 调用方式（originalImages + mask）
+- [x] 后端：LLM 规划排版并输出文字块坐标（textBlocks: [{text, x, y, width, height, fontSize, color}]）
+- [x] 后端：图像 API 生成整页图片（文字、色块、图形、照片都在图片内）
+- [x] 后端：新增 inpainting 接口（接收 jobId, pageIndex, blockIndex, newText，生成 mask，调用 inpainting API）
+- [x] 前端：图片展示时叠加透明可点击文字区域（根据 textBlocks 坐标）
+- [x] 前端：点击文字区域弹出编辑框，输入新文案后调用 inpainting 接口
+- [x] 前端：inpainting 完成后更新该页图片
+- [x] 测试验证并保存检查点
