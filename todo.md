@@ -1203,3 +1203,11 @@
 - [x] 修复：将 AiToolSelector 的 capability 改为 "rendering"，Gemini 3、即梦等工具均可被列出和选择
 - [x] 验证：TSC 无错误，服务器热更新已生效
 - [x] 保存检查点
+
+## 功能重构：图文排版第三轮改进
+- [x] 研究 Lovart 品牌手册生成方式，参考最佳实践
+- [x] 重构生成方案：LLM 直接生成完整 HTML/CSS 页面，前端用 iframe 渲染，彻底解决文字重叠和比例问题
+- [x] 版式学习上传：支持多图同时选择（multiple）和文件夹上传（webkitdirectory）
+- [x] 数据库新增 htmlPages 字段存储 LLM 生成的 HTML 页面
+- [x] 测试验证：18 项 Vitest 测试全部通过
+- [x] 保存检查点

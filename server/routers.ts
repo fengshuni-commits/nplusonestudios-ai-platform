@@ -4515,107 +4515,93 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
       if (pack?.styleGuide) {
         packStyleGuide = pack.styleGuide as any;
         const sg = packStyleGuide;
-        styleGuideHint = `\n参考版式包风格（${pack.name}）：\n- 配色：主色 ${sg.colorPalette?.primary}，背景 ${sg.colorPalette?.background}，文字 ${sg.colorPalette?.text}，强调 ${sg.colorPalette?.accent}\n- 字体：${sg.typography?.titleFont} / ${sg.typography?.bodyFont}\n- 调性：${sg.tone === "dark" ? "深色" : sg.tone === "light" ? "浅色" : "混合"}\n- 密度：${sg.density}\n- 风格关键词：${sg.styleKeywords?.join("、")}\n- 排版模式参考：${sg.layoutPatterns?.slice(0, 3).map((p: any) => p.patternName).join("、")}`;
+        styleGuideHint = `\n参考版式包风格（${pack.name}）：\n- 配色：主色 ${sg.colorPalette?.primary}，背景 ${sg.colorPalette?.background}，文字 ${sg.colorPalette?.text}，强调 ${sg.colorPalette?.accent}\n- 字体：${sg.typography?.titleFont} / ${sg.typography?.bodyFont}\n- 调性：${sg.tone === "dark" ? "深色" : sg.tone === "light" ? "浅色" : "混合"}\n- 风格关键词：${sg.styleKeywords?.join("、")}`;
       }
     }
     const docTypeNames: Record<string, string> = { brand_manual: "品牌手册", product_detail: "商品详情页", project_board: "项目图板", custom: "自定义图文排版" };
     const docTypeName = docTypeNames[job.docType] ?? "图文排版";
     const assetUrls = (job.assetUrls as string[]) ?? [];
     const aspectRatio = (job as any).aspectRatio ?? "3:4";
-    // 图幅比例 → 图像尺寸
+
+    // 图幅比例 → CSS 像素尺寸
+    const aspectRatioToCss: Record<string, { width: number; height: number }> = {
+      "3:4": { width: 750, height: 1000 }, "4:3": { width: 1000, height: 750 }, "1:1": { width: 800, height: 800 },
+      "16:9": { width: 1200, height: 675 }, "9:16": { width: 675, height: 1200 },
+      "A4": { width: 794, height: 1123 }, "A3": { width: 1123, height: 1587 },
+    };
+    const pageDimensions = aspectRatioToCss[aspectRatio] ?? { width: 750, height: 1000 };
+
+    // 图幅比例 → 图像生成尺寸
     const aspectRatioToSize: Record<string, string> = {
       "3:4": "1024x1365", "4:3": "1365x1024", "1:1": "1024x1024",
       "16:9": "1536x864", "9:16": "864x1536",
       "A4": "794x1123", "A3": "1123x1587",
     };
     const imageSize = aspectRatioToSize[aspectRatio] ?? "1024x1365";
-    // Step 1: LLM 规划每页排版结构
-    const planResponse = await invokeLLM({
-      messages: [
-        { role: "system", content: `你是一个专业的图文排版设计师，擅长为建筑设计事务所制作高质量的品牌视觉内容。
-任务：根据用户内容描述，规划 ${job.pageCount} 页${docTypeName}的排版方案。
-重要说明：每页的文字内容将由前端直接叠加在图片上方，因此文字层的位置和内容需要设计合理。
-每页需要规划：
-1. 排版布局类型：hero_image(大图全屏+文字叠加) / text_left_image_right(左文右图) / image_left_text_right(左图右文) / full_text_grid(纯文字) / image_grid(图片网格) / quote_highlight(大字引语) / two_column(双栏) / timeline_strip(时间轴)
-2. 背景色(hex)
-3. 文字层：标题/副标题/正文/标注等，内容要真实填写。其中 position 字段表示文字在页面中的位置（top/middle/bottom）和左右对齐（left/center/right）
-4. 是否需要素材图
-5. 装饰元素（色块/线条/几何形）${styleGuideHint}` },
-        { role: "user", content: `文档类型：${docTypeName}
-内容描述：${job.contentText}
-页数：${job.pageCount}
-素材图数量：${assetUrls.length}` },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "graphic_layout_plan",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              pages: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    pageIndex: { type: "number" },
-                    layoutType: { type: "string", enum: ["hero_image", "text_left_image_right", "image_left_text_right", "full_text_grid", "image_grid", "quote_highlight", "two_column", "timeline_strip"] },
-                    backgroundColor: { type: "string" },
-                    needsImage: { type: "boolean" },
-                    assetIndex: { type: "number" },
-                    textLayers: { type: "array", items: { type: "object", properties: { id: { type: "string" }, role: { type: "string", enum: ["title", "subtitle", "body", "caption", "label", "quote", "number"] }, text: { type: "string" }, fontSize: { type: "number" }, fontWeight: { type: "string", enum: ["normal", "medium", "semibold", "bold"] }, color: { type: "string" }, align: { type: "string", enum: ["left", "center", "right"] } }, required: ["id", "role", "text", "fontSize", "fontWeight", "color", "align"], additionalProperties: false } },
-                    decorElements: { type: "array", items: { type: "object", properties: { type: { type: "string", enum: ["rect", "line", "circle", "dot_grid"] }, color: { type: "string" }, opacity: { type: "number" }, position: { type: "string" } }, required: ["type", "color", "opacity", "position"], additionalProperties: false } },
-                  },
-                  required: ["pageIndex", "layoutType", "backgroundColor", "needsImage", "assetIndex", "textLayers", "decorElements"],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ["pages"],
-            additionalProperties: false,
-          },
-        },
-      },
-    });
-    const planContent = planResponse.choices[0]?.message?.content;
-    if (!planContent) throw new Error("未获得排版规划结果");
-    const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
-    // Step 2: 为每页生成底图
-    // 策略：纯色/几何版式（full_text_grid/quote_highlight/two_column/timeline_strip）完全不调用图像 API，
-    // 直接用 backgroundColor 作为纯色底图，避免 AI 在图像中生成文字造成混乱。
-    // 只有需要照片的版式（hero_image/image_grid/text_left_image_right/image_left_text_right）才调用图像 API，
-    // 且 prompt 只描述照片场景，不含任何排版或文字描述。
-    const PHOTO_LAYOUTS = new Set(["hero_image", "image_grid", "text_left_image_right", "image_left_text_right"]);
+
+    const sg = packStyleGuide;
+    const colorScheme = sg
+      ? `主色:${sg.colorPalette?.primary}, 背景:${sg.colorPalette?.background}, 文字:${sg.colorPalette?.text}, 强调:${sg.colorPalette?.accent}`
+      : "深色系：背景 #0f0f0f，文字 #ffffff，强调色 #c8a96e（金色）";
+
+    // 为每页生成完整 HTML
+    const htmlPages: string[] = [];
     const generatedPages: any[] = [];
-    for (const page of plan.pages) {
-      const sg = packStyleGuide;
-      const bgColor = page.backgroundColor || sg?.colorPalette?.background || "#1a1a1a";
-      let imageUrl = "";
-      // 只有照片类版式才调用图像 API
-      if (PHOTO_LAYOUTS.has(page.layoutType)) {
+
+    for (let pageIdx = 0; pageIdx < job.pageCount; pageIdx++) {
+      // 确定当前页的背景图
+      let bgImageUrl = assetUrls[pageIdx % assetUrls.length] ?? "";
+
+      // 如果没有素材图且是第一页，尝试用 AI 生成一张背景照片
+      if (!bgImageUrl && pageIdx === 0) {
         try {
-          // prompt 只描述照片场景，不含任何文字/排版描述
           const photoStyle = sg
-            ? `${sg.tone === "dark" ? "dark moody" : "bright clean"} architectural photography, ${sg.styleKeywords?.slice(0, 2).join(", ")}`
-            : "modern minimalist architectural interior photography";
-          const photoPrompt = page.layoutType === "image_grid"
-            ? `${photoStyle}, multiple architectural spaces, grid composition`
-            : `${photoStyle}, single architectural space, high quality`;
-          const originalImages = page.needsImage && assetUrls[page.assetIndex]
-            ? [{ url: assetUrls[page.assetIndex], mimeType: "image/jpeg" as const }]
-            : undefined;
-          const result = await generateImageWithTool({ prompt: photoPrompt, originalImages, size: imageSize, toolId: imageToolId ?? null });
-          imageUrl = result.url ?? "";
-        } catch (imgErr: any) {
-          console.warn(`[GraphicLayout] Image gen failed for page ${page.pageIndex}:`, imgErr.message);
-          imageUrl = "";
-        }
+            ? `${sg.tone === "dark" ? "dark moody" : "bright clean"} architectural photography, ${sg.styleKeywords?.slice(0, 2).join(", ")}, no text, no words`
+            : "modern minimalist architectural interior photography, no text, no words, no typography";
+          const result = await generateImageWithTool({ prompt: photoStyle, size: imageSize, toolId: imageToolId ?? null });
+          bgImageUrl = result.url ?? "";
+        } catch { bgImageUrl = ""; }
       }
-      // 纯色/几何版式：imageUrl 保持空字符串，前端用 backgroundColor 渲染纯色底图
-      generatedPages.push({ pageIndex: page.pageIndex, layoutType: page.layoutType, imageUrl, textLayers: page.textLayers, decorElements: page.decorElements, backgroundColor: bgColor });
+
+      // LLM 生成单页完整 HTML/CSS
+      const bgImageInstruction = bgImageUrl
+        ? `背景图片 URL：${bgImageUrl}（使用 background-image: url('${bgImageUrl}'); background-size: cover; background-position: center; 并叠加半透明深色遮罩确保文字可读）`
+        : `使用纯色或渐变色背景（基于配色方案）`;
+
+      const pageHtmlResponse = await invokeLLM({
+        messages: [
+          { role: "system", content: `你是一个专业的品牌视觉设计师，擅长用 HTML/CSS 制作精美的排版页面。
+
+规则：
+1. 页面固定尺寸：width: ${pageDimensions.width}px; height: ${pageDimensions.height}px; overflow: hidden;
+2. 配色方案：${colorScheme}${styleGuideHint}
+3. 字体：在 <head> 引入 Google Fonts，标题用 Cormorant Garamond 或 Playfair Display，正文用 Inter 或 Noto Sans SC
+4. 排版要求：层次分明，有充分留白，文字不得溢出容器，不得相互重叠
+5. ${bgImageInstruction}
+6. 只用纯 HTML + CSS，不用任何 JS 库
+7. 返回完整 HTML 文档（从 <!DOCTYPE html> 到 </html>）
+8. 文字内容必须真实填写，不要用占位符` },
+          { role: "user", content: `文档类型：${docTypeName}，第 ${pageIdx + 1} 页 / 共 ${job.pageCount} 页\n内容描述：${job.contentText}\n\n请生成这一页的完整 HTML 排版页面。` },
+        ],
+      });
+
+      const rawHtml = pageHtmlResponse.choices[0]?.message?.content ?? "";
+      const htmlContent = typeof rawHtml === "string" ? rawHtml : JSON.stringify(rawHtml);
+      // 清除可能的 markdown 代码块包裹
+      const cleanHtml = htmlContent
+        .replace(/^```html\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/i, "").trim();
+
+      htmlPages.push(cleanHtml);
+      generatedPages.push({
+        pageIndex: pageIdx,
+        layoutType: "html",
+        imageUrl: bgImageUrl,
+        textLayers: [],
+        backgroundColor: sg?.colorPalette?.background ?? "#0f0f0f",
+      });
     }
-    await drizzleDb.update(graphicLayoutJobs).set({ status: "done", pages: generatedPages }).where(_eq(graphicLayoutJobs.id, jobId));
+
+    await drizzleDb.update(graphicLayoutJobs).set({ status: "done", pages: generatedPages, htmlPages } as any).where(_eq(graphicLayoutJobs.id, jobId));
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "未知错误";
     console.error(`[GraphicLayout] Generation failed for job ${jobId}:`, msg);

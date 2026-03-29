@@ -623,6 +623,8 @@ export const graphicLayoutJobs = mysqlTable("graphic_layout_jobs", {
   // 生成结果：每页图片 URL + 可编辑文字层（JSON 数组）
   // 每项：{ pageIndex, imageUrl, textLayers: [{ id, text, x, y, fontSize, color }] }
   pages: json("pages"),
+  // LLM 生成的每页完整 HTML 字符串数组
+  htmlPages: json("htmlPages"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
