@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
+import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Pencil, Check, X, Palette,
@@ -304,6 +305,7 @@ export default function MediaLayout() {
   const [contentText, setContentText] = useState("");
   const [titleInput, setTitleInput] = useState("");
   const [assetUrls, setAssetUrls] = useState<string[]>([]);
+  const [imageToolId, setImageToolId] = useState<number | undefined>(undefined);
   const [uploadingAsset, setUploadingAsset] = useState(false);
 
   // Jobs
@@ -402,6 +404,7 @@ export default function MediaLayout() {
       contentText: contentText.trim(),
       assetUrls,
       title: titleInput.trim() || undefined,
+      imageToolId: imageToolId ?? undefined,
     });
   };
 
@@ -547,6 +550,18 @@ export default function MediaLayout() {
               </div>
               <input ref={assetInputRef} type="file" accept="image/*" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAssetUpload(f); e.target.value = ""; }} />
+            </div>
+
+            {/* AI Tool Selector */}
+            <div>
+              <Label className="text-xs text-white/50 mb-1.5 block">图像生成工具</Label>
+              <AiToolSelector
+                capability="image_generation"
+                value={imageToolId}
+                onChange={(id) => setImageToolId(id ?? undefined)}
+                label="图像生成工具"
+                showBuiltIn={true}
+              />
             </div>
 
             <Button onClick={handleGenerate} disabled={generating || !contentText.trim()}

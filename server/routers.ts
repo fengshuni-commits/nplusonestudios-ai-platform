@@ -4317,6 +4317,7 @@ const graphicLayoutRouter = router({
       contentText: z.string().min(1),
       assetUrls: z.array(z.string()).optional(),
       title: z.string().optional(),
+      imageToolId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const drizzleDb = await db.getDb();
@@ -4330,7 +4331,7 @@ const graphicLayoutRouter = router({
       });
       const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
       if (!newJob) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建排版任务失败" });
-      generateGraphicLayoutAsync(newJob.id, ctx.user.id).catch(console.error);
+      generateGraphicLayoutAsync(newJob.id, ctx.user.id, input.imageToolId).catch(console.error);
       return { id: newJob.id, status: "pending" as const };
     }),
 
@@ -4498,7 +4499,7 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
 
 // ─── Graphic Layout Async Generation ─────────────────────────────────────────
 
-async function generateGraphicLayoutAsync(jobId: number, userId: number) {
+async function generateGraphicLayoutAsync(jobId: number, userId: number, imageToolId?: number) {
   const drizzleDb = await db.getDb();
   if (!drizzleDb) return;
   const { graphicLayoutJobs, graphicStylePacks } = await import("../drizzle/schema");
@@ -4580,38 +4581,38 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number) {
     const planContent = planResponse.choices[0]?.message?.content;
     if (!planContent) throw new Error("未获得排版规划结果");
     const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
-    // Step 2: 为每页生成纯视觉底图（不含文字，文字由前端 HTML 叠加）
+    // Step 2: 为每页生成底图
+    // 策略：纯色/几何版式（full_text_grid/quote_highlight/two_column/timeline_strip）完全不调用图像 API，
+    // 直接用 backgroundColor 作为纯色底图，避免 AI 在图像中生成文字造成混乱。
+    // 只有需要照片的版式（hero_image/image_grid/text_left_image_right/image_left_text_right）才调用图像 API，
+    // 且 prompt 只描述照片场景，不含任何排版或文字描述。
+    const PHOTO_LAYOUTS = new Set(["hero_image", "image_grid", "text_left_image_right", "image_left_text_right"]);
     const generatedPages: any[] = [];
     for (const page of plan.pages) {
       const sg = packStyleGuide;
       const bgColor = page.backgroundColor || sg?.colorPalette?.background || "#1a1a1a";
-      // 根据布局类型生成底图描述（不含文字，仅描述视觉元素）
-      const bgLayoutDescriptions: Record<string, string> = {
-        hero_image: "full-bleed atmospheric background photo, architectural space, no text, no typography",
-        text_left_image_right: "right half architectural photo, left half solid color background panel, clean split composition, no text",
-        image_left_text_right: "left half architectural photo, right half solid color background panel, clean split composition, no text",
-        full_text_grid: "clean solid color background with subtle geometric grid lines, minimal texture, no text",
-        image_grid: "2x2 or 3x2 grid of architectural photos separated by thin lines, no text",
-        quote_highlight: "minimal solid color background with a single thin horizontal accent line, no text",
-        two_column: "clean solid color background with a single vertical dividing line, no text",
-        timeline_strip: "clean solid color background with horizontal timeline dots and lines, no text",
-      };
-      const bgDesc = bgLayoutDescriptions[page.layoutType] || "clean minimal solid color background, no text";
-      const styleDesc = sg
-        ? `${sg.tone === "dark" ? "dark" : "light"} color scheme with ${sg.styleKeywords?.slice(0, 3).join(", ")} aesthetic`
-        : "modern minimalist architectural design studio aesthetic";
-      // 底图仅包含视觉元素，不含任何文字、标题、标注
-      const imagePrompt = `${bgDesc}. Background color ${bgColor}. ${styleDesc}. High quality, professional photography or graphic design. Absolutely NO text, NO words, NO letters, NO numbers, NO typography of any kind. Pure visual background only.`;
       let imageUrl = "";
-      try {
-        const originalImages = page.needsImage && assetUrls[page.assetIndex]
-          ? [{ url: assetUrls[page.assetIndex], mimeType: "image/jpeg" as const }]
-          : undefined;
-        const result = await generateImage({ prompt: imagePrompt, originalImages, size: imageSize });
-        imageUrl = result.url ?? "";
-      } catch (imgErr: any) {
-        console.warn(`[GraphicLayout] Image gen failed for page ${page.pageIndex}:`, imgErr.message);
+      // 只有照片类版式才调用图像 API
+      if (PHOTO_LAYOUTS.has(page.layoutType)) {
+        try {
+          // prompt 只描述照片场景，不含任何文字/排版描述
+          const photoStyle = sg
+            ? `${sg.tone === "dark" ? "dark moody" : "bright clean"} architectural photography, ${sg.styleKeywords?.slice(0, 2).join(", ")}`
+            : "modern minimalist architectural interior photography";
+          const photoPrompt = page.layoutType === "image_grid"
+            ? `${photoStyle}, multiple architectural spaces, grid composition`
+            : `${photoStyle}, single architectural space, high quality`;
+          const originalImages = page.needsImage && assetUrls[page.assetIndex]
+            ? [{ url: assetUrls[page.assetIndex], mimeType: "image/jpeg" as const }]
+            : undefined;
+          const result = await generateImageWithTool({ prompt: photoPrompt, originalImages, size: imageSize, toolId: imageToolId ?? null });
+          imageUrl = result.url ?? "";
+        } catch (imgErr: any) {
+          console.warn(`[GraphicLayout] Image gen failed for page ${page.pageIndex}:`, imgErr.message);
+          imageUrl = "";
+        }
       }
+      // 纯色/几何版式：imageUrl 保持空字符串，前端用 backgroundColor 渲染纯色底图
       generatedPages.push({ pageIndex: page.pageIndex, layoutType: page.layoutType, imageUrl, textLayers: page.textLayers, decorElements: page.decorElements, backgroundColor: bgColor });
     }
     await drizzleDb.update(graphicLayoutJobs).set({ status: "done", pages: generatedPages }).where(_eq(graphicLayoutJobs.id, jobId));
