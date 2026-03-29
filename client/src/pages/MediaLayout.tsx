@@ -556,7 +556,7 @@ export default function MediaLayout() {
             <div>
               <Label className="text-xs text-white/50 mb-1.5 block">图像生成工具</Label>
               <AiToolSelector
-                capability="image_generation"
+                capability="rendering"
                 value={imageToolId}
                 onChange={(id) => setImageToolId(id ?? undefined)}
                 label="图像生成工具"

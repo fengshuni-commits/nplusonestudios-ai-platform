@@ -1197,3 +1197,9 @@
 - [x] 修复根本原因：update mutation 中 accessKeyId 逻辑被错误嵌套在 apiKey 判断内，导致括号关闭位置错误
 - [x] 验证：18 项测试全部通过，TSC 无错误
 - [x] 保存检查点
+
+## Bug 修复：图文排版 AI 工具选择器只显示内置工具
+- [x] 排查根本原因：capability="image_generation" 与数据库中工具的 capabilities 字段不匹配（数据库存的是 "rendering"）
+- [x] 修复：将 AiToolSelector 的 capability 改为 "rendering"，Gemini 3、即梦等工具均可被列出和选择
+- [x] 验证：TSC 无错误，服务器热更新已生效
+- [x] 保存检查点
