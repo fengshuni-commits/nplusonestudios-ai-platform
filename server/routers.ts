@@ -4245,6 +4245,368 @@ ${layoutIdList}
   }
 }
 
+// ─── Graphic Style Packs Router ─────────────────────────────────────────────
+
+const graphicStylePacksRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return [];
+    const { graphicStylePacks } = await import("../drizzle/schema");
+    const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+    return drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.userId, ctx.user.id)).orderBy(_desc(graphicStylePacks.createdAt));
+  }),
+
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1).max(256),
+      sourceType: z.enum(["images", "pdf"]),
+      sourceFileUrl: z.string().url(),
+      sourceFileKey: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const { graphicStylePacks } = await import("../drizzle/schema");
+      const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+      await drizzleDb.insert(graphicStylePacks).values({
+        userId: ctx.user.id, name: input.name, sourceType: input.sourceType,
+        sourceFileUrl: input.sourceFileUrl, sourceFileKey: input.sourceFileKey, status: "pending",
+      });
+      const [newPack] = await drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.userId, ctx.user.id)).orderBy(_desc(graphicStylePacks.createdAt)).limit(1);
+      if (!newPack) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建版式包失败" });
+      extractGraphicStylePackAsync(newPack.id, input.sourceType, input.sourceFileUrl).catch(console.error);
+      return { id: newPack.id, status: "pending" as const };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicStylePacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      await drizzleDb.delete(graphicStylePacks).where(_and(_eq(graphicStylePacks.id, input.id), _eq(graphicStylePacks.userId, ctx.user.id)));
+      return { success: true };
+    }),
+
+  retry: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicStylePacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [pack] = await drizzleDb.select().from(graphicStylePacks).where(_and(_eq(graphicStylePacks.id, input.id), _eq(graphicStylePacks.userId, ctx.user.id))).limit(1);
+      if (!pack) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!pack.sourceFileUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "没有原始文件" });
+      await drizzleDb.update(graphicStylePacks).set({ status: "pending", errorMessage: null }).where(_eq(graphicStylePacks.id, input.id));
+      extractGraphicStylePackAsync(pack.id, pack.sourceType, pack.sourceFileUrl).catch(console.error);
+      return { success: true };
+    }),
+});
+
+// ─── Graphic Layout Router ────────────────────────────────────────────────────
+
+const graphicLayoutRouter = router({
+  generate: protectedProcedure
+    .input(z.object({
+      packId: z.number().optional(),
+      docType: z.enum(["brand_manual", "product_detail", "project_board", "custom"]),
+      pageCount: z.number().min(1).max(10).default(1),
+      contentText: z.string().min(1),
+      assetUrls: z.array(z.string()).optional(),
+      title: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+      await drizzleDb.insert(graphicLayoutJobs).values({
+        userId: ctx.user.id, packId: input.packId ?? null, docType: input.docType,
+        pageCount: input.pageCount, contentText: input.contentText,
+        assetUrls: input.assetUrls ?? [], title: input.title ?? null, status: "pending",
+      });
+      const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
+      if (!newJob) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建排版任务失败" });
+      generateGraphicLayoutAsync(newJob.id, ctx.user.id).catch(console.error);
+      return { id: newJob.id, status: "pending" as const };
+    }),
+
+  status: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.id), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      return job;
+    }),
+
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return [];
+    const { graphicLayoutJobs } = await import("../drizzle/schema");
+    const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+    return drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(50);
+  }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      await drizzleDb.delete(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.id), _eq(graphicLayoutJobs.userId, ctx.user.id)));
+      return { success: true };
+    }),
+
+  updateTextLayer: protectedProcedure
+    .input(z.object({ jobId: z.number(), pageIndex: z.number(), layerId: z.string(), text: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.jobId), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      const pages = (job.pages as any[]) ?? [];
+      const updatedPages = pages.map((page: any) => {
+        if (page.pageIndex !== input.pageIndex) return page;
+        return { ...page, textLayers: (page.textLayers ?? []).map((layer: any) => layer.id === input.layerId ? { ...layer, text: input.text } : layer) };
+      });
+      await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, input.jobId));
+      return { success: true };
+    }),
+});
+
+// ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
+
+async function extractGraphicStylePackAsync(packId: number, sourceType: string, fileUrl: string) {
+  const drizzleDb = await db.getDb();
+  if (!drizzleDb) return;
+  const { graphicStylePacks } = await import("../drizzle/schema");
+  const { eq: _eq } = await import("drizzle-orm");
+  await drizzleDb.update(graphicStylePacks).set({ status: "processing" }).where(_eq(graphicStylePacks.id, packId));
+  try {
+    const { execSync } = await import("child_process");
+    const { mkdtempSync, readFileSync, readdirSync } = await import("fs");
+    const { join } = await import("path");
+    const { tmpdir } = await import("os");
+    const tmpDir = mkdtempSync(join(tmpdir(), "graphic-style-"));
+    const imageContent: any[] = [];
+    try {
+      const fileExt = fileUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? "pdf";
+      const localFile = join(tmpDir, `source.${fileExt}`);
+      await new Promise<void>((resolve, reject) => {
+        const isHttps = fileUrl.startsWith("https");
+        import(isHttps ? "https" : "http").then(protocol => {
+          import("fs").then(fsModule => {
+            const file = fsModule.createWriteStream(localFile);
+            (protocol as any).get(fileUrl, (res: any) => { res.pipe(file); file.on("finish", () => { file.close(); resolve(); }); }).on("error", reject);
+          });
+        });
+      });
+      const tmpImgDir = join(tmpDir, "imgs");
+      execSync(`mkdir -p "${tmpImgDir}"`);
+      if (sourceType === "pdf") {
+        const pageCountResult = execSync(`pdfinfo "${localFile}" 2>/dev/null | grep Pages | awk '{print $2}'`).toString().trim();
+        const totalPages = parseInt(pageCountResult) || 1;
+        const maxSamples = Math.min(10, totalPages);
+        const step = Math.max(1, Math.floor(totalPages / maxSamples));
+        for (let i = 1; i <= totalPages && imageContent.length < maxSamples; i += step) {
+          const outPrefix = join(tmpImgDir, `page-${i}`);
+          try { execSync(`pdftoppm -r 150 -f ${i} -l ${i} -jpeg "${localFile}" "${outPrefix}"`); } catch {}
+        }
+      } else {
+        execSync(`cp "${localFile}" "${tmpImgDir}/page-1.jpg"`);
+      }
+      const imgFiles = readdirSync(tmpImgDir).filter(f => /\.(jpg|jpeg|png)$/i.test(f)).sort();
+      const maxImages = Math.min(10, imgFiles.length);
+      const stepImg = Math.max(1, Math.floor(imgFiles.length / maxImages));
+      const sampledFiles: string[] = [];
+      for (let i = 0; i < imgFiles.length && sampledFiles.length < maxImages; i += stepImg) sampledFiles.push(imgFiles[i]);
+      for (const imgFile of sampledFiles) {
+        const imgPath = join(tmpImgDir, imgFile);
+        const imgBase64 = readFileSync(imgPath).toString("base64");
+        const mime = imgFile.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+        imageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${imgBase64}`, detail: "high" } });
+      }
+      if (imageContent.length === 0) throw new Error("未能从文件中提取页面图片");
+    } catch (convErr: any) {
+      console.warn(`[GraphicStylePack] Image conversion failed:`, convErr.message);
+    } finally {
+      try { execSync(`rm -rf "${tmpDir}"`); } catch {}
+    }
+    const userContent: any[] = [
+      ...imageContent,
+      { type: "text" as const, text: imageContent.length > 0
+        ? `这是一份图文排版参考文件（${imageContent.length} 张均匀采样截图）。请仔细观察每张截图的视觉设计，分析整份文件的图文排版风格。`
+        : `请生成一个典型的建筑设计品牌手册排版风格包。` },
+    ];
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: `你是一个专业的图文排版设计分析师。分析提供的图文排版参考截图，提取其设计风格特征。
+分析要求：
+1. 配色：主色、背景色、文字色、强调色（准确 hex）
+2. 字体：标题和正文字体风格
+3. 排版模式：识别常见的图文排版模式（大图+文字叠加、左文右图等）
+4. 视觉风格：整体调性、风格、密度` },
+        { role: "user", content: userContent },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "graphic_style_analysis",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              packName: { type: "string" },
+              description: { type: "string" },
+              colorPalette: { type: "object", properties: { primary: { type: "string" }, secondary: { type: "string" }, background: { type: "string" }, text: { type: "string" }, accent: { type: "string" } }, required: ["primary", "secondary", "background", "text", "accent"], additionalProperties: false },
+              typography: { type: "object", properties: { titleFont: { type: "string" }, bodyFont: { type: "string" }, style: { type: "string" } }, required: ["titleFont", "bodyFont", "style"], additionalProperties: false },
+              layoutPatterns: { type: "array", items: { type: "object", properties: { patternName: { type: "string" }, visualDescription: { type: "string" }, contentSuggestion: { type: "string" } }, required: ["patternName", "visualDescription", "contentSuggestion"], additionalProperties: false } },
+              styleKeywords: { type: "array", items: { type: "string" } },
+              tone: { type: "string", enum: ["dark", "light", "mixed"] },
+              density: { type: "string", enum: ["sparse", "balanced", "dense"] },
+            },
+            required: ["packName", "description", "colorPalette", "typography", "layoutPatterns", "styleKeywords", "tone", "density"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("未获得 AI 分析结果");
+    const analysis = JSON.parse(typeof content === "string" ? content : JSON.stringify(content));
+    await drizzleDb.update(graphicStylePacks).set({
+      name: analysis.packName, status: "done",
+      styleGuide: { description: analysis.description, colorPalette: analysis.colorPalette, typography: analysis.typography, layoutPatterns: analysis.layoutPatterns, styleKeywords: analysis.styleKeywords, tone: analysis.tone, density: analysis.density },
+      thumbnails: [],
+    }).where(_eq(graphicStylePacks.id, packId));
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "未知错误";
+    console.error(`[GraphicStylePack] Extraction failed for pack ${packId}:`, msg);
+    await drizzleDb.update(graphicStylePacks).set({ status: "failed", errorMessage: msg }).where(_eq(graphicStylePacks.id, packId));
+  }
+}
+
+// ─── Graphic Layout Async Generation ─────────────────────────────────────────
+
+async function generateGraphicLayoutAsync(jobId: number, userId: number) {
+  const drizzleDb = await db.getDb();
+  if (!drizzleDb) return;
+  const { graphicLayoutJobs, graphicStylePacks } = await import("../drizzle/schema");
+  const { eq: _eq } = await import("drizzle-orm");
+  await drizzleDb.update(graphicLayoutJobs).set({ status: "processing" }).where(_eq(graphicLayoutJobs.id, jobId));
+  try {
+    const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.id, jobId)).limit(1);
+    if (!job) throw new Error("任务不存在");
+    let styleGuideHint = "";
+    let packStyleGuide: any = null;
+    if (job.packId) {
+      const [pack] = await drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.id, job.packId)).limit(1);
+      if (pack?.styleGuide) {
+        packStyleGuide = pack.styleGuide as any;
+        const sg = packStyleGuide;
+        styleGuideHint = `\n参考版式包风格（${pack.name}）：\n- 配色：主色 ${sg.colorPalette?.primary}，背景 ${sg.colorPalette?.background}，文字 ${sg.colorPalette?.text}，强调 ${sg.colorPalette?.accent}\n- 字体：${sg.typography?.titleFont} / ${sg.typography?.bodyFont}\n- 调性：${sg.tone === "dark" ? "深色" : sg.tone === "light" ? "浅色" : "混合"}\n- 密度：${sg.density}\n- 风格关键词：${sg.styleKeywords?.join("、")}\n- 排版模式参考：${sg.layoutPatterns?.slice(0, 3).map((p: any) => p.patternName).join("、")}`;
+      }
+    }
+    const docTypeNames: Record<string, string> = { brand_manual: "品牌手册", product_detail: "商品详情页", project_board: "项目图板", custom: "自定义图文排版" };
+    const docTypeName = docTypeNames[job.docType] ?? "图文排版";
+    const assetUrls = (job.assetUrls as string[]) ?? [];
+    // Step 1: LLM 规划每页排版结构
+    const planResponse = await invokeLLM({
+      messages: [
+        { role: "system", content: `你是一个专业的图文排版设计师，擅长为建筑设计事务所制作高质量的品牌视觉内容。
+任务：根据用户内容描述，规划 ${job.pageCount} 页${docTypeName}的排版方案。
+每页需要规划：
+1. 排版布局类型：hero_image(大图全屏+文字叠加) / text_left_image_right(左文右图) / image_left_text_right(左图右文) / full_text_grid(纯文字) / image_grid(图片网格) / quote_highlight(大字引语) / two_column(双栏) / timeline_strip(时间轴)
+2. 背景色(hex)
+3. 文字层：标题/副标题/正文/标注等，内容要真实填写
+4. 是否需要素材图
+5. 装饰元素（色块/线条/几何形）${styleGuideHint}` },
+        { role: "user", content: `文档类型：${docTypeName}\n内容描述：${job.contentText}\n页数：${job.pageCount}\n素材图数量：${assetUrls.length}` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "graphic_layout_plan",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              pages: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    pageIndex: { type: "number" },
+                    layoutType: { type: "string", enum: ["hero_image", "text_left_image_right", "image_left_text_right", "full_text_grid", "image_grid", "quote_highlight", "two_column", "timeline_strip"] },
+                    backgroundColor: { type: "string" },
+                    needsImage: { type: "boolean" },
+                    assetIndex: { type: "number" },
+                    textLayers: { type: "array", items: { type: "object", properties: { id: { type: "string" }, role: { type: "string", enum: ["title", "subtitle", "body", "caption", "label", "quote", "number"] }, text: { type: "string" }, fontSize: { type: "number" }, fontWeight: { type: "string", enum: ["normal", "medium", "semibold", "bold"] }, color: { type: "string" }, align: { type: "string", enum: ["left", "center", "right"] } }, required: ["id", "role", "text", "fontSize", "fontWeight", "color", "align"], additionalProperties: false } },
+                    decorElements: { type: "array", items: { type: "object", properties: { type: { type: "string", enum: ["rect", "line", "circle", "dot_grid"] }, color: { type: "string" }, opacity: { type: "number" }, position: { type: "string" } }, required: ["type", "color", "opacity", "position"], additionalProperties: false } },
+                  },
+                  required: ["pageIndex", "layoutType", "backgroundColor", "needsImage", "assetIndex", "textLayers", "decorElements"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["pages"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const planContent = planResponse.choices[0]?.message?.content;
+    if (!planContent) throw new Error("未获得排版规划结果");
+    const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
+    // Step 2: 为每页生成图片
+    const generatedPages: any[] = [];
+    for (const page of plan.pages) {
+      const sg = packStyleGuide;
+      const bgColor = page.backgroundColor || sg?.colorPalette?.background || "#1a1a1a";
+      const titleLayer = page.textLayers.find((l: any) => l.role === "title");
+      const layoutDescriptions: Record<string, string> = {
+        hero_image: "full-bleed background image with text overlay, large title",
+        text_left_image_right: "left half text area, right half image, minimal grid",
+        image_left_text_right: "left half image, right half text with margins",
+        full_text_grid: "clean typographic layout, structured text grid",
+        image_grid: "multiple images in grid with minimal text labels",
+        quote_highlight: "large typographic quote, minimal background, high contrast",
+        two_column: "two equal columns, clean dividing line",
+        timeline_strip: "horizontal timeline with nodes and text labels",
+      };
+      const layoutDesc = layoutDescriptions[page.layoutType] || "clean modern layout";
+      const titleText = titleLayer?.text || "";
+      const styleDesc = sg ? `${sg.tone === "dark" ? "dark" : "light"} color scheme, ${sg.styleKeywords?.slice(0, 3).join(", ")} style` : "modern architectural design style";
+      const imagePrompt = `Professional ${docTypeName} page design, ${layoutDesc}. Title: "${titleText}". Background color ${bgColor}. ${styleDesc}. Architecture and design studio aesthetic, clean typography, high-end brand identity. No watermarks, no borders.`;
+      let imageUrl = "";
+      try {
+        const originalImages = page.needsImage && assetUrls[page.assetIndex]
+          ? [{ url: assetUrls[page.assetIndex], mimeType: "image/jpeg" as const }]
+          : undefined;
+        const result = await generateImage({ prompt: imagePrompt, originalImages });
+        imageUrl = result.url ?? "";
+      } catch (imgErr: any) {
+        console.warn(`[GraphicLayout] Image gen failed for page ${page.pageIndex}:`, imgErr.message);
+      }
+      generatedPages.push({ pageIndex: page.pageIndex, layoutType: page.layoutType, imageUrl, textLayers: page.textLayers, decorElements: page.decorElements, backgroundColor: bgColor });
+    }
+    await drizzleDb.update(graphicLayoutJobs).set({ status: "done", pages: generatedPages }).where(_eq(graphicLayoutJobs.id, jobId));
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "未知错误";
+    console.error(`[GraphicLayout] Generation failed for job ${jobId}:`, msg);
+    await drizzleDb.update(graphicLayoutJobs).set({ status: "failed", errorMessage: msg }).where(_eq(graphicLayoutJobs.id, jobId));
+  }
+}
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -4278,6 +4640,8 @@ export const appRouter = router({system: systemRouter,
   fieldTemplates: fieldTemplatesRouter,
   personalTasks: personalTasksRouter,
   layoutPacks: layoutPacksRouter,
+  graphicStylePacks: graphicStylePacksRouter,
+  graphicLayout: graphicLayoutRouter,
   video: router({
     generate: protectedProcedure
       .input(

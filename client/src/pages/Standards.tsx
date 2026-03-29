@@ -517,13 +517,15 @@ function PptLayoutStandardsTab() {
                     <p className="font-semibold text-sm truncate">{pack.name}</p>
                     <p className="text-[10px] text-muted-foreground">AI 学习版式包</p>
                   </div>
-                  <Button
-                    variant="ghost" size="icon"
-                    className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="h-6 w-6 shrink-0 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 cursor-pointer transition-colors"
                     onClick={(e) => { e.stopPropagation(); deleteMutation.mutate({ id: pack.id }); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); deleteMutation.mutate({ id: pack.id }); } }}
                   >
                     <Trash className="h-3 w-3" />
-                  </Button>
+                  </div>
                 </div>
                 {colors.length > 0 && (
                   <div className="flex h-1.5 rounded-full overflow-hidden">
@@ -803,9 +805,15 @@ function AILayoutLearning() {
                 </div>
                 <p className="font-medium text-sm">{selectedFile.name}</p>
                 <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</p>
-                <Button variant="ghost" size="sm" className="text-xs" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setPackName(""); }}>
-                  <X className="h-3 w-3 mr-1" />更换文件
-                </Button>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2 py-1 rounded hover:bg-accent transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setSelectedFile(null); setPackName(""); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setSelectedFile(null); setPackName(""); } }}
+                >
+                  <X className="h-3 w-3" />更换文件
+                </div>
               </div>
             ) : (
               <div className="space-y-2">

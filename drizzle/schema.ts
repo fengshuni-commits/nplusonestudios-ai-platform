@@ -572,3 +572,57 @@ export const layoutPacks = mysqlTable("layout_packs", {
 });
 export type LayoutPack = typeof layoutPacks.$inferSelect;
 export type InsertLayoutPack = typeof layoutPacks.$inferInsert;
+
+// ─── Graphic Style Packs (图文排版版式包) ────────────────────────────────────
+// 用户上传参考图片/PDF，AI 提取图文排版风格，生成可复用的排版版式包
+export const graphicStylePacks = mysqlTable("graphic_style_packs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  // 来源文件类型：images / pdf
+  sourceType: mysqlEnum("sourceType", ["images", "pdf"]).notNull(),
+  // 原始文件 URL（S3）
+  sourceFileUrl: text("sourceFileUrl"),
+  sourceFileKey: text("sourceFileKey"),
+  // 提取状态
+  status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  // AI 提取的排版风格（JSON 字符串）
+  // 包含：colorPalette, typography, layoutPatterns[], visualStyle, keywords[]
+  styleGuide: json("styleGuide"),
+  // 参考截图缩略图 URL 数组（JSON）
+  thumbnails: json("thumbnails"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GraphicStylePack = typeof graphicStylePacks.$inferSelect;
+export type InsertGraphicStylePack = typeof graphicStylePacks.$inferInsert;
+
+// ─── Graphic Layout Jobs (图文排版任务) ──────────────────────────────────────
+// 用户输入内容 + 选择版式包，AI 生成图文排版页面（输出为图片）
+export const graphicLayoutJobs = mysqlTable("graphic_layout_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // 关联的版式包（可为空，使用默认风格）
+  packId: int("packId"),
+  // 文档类型：brand_manual / product_detail / project_board / custom
+  docType: mysqlEnum("docType", ["brand_manual", "product_detail", "project_board", "custom"]).notNull(),
+  // 页数：1-10
+  pageCount: int("pageCount").notNull().default(1),
+  // 用户输入的文字描述
+  contentText: text("contentText").notNull(),
+  // 用户上传的素材图 URL 数组（JSON）
+  assetUrls: json("assetUrls"),
+  // 版式名称（用户自定义）
+  title: varchar("title", { length: 256 }),
+  // 生成状态
+  status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  // 生成结果：每页图片 URL + 可编辑文字层（JSON 数组）
+  // 每项：{ pageIndex, imageUrl, textLayers: [{ id, text, x, y, fontSize, color }] }
+  pages: json("pages"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GraphicLayoutJob = typeof graphicLayoutJobs.$inferSelect;
+export type InsertGraphicLayoutJob = typeof graphicLayoutJobs.$inferInsert;

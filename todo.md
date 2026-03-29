@@ -1159,3 +1159,21 @@
 - [x] 更新 JSON schema：新字段结构，兼容旧数据
 - [x] 前端 AiLayoutSlideCard 展示新字段（版式标签 + 视觉描述 + 适用场景）
 - [x] 保存检查点
+
+## 功能：图文排版模块（品牌板块）
+- [x] 数据库：新建 graphic_style_packs 表（版式包：id, userId, name, sourceType, thumbnailUrl, styleGuide, status, createdAt）
+- [x] 数据库：新建 graphic_layout_jobs 表（排版任务：id, userId, packId, docType, pageCount, contentText, assetUrls, pages, status, errorMessage, createdAt）
+- [x] 后端：graphicStylePacks router（list/create/delete/retry）
+- [x] 后端：graphicLayout router（generate/status/list/delete/updateTextLayer）
+- [x] 后端：multipart 上传端点 /api/upload/layout-pack（复用现有端点）
+- [x] 后端：multipart 上传端点 /api/upload/graphic-asset（复用现有端点）
+- [x] 后端：AI 提取版式风格（均匀采样截图，视觉描述 + 配色 + 排版规律）
+- [x] 后端：AI 生成图文排版（LLM 规划每页排版结构 + 图像生成 API 生成每页图片）
+- [x] 前端：MediaLayout.tsx 页面（三列布局：版式包管理 / 内容输入 / 生成预览）
+- [x] 前端：版式包上传与展示（支持图片/PDF，AI 提取后展示风格卡片）
+- [x] 前端：内容输入区（文档类型选择、页数、标题、文字描述、素材图上传）
+- [x] 前端：生成预览区（图片展示、文字层可点击编辑、缩略图导航）
+- [x] 前端：App.tsx 注册路由 /media/layout
+- [x] 前端：DashboardLayout.tsx 品牌板块添加「图文排版」导航入口
+- [x] 测试：18 项 Vitest 测试全部通过
+- [x] 保存检查点
