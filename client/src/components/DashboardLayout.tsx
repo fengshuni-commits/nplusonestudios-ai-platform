@@ -42,6 +42,7 @@ import {
   LayoutTemplate,
   BookImage,
   Film,
+  Activity,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { HelpGuide } from "./HelpGuide";
@@ -123,6 +124,7 @@ const menuSections: MenuSection[] = [
       { icon: Key, label: "AI 工具管理", path: "/admin/ai-tools" },
       { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
       { icon: BarChart3, label: "反馈分析", path: "/admin/feedback" },
+      { icon: Activity, label: "调用统计", path: "/admin/ai-stats" },
     ],
   },
   {

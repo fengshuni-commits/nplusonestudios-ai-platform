@@ -14,10 +14,17 @@ import { getAiToolById } from "server/db";
 import { decryptApiKey } from "./crypto";
 import { storagePut } from "server/storage";
 import { generateImage, type GenerateImageOptions } from "./imageGeneration";
-import { generateImageWithJimeng, type VolcengineConfig } from "./volcengine";
+import { generateImageWithJimeng, imageToImageWithJimeng, inpaintWithJimeng, upscaleWithJimeng, type VolcengineConfig } from "./volcengine";
 
 export type GenerateWithToolOptions = GenerateImageOptions & {
   toolId?: number | null;
+  // 即梦专属模式
+  jimengMode?: "i2i" | "inpaint" | "upscale";
+  // inpaint 专用：mask 图 URL
+  maskImageUrl?: string;
+  // upscale 专用参数
+  upscaleResolution?: "4k" | "8k";
+  upscaleScale?: number;
 };
 
 /**
@@ -355,17 +362,80 @@ export async function generateImageWithTool(
       if (!volcengineConfig.accessKeyId) {
         throw new Error("即梦 AI 缺少 AccessKeyID 配置");
       }
-      const response = await generateImageWithJimeng(volcengineConfig, {
-        prompt: genOpts.prompt,
-        negativePrompt: config.negativePrompt,
-        width: genOpts.size ? parseInt(genOpts.size.split("x")[0]) : 512,
-        height: genOpts.size ? parseInt(genOpts.size.split("x")[1]) : 512,
-      });
-      if (!response.data?.image_urls?.[0]?.url) {
-        throw new Error(`即梦 API 返回无效响应: ${JSON.stringify(response).substring(0, 300)}`);
+
+      let jimengImageUrl: string;
+
+      if (opts.jimengMode === "upscale") {
+        // ── 智能超清模式 ──
+        const refUrl = genOpts.originalImages?.[0]?.url;
+        if (!refUrl) throw new Error("即梦智能超清需要提供原图 URL");
+        const upscaleResp = await upscaleWithJimeng(volcengineConfig, refUrl, {
+          resolution: opts.upscaleResolution || "4k",
+          scale: opts.upscaleScale ?? 50,
+        });
+        if (!upscaleResp.data?.image_urls?.[0]?.url) {
+          throw new Error(`即梦智能超清返回无效响应: ${JSON.stringify(upscaleResp).substring(0, 300)}`);
+        }
+        jimengImageUrl = upscaleResp.data.image_urls[0].url;
+      } else if (opts.jimengMode === "inpaint" && opts.maskImageUrl) {
+        // ── Inpainting 模式 ──
+        const refUrl = genOpts.originalImages?.[0]?.url;
+        if (!refUrl) throw new Error("即梦 Inpainting 需要提供原图 URL");
+        const inpaintResp = await inpaintWithJimeng(
+          volcengineConfig,
+          refUrl,
+          opts.maskImageUrl,
+          genOpts.prompt
+        );
+        if (!inpaintResp.data?.image_urls?.[0]?.url) {
+          throw new Error(`即梦 Inpainting 返回无效响应: ${JSON.stringify(inpaintResp).substring(0, 300)}`);
+        }
+        jimengImageUrl = inpaintResp.data.image_urls[0].url;
+      } else if (opts.jimengMode === "i2i" || genOpts.originalImages?.[0]?.url) {
+        // ── 图生图模式（有参考图时自动使用）──
+        const refUrl = genOpts.originalImages?.[0]?.url;
+        if (!refUrl) {
+          // 无参考图，降级到文生图
+          const response = await generateImageWithJimeng(volcengineConfig, {
+            prompt: genOpts.prompt,
+            negativePrompt: config.negativePrompt,
+            width: genOpts.size ? parseInt(genOpts.size.split("x")[0]) : 1024,
+            height: genOpts.size ? parseInt(genOpts.size.split("x")[1]) : 1024,
+          });
+          if (!response.data?.image_urls?.[0]?.url) {
+            throw new Error(`即梦 API 返回无效响应: ${JSON.stringify(response).substring(0, 300)}`);
+          }
+          jimengImageUrl = response.data.image_urls[0].url;
+        } else {
+          const i2iResp = await imageToImageWithJimeng(
+            volcengineConfig,
+            refUrl,
+            genOpts.prompt,
+            {
+              width: genOpts.size ? parseInt(genOpts.size.split("x")[0]) : 1024,
+              height: genOpts.size ? parseInt(genOpts.size.split("x")[1]) : 1024,
+            }
+          );
+          if (!i2iResp.data?.image_urls?.[0]?.url) {
+            throw new Error(`即梦图生图返回无效响应: ${JSON.stringify(i2iResp).substring(0, 300)}`);
+          }
+          jimengImageUrl = i2iResp.data.image_urls[0].url;
+        }
+      } else {
+        // ── 文生图模式 ──
+        const response = await generateImageWithJimeng(volcengineConfig, {
+          prompt: genOpts.prompt,
+          negativePrompt: config.negativePrompt,
+          width: genOpts.size ? parseInt(genOpts.size.split("x")[0]) : 1024,
+          height: genOpts.size ? parseInt(genOpts.size.split("x")[1]) : 1024,
+        });
+        if (!response.data?.image_urls?.[0]?.url) {
+          throw new Error(`即梦 API 返回无效响应: ${JSON.stringify(response).substring(0, 300)}`);
+        }
+        jimengImageUrl = response.data.image_urls[0].url;
       }
-      const imageUrl = response.data.image_urls[0].url;
-      const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(60000) });
+
+      const imgResp = await fetch(jimengImageUrl, { signal: AbortSignal.timeout(60000) });
       if (!imgResp.ok) {
         throw new Error(`Failed to download 即梦 image (${imgResp.status})`);
       }

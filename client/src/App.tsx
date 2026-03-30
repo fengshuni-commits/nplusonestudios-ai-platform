@@ -17,6 +17,7 @@ import Integrations from "./pages/Integrations";
 import Workflows from "./pages/Workflows";
 import AdminTeam from "./pages/AdminTeam";
 import AiToolsManagement from "./pages/AiToolsManagement";
+import AiToolStats from "./pages/AiToolStats";
 import AdminSettings from "./pages/AdminSettings";
 import AdminCaseSources from "./pages/AdminCaseSources";
 import AdminFeedback from "./pages/AdminFeedback";
@@ -86,6 +87,7 @@ function Router() {
         <Route path="/workflows" component={Workflows} />
         <Route path="/admin/team" component={AdminTeam} />
         <Route path="/admin/ai-tools" component={AiToolsManagement} />
+        <Route path="/admin/ai-stats" component={AiToolStats} />
         <Route path="/admin/case-sources" component={AdminCaseSources} />
         <Route path="/admin/settings" component={AdminSettings} />
         <Route path="/admin/feedback" component={AdminFeedback} />

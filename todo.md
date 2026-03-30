@@ -1312,3 +1312,18 @@
 - [x] 对照文档修复接口：req_key 由 jimeng_t2i_v3.1 改为 jimeng_t2i_v31
 - [x] 修复 Action：提交改为 CVSync2AsyncSubmitTask，查询改为 CVSync2AsyncGetResult，version=2022-08-31
 - [x] 修复 status 字段：改为字符串判断（"done"/"failed"），修复 image_urls 字符串数组转换
+
+## 功能：即梦四大功能接入（图生图、视频生成、交互编辑、智能超清）
+- [ ] 查看即梦 API 文档：图生图（i2i）、视频生成（t2v/i2v）、交互编辑（inpainting）、智能超清（upscale）
+- [ ] 后端：volcengine.ts 实现四个接口的调用逻辑
+- [ ] 后端：routers.ts 添加对应 tRPC 路由
+- [ ] 前端：AI 效果图页面添加四个功能的 UI 入口和交互
+- [ ] 测试验证并保存 checkpoint
+
+## API 调用统计页面
+- [x] 后端：aiTools.getCallStats 路由（按工具、按日期、按操作类型统计调用次数/成功率/耗时）
+- [x] 前端：AI 工具管理模块新增「调用统计」标签页
+- [x] 前端：各工具调用总量、成功/失败分布图表
+- [x] 前端：按日期趋势折线图（近 7 天/30 天）
+- [x] 前端：按操作类型分类统计（效果图、对标调研、彩平、视频等）
+- [x] 前端：最近失败记录列表（含错误信息）

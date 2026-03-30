@@ -1682,6 +1682,22 @@ const aiToolsRouter = router({
       await db.deleteAiTool(input.id);
       return { success: true };
     }),
+
+  /** 调用统计：按工具和日期汇总 */
+  getCallStats: adminProcedure
+    .input(z.object({
+      days: z.number().min(1).max(90).default(30),
+    }))
+    .query(async ({ input }) => {
+      const { days } = input;
+      // 1. 按工具汇总
+      const toolStats = await db.getAiToolCallStats(days);
+      // 2. 按日期趋势
+      const dailyTrend = await db.getAiToolDailyTrend(days);
+      // 3. 最近失败记录
+      const recentFailures = await db.getAiToolRecentFailures(20);
+      return { toolStats, dailyTrend, recentFailures };
+    }),
 });
 
 // ─── AI Module: Benchmarking Research ────────────────────
@@ -2105,6 +2121,11 @@ async function generateRenderingInBackground(
     maskImageData?: string;
     aspectRatio?: string;
     resolution?: string;
+    // 即梦专属模式
+    jimengMode?: "i2i" | "inpaint" | "upscale";
+    jimengMaskUrl?: string;
+    jimengUpscaleResolution?: "4k" | "8k";
+    jimengUpscaleScale?: number;
   },
   userId: number,
   userName: string | null
@@ -2193,7 +2214,14 @@ async function generateRenderingInBackground(
     if (originalImages.length > 0) genOpts.originalImages = originalImages;
     if (imageSize) genOpts.size = imageSize;
 
-    const result = await generateImageWithTool({ ...genOpts, toolId: input.toolId });
+    const result = await generateImageWithTool({
+      ...genOpts,
+      toolId: input.toolId,
+      jimengMode: input.jimengMode,
+      maskImageUrl: input.jimengMaskUrl,
+      upscaleResolution: input.jimengUpscaleResolution,
+      upscaleScale: input.jimengUpscaleScale,
+    });
 
     await db.createAiToolLog({
       toolId: input.toolId || 0,
@@ -2205,12 +2233,19 @@ async function generateRenderingInBackground(
       durationMs: Date.now() - startTime,
     });
 
+    // 即梦智能超清模式下特殊标题
+    const titlePrefix = input.jimengMode === "upscale"
+      ? `即梦超清 - ${input.prompt.substring(0, 40)}`
+      : input.jimengMode === "inpaint"
+        ? `即梦重绘 - ${input.prompt.substring(0, 40)}`
+        : input.referenceImageUrl
+          ? (input.maskImageData ? `局部重绘 - ${input.prompt.substring(0, 40)}` : `图生图 - ${input.prompt.substring(0, 40)}`)
+          : `AI 渲染 - ${input.prompt.substring(0, 40)}`;
+
     const historyResult = await db.createGenerationHistory({
       userId,
       module: "ai_render",
-      title: input.referenceImageUrl
-        ? (input.maskImageData ? `局部重绘 - ${input.prompt.substring(0, 40)}` : `图生图 - ${input.prompt.substring(0, 40)}`)
-        : `AI 渲染 - ${input.prompt.substring(0, 40)}`,
+      title: titlePrefix,
       summary: fullPrompt.substring(0, 200),
       inputParams: {
         prompt: input.prompt,
@@ -2264,6 +2299,13 @@ const renderingRouter = router({
       maskImageData: z.string().optional(),
       aspectRatio: z.string().optional(),
       resolution: z.string().optional(),
+      // 即梦专属模式
+      jimengMode: z.enum(["i2i", "inpaint", "upscale"]).optional(),
+      // inpaint 专用：mask 图 URL（已上传到 S3 的白黑 mask）
+      jimengMaskUrl: z.string().url().optional(),
+      // upscale 专用参数
+      jimengUpscaleResolution: z.enum(["4k", "8k"]).optional(),
+      jimengUpscaleScale: z.number().min(0).max(100).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       // Async mode: create job immediately and return jobId

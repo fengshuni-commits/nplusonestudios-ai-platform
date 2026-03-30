@@ -1999,3 +1999,110 @@ export async function getRecentBenchmarkCaseNames(userId: number, limit = 10): P
   }
   return Array.from(allNames);
 }
+
+// ─── AI Tool Call Statistics ─────────────────────────────────────────────────
+
+/** 按工具汇总调用统计（近 N 天） */
+export async function getAiToolCallStats(days: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(
+    sql`
+      SELECT
+        l.toolId,
+        t.name AS toolName,
+        t.provider,
+        COUNT(*) AS totalCalls,
+        SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) AS successCalls,
+        SUM(CASE WHEN l.status = 'failed'  THEN 1 ELSE 0 END) AS failedCalls,
+        ROUND(AVG(CASE WHEN l.durationMs IS NOT NULL THEN l.durationMs END)) AS avgDurationMs,
+        MAX(l.createdAt) AS lastCalledAt,
+        l.action
+      FROM ai_tool_logs l
+      LEFT JOIN ai_tools t ON l.toolId = t.id
+      WHERE l.createdAt >= DATE_SUB(NOW(), INTERVAL ${days} DAY)
+      GROUP BY l.toolId, t.name, t.provider, l.action
+      ORDER BY totalCalls DESC
+    `
+  );
+  return (result[0] as unknown as Array<{
+    toolId: number;
+    toolName: string | null;
+    provider: string | null;
+    totalCalls: number;
+    successCalls: number;
+    failedCalls: number;
+    avgDurationMs: number | null;
+    lastCalledAt: Date;
+    action: string | null;
+  }>);
+}
+
+/** 按日期趋势统计（近 N 天，每天的调用量） */
+export async function getAiToolDailyTrend(days: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(
+    sql`
+      SELECT
+        DATE(l.createdAt) AS date,
+        l.toolId,
+        t.name AS toolName,
+        COUNT(*) AS totalCalls,
+        SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) AS successCalls,
+        SUM(CASE WHEN l.status = 'failed'  THEN 1 ELSE 0 END) AS failedCalls
+      FROM ai_tool_logs l
+      LEFT JOIN ai_tools t ON l.toolId = t.id
+      WHERE l.createdAt >= DATE_SUB(NOW(), INTERVAL ${days} DAY)
+      GROUP BY DATE(l.createdAt), l.toolId, t.name
+      ORDER BY date ASC, totalCalls DESC
+    `
+  );
+  return (result[0] as unknown as Array<{
+    date: string;
+    toolId: number;
+    toolName: string | null;
+    totalCalls: number;
+    successCalls: number;
+    failedCalls: number;
+  }>);
+}
+
+/** 最近失败记录（含错误信息） */
+export async function getAiToolRecentFailures(limit: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(
+    sql`
+      SELECT
+        l.id,
+        l.toolId,
+        t.name AS toolName,
+        l.action,
+        l.inputSummary,
+        l.durationMs,
+        l.createdAt,
+        rj.error AS errorMessage
+      FROM ai_tool_logs l
+      LEFT JOIN ai_tools t ON l.toolId = t.id
+      LEFT JOIN rendering_jobs rj
+        ON rj.createdAt BETWEEN DATE_SUB(l.createdAt, INTERVAL 5 SECOND)
+                             AND DATE_ADD(l.createdAt, INTERVAL 5 SECOND)
+        AND rj.status = 'failed'
+        AND l.status = 'failed'
+      WHERE l.status = 'failed'
+      ORDER BY l.createdAt DESC
+      LIMIT ${limit}
+    `
+  );
+  return (result[0] as unknown as Array<{
+    id: number;
+    toolId: number;
+    toolName: string | null;
+    action: string | null;
+    inputSummary: string | null;
+    durationMs: number | null;
+    createdAt: Date;
+    errorMessage: string | null;
+  }>);
+}

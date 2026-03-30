@@ -311,7 +311,205 @@ export async function generateImageWithJimeng(
 }
 
 /**
- * 调用即梦 AI 图生图 API
+ * 调用即梦 AI 图生图 API（图生图 3.0 - 智能参考）
+ * req_key: jimeng_i2i_v1.3
+ */
+export async function imageToImageWithJimeng(
+  config: VolcengineConfig,
+  imageUrl: string,
+  prompt: string,
+  options?: { width?: number; height?: number; seed?: number }
+): Promise<ImageGenerationResponse> {
+  const body: Record<string, unknown> = {
+    req_key: "jimeng_i2i_v1.3",
+    prompt,
+    image_urls: [imageUrl],
+    width: options?.width || 1024,
+    height: options?.height || 1024,
+    seed: options?.seed ?? -1,
+  };
+
+  const submitResult = await callVolcengineVisualApi(
+    config,
+    "CVSync2AsyncSubmitTask",
+    body,
+    "2022-08-31"
+  );
+
+  const submitData = submitResult.data as Record<string, unknown> | undefined;
+  const taskId = submitData?.task_id as string | undefined;
+
+  if (!taskId) {
+    console.error("[Jimeng i2i] Submit task failed:", JSON.stringify(submitResult).substring(0, 500));
+    throw new Error(`即梦图生图提交失败: ${(submitResult.message as string) || JSON.stringify(submitResult).substring(0, 200)}`);
+  }
+
+  console.log(`[Jimeng i2i] Task submitted, task_id=${taskId}, polling...`);
+
+  const reqJson = JSON.stringify({ return_url: true });
+  const maxAttempts = 20;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollResult = await callVolcengineVisualApi(
+      config,
+      "CVSync2AsyncGetResult",
+      { req_key: "jimeng_i2i_v1.3", task_id: taskId, req_json: reqJson },
+      "2022-08-31"
+    );
+    const pollCode = pollResult.code as number | undefined;
+    if (pollCode !== 10000) {
+      throw new Error(`即梦图生图查询失败 (code=${pollCode}): ${(pollResult.message as string) || "未知错误"}`);
+    }
+    const pollData = pollResult.data as Record<string, unknown> | undefined;
+    const status = pollData?.status as string | undefined;
+    console.log(`[Jimeng i2i] Poll ${i + 1}/${maxAttempts}, status=${status}`);
+    if (status === "done") {
+      const imageUrls = pollData?.image_urls as string[] | undefined;
+      if (imageUrls && imageUrls.length > 0) {
+        return { data: { image_urls: imageUrls.map(url => ({ url })) } } as ImageGenerationResponse;
+      }
+      throw new Error("即梦图生图任务成功但无图片 URL");
+    } else if (status === "failed" || status === "error") {
+      throw new Error(`即梦图生图任务失败: ${(pollData?.message as string) || "未知错误"}`);
+    }
+  }
+  throw new Error("即梦图生图任务超时（60秒），请稍后重试");
+}
+
+/**
+ * 调用即梦 AI 交互编辑 Inpainting API
+ * req_key: jimeng_image2image_dream_inpaint
+ * imageUrl: 原图 URL
+ * maskUrl: mask 图 URL（白色=重绘区域，黑色=保留区域）
+ * prompt: 编辑描述（消除场景输入"删除"）
+ */
+export async function inpaintWithJimeng(
+  config: VolcengineConfig,
+  imageUrl: string,
+  maskUrl: string,
+  prompt: string
+): Promise<ImageGenerationResponse> {
+  const body: Record<string, unknown> = {
+    req_key: "jimeng_image2image_dream_inpaint",
+    image_urls: [imageUrl, maskUrl],
+    prompt,
+    seed: -1,
+  };
+
+  const submitResult = await callVolcengineVisualApi(
+    config,
+    "CVSync2AsyncSubmitTask",
+    body,
+    "2022-08-31"
+  );
+
+  const submitData = submitResult.data as Record<string, unknown> | undefined;
+  const taskId = submitData?.task_id as string | undefined;
+
+  if (!taskId) {
+    console.error("[Jimeng inpaint] Submit task failed:", JSON.stringify(submitResult).substring(0, 500));
+    throw new Error(`即梦 Inpainting 提交失败: ${(submitResult.message as string) || JSON.stringify(submitResult).substring(0, 200)}`);
+  }
+
+  console.log(`[Jimeng inpaint] Task submitted, task_id=${taskId}, polling...`);
+
+  const reqJson = JSON.stringify({ return_url: true });
+  const maxAttempts = 20;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollResult = await callVolcengineVisualApi(
+      config,
+      "CVSync2AsyncGetResult",
+      { req_key: "jimeng_image2image_dream_inpaint", task_id: taskId, req_json: reqJson },
+      "2022-08-31"
+    );
+    const pollCode = pollResult.code as number | undefined;
+    if (pollCode !== 10000) {
+      throw new Error(`即梦 Inpainting 查询失败 (code=${pollCode}): ${(pollResult.message as string) || "未知错误"}`);
+    }
+    const pollData = pollResult.data as Record<string, unknown> | undefined;
+    const status = pollData?.status as string | undefined;
+    console.log(`[Jimeng inpaint] Poll ${i + 1}/${maxAttempts}, status=${status}`);
+    if (status === "done") {
+      const imageUrls = pollData?.image_urls as string[] | undefined;
+      if (imageUrls && imageUrls.length > 0) {
+        return { data: { image_urls: imageUrls.map(url => ({ url })) } } as ImageGenerationResponse;
+      }
+      throw new Error("即梦 Inpainting 任务成功但无图片 URL");
+    } else if (status === "failed" || status === "error") {
+      throw new Error(`即梦 Inpainting 任务失败: ${(pollData?.message as string) || "未知错误"}`);
+    }
+  }
+  throw new Error("即梦 Inpainting 任务超时（60秒），请稍后重试");
+}
+
+/**
+ * 调用即梦 AI 智能超清 API
+ * req_key: jimeng_i2i_seed3_tilesr_cvtob
+ * 支持将图像超清到 4K/8K
+ */
+export async function upscaleWithJimeng(
+  config: VolcengineConfig,
+  imageUrl: string,
+  options?: { resolution?: "4k" | "8k"; scale?: number }
+): Promise<ImageGenerationResponse> {
+  const body: Record<string, unknown> = {
+    req_key: "jimeng_i2i_seed3_tilesr_cvtob",
+    image_urls: [imageUrl],
+    resolution: options?.resolution || "4k",
+    scale: options?.scale ?? 50,
+  };
+
+  const submitResult = await callVolcengineVisualApi(
+    config,
+    "CVSync2AsyncSubmitTask",
+    body,
+    "2022-08-31"
+  );
+
+  const submitData = submitResult.data as Record<string, unknown> | undefined;
+  const taskId = submitData?.task_id as string | undefined;
+
+  if (!taskId) {
+    console.error("[Jimeng upscale] Submit task failed:", JSON.stringify(submitResult).substring(0, 500));
+    throw new Error(`即梦智能超清提交失败: ${(submitResult.message as string) || JSON.stringify(submitResult).substring(0, 200)}`);
+  }
+
+  console.log(`[Jimeng upscale] Task submitted, task_id=${taskId}, polling...`);
+
+  const reqJson = JSON.stringify({ return_url: true });
+  const maxAttempts = 20;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollResult = await callVolcengineVisualApi(
+      config,
+      "CVSync2AsyncGetResult",
+      { req_key: "jimeng_i2i_seed3_tilesr_cvtob", task_id: taskId, req_json: reqJson },
+      "2022-08-31"
+    );
+    const pollCode = pollResult.code as number | undefined;
+    if (pollCode !== 10000) {
+      throw new Error(`即梦智能超清查询失败 (code=${pollCode}): ${(pollResult.message as string) || "未知错误"}`);
+    }
+    const pollData = pollResult.data as Record<string, unknown> | undefined;
+    const status = pollData?.status as string | undefined;
+    console.log(`[Jimeng upscale] Poll ${i + 1}/${maxAttempts}, status=${status}`);
+    if (status === "done") {
+      const imageUrls = pollData?.image_urls as string[] | undefined;
+      if (imageUrls && imageUrls.length > 0) {
+        return { data: { image_urls: imageUrls.map(url => ({ url })) } } as ImageGenerationResponse;
+      }
+      throw new Error("即梦智能超清任务成功但无图片 URL");
+    } else if (status === "failed" || status === "error") {
+      throw new Error(`即梦智能超清任务失败: ${(pollData?.message as string) || "未知错误"}`);
+    }
+  }
+  throw new Error("即梦智能超清任务超时（60秒），请稍后重试");
+}
+
+/**
+ * 调用即梦 AI 图生图 API（旧版兼容）
+ * @deprecated 请使用 imageToImageWithJimeng
  */
 export async function enhanceImageWithJimeng(
   config: VolcengineConfig,
@@ -319,11 +517,7 @@ export async function enhanceImageWithJimeng(
   prompt: string,
   negativePrompt?: string
 ): Promise<ImageGenerationResponse> {
-  return generateImageWithJimeng(config, {
-    prompt,
-    negativePrompt,
-    imageUrl,
-  });
+  return imageToImageWithJimeng(config, imageUrl, prompt);
 }
 
 // ─── 视频生成 ───────────────────────────────────────────────────
