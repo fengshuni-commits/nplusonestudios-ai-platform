@@ -232,19 +232,30 @@ export async function searchCaseStudy(
   let allResults: TavilySearchResult[] = [];
 
   try {
-    // Strategy 1: Chinese query - search by name only, no type restriction
+    // Get current year for recency filtering
+    const currentYear = new Date().getFullYear();
+
+    // Strategy 1: Chinese query with recent year hint
     try {
-      const chineseQuery = `${caseName} 设计`;
+      const chineseQuery = `${caseName} 设计 ${currentYear - 1}`;
       const chineseResults = await tavilySearch(chineseQuery, 5);
       allResults.push(...chineseResults);
     } catch {
       // Chinese search failure is non-critical
     }
 
-    // Strategy 2: English query - search by name only, no type restriction
-    const englishQuery = `${caseName} design`;
+    // Strategy 2: English query with recent years hint
+    const englishQuery = `${caseName} design ${currentYear - 2} ${currentYear - 1} ${currentYear}`;
     const englishResults = await tavilySearch(englishQuery, 5);
     allResults.push(...englishResults);
+
+    // Strategy 3: Fallback without year if no results yet
+    if (allResults.length === 0) {
+      try {
+        const fallbackResults = await tavilySearch(`${caseName} design`, 5);
+        allResults.push(...fallbackResults);
+      } catch { /* ignore */ }
+    }
 
     if (allResults.length === 0) {
       console.warn(`[Tavily] No results for "${caseName}", using fallback`);

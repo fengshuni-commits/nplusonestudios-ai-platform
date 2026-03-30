@@ -1855,7 +1855,7 @@ async function generateBenchmarkInBackground(
           role: "system",
           content: `你是 N+1 STUDIOS 的对标调研专家。请仔细阅读用户提供的项目信息和需求描述，选出 ${input.referenceCount || 5} 个与该项目需求最匹配的对标案例名称。
 
-选案标准：案例应在空间类型、设计元素、使用场景或设计理念上与项目需求直接相关。案例必须是真实存在的项目，使用项目官方名称（英文或中文）。${excludeSection ? excludeSection : ''}
+选案标准：案例应在空间类型、设计元素、使用场景或设计理念上与项目需求直接相关。案例必须是真实存在的项目，使用项目官方名称（英文或中文）。**时间要求：优先选择 2022 年至今竣工或公开发布的项目**，如近三年内无足够匹配案例，可适当放宽至 2018 年后。${excludeSection ? excludeSection : ''}
 只返回案例名称列表，每行一个，不要包含链接或额外说明。`
         },
         {

@@ -1361,3 +1361,8 @@
 - [x] 修复：将 pre 替换为 ReportMarkdown，图片、链接、标题均可正常渲染
 - [x] 在 TileCard 卡片添加「在报告模块中继续编辑」快捷按鈕（跳转到 /design/planning?historyId=xxx）
 - [x] 保存检查点
+
+## 案例调研 - 优先近三年项目案例
+- [x] Phase 1 prompt 加入时间约束（优先 2022 年至今竣工或公开发布的项目）
+- [x] tavily 搜索查询加入年份关键词（中文查询加 currentYear-1，英文查询加近三年年份），并增加无年份备用策略
+- [x] 保存检查点
