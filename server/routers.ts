@@ -4774,20 +4774,35 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
       assetConfig = { mode: "legacy", urls: [] };
     }
     // 获取指定页的素材图（最多 5 张）
-    const getAssetsForPage = (pageIdx: number): string[] => {
+    // by_type 模式下，selectedGroup 为 LLM 选定的文件夹名，优先从该文件夹取图
+    const getAssetsForPage = (pageIdx: number, selectedGroup?: string): string[] => {
       if (assetConfig.mode === "per_page") {
         return (assetConfig.pages[String(pageIdx)] ?? []).slice(0, 5);
       } else if (assetConfig.mode === "by_type") {
-        // by_type 模式下返回所有类型的前 5 张（合并后取）
-        const all = Object.values(assetConfig.groups).flat();
-        return all.slice(0, 5);
+        const groups = assetConfig.groups;
+        // 如果 LLM 选定了文件夹且该文件夹存在，从该文件夹取前 5 张
+        if (selectedGroup && groups[selectedGroup]) {
+          return groups[selectedGroup].slice(0, 5);
+        }
+        // 如果没有选定，取第一个文件夹的前 5 张（fallback）
+        const firstGroup = Object.values(groups)[0] ?? [];
+        return firstGroup.slice(0, 5);
       } else {
         return (assetConfig.urls ?? []).slice(0, 5);
       }
     };
+    // 获取 by_type 模式下的所有文件夹名称列表（用于告知 LLM）
+    const getByTypeGroupNames = (): string[] => {
+      if (assetConfig.mode !== "by_type") return [];
+      return Object.keys(assetConfig.groups);
+    };
     // 获取 by_type 模式下的类型描述（用于 prompt）
-    const getByTypeDescription = (): string => {
+    const getByTypeDescription = (selectedGroup?: string): string => {
       if (assetConfig.mode !== "by_type") return "";
+      if (selectedGroup) {
+        const count = assetConfig.groups[selectedGroup]?.length ?? 0;
+        return `已选择「${selectedGroup}」类素材（共${count}张，取前5张作为参考）`;
+      }
       return Object.entries(assetConfig.groups)
         .map(([typeName, urls]) => `${typeName}(共${urls.length}张)`)
         .join("、");
@@ -4811,13 +4826,14 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
       : "深色系：背景 #0f0f0f，文字 #ffffff，强调色 #c8a96e（金色）";
 
     const generatedPages: any[] = [];
+    // by_type 模式下的文件夹名列表（提前计算，不随循环变化）
+    const byTypeGroupNames = getByTypeGroupNames();
 
     for (let pageIdx = 0; pageIdx < job.pageCount; pageIdx++) {
-      // 素材图（如有）：按页或按类型取对应素材，最多 5 张
-      const pageAssets = getAssetsForPage(pageIdx);
-      const assetImagesForPage = pageAssets.length > 0
-        ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
-        : undefined;
+      // by_type 模式：构建告知 LLM 可用文件夹的 instruction
+      const byTypeInstruction = byTypeGroupNames.length > 0
+        ? `\n- 可用素材文件夹：${byTypeGroupNames.join("、")}，请根据这一页的主题选择最合适的一个文件夹，输出到 selectedAssetGroup 字段`
+        : "";
 
       // Step 1: LLM 规划排版结构，输出文字块坐标
       const planResponse = await invokeLLM({
@@ -4834,7 +4850,7 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
 - 每个文字块的 x/y 是左上角坐标，width/height 是文字区域尺寸（单位 px）
 - 留出足够边距（至少 40px）
 - fontSize 单位 px，标题 48-80px，副标题 24-36px，正文 16-22px
-- 最多 6 个文字块`
+- 最多 6 个文字块${byTypeInstruction}`
           },
           {
             role: "user",
@@ -4854,6 +4870,7 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
               properties: {
                 pageTheme: { type: "string", description: "这一页的视觉主题描述（用于图像生成 prompt）" },
                 backgroundColor: { type: "string", description: "背景主色 hex" },
+                selectedAssetGroup: { type: "string", description: "选择的素材文件夹名称，必须是可用文件夹列表中的一个，无文件夹时输出空字符串" },
                 textBlocks: {
                   type: "array",
                   items: {
@@ -4875,7 +4892,7 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
                   }
                 }
               },
-              required: ["pageTheme", "backgroundColor", "textBlocks"],
+              required: ["pageTheme", "backgroundColor", "selectedAssetGroup", "textBlocks"],
               additionalProperties: false,
             }
           }
@@ -4887,16 +4904,23 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
       const textBlocks: any[] = plan.textBlocks ?? [];
       const pageTheme: string = plan.pageTheme ?? "";
       const bgColor: string = plan.backgroundColor ?? (sg?.colorPalette?.background ?? "#0f0f0f");
+      // LLM 选定的素材文件夹（by_type 模式下有效）
+      const selectedGroup: string | undefined = plan.selectedAssetGroup || undefined;
+      // 根据 LLM 选定的文件夹取素材图（最多 5 张）
+      const pageAssets = getAssetsForPage(pageIdx, selectedGroup);
+      const assetImagesForPage = pageAssets.length > 0
+        ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
+        : undefined;
 
       // Step 2: 构建图像生成 prompt（包含完整排版描述）
       const textDescriptions = textBlocks.map((b: any) =>
         `"${b.text}" (${b.role}, ${b.fontSize}px, color ${b.color}, at position ${Math.round(b.x/imgW*100)}% from left, ${Math.round(b.y/imgH*100)}% from top)`
       ).join("; ");
 
-      const byTypeDesc = getByTypeDescription();
+      const byTypeDesc = getByTypeDescription(selectedGroup);
       const assetDesc = pageAssets.length > 0
         ? (byTypeDesc
-            ? `incorporate the provided reference images as visual elements; available asset categories: ${byTypeDesc} — choose the most suitable ones for this page's theme`
+            ? `incorporate the provided reference images as visual elements; ${byTypeDesc}`
             : `incorporate the provided reference images as visual elements`)
         : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
 

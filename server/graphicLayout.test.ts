@@ -386,6 +386,21 @@ describe("graphicLayout", () => {
     await trpc.graphicLayout.delete({ id: job.id });
   }, 15000);
 
+  it("generate should reject by_type assetConfig with more than 20 images per group", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    const tooManyUrls = Array.from({ length: 21 }, (_, i) => `https://example.com/img${i}.jpg`);
+    await expect(trpc.graphicLayout.generate({
+      docType: "brand_manual",
+      pageCount: 1,
+      contentText: "Too many group assets test",
+      assetConfig: {
+        mode: "by_type",
+        groups: { "室内实景": tooManyUrls },
+      },
+    })).rejects.toThrow();
+  }, 10000);
+
   it("generate should reject per_page assetConfig with more than 5 images per page", async () => {
     const ctx = createContext(createTestUser());
     const trpc = caller(ctx);
