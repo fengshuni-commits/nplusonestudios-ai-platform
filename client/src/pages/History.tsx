@@ -289,6 +289,93 @@ async function downloadImage(url: string, filename: string) {
   } catch { window.open(url, "_blank"); }
 }
 
+// ─── Media Content View ─────────────────────────────────────────────────────
+
+function MediaContentView({ item, onLightbox }: { item: any; onLightbox: (src: string, label: string) => void }) {
+  // Parse outputContent (JSON string) or fall back to summary
+  const parsed = useMemo(() => {
+    if (!item.outputContent) return null;
+    try { return JSON.parse(item.outputContent); } catch { return null; }
+  }, [item.outputContent]);
+
+  const isWechat = item.module === "media_wechat";
+  const isIg = item.module === "media_instagram";
+
+  if (!parsed) {
+    return (
+      <div className="space-y-3">
+        {item.outputUrl && (
+          <div className="rounded-lg overflow-hidden border border-border/50 cursor-zoom-in" onClick={() => onLightbox(item.outputUrl, item.title)}>
+            <img src={item.outputUrl} alt={item.title} className="w-full h-auto max-h-[300px] object-cover" />
+          </div>
+        )}
+        <p className="text-sm text-muted-foreground">{item.summary || "暂无内容"}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Cover image */}
+      {item.outputUrl && (
+        <div className="rounded-lg overflow-hidden border border-border/50 cursor-zoom-in group/img relative"
+          onClick={() => onLightbox(item.outputUrl, item.title)}>
+          <img src={item.outputUrl} alt={item.title} className="w-full h-auto max-h-[280px] object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/20">
+            <div className="bg-black/60 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">
+              <Maximize2 className="h-3 w-3" />
+              点击放大
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Title */}
+      {(parsed.title || parsed.caption) && (
+        <div>
+          <p className="text-[10px] font-medium text-muted-foreground mb-1">{isIg ? "Caption" : "标题"}</p>
+          <p className="text-sm font-semibold text-foreground leading-snug">{parsed.title || parsed.caption}</p>
+        </div>
+      )}
+
+      {/* Summary (wechat only) */}
+      {isWechat && parsed.summary && (
+        <div>
+          <p className="text-[10px] font-medium text-muted-foreground mb-1">摘要</p>
+          <p className="text-sm text-foreground/70 leading-relaxed">{parsed.summary}</p>
+        </div>
+      )}
+
+      {/* Main content */}
+      {parsed.content && (
+        <div>
+          <p className="text-[10px] font-medium text-muted-foreground mb-1">正文</p>
+          <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap rounded-lg bg-muted/40 p-3 border border-border/30 max-h-[300px] overflow-y-auto">
+            {parsed.content}
+          </div>
+        </div>
+      )}
+
+      {/* Tags / Hashtags */}
+      {(parsed.tags || parsed.hashtags) && (
+        <div>
+          <p className="text-[10px] font-medium text-muted-foreground mb-1.5">{isIg ? "Hashtags" : "标签"}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {(parsed.tags || parsed.hashtags || []).map((tag: string, i: number) => (
+              <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/40">{tag}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No cover image notice */}
+      {!item.outputUrl && (
+        <p className="text-xs text-muted-foreground/50 border-t border-border/30 pt-3">封面图生成失败（AI 配额不足），文字内容已保存</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Unified Tile Card ───────────────────────────────────────────────────────
 
 interface TileCardProps {
@@ -333,6 +420,7 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
   };
   const ModuleIcon = cfg.icon;
   const isRender = item.module === "ai_render" || item.module === "layout_design";
+  const isMedia = item.module === "media_xiaohongshu" || item.module === "media_wechat" || item.module === "media_instagram";
   const displayUrl = item.latestOutputUrl || item.outputUrl;
   const chainLen = item.chainLength || 1;
   const title = item.latestTitle || item.title;
@@ -372,13 +460,19 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
         <img src={displayUrl} alt={title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
       ) : item.module === "ai_video" && displayUrl ? (
         <video src={displayUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+      ) : isMedia && displayUrl ? (
+        <img src={displayUrl} alt={title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
       ) : (
         <div className={`absolute inset-0 bg-gradient-to-br ${cfg.gradient}`} />
       )}
 
       {/* Dark overlay for non-image tiles */}
-      {!isRender && item.module !== "ai_video" && (
+      {!isRender && item.module !== "ai_video" && !(isMedia && displayUrl) && (
         <div className="absolute inset-0 bg-black/20" />
+      )}
+      {/* Dark overlay for media tiles with cover image */}
+      {isMedia && displayUrl && (
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
       )}
 
       {/* Content overlay */}
@@ -404,12 +498,18 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
           </div>
         </div>
 
-        {/* Center: large icon for non-image tiles */}
-        {!isRender && (
-          <div className="flex items-center justify-center flex-1">
-            <ModuleIcon className={`h-10 w-10 opacity-30 ${cfg.iconColor}`} />
+        {/* Center: large icon or text preview for non-image tiles */}
+        {!isRender && !(isMedia && displayUrl) && (
+          <div className="flex flex-col items-center justify-center flex-1 gap-1.5 px-1">
+            {isMedia && item.summary ? (
+              <p className="text-[10px] text-white/70 leading-relaxed line-clamp-4 text-center">{item.summary}</p>
+            ) : (
+              <ModuleIcon className={`h-10 w-10 opacity-30 ${cfg.iconColor}`} />
+            )}
           </div>
         )}
+        {/* Media with cover image: spacer */}
+        {isMedia && displayUrl && <div className="flex-1" />}
 
         {/* Bottom: title + time */}
         <div className={`${isRender ? "opacity-0 group-hover:opacity-100 transition-opacity" : ""}`}>
@@ -1174,7 +1274,21 @@ export default function HistoryPage() {
                 {displayContentItem?.outputContent && (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
                     onClick={() => {
-                      const text = displayContentItem?.outputContent || "";
+                      let text = displayContentItem?.outputContent || "";
+                      // For media modules, extract readable text from JSON
+                      if (['media_xiaohongshu', 'media_wechat', 'media_instagram'].includes(displayContentItem?.module || '')) {
+                        try {
+                          const parsed = JSON.parse(text);
+                          const parts = [];
+                          if (parsed.title) parts.push(parsed.title);
+                          if (parsed.caption) parts.push(parsed.caption);
+                          if (parsed.summary) parts.push(parsed.summary);
+                          if (parsed.content) parts.push(parsed.content);
+                          if (parsed.tags) parts.push(parsed.tags.join(' '));
+                          if (parsed.hashtags) parts.push(parsed.hashtags.join(' '));
+                          text = parts.join('\n\n');
+                        } catch {}
+                      }
                       navigator.clipboard.writeText(text).then(() => toast.success("内容已复制")).catch(() => toast.error("复制失败"));
                     }}>
                     <Copy className="h-3 w-3 mr-1" />
@@ -1211,6 +1325,8 @@ export default function HistoryPage() {
                   </div>
                 )}
               </div>
+            ) : displayContentItem && ['media_xiaohongshu', 'media_wechat', 'media_instagram'].includes(displayContentItem.module) ? (
+              <MediaContentView item={displayContentItem} onLightbox={(src, label) => setLightbox({ src, label })} />
             ) : (currentReportContent || displayContentItem?.outputContent) ? (
               <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
                 <ReportMarkdown>{currentReportContent || displayContentItem?.outputContent || ""}</ReportMarkdown>

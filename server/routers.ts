@@ -2997,7 +2997,7 @@ Note: Instagram content should be visually driven, use professional English, inc
           summary: input.topic.substring(0, 200),
           inputParams: { platform: input.platform, topic: input.topic, style: input.style },
           outputUrl: coverImageUrl,
-          outputContent: typeof textContent === 'string' ? textContent : null,
+          outputContent: typeof textContent === 'string' ? textContent : JSON.stringify(textContent),
           status: "success",
           durationMs: Date.now() - startTime,
           projectId: null,
