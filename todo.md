@@ -1355,3 +1355,9 @@
 - [x] 移除 Phase 1 prompt 中的 diversityHints、建筑媒体限制、建筑项目要求
 - [x] 移除 tavily.ts 中搜索查询硬编码的 “建筑设计”/“architecture design”/“architecture interior design”后缀
 - [x] 保存检查点
+
+## Bug 修复：案例调研历史成果无法显示图片 + 继续编辑功能
+- [x] 排查根本原因：BenchmarkChainItem 用 pre 标签渲染，Markdown 图片语法被当纯文本显示
+- [x] 修复：将 pre 替换为 ReportMarkdown，图片、链接、标题均可正常渲染
+- [x] 在 TileCard 卡片添加「在报告模块中继续编辑」快捷按鈕（跳转到 /design/planning?historyId=xxx）
+- [x] 保存检查点

@@ -401,8 +401,8 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
       </div>
       {expanded && (
         <div className="px-3 pb-3 border-t border-border/30">
-          <div className="pt-2 prose prose-xs prose-neutral max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 text-xs leading-relaxed">
-            <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground/80 bg-transparent">{content}</pre>
+          <div className="pt-2 prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 leading-relaxed">
+            <ReportMarkdown>{content}</ReportMarkdown>
           </div>
         </div>
       )}
@@ -541,6 +541,19 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
           onClick={(e) => { e.stopPropagation(); onImport(item.id); }}>
           <div className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-emerald-500/80 hover:text-white transition-colors" title="导入到素材库">
             <FolderPlus className="h-3 w-3" />
+          </div>
+        </div>
+      )}
+
+      {/* Open in planning module button for benchmark_report */}
+      {item.module === "benchmark_report" && onNavigate && (
+        <div className="absolute bottom-1.5 right-14 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate(`/design/planning?historyId=${item.id}`);
+          }}>
+          <div className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-primary/80 hover:text-white transition-colors" title="在报告模块中继续编辑">
+            <ExternalLink className="h-3 w-3" />
           </div>
         </div>
       )}
