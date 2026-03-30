@@ -1975,3 +1975,27 @@ export async function getMemberAiStats() {
     };
   });
 }
+
+// ─── Benchmark: Recent Case Names ────────────────────────────────────────────────────────────────
+/**
+ * Get the list of case names used in a user's recent benchmark jobs.
+ * Used to avoid repeating the same cases in new reports.
+ */
+export async function getRecentBenchmarkCaseNames(userId: number, limit = 10): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(
+    sql`SELECT caseRefs FROM benchmark_jobs WHERE userId = ${userId} AND status = 'done' AND caseRefs IS NOT NULL ORDER BY createdAt DESC LIMIT ${limit}`
+  );
+  const rows = result[0] as unknown as Array<{ caseRefs: unknown }>;
+  const allNames = new Set<string>();
+  for (const row of rows) {
+    try {
+      const refs = typeof row.caseRefs === 'string' ? JSON.parse(row.caseRefs) : row.caseRefs;
+      if (refs && typeof refs === 'object') {
+        Object.keys(refs).forEach(name => allNames.add(name));
+      }
+    } catch { /* ignore */ }
+  }
+  return Array.from(allNames);
+}

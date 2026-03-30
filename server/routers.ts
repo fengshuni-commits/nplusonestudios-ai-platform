@@ -1792,20 +1792,64 @@ async function generateBenchmarkInBackground(
   try {
     await db.updateBenchmarkJob(jobId, { status: "processing" });
 
+    // === Phase 0: Extract design keywords from requirements ===
+    const keywordResponse = await invokeLLMWithUserTool({
+      messages: [
+        {
+          role: "system",
+          content: `你是一位建筑设计专家。请从用户的项目需求描述中，提取 4-6 个最关键的设计维度关键词（如空间类型、功能特征、设计风格、技术要求、用户体验等）。
+这些关键词将用于引导案例搜索，应该具体且有区分度，避免过于宽泛。
+只返回关键词列表，每行一个，无需解释。`
+        },
+        {
+          role: "user",
+          content: `项目名称：${input.projectName}\n项目类型：${input.projectType}\n项目需求：${input.requirements}`
+        }
+      ],
+    }, userId);
+    const keywordsRaw = typeof keywordResponse.choices[0]?.message?.content === 'string'
+      ? keywordResponse.choices[0].message.content : '';
+    const designKeywords = keywordsRaw
+      .split('\n')
+      .map(line => line.replace(/^[-*\d.\s]+/, '').trim())
+      .filter(line => line.length > 1)
+      .slice(0, 6);
+    console.log(`[Benchmark] Phase 0 keywords: ${designKeywords.join(', ')}`);
+
     // === Phase 1: Generate case study names only ===
+    // Fetch recent case names to avoid repetition
+    const recentCaseNames = await db.getRecentBenchmarkCaseNames(userId, 8);
+    const excludeSection = recentCaseNames.length > 0
+      ? `\n**必须排除以下已调研过的案例**（请选择全新的案例）：\n${recentCaseNames.map(n => `- ${n}`).join('\n')}\n`
+      : '';
+    // Rotating diversity hints to guide different angles each time
+    const diversityHints = [
+      '优先选择近三年（2022-2025年）竣工的新项目',
+      '优先选择欧洲或北美的国际案例，兼顾1-2个中国案例',
+      '优先选择中小规模（5000㎡以下）的精品项目',
+      '优先选择亚洲（日本、新加坡、韩国等）的案例',
+      '优先选择获得国际建筑奖项（普利兹克、AIA、RIBA等）的项目',
+      '优先选择由独立建筑师事务所（非大型商业机构）设计的项目',
+      '优先选择在可持续设计或绿色建筑方面有突出表现的项目',
+      '优先选择在室内空间创新或工作方式探索上有独特理念的项目',
+    ];
+    const hint = diversityHints[Math.floor(Date.now() / 1000) % diversityHints.length];
     const phase1Response = await invokeLLMWithUserTool({
       messages: [
         {
           role: "system",
-          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息，列出 ${input.referenceCount || 5} 个最相关的对标案例名称。
+          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息和设计关键词，列出 ${input.referenceCount || 5} 个最相关的对标案例名称。
+
+**本次调研的设计关键词**（必须围绕这些维度选案例）：${designKeywords.join('、')}
+
+**本次调研方向**：${hint}
 
 **要求**：
 - 只返回案例名称列表，每行一个，无需其他内容
 - 案例必须是真实存在的建筑项目，优先选择在 ArchDaily、谷德设计等主流建筑媒体上有详细介绍的项目
 - 案例名称必须是项目的真实英文或中文名称，例如"Apple Park"、"腾讯滨海大厦"、"华为松山湖研发中心"，不要使用描述性短语
-- 优先选择知名度高、在建筑媒体上有大量报道的项目，确保 Tavily 搜索能找到真实链接
-- 不要包含任何链接或额外说明
-
+- 案例应覆盖不同地域、不同规模、不同设计师，避免选择同一类型的案例
+- 不要包含任何链接或额外说明${excludeSection}
 直接输出案例名称列表，每行一个。`
         },
         {
