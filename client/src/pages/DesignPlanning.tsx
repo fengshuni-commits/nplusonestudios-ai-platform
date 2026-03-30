@@ -72,11 +72,27 @@ export default function DesignPlanning() {
   const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
   const [report, setReport] = useState<string>("");
   const [reportHistoryId, setReportHistoryId] = useState<number | undefined>(undefined);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [generateElapsed, setGenerateElapsed] = useState(0);
   const generateTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [benchmarkJobId, setBenchmarkJobId] = useState<string | null>(null);
+  const BENCHMARK_JOB_KEY = "benchmark_pending_job";
+  const [benchmarkJobId, setBenchmarkJobIdState] = useState<string | null>(() => {
+    // Restore pending job from localStorage on mount
+    try { return localStorage.getItem(BENCHMARK_JOB_KEY) || null; } catch { return null; }
+  });
+  // If there's a pending job on mount, show generating state
+  const [isGenerating, setIsGenerating] = useState(() => {
+    try { return !!localStorage.getItem(BENCHMARK_JOB_KEY); } catch { return false; }
+  });
   const benchmarkPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Wrapper: keep localStorage in sync with state
+  const setBenchmarkJobId = (id: string | null) => {
+    setBenchmarkJobIdState(id);
+    try {
+      if (id) localStorage.setItem(BENCHMARK_JOB_KEY, id);
+      else localStorage.removeItem(BENCHMARK_JOB_KEY);
+    } catch {}
+  };
 
   // Conversation / refine state
   const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
@@ -262,6 +278,7 @@ export default function DesignPlanning() {
     if (!form.projectName.trim()) { toast.error("请输入报告名称"); return; }
     if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
     setIsGenerating(true);
+    setBenchmarkJobId(null); // clear any stale job
     setReport("");
     setChatHistory([]);
     setGenerateElapsed(0);

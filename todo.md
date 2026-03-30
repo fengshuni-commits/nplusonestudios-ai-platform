@@ -1284,3 +1284,7 @@
 - [x] 后端：Phase 3 生成报告时，在每个案例章节 prompt 中注入图片 URL，让 LLM 用 Markdown 图片语法嵌入
 - [x] 前端：ReportMarkdown 渲染器添加 CustomImage 组件（圆角、最大高度 256px、加载失败自动隐藏）
 - [x] 测试验证并保存 checkpoint
+
+## Bug 修复：案例调研报告生成无结果
+- [x] 排查报告生成失败原因（用户离开页面导致组件卸载，报告内容丢失）
+- [x] 将 benchmarkJobId 持久化到 localStorage，页面重新加载时自动恢复轮询和 isGenerating 状态
