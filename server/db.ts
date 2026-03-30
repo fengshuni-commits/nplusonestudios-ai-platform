@@ -2106,3 +2106,74 @@ export async function getAiToolRecentFailures(limit: number) {
     errorMessage: string | null;
   }>);
 }
+
+/** 按成员统计 AI 工具调用（近 N 天） */
+export async function getAiToolStatsByUser(days: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(
+    sql`
+      SELECT
+        l.userId,
+        u.name AS userName,
+        u.avatar AS userAvatar,
+        u.department,
+        COUNT(*) AS totalCalls,
+        SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) AS successCalls,
+        SUM(CASE WHEN l.status = 'failed'  THEN 1 ELSE 0 END) AS failedCalls,
+        AVG(CASE WHEN l.durationMs IS NOT NULL THEN l.durationMs END) AS avgDurationMs,
+        MAX(l.createdAt) AS lastCalledAt
+      FROM ai_tool_logs l
+      LEFT JOIN users u ON l.userId = u.id
+      WHERE l.createdAt >= DATE_SUB(NOW(), INTERVAL ${days} DAY)
+      GROUP BY l.userId, u.name, u.avatar, u.department
+      ORDER BY totalCalls DESC
+    `
+  );
+  return (result[0] as unknown as Array<{
+    userId: number;
+    userName: string | null;
+    userAvatar: string | null;
+    department: string | null;
+    totalCalls: number;
+    successCalls: number;
+    failedCalls: number;
+    avgDurationMs: number | null;
+    lastCalledAt: Date;
+  }>);
+}
+
+/** 按成员 + 操作类型 + 工具统计（近 N 天，用于成员详情展开） */
+export async function getAiToolStatsByUserAndAction(days: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(
+    sql`
+      SELECT
+        l.userId,
+        u.name AS userName,
+        l.action,
+        l.toolId,
+        t.name AS toolName,
+        COUNT(*) AS totalCalls,
+        SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) AS successCalls,
+        SUM(CASE WHEN l.status = 'failed'  THEN 1 ELSE 0 END) AS failedCalls
+      FROM ai_tool_logs l
+      LEFT JOIN users u ON l.userId = u.id
+      LEFT JOIN ai_tools t ON l.toolId = t.id
+      WHERE l.createdAt >= DATE_SUB(NOW(), INTERVAL ${days} DAY)
+      GROUP BY l.userId, u.name, l.action, l.toolId, t.name
+      ORDER BY l.userId, totalCalls DESC
+    `
+  );
+  return (result[0] as unknown as Array<{
+    userId: number;
+    userName: string | null;
+    action: string | null;
+    toolId: number;
+    toolName: string | null;
+    totalCalls: number;
+    successCalls: number;
+    failedCalls: number;
+  }>);
+}

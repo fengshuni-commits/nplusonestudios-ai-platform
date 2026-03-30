@@ -1698,6 +1698,17 @@ const aiToolsRouter = router({
       const recentFailures = await db.getAiToolRecentFailures(20);
       return { toolStats, dailyTrend, recentFailures };
     }),
+
+  getStatsByUser: adminProcedure
+    .input(z.object({
+      days: z.number().min(1).max(90).default(30),
+    }))
+    .query(async ({ input }) => {
+      const { days } = input;
+      const userStats = await db.getAiToolStatsByUser(days);
+      const userActionStats = await db.getAiToolStatsByUserAndAction(days);
+      return { userStats, userActionStats };
+    }),
 });
 
 // ─── AI Module: Benchmarking Research ────────────────────
