@@ -74,13 +74,14 @@ function CustomImage({
   const [error, setError] = useState(false);
   if (!src || error) return null;
   return (
-    <span className="block my-3">
+    <span className="block my-3 group/img">
       <img
         src={src}
         alt={alt || ""}
         onError={() => setError(true)}
-        className="rounded-lg max-w-full max-h-64 object-cover border border-border/40 shadow-sm"
+        className="rounded-lg max-w-full max-h-64 object-cover border border-border/40 shadow-sm transition-all group-hover/img:shadow-md group-hover/img:brightness-95 cursor-pointer"
         loading="lazy"
+        title={alt ? `${alt} — 点击查看来源` : "点击查看来源"}
         {...rest}
       />
       {alt && (
