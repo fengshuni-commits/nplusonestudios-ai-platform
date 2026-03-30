@@ -1257,3 +1257,17 @@
 - [x] 排查原因：DashboardLayout 全局问号按钮在图文排版页面时显示默认帮助内容
 - [x] 将图文排版专属说明注册到 HelpGuide.tsx 的 /media/layout 路由，全局问号按钮在图文排版页面时自动显示专属说明
 - [x] 保存 checkpoint
+
+## Bug 修复：index.css HMR 重载失败
+- [x] 排查原因：HelpGuide.tsx 中中文双引号导致 Babel 字符串截断，重写文件已修复
+- [x] 修复并验证 Vite HMR 正常重载
+- [x] 保存 checkpoint
+
+## 功能：团队管理 - 任务视图
+- [x] 后端：admin.getMemberTaskStats 接口（按成员汇总：总任务数、已完成、进行中、提前完成、延期完成、逆期未完成）
+- [x] 后端：admin.analyzePerformance 接口（用 invokeLLMWithUserTool 生成员工表现分析报告）
+- [x] 前端：团队管理页面新增「任务视图」 Tab（与成员列表并列）
+- [x] 前端：任务视图展示成员统计卡片（头像、姓名、各类任务数量、完成率、逆期率）
+- [x] 前端：任务视图展示汇总图表（recharts 柱状图：各成员完成/延期/进行中对比）
+- [x] 前端：AI 分析员工表现按钮（选择 AI 工具，调用 analyzePerformance，展示分析报告）
+- [x] 测试验证并保存 checkpoint

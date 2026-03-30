@@ -2697,6 +2697,41 @@ const adminRouter = router({
       await db.deleteCaseSource(input.id);
       return { success: true };
     }),
+  // ─── Team Task Stats ───────────────────────────────────
+  getMemberTaskStats: adminProcedure.query(async () => {
+    return db.getMemberTaskStats();
+  }),
+
+  analyzePerformance: adminProcedure
+    .input(z.object({
+      statsJson: z.string(),
+      aiToolId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { statsJson, aiToolId } = input;
+      const stats = JSON.parse(statsJson);
+
+      const memberLines = (stats as any[]).map((m) => {
+        const completionRate = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
+        const overdueRate = m.done > 0 ? Math.round((m.overdueCompleted / m.done) * 100) : 0;
+        return `- ${m.name}：总任务 ${m.total} 个，已完成 ${m.done} 个（完成率 ${completionRate}%），提前完成 ${m.earlyCompleted} 个，延期完成 ${m.overdueCompleted} 个（延期率 ${overdueRate}%），进行中 ${m.inProgress} 个，逾期未完成 ${m.overdueIncomplete} 个`;
+      }).join('\n');
+
+      const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+        {
+          role: 'system',
+          content: '你是一位专业的团队管理顾问，擅长根据任务数据分析团队成员的工作表现。请用中文撰写分析报告，风格专业、客观、建设性，避免过度批评。报告应包含：1) 整体团队表现概述；2) 各成员表现亮点与改进建议；3) 团队协作建议。',
+        },
+        {
+          role: 'user',
+          content: `请根据以下团队成员任务完成数据，生成一份员工表现分析报告：\n\n${memberLines}\n\n请重点分析任务完成率、提前/延期完成情况，并给出具体的改进建议。`,
+        },
+      ];
+
+       const llmResult = await invokeLLMWithUserTool({ messages }, undefined, aiToolId);
+      return { report: llmResult.choices[0]?.message?.content || '' };
+    }),
+
 });
 
 // ─── File Upload ─────────────────────────────────────────

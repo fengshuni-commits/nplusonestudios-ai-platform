@@ -1828,3 +1828,78 @@ export async function updateRenderingJob(id: string, updates: {
   if (Object.keys(set).length === 0) return;
   await db.update(renderingJobs).set(set).where(eq(renderingJobs.id, id));
 }
+
+
+// ─── Team Task Stats ──────────────────────────────────────
+export async function getMemberTaskStats() {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Get all approved users
+  const allUsers = await db.select({
+    id: users.id,
+    name: users.name,
+    avatar: users.avatar,
+    department: users.department,
+  }).from(users).where(eq(users.approved, true));
+
+  if (allUsers.length === 0) return [];
+
+  // Get all tasks with assignee
+  const allTasks = await db.select({
+    id: tasks.id,
+    assigneeId: tasks.assigneeId,
+    status: tasks.status,
+    dueDate: tasks.dueDate,
+    updatedAt: tasks.updatedAt,
+  }).from(tasks).where(sql`${tasks.assigneeId} IS NOT NULL`);
+
+  const now = new Date();
+
+  // Build stats per member
+  return allUsers.map((u) => {
+    const memberTasks = allTasks.filter((t) => t.assigneeId === u.id);
+    const total = memberTasks.length;
+    const done = memberTasks.filter((t) => t.status === 'done').length;
+    const inProgress = memberTasks.filter((t) => t.status === 'in_progress' || t.status === 'review').length;
+
+    // Early completed: done AND completedAt (updatedAt) <= dueDate
+    const earlyCompleted = memberTasks.filter((t) => {
+      if (t.status !== 'done') return false;
+      if (!t.dueDate) return false;
+      return t.updatedAt <= t.dueDate;
+    }).length;
+
+    // Overdue completed: done AND completedAt (updatedAt) > dueDate
+    const overdueCompleted = memberTasks.filter((t) => {
+      if (t.status !== 'done') return false;
+      if (!t.dueDate) return false;
+      return t.updatedAt > t.dueDate;
+    }).length;
+
+    // Overdue incomplete: not done AND dueDate < now
+    const overdueIncomplete = memberTasks.filter((t) => {
+      if (t.status === 'done') return false;
+      if (!t.dueDate) return false;
+      return t.dueDate < now;
+    }).length;
+
+    const completionRate = total > 0 ? Math.round((done / total) * 100) : 0;
+    const overdueRate = done > 0 ? Math.round((overdueCompleted / done) * 100) : 0;
+
+    return {
+      userId: u.id,
+      name: u.name || 'Unknown',
+      avatar: u.avatar,
+      department: u.department,
+      total,
+      done,
+      inProgress,
+      earlyCompleted,
+      overdueCompleted,
+      overdueIncomplete,
+      completionRate,
+      overdueRate,
+    };
+  });
+}
