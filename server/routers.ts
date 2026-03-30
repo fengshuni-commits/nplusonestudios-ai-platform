@@ -4471,10 +4471,80 @@ const graphicLayoutRouter = router({
         };
       });
       await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, input.jobId));
-      return { success: true, newImageUrl };
+       return { success: true, newImageUrl };
+    }),
+
+  // ─── 导出 PDF ──────────────────────────────────────────────────────────────
+  exportPdf: protectedProcedure
+    .input(z.object({ jobId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+        .where(_and(_eq(graphicLayoutJobs.id, input.jobId), _eq(graphicLayoutJobs.userId, ctx.user.id)))
+        .limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      if (job.status !== "done") throw new TRPCError({ code: "BAD_REQUEST", message: "排版尚未完成" });
+      const pages = (job.pages as any[]) ?? [];
+      if (pages.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "无页面数据" });
+
+      // 计算 PDF 页面尺寸（单位 pt，1mm ≈ 2.8346pt）
+      const aspectRatio = job.aspectRatio ?? "3:4";
+      const PAGE_SIZES: Record<string, [number, number]> = {
+        "3:4":  [595, 793],
+        "4:3":  [793, 595],
+        "1:1":  [595, 595],
+        "16:9": [842, 474],
+        "9:16": [474, 842],
+        "A4":   [595, 842],
+        "A3":   [1191, 842],
+      };
+      const [pageW, pageH] = PAGE_SIZES[aspectRatio] ?? [595, 793];
+
+      // 下载所有页面图片（使用 Node.js 18+ 内置 fetch）
+      const imageBuffers: Array<{ buf: Buffer; idx: number }> = [];
+      const sortedPages = [...pages].sort((a: any, b: any) => a.pageIndex - b.pageIndex);
+      for (const page of sortedPages) {
+        if (!page.imageUrl) continue;
+        try {
+          const res = await fetch(page.imageUrl);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const buf = Buffer.from(await res.arrayBuffer());
+          imageBuffers.push({ buf, idx: page.pageIndex });
+        } catch (err) {
+          console.error(`[exportPdf] Failed to fetch page ${page.pageIndex}:`, err);
+        }
+      }
+      if (imageBuffers.length === 0) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "所有页面图片下载失败" });
+
+      // 用 pdfkit 生成 PDF
+      const PDFDocument = (await import("pdfkit")).default;
+      const pdfChunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+        doc.on("data", (chunk: Buffer) => pdfChunks.push(chunk));
+        doc.on("end", resolve);
+        doc.on("error", reject);
+        for (const { buf } of imageBuffers) {
+          doc.addPage({ size: [pageW, pageH], margin: 0 });
+          try {
+            doc.image(buf, 0, 0, { width: pageW, height: pageH });
+          } catch (e) {
+            console.error("[exportPdf] Failed to embed image:", e);
+          }
+        }
+        doc.end();
+      });
+      const pdfBuffer = Buffer.concat(pdfChunks);
+
+      // 上传到 S3
+      const fileKey = `graphic-layout-pdf/${ctx.user.id}/${input.jobId}-${Date.now()}.pdf`;
+      const { url } = await storagePut(fileKey, pdfBuffer, "application/pdf");
+      return { url, filename: `${job.title || "排版"}.pdf` };
     }),
 });
-
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 
 async function extractGraphicStylePackAsync(packId: number, sourceType: string, fileUrl: string) {

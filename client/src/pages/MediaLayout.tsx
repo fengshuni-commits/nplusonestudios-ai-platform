@@ -12,7 +12,7 @@ import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
-  BookOpen, Layers, Maximize2, FolderOpen, Pencil
+  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -300,6 +300,32 @@ export default function MediaLayout() {
   const [editingPageIndex, setEditingPageIndex] = useState<number>(0);
   const [newText, setNewText] = useState("");
   const [inpaintingBlockId, setInpaintingBlockId] = useState<string | undefined>();
+
+  // Export PDF state
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const exportPdfMutation = trpc.graphicLayout.exportPdf.useMutation({
+    onSuccess: (data) => {
+      const a = document.createElement("a");
+      a.href = data.url;
+      a.download = data.filename;
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("导出成功！");
+      setExportingPdf(false);
+    },
+    onError: (err) => {
+      toast.error("导出失败：" + err.message);
+      setExportingPdf(false);
+    },
+  });
+
+  const handleExportPdf = () => {
+    if (!activeJobId) return;
+    setExportingPdf(true);
+    exportPdfMutation.mutate({ jobId: activeJobId });
+  };
 
   const generateMutation = trpc.graphicLayout.generate.useMutation({
     onSuccess: (data) => {
@@ -648,6 +674,20 @@ export default function MediaLayout() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* 导出 PDF 按钮 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportPdf}
+                    disabled={exportingPdf}
+                    className="h-7 px-2.5 border-white/15 text-white/60 bg-transparent hover:bg-white/8 hover:text-white text-xs"
+                  >
+                    {exportingPdf ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />导出中...</>
+                    ) : (
+                      <><FileDown className="w-3.5 h-3.5 mr-1.5" />导出 PDF</>
+                    )}
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
                     disabled={currentPage === 0} className="h-7 w-7 p-0 text-white/40">
                     <ChevronLeft className="w-4 h-4" />

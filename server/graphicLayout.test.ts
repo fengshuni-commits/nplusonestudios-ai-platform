@@ -271,4 +271,42 @@ describe("graphicLayout", () => {
     expect(result).toBeDefined();
     expect(result.success).toBe(true);
   });
+
+  it("exportPdf should throw BAD_REQUEST when job is not done", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    const job = await trpc.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 1,
+      contentText: "Export PDF test job",
+      assetUrls: [],
+    });
+    // Job is in 'pending' status right after creation
+    await expect(trpc.graphicLayout.exportPdf({ jobId: job.id })).rejects.toThrow();
+    // Cleanup
+    await trpc.graphicLayout.delete({ id: job.id });
+  }, 15000);
+
+  it("exportPdf should throw NOT_FOUND for non-existent job", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    await expect(trpc.graphicLayout.exportPdf({ jobId: 999999999 })).rejects.toThrow();
+  });
+
+  it("exportPdf should throw NOT_FOUND for another user's job", async () => {
+    const ctx1 = createContext(createTestUser());
+    const trpc1 = caller(ctx1);
+    const job = await trpc1.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 1,
+      contentText: "Another user's job",
+      assetUrls: [],
+    });
+    // Different user tries to export — should be NOT_FOUND because userId mismatch
+    const ctx2 = createContext(createTestUser());
+    const trpc2 = caller(ctx2);
+    await expect(trpc2.graphicLayout.exportPdf({ jobId: job.id })).rejects.toThrow();
+    // Cleanup
+    await trpc1.graphicLayout.delete({ id: job.id });
+  }, 15000);
 });
