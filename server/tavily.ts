@@ -55,11 +55,14 @@ export function getSearchDomains(projectType?: string): string[] {
 }
 
 /**
- * Generate a fallback search URL - uses archdaily search page
- * This is a valid, real URL that the LLM should keep as-is
+ * Generate a fallback search URL - uses a general web search
  */
-function getFallbackUrl(caseName: string): string {
+function getFallbackUrl(caseName: string, projectType?: string): string {
   const encoded = encodeURIComponent(caseName);
+  // Use gooood for Chinese projects, archdaily for others
+  if (projectType && ['office', 'exhibition', 'commercial', 'lab', 'factory'].includes(projectType.toLowerCase())) {
+    return `https://www.gooood.cn/?s=${encoded}`;
+  }
   return `https://www.archdaily.com/search/projects?q=${encoded}`;
 }
 
@@ -229,23 +232,23 @@ export async function searchCaseStudy(
   let allResults: TavilySearchResult[] = [];
 
   try {
-    // Strategy 1: Chinese query - open web, no domain restriction
+    // Strategy 1: Chinese query - search by name only, no type restriction
     try {
-      const chineseQuery = `${caseName} 建筑设计`;
+      const chineseQuery = `${caseName} 设计`;
       const chineseResults = await tavilySearch(chineseQuery, 5);
       allResults.push(...chineseResults);
     } catch {
       // Chinese search failure is non-critical
     }
 
-    // Strategy 2: English query - open web, no domain restriction
-    const englishQuery = `${caseName} architecture design`;
+    // Strategy 2: English query - search by name only, no type restriction
+    const englishQuery = `${caseName} design`;
     const englishResults = await tavilySearch(englishQuery, 5);
     allResults.push(...englishResults);
 
     if (allResults.length === 0) {
       console.warn(`[Tavily] No results for "${caseName}", using fallback`);
-      return getFallbackUrl(caseName);
+      return getFallbackUrl(caseName, projectType);
     }
 
     // Score, validate, and sort results
@@ -262,7 +265,7 @@ export async function searchCaseStudy(
     // The fallback is a real archdaily search URL, not a fabricated project URL
     if (best.score < 0.3) {
       console.warn(`[Tavily] Low confidence for "${caseName}" (score=${best.score.toFixed(2)}), using search page fallback`);
-      return getFallbackUrl(caseName);
+      return getFallbackUrl(caseName, projectType);
     }
 
     return best.result.url;
@@ -283,7 +286,7 @@ export async function searchCaseImages(
   if (!TAVILY_API_KEY) return [];
 
   try {
-    const query = `${caseName} architecture interior design`;
+    const query = `${caseName} design space`;
     const response = await fetch(`${TAVILY_BASE_URL}/search`, {
       method: "POST",
       headers: {

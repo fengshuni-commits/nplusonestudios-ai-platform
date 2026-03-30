@@ -1849,37 +1849,14 @@ async function generateBenchmarkInBackground(
     const excludeSection = recentCaseNames.length > 0
       ? `\n**必须排除以下已调研过的案例**（请选择全新的案例）：\n${recentCaseNames.map(n => `- ${n}`).join('\n')}\n`
       : '';
-    // Rotating diversity hints to guide different angles each time
-    const diversityHints = [
-      '优先选择近三年（2022-2025年）竣工的新项目',
-      '优先选择欧洲或北美的国际案例，兼顾1-2个中国案例',
-      '优先选择中小规模（5000㎡以下）的精品项目',
-      '优先选择亚洲（日本、新加坡、韩国等）的案例',
-      '优先选择获得国际建筑奖项（普利兹克、AIA、RIBA等）的项目',
-      '优先选择由独立建筑师事务所（非大型商业机构）设计的项目',
-      '优先选择在可持续设计或绿色建筑方面有突出表现的项目',
-      '优先选择在室内空间创新或工作方式探索上有独特理念的项目',
-    ];
-    const hint = diversityHints[Math.floor(Date.now() / 1000) % diversityHints.length];
     const phase1Response = await invokeLLMWithUserTool({
       messages: [
         {
           role: "system",
-          content: `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息和设计关键词，列出 ${input.referenceCount || 5} 个最相关的对标案例名称。
+          content: `你是 N+1 STUDIOS 的对标调研专家。请仔细阅读用户提供的项目信息和需求描述，选出 ${input.referenceCount || 5} 个与该项目需求最匹配的对标案例名称。
 
-**本次调研的设计关键词**（必须围绕这些维度选案例）：${designKeywords.join('、')}
-
-**本次调研方向**：${hint}
-
-**要求**：
-- 只返回案例名称列表，每行一个，无需其他内容
-- 案例必须是真实存在的建筑项目，优先选择在 ArchDaily、谷德设计等主流建筑媒体上有详细介绍的项目
-- 案例名称必须是项目的真实英文或中文名称（如项目官方名称），不要使用描述性短语
-- **严禁选择以下过度曝光的案例**：Apple Park、腾讯滨海大厦、华为松山湖研发中心、字节跳动北京总部、阿里巴巴西溪园区、Google Campus、Facebook MPK20——这些案例已被过度引用，请选择更具针对性和新鲜感的案例
-- 案例应与项目需求的核心设计关键词高度匹配，而非仅因知名度高而选择
-- 案例应覆盖不同地域、不同规模、不同设计师，避免选择同一类型的案例
-- 不要包含任何链接或额外说明${excludeSection}
-直接输出案例名称列表，每行一个。`
+选案标准：案例应在空间类型、设计元素、使用场景或设计理念上与项目需求直接相关。案例必须是真实存在的项目，使用项目官方名称（英文或中文）。${excludeSection ? excludeSection : ''}
+只返回案例名称列表，每行一个，不要包含链接或额外说明。`
         },
         {
           role: "user",

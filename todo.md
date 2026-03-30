@@ -1292,7 +1292,6 @@
 ## Bug 修复：即梦（Jimeng）AI 效果图功能不可用
 - [ ] 排查即梦功能失败原因（日志、API 调用、错误信息）
 - [ ] 修复并验证即梦功能正常
-<<<<<<< Updated upstream
 
 ## 功能优化：案例调研案例多样性
 - [x] 分析当前搜索逻辑，找到导致重复的原因（未从需求提取关键词，且无排除历史案例）
@@ -1350,5 +1349,9 @@
 - [x] 排查根本原因：Phase 1 prompt 中用 Apple Park/腾讯滨海大厦/华为松山湖作为示例，LLM 把示例当推荐案例
 - [x] 修复：将示例改为明确禁止列表，并加强“选案必须与需求匹配”约束
 - [x] 保存检查点
-=======
->>>>>>> Stashed changes
+
+## Bug 修复：案例调研搜索结果只返回建筑案例
+- [x] 查找 Phase 1 prompt 和 tavily.ts 中硬编码的“建筑项目”限制
+- [x] 移除 Phase 1 prompt 中的 diversityHints、建筑媒体限制、建筑项目要求
+- [x] 移除 tavily.ts 中搜索查询硬编码的 “建筑设计”/“architecture design”/“architecture interior design”后缀
+- [x] 保存检查点
