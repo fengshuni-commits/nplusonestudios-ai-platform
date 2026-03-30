@@ -240,28 +240,74 @@ export interface ImageGenerationResponse {
 
 /**
  * 调用即梦 AI 文生图 API（视觉生成 3.1）
+ * 即梦使用异步任务模式：先提交任务，再轮询结果
  */
 export async function generateImageWithJimeng(
   config: VolcengineConfig,
   request: ImageGenerationRequest
 ): Promise<ImageGenerationResponse> {
   const body: Record<string, unknown> = {
-    req_key: "jimeng_t2i_v3.1",
+    req_key: "jimeng_t2i_v31",
     prompt: request.prompt,
-    negative_prompt: request.negativePrompt || "",
     width: request.width || 1024,
     height: request.height || 1024,
     seed: -1,
-    return_url: true,
   };
 
-  const result = await callVolcengineVisualApi(
+  // Step 1: 提交异步任务（使用通用接口 CVSync2AsyncSubmitTask，version=2022-08-31）
+  const submitResult = await callVolcengineVisualApi(
     config,
-    "JimengT2IV31SubmitTask",
-    body
+    "CVSync2AsyncSubmitTask",
+    body,
+    "2022-08-31"
   );
 
-  return result as ImageGenerationResponse;
+  const submitData = submitResult.data as Record<string, unknown> | undefined;
+  const taskId = submitData?.task_id as string | undefined;
+
+  if (!taskId) {
+    console.error("[Jimeng] Submit task failed, response:", JSON.stringify(submitResult).substring(0, 500));
+    throw new Error(`即梦提交任务失败: ${(submitResult.message as string) || JSON.stringify(submitResult).substring(0, 200)}`);
+  }
+
+  console.log(`[Jimeng] Task submitted, task_id=${taskId}, polling for result...`);
+
+  // Step 2: 轮询任务结果（最多 60s，每 3s 一次）
+  // 查询接口：CVSync2AsyncGetResult，req_json 中设置 return_url=true
+  const reqJson = JSON.stringify({ return_url: true });
+  const maxAttempts = 20;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollResult = await callVolcengineVisualApi(
+      config,
+      "CVSync2AsyncGetResult",
+      { req_key: "jimeng_t2i_v31", task_id: taskId, req_json: reqJson },
+      "2022-08-31"
+    );
+    const pollCode = pollResult.code as number | undefined;
+    if (pollCode !== 10000) {
+      const errMsg = (pollResult.message as string) || "未知错误";
+      throw new Error(`即梦查询任务失败 (code=${pollCode}): ${errMsg}`);
+    }
+    const pollData = pollResult.data as Record<string, unknown> | undefined;
+    const status = pollData?.status as string | undefined;
+    console.log(`[Jimeng] Poll attempt ${i + 1}/${maxAttempts}, status=${status}`);
+    // status: "done" = 成功, "failed" = 失败, 其他 = 处理中
+    if (status === "done") {
+      const imageUrls = pollData?.image_urls as string[] | undefined;
+      if (imageUrls && imageUrls.length > 0) {
+        // 文档返回的是字符串数组，转换为对象数组
+        return { data: { image_urls: imageUrls.map(url => ({ url })) } } as ImageGenerationResponse;
+      }
+      throw new Error("即梦任务成功但无图片 URL");
+    } else if (status === "failed" || status === "error") {
+      const errMsg = (pollData?.message as string) || "未知错误";
+      throw new Error(`即梦任务失败: ${errMsg}`);
+    }
+    // 其他状态（in_queue / processing 等）继续轮询
+  }
+
+  throw new Error("即梦任务超时（60秒），请稍后重试");
 }
 
 /**

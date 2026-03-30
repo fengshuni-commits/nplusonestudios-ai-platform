@@ -1306,3 +1306,9 @@
 - [x] 在 History.tsx 添加 layout_design 模块配置（琥珀色主题），支持图片缩略图展示
 - [x] 点击卡片跳转到图文排版页面，过滤器添加图文排版选项
 - [x] 测试验证并保存 checkpoint
+
+## Bug 修复：即梦 AI 效果图不可用
+- [x] 检查即梦 API 配置：数据库 provider 字段为 null，已更新为 jimeng
+- [x] 对照文档修复接口：req_key 由 jimeng_t2i_v3.1 改为 jimeng_t2i_v31
+- [x] 修复 Action：提交改为 CVSync2AsyncSubmitTask，查询改为 CVSync2AsyncGetResult，version=2022-08-31
+- [x] 修复 status 字段：改为字符串判断（"done"/"failed"），修复 image_urls 字符串数组转换
