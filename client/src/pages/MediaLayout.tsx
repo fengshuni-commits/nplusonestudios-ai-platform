@@ -12,7 +12,7 @@ import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
-  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images
+  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images, HelpCircle
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -487,9 +487,12 @@ export default function MediaLayout() {
     });
   };
 
-  const pages = (activeJob?.pages ?? []) as PageData[];
+   const pages = (activeJob?.pages ?? []) as PageData[];
   const currentPageData = pages[currentPage];
   const activeAspectRatio = activeJob?.aspectRatio || aspectRatio;
+
+  // Help dialog state
+  const [showHelp, setShowHelp] = useState(false);
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0F0F0F]">
@@ -498,11 +501,118 @@ export default function MediaLayout() {
         <div className="w-8 h-8 rounded-lg bg-[#B87333]/20 flex items-center justify-center">
           <LayoutTemplate className="w-4 h-4 text-[#B87333]" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-base font-semibold text-white">图文排版</h1>
           <p className="text-xs text-white/40">AI 生成整页图文排版，点击文字区域可局部重绘编辑</p>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowHelp(true)}
+          className="h-8 w-8 p-0 text-white/30 hover:text-white/70 hover:bg-white/8 rounded-lg"
+          title="使用说明"
+        >
+          <HelpCircle className="w-4.5 h-4.5" />
+        </Button>
       </div>
+
+      {/* Help Dialog */}
+      <Dialog open={showHelp} onOpenChange={setShowHelp}>
+        <DialogContent className="max-w-2xl bg-[#1A1A1A] border-white/10 text-white max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white text-lg font-semibold flex items-center gap-2">
+              <HelpCircle className="w-5 h-5 text-[#B87333]" />
+              图文排版——使用说明
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 text-sm text-white/80 pb-2">
+
+            {/* Overview */}
+            <div className="bg-[#B87333]/10 border border-[#B87333]/20 rounded-lg p-4">
+              <p className="text-white/90 leading-relaxed">
+                图文排版模块可以根据你提供的文字内容和素材图片，自动生成具有专业排版的整页图片——文字、色块、图形、照片全部融入同一张图片中。适用于生成品牌手册、项目图板、商品详情页等多种场景。
+              </p>
+            </div>
+
+            {/* Step 1 */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">1</span>
+                <h3 className="font-semibold text-white">选择或创建版式包</h3>
+              </div>
+              <div className="ml-7 space-y-1.5 text-white/70">
+                <p>左侧「版式包」区域存放你的版式风格库。点击「新建版式包」可以上传参考图片，让 AI 学习其排版风格、配色和字体特征。</p>
+                <p>支持上传多张图片或整个文件夹，上传后 AI 会自动提取风格指南（包含配色、字体、排版特征）。</p>
+                <p>已创建的版式包可在不同生成任务中复用。</p>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">2</span>
+                <h3 className="font-semibold text-white">填写内容与设置</h3>
+              </div>
+              <div className="ml-7 space-y-1.5 text-white/70">
+                <p><span className="text-white/90">文档类型：</span>可选择品牌手册、项目图板、商品详情页或自定义，不同类型会影响 AI 的排版逻辑和内容组织方式。</p>
+                <p><span className="text-white/90">页面数量：</span>支持 1–8 页，多页时 AI 会自动规划每页的内容分配。</p>
+                <p><span className="text-white/90">图幅比例：</span>3:4（竞屏展示）、A4（文档打印）、16:9（宽屏展示）等多种选项，导出 PDF 时页面尺寸会自动匹配。</p>
+                <p><span className="text-white/90">内容描述：</span>详细描述你希望展示的主题、关键信息和风格假设。内容越具体，生成质量越高。</p>
+                <p><span className="text-white/90">素材图片：</span>可选择上传你希望融入排版的实景照片或产品图片， AI 会将其嵌入到合适的版面位置。</p>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">3</span>
+                <h3 className="font-semibold text-white">生成与预览</h3>
+              </div>
+              <div className="ml-7 space-y-1.5 text-white/70">
+                <p>点击「生成排版」后， AI 会先规划每页的文字块布局，再逐页生成整页图片。多页文档会逐页完成，右侧预览区会实时更新。</p>
+                <p>预览区可用左右箭头按鈕切换页面，也可点击左侧缩略图快速跳转。</p>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">4</span>
+                <h3 className="font-semibold text-white">局部重绘修改文案</h3>
+              </div>
+              <div className="ml-7 space-y-1.5 text-white/70">
+                <p>生成完成后，预览区会在图片上叠加透明文字热区。将鼠标悬停在文字区域时，会显示文字内容和编辑图标。</p>
+                <p>点击文字区域后，在弹出的编辑框中输入新文案，点击「重绘」。AI 会以局部重绘（Inpainting）的方式，仅替换该文字区域的内容，保留其余画面不变。</p>
+                <p className="text-white/50 text-xs">提示：重绘需要 10–30 秒，请耐心等待。如果效果不理想，可再次点击重绘。</p>
+              </div>
+            </div>
+
+            {/* Step 5 */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">5</span>
+                <h3 className="font-semibold text-white">导出与下载</h3>
+              </div>
+              <div className="ml-7 space-y-1.5 text-white/70">
+                <p><span className="text-white/90">导出图片：</span>将所有页面打包为 ZIP 文件下载，图片按 page-01、page-02 依次命名，适合展示和分享。</p>
+                <p><span className="text-white/90">导出 PDF：</span>将所有页面合并为一个 PDF 文件，页面尺寸自动匹配所选图幅比例，适合打印和正式提交。</p>
+              </div>
+            </div>
+
+            {/* Tips */}
+            <div className="border-t border-white/8 pt-4">
+              <h3 className="font-semibold text-white mb-2">使用建议</h3>
+              <div className="space-y-1.5 text-white/60">
+                <p>• 版式包的参考图越多、风格越统一，AI 学习效果越好，建议上传 5–10 张同一风格的参考图。</p>
+                <p>• 内容描述中建议包含：主题、核心信息点（标题/副标题/正文）、希望的调性或氛围。</p>
+                <p>• 如果生成结果不理想，可修改内容描述后重新生成，每次生成都会保存在历史记录中。</p>
+                <p>• 局部重绘适合微调文案，如需大幅修改排版风格，建议重新生成。</p>
+              </div>
+            </div>
+
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel */}
