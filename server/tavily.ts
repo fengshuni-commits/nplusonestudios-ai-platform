@@ -20,7 +20,7 @@ export interface TavilySearchResponse {
 }
 
 /**
- * Base architecture/design domains always included
+ * Base design media domains always included
  */
 const BASE_DOMAINS = [
   "archdaily.com",
@@ -28,6 +28,7 @@ const BASE_DOMAINS = [
   "gooood.cn",
   "dezeen.com",
   "archello.com",
+  "designboom.com",
 ];
 
 /**
@@ -35,13 +36,13 @@ const BASE_DOMAINS = [
  */
 const DOMAIN_MAP: Record<string, string[]> = {
   office: [...BASE_DOMAINS, "officelovin.com", "interiordesign.net", "workplaceinsight.net"],
-  exhibition: [...BASE_DOMAINS, "designboom.com", "exhibitormagazine.com", "exhibitionworld.co.uk"],
-  commercial: [...BASE_DOMAINS, "retaildesignblog.net", "designboom.com", "vmsd.com"],
-  residential: [...BASE_DOMAINS, "designboom.com", "dwell.com", "architecturaldigest.com"],
-  cultural: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "museumsandheritage.com"],
-  lab: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "interiordesign.net"],
-  factory: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "interiordesign.net"],
-  other: [...BASE_DOMAINS, "designboom.com", "architecturalrecord.com", "interiordesign.net"],
+  exhibition: [...BASE_DOMAINS, "exhibitormagazine.com", "exhibitionworld.co.uk", "frame-web.com"],
+  commercial: [...BASE_DOMAINS, "retaildesignblog.net", "vmsd.com"],
+  residential: [...BASE_DOMAINS, "dwell.com", "architecturaldigest.com"],
+  cultural: [...BASE_DOMAINS, "architecturalrecord.com", "museumsandheritage.com"],
+  lab: [...BASE_DOMAINS, "architecturalrecord.com", "interiordesign.net"],
+  factory: [...BASE_DOMAINS, "architecturalrecord.com", "interiordesign.net"],
+  other: [...BASE_DOMAINS, "architecturalrecord.com", "interiordesign.net"],
 };
 
 export function getSearchDomains(projectType?: string): string[] {
@@ -55,11 +56,14 @@ export function getSearchDomains(projectType?: string): string[] {
 }
 
 /**
- * Generate a fallback search URL - uses a general web search
+ * Generate a fallback search URL
  */
 function getFallbackUrl(caseName: string, projectType?: string): string {
   const encoded = encodeURIComponent(caseName);
-  // Use gooood for Chinese projects, archdaily for others
+  // Use gooood for Chinese-named projects (contains CJK characters)
+  if (/[\u4e00-\u9fff]/.test(caseName)) {
+    return `https://www.gooood.cn/?s=${encoded}`;
+  }
   if (projectType && ['office', 'exhibition', 'commercial', 'lab', 'factory'].includes(projectType.toLowerCase())) {
     return `https://www.gooood.cn/?s=${encoded}`;
   }
@@ -68,14 +72,13 @@ function getFallbackUrl(caseName: string, projectType?: string): string {
 
 /**
  * Extract meaningful keywords from a case name for URL matching
- * Filters out common words that don't help identify a specific project
  */
 function extractKeywords(caseName: string): string[] {
   const stopWords = new Set([
     "the", "a", "an", "of", "in", "at", "by", "for", "with", "and", "or",
     "office", "building", "center", "centre", "space", "design", "project",
-    "architecture", "studio", "tower", "complex", "park", "campus",
-    "设计", "建筑", "办公", "空间", "中心", "大楼", "园区",
+    "architecture", "studio", "tower", "complex", "park", "campus", "global",
+    "设计", "建筑", "办公", "空间", "中心", "大楼", "园区", "总部",
   ]);
   return caseName
     .toLowerCase()
@@ -85,26 +88,22 @@ function extractKeywords(caseName: string): string[] {
 
 /**
  * Check if a URL is likely to be a correct match for the case name.
- * For archdaily, the URL slug usually contains the project name keywords.
- * For gooood, the URL may be numeric but the title should match.
  */
 function isUrlLikelyCorrect(result: TavilySearchResult, caseName: string): boolean {
   const keywords = extractKeywords(caseName);
-  if (keywords.length === 0) return true; // can't validate, assume ok
+  if (keywords.length === 0) return true;
 
   const urlLower = result.url.toLowerCase();
   const titleLower = result.title.toLowerCase();
 
   // For archdaily: URL slug should contain at least one keyword
   if (urlLower.includes("archdaily.com") || urlLower.includes("archdaily.cn")) {
-    // archdaily URL format: /123456/project-name-slug
-    // Check if the slug part contains a keyword
     const hasKeywordInUrl = keywords.some(kw => urlLower.includes(kw));
     const hasKeywordInTitle = keywords.filter(kw => titleLower.includes(kw)).length >= Math.min(2, keywords.length);
     return hasKeywordInUrl || hasKeywordInTitle;
   }
 
-  // For gooood: title match is sufficient (URLs are often numeric)
+  // For gooood: title match is sufficient
   if (urlLower.includes("gooood.cn")) {
     const matchCount = keywords.filter(kw => titleLower.includes(kw)).length;
     return matchCount >= Math.min(1, keywords.length);
@@ -138,7 +137,8 @@ function scoreResult(result: TavilySearchResult, caseName: string): number {
     urlLower.includes("/tag/") ||
     urlLower.includes("/category/") ||
     urlLower.includes("/type/") ||
-    urlLower.includes("/topics/")
+    urlLower.includes("/topics/") ||
+    urlLower.includes("keyword=")
   ) {
     score -= 0.8;
   }
@@ -146,8 +146,21 @@ function scoreResult(result: TavilySearchResult, caseName: string): number {
   // Boost project-specific pages (archdaily style numeric ID in URL)
   if (/\/\d{6,}\//.test(result.url)) score += 0.3;
 
-  // Boost gooood results (usually very accurate for Chinese projects)
-  if (urlLower.includes("gooood.cn")) score += 0.2;
+  // Boost trusted design media
+  if (urlLower.includes("gooood.cn")) score += 0.3;
+  if (urlLower.includes("archdaily.com") || urlLower.includes("archdaily.cn")) score += 0.2;
+  if (urlLower.includes("dezeen.com") || urlLower.includes("designboom.com")) score += 0.15;
+
+  // Penalize non-design media (news sites, social, travel, etc.)
+  const nonDesignDomains = [
+    "tripadvisor", "sina.cn", "sina.com", "bilibili.com", "sohu.com",
+    "163.com", "qq.com", "xueqiu.com", "pjtime.com", "kimley-horn.com",
+    "truebeck.com", "usgbc.org", "constructingexcellence.org",
+    "laconservancy.org", "phillyyimby.com",
+  ];
+  if (nonDesignDomains.some(d => urlLower.includes(d))) {
+    score -= 1.0;
+  }
 
   // Penalize results that don't match the case name well
   if (!isUrlLikelyCorrect(result, caseName)) {
@@ -159,7 +172,6 @@ function scoreResult(result: TavilySearchResult, caseName: string): number {
 
 /**
  * Low-quality domains to exclude from all searches.
- * These tend to produce irrelevant aggregator pages, ads, or social noise.
  */
 const EXCLUDE_DOMAINS = [
   "pinterest.com",
@@ -179,6 +191,12 @@ const EXCLUDE_DOMAINS = [
   "reddit.com",
   "quora.com",
   "wikipedia.org",
+  "tripadvisor.com",
+  "tripadvisor.cn",
+  "sina.cn",
+  "sohu.com",
+  "163.com",
+  "qq.com",
 ];
 
 /**
@@ -186,20 +204,26 @@ const EXCLUDE_DOMAINS = [
  */
 async function tavilySearch(
   query: string,
-  maxResults = 5
+  maxResults = 5,
+  includeDomains?: string[]
 ): Promise<TavilySearchResult[]> {
+  const body: Record<string, unknown> = {
+    query,
+    max_results: maxResults,
+    search_depth: "basic",
+    exclude_domains: EXCLUDE_DOMAINS,
+  };
+  if (includeDomains && includeDomains.length > 0) {
+    body.include_domains = includeDomains;
+  }
+
   const response = await fetch(`${TAVILY_BASE_URL}/search`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${TAVILY_API_KEY}`,
     },
-    body: JSON.stringify({
-      query,
-      max_results: maxResults,
-      search_depth: "basic",
-      exclude_domains: EXCLUDE_DOMAINS,
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   });
 
@@ -215,10 +239,10 @@ async function tavilySearch(
  * Search for a benchmark case study and return a verified URL.
  *
  * Strategy:
- * 1. Try Chinese query first (gooood.cn is very accurate for Chinese projects)
- * 2. Try English query for international sites (archdaily, dezeen)
- * 3. Score and validate results - penalize archdaily links that don't match case name
- * 4. Fall back to archdaily search page (a real, valid URL) if no good match found
+ * 1. Try domain-restricted search on trusted design media first
+ * 2. Try open web search as fallback
+ * 3. Score and validate results
+ * 4. Fall back to search page if no good match found
  */
 export async function searchCaseStudy(
   caseName: string,
@@ -230,30 +254,26 @@ export async function searchCaseStudy(
   }
 
   let allResults: TavilySearchResult[] = [];
+  const trustedDomains = getSearchDomains(projectType);
 
   try {
-    // Get current year for recency filtering
-    const currentYear = new Date().getFullYear();
-
-    // Strategy 1: Chinese query with recent year hint
+    // Strategy 1: Search within trusted design media domains
     try {
-      const chineseQuery = `${caseName} 设计 ${currentYear - 1}`;
-      const chineseResults = await tavilySearch(chineseQuery, 5);
-      allResults.push(...chineseResults);
+      const domainQuery = `${caseName}`;
+      const domainResults = await tavilySearch(domainQuery, 5, trustedDomains);
+      allResults.push(...domainResults);
     } catch {
-      // Chinese search failure is non-critical
+      // Domain-restricted search failure is non-critical
     }
 
-    // Strategy 2: English query with recent years hint
-    const englishQuery = `${caseName} design ${currentYear - 2} ${currentYear - 1} ${currentYear}`;
-    const englishResults = await tavilySearch(englishQuery, 5);
-    allResults.push(...englishResults);
-
-    // Strategy 3: Fallback without year if no results yet
-    if (allResults.length === 0) {
+    // Strategy 2: Open web search with case name only (no year noise)
+    if (allResults.length < 3) {
       try {
-        const fallbackResults = await tavilySearch(`${caseName} design`, 5);
-        allResults.push(...fallbackResults);
+        const openQuery = /[\u4e00-\u9fff]/.test(caseName)
+          ? `${caseName} 设计`
+          : `${caseName} design`;
+        const openResults = await tavilySearch(openQuery, 5);
+        allResults.push(...openResults);
       } catch { /* ignore */ }
     }
 
@@ -272,9 +292,8 @@ export async function searchCaseStudy(
     // Log for debugging
     console.log(`[Tavily] Best match for "${caseName}": score=${best.score.toFixed(2)} url=${best.result.url}`);
 
-    // If best score is too low, the result is unreliable - use fallback search page
-    // The fallback is a real archdaily search URL, not a fabricated project URL
-    if (best.score < 0.3) {
+    // Higher threshold: if best score is too low, use fallback search page
+    if (best.score < 0.8) {
       console.warn(`[Tavily] Low confidence for "${caseName}" (score=${best.score.toFixed(2)}), using search page fallback`);
       return getFallbackUrl(caseName, projectType);
     }
@@ -287,8 +306,10 @@ export async function searchCaseStudy(
 }
 
 /**
- * Search for images of a specific case study
- * Returns up to 2 image URLs
+ * Search for images of a specific case study.
+ * Uses the same domain-restricted search to ensure images come from
+ * the same trusted sources as the case study link.
+ * Returns up to 2 image URLs.
  */
 export async function searchCaseImages(
   caseName: string,
@@ -296,8 +317,14 @@ export async function searchCaseImages(
 ): Promise<string[]> {
   if (!TAVILY_API_KEY) return [];
 
+  const trustedDomains = getSearchDomains(projectType);
+
   try {
-    const query = `${caseName} design space`;
+    // Use same query strategy as searchCaseStudy for consistency
+    const query = /[\u4e00-\u9fff]/.test(caseName)
+      ? `${caseName} 设计`
+      : `${caseName} design`;
+
     const response = await fetch(`${TAVILY_BASE_URL}/search`, {
       method: "POST",
       headers: {
@@ -306,9 +333,10 @@ export async function searchCaseImages(
       },
       body: JSON.stringify({
         query,
-        max_results: 3,
+        max_results: 5,
         search_depth: "basic",
         include_images: true,
+        include_domains: trustedDomains,
         exclude_domains: EXCLUDE_DOMAINS,
       }),
       signal: AbortSignal.timeout(12000),
@@ -318,7 +346,6 @@ export async function searchCaseImages(
 
     const data = (await response.json()) as TavilySearchResponse & { images?: string[] };
     const images = (data.images || []).filter((url: string) => {
-      // Filter out low-quality or irrelevant images
       const u = url.toLowerCase();
       return (
         (u.endsWith('.jpg') || u.endsWith('.jpeg') || u.endsWith('.png') || u.endsWith('.webp')) &&
@@ -326,6 +353,7 @@ export async function searchCaseImages(
         !u.includes('avatar') &&
         !u.includes('icon') &&
         !u.includes('thumbnail') &&
+        !u.includes('banner') &&
         url.length < 500
       );
     });
