@@ -309,4 +309,38 @@ describe("graphicLayout", () => {
     // Cleanup
     await trpc1.graphicLayout.delete({ id: job.id });
   }, 15000);
+
+  it("exportImages should throw BAD_REQUEST when job is not done", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    const job = await trpc.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 1,
+      contentText: "Export images test job",
+      assetUrls: [],
+    });
+    await expect(trpc.graphicLayout.exportImages({ jobId: job.id })).rejects.toThrow();
+    await trpc.graphicLayout.delete({ id: job.id });
+  }, 15000);
+
+  it("exportImages should throw NOT_FOUND for non-existent job", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    await expect(trpc.graphicLayout.exportImages({ jobId: 999999998 })).rejects.toThrow();
+  });
+
+  it("exportImages should throw NOT_FOUND for another user's job", async () => {
+    const ctx1 = createContext(createTestUser());
+    const trpc1 = caller(ctx1);
+    const job = await trpc1.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 1,
+      contentText: "Another user images job",
+      assetUrls: [],
+    });
+    const ctx2 = createContext(createTestUser());
+    const trpc2 = caller(ctx2);
+    await expect(trpc2.graphicLayout.exportImages({ jobId: job.id })).rejects.toThrow();
+    await trpc1.graphicLayout.delete({ id: job.id });
+  }, 15000);
 });

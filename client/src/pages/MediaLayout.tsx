@@ -12,7 +12,7 @@ import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
-  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown
+  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -325,6 +325,32 @@ export default function MediaLayout() {
     if (!activeJobId) return;
     setExportingPdf(true);
     exportPdfMutation.mutate({ jobId: activeJobId });
+  };
+
+  // Export Images state
+  const [exportingImages, setExportingImages] = useState(false);
+  const exportImagesMutation = trpc.graphicLayout.exportImages.useMutation({
+    onSuccess: (data) => {
+      const a = document.createElement("a");
+      a.href = data.url;
+      a.download = data.filename;
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success(`导出成功！共 ${data.pageCount} 张图片`);
+      setExportingImages(false);
+    },
+    onError: (err) => {
+      toast.error("导出失败：" + err.message);
+      setExportingImages(false);
+    },
+  });
+
+  const handleExportImages = () => {
+    if (!activeJobId) return;
+    setExportingImages(true);
+    exportImagesMutation.mutate({ jobId: activeJobId });
   };
 
   const generateMutation = trpc.graphicLayout.generate.useMutation({
@@ -674,6 +700,20 @@ export default function MediaLayout() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* 导出图片按钮 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportImages}
+                    disabled={exportingImages}
+                    className="h-7 px-2.5 border-white/15 text-white/60 bg-transparent hover:bg-white/8 hover:text-white text-xs"
+                  >
+                    {exportingImages ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />导出中...</>
+                    ) : (
+                      <><Images className="w-3.5 h-3.5 mr-1.5" />导出图片</>
+                    )}
+                  </Button>
                   {/* 导出 PDF 按钮 */}
                   <Button
                     variant="outline"

@@ -4544,6 +4544,64 @@ const graphicLayoutRouter = router({
       const { url } = await storagePut(fileKey, pdfBuffer, "application/pdf");
       return { url, filename: `${job.title || "排版"}.pdf` };
     }),
+
+  // ─── 导出图片 ZIP ────────────────────────────────────────────────────────────
+  exportImages: protectedProcedure
+    .input(z.object({ jobId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+        .where(_and(_eq(graphicLayoutJobs.id, input.jobId), _eq(graphicLayoutJobs.userId, ctx.user.id)))
+        .limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      if (job.status !== "done") throw new TRPCError({ code: "BAD_REQUEST", message: "排版尚未完成" });
+      const pages = (job.pages as any[]) ?? [];
+      if (pages.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "无页面数据" });
+
+      // 下载所有页面图片
+      const sortedPages = [...pages].sort((a: any, b: any) => a.pageIndex - b.pageIndex);
+      const imageEntries: Array<{ buf: Buffer; filename: string }> = [];
+      for (const page of sortedPages) {
+        if (!page.imageUrl) continue;
+        try {
+          const res = await fetch(page.imageUrl);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const buf = Buffer.from(await res.arrayBuffer());
+          // 尝试从 URL 提取扩展名，默认 jpg
+          const urlPath = new URL(page.imageUrl).pathname;
+          const ext = urlPath.match(/\.(png|jpg|jpeg|webp)$/i)?.[1] ?? "jpg";
+          const paddedIdx = String(page.pageIndex + 1).padStart(2, "0");
+          imageEntries.push({ buf, filename: `page-${paddedIdx}.${ext}` });
+        } catch (err) {
+          console.error(`[exportImages] Failed to fetch page ${page.pageIndex}:`, err);
+        }
+      }
+      if (imageEntries.length === 0) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "所有页面图片下载失败" });
+
+      // 用 archiver 打包为 ZIP
+      const archiver = (await import("archiver")).default;
+      const zipChunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const archive = archiver("zip", { zlib: { level: 6 } });
+        archive.on("data", (chunk: Buffer) => zipChunks.push(chunk));
+        archive.on("end", resolve);
+        archive.on("error", reject);
+        for (const { buf, filename } of imageEntries) {
+          archive.append(buf, { name: filename });
+        }
+        archive.finalize();
+      });
+      const zipBuffer = Buffer.concat(zipChunks);
+
+      // 上传到 S3
+      const safeTitle = (job.title || "排版").replace(/[^\w\u4e00-\u9fa5-]/g, "_");
+      const fileKey = `graphic-layout-images/${ctx.user.id}/${input.jobId}-${Date.now()}.zip`;
+      const { url } = await storagePut(fileKey, zipBuffer, "application/zip");
+      return { url, filename: `${safeTitle}-图片.zip`, pageCount: imageEntries.length };
+    }),
 });
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 
