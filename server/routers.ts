@@ -14,7 +14,7 @@ import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
 import { submitEnhanceTask, getEnhanceTaskStatus, downloadAndStoreEnhancedImage } from "./magnific";
 import { nanoid } from "nanoid";
-import { searchCaseStudies } from "./tavily";
+import { searchCaseStudies, searchCaseStudyImages } from "./tavily";
 import { notifyOwner } from "./_core/notification";
 import crypto from "crypto";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
@@ -1825,20 +1825,25 @@ async function generateBenchmarkInBackground(
 
     console.log(`[Benchmark] Phase 1 done: ${caseNames.length} case names extracted`);
 
-    // === Phase 2: Search real URLs for each case using Tavily ===
-    const caseUrlMap = await searchCaseStudies(caseNames, input.projectType);
-    console.log(`[Benchmark] Phase 2 done: searched URLs for ${Object.keys(caseUrlMap).length} cases (projectType: ${input.projectType})`);
-
+      // === Phase 2: Search real URLs and images for each case using Tavily ===
+    const [caseUrlMap, caseImageMap] = await Promise.all([
+      searchCaseStudies(caseNames, input.projectType),
+      searchCaseStudyImages(caseNames, input.projectType),
+    ]);
+    console.log(`[Benchmark] Phase 2 done: URLs for ${Object.keys(caseUrlMap).length} cases, images for ${Object.values(caseImageMap).filter(imgs => imgs.length > 0).length} cases`);
     // Persist caseUrlMap so refine can reuse the same verified URLs
     await db.updateBenchmarkJob(jobId, { caseRefs: caseUrlMap });
-
-    // Build case reference context with real URLs
+    // Build case reference context with real URLs and images
     const caseRefs = caseNames.map(name => {
       const url = caseUrlMap[name];
-      return url ? `- ${name}: ${url}` : `- ${name}: (URL 未找到)`;
+      const images = caseImageMap[name] || [];
+      const urlPart = url ? `- ${name}: ${url}` : `- ${name}: (URL 未找到)`;
+      const imgPart = images.length > 0
+        ? `\n  图片：${images.map(img => `![${name}](${img})`).join(' ')}`
+        : '';
+      return urlPart + imgPart;
     }).join('\n');
-
-    // === Phase 3: Generate full report with real URLs ===
+    // === Phase 3: Generate full report with real URLs ====
     const response = await invokeLLMWithUserTool({
       messages: [
         {
@@ -1856,21 +1861,21 @@ ${caseRefs}
 
 **重要要求**：
 - 严格使用上面提供的案例名称和链接，不要自行编造 URL
-- 如果某个案例标注了“URL 未找到”，则展示案例信息时不要添加链接
+- 如果某个案例标注了"URL 未找到"，则展示案例信息时不要添加链接
 - 每个案例标题后用 Markdown 链接标注来源，例如 [来源](https://www.archdaily.com/xxx)
-
+- 如果案例数据中提供了「图片」字段（格式为 ![名称](url)），请在该案例的分析段落中直接嵌入这些图片，放在设计亮点分析之前，以增强报告的可视化效果
 报告结构：
 1. **项目概述与调研目标**
 2. **对标案例分析**（${input.referenceCount || 5} 个案例，每个案例包含）：
    - 项目名称 + 来源链接
    - 设计单位
    - 项目概况（位置、面积、完成时间）
+   - 案例图片（如有，直接嵌入 Markdown 图片语法）
    - 设计亮点分析
    - 与本项目的关联性分析
 3. **设计策略建议**
 4. **材料与工艺参考**
 5. **总结与建议**
-
 请以 Markdown 格式输出，结构清晰，内容专业。`;
           })()
         },

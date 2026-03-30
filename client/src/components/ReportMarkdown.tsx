@@ -9,6 +9,7 @@
 
 import { Streamdown } from "streamdown";
 import { ExternalLink, Search } from "lucide-react";
+import { useState } from "react";
 
 interface ReportMarkdownProps {
   children: string;
@@ -64,8 +65,34 @@ function CustomLink({
   );
 }
 
+/** Custom image renderer for case study photos */
+function CustomImage({
+  src,
+  alt,
+  ...rest
+}: React.ImgHTMLAttributes<HTMLImageElement>) {
+  const [error, setError] = useState(false);
+  if (!src || error) return null;
+  return (
+    <span className="block my-3">
+      <img
+        src={src}
+        alt={alt || ""}
+        onError={() => setError(true)}
+        className="rounded-lg max-w-full max-h-64 object-cover border border-border/40 shadow-sm"
+        loading="lazy"
+        {...rest}
+      />
+      {alt && (
+        <span className="block mt-1 text-xs text-muted-foreground/60 italic">{alt}</span>
+      )}
+    </span>
+  );
+}
+
 const COMPONENTS = {
   a: CustomLink,
+  img: CustomImage,
 };
 
 export function ReportMarkdown({ children, className }: ReportMarkdownProps) {

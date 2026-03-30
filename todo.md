@@ -1278,3 +1278,9 @@
 - [x] 前端：任务视图新增「AI 使用」 Tab，展示成员统计卡片（调用次数、成果数、平均耗时、各模块分布）
 - [x] 前端：新增 AI 使用对比图表（recharts 柱状图：各成员 AI 调用次数对比）
 - [x] 测试验证并保存 checkpoint
+
+## 功能：案例调研报告嵌入案例图片
+- [x] 后端：Phase 2 新增图片搜索（Tavily images），为每个案例搜索 1-2 张图片 URL
+- [x] 后端：Phase 3 生成报告时，在每个案例章节 prompt 中注入图片 URL，让 LLM 用 Markdown 图片语法嵌入
+- [x] 前端：ReportMarkdown 渲染器添加 CustomImage 组件（圆角、最大高度 256px、加载失败自动隐藏）
+- [x] 测试验证并保存 checkpoint

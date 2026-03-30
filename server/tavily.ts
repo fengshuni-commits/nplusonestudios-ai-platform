@@ -273,6 +273,87 @@ export async function searchCaseStudy(
 }
 
 /**
+ * Search for images of a specific case study
+ * Returns up to 2 image URLs
+ */
+export async function searchCaseImages(
+  caseName: string,
+  projectType?: string
+): Promise<string[]> {
+  if (!TAVILY_API_KEY) return [];
+
+  try {
+    const query = `${caseName} architecture interior design`;
+    const response = await fetch(`${TAVILY_BASE_URL}/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${TAVILY_API_KEY}`,
+      },
+      body: JSON.stringify({
+        query,
+        max_results: 3,
+        search_depth: "basic",
+        include_images: true,
+        exclude_domains: EXCLUDE_DOMAINS,
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as TavilySearchResponse & { images?: string[] };
+    const images = (data.images || []).filter((url: string) => {
+      // Filter out low-quality or irrelevant images
+      const u = url.toLowerCase();
+      return (
+        (u.endsWith('.jpg') || u.endsWith('.jpeg') || u.endsWith('.png') || u.endsWith('.webp')) &&
+        !u.includes('logo') &&
+        !u.includes('avatar') &&
+        !u.includes('icon') &&
+        !u.includes('thumbnail') &&
+        url.length < 500
+      );
+    });
+    console.log(`[Tavily] Images for "${caseName}": ${images.length} found`);
+    return images.slice(0, 2);
+  } catch (err) {
+    console.error(`[Tavily] Image search error for "${caseName}":`, err);
+    return [];
+  }
+}
+
+/**
+ * Search for images of multiple case studies in parallel
+ * Returns a map of caseName -> imageUrls[]
+ */
+export async function searchCaseStudyImages(
+  caseNames: string[],
+  projectType?: string
+): Promise<Record<string, string[]>> {
+  const BATCH_SIZE = 3;
+  const results: Record<string, string[]> = {};
+
+  for (let i = 0; i < caseNames.length; i += BATCH_SIZE) {
+    const batch = caseNames.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (name) => {
+        const images = await searchCaseImages(name, projectType);
+        return { name, images };
+      })
+    );
+    for (const { name, images } of batchResults) {
+      results[name] = images;
+    }
+    if (i + BATCH_SIZE < caseNames.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  }
+
+  return results;
+}
+
+/**
  * Search for multiple case studies in parallel
  * Returns a map of caseName -> URL
  */
