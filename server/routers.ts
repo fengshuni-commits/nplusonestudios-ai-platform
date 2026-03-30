@@ -5035,6 +5035,28 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
     await drizzleDb.update(graphicLayoutJobs)
       .set({ status: "done", pages: generatedPages, htmlPages: [] } as any)
       .where(_eq(graphicLayoutJobs.id, jobId));
+    // Save to generation history
+    const docTypeLabels: Record<string, string> = {
+      brand_manual: "品牌手册", product_detail: "商品详情页",
+      project_board: "项目图板", custom: "自定义排版",
+    };
+    const firstPageUrl = generatedPages[0]?.imageUrl ?? null;
+    const [jobForHistory] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.id, jobId)).limit(1);
+    if (jobForHistory) {
+      const docLabel = docTypeLabels[jobForHistory.docType] ?? jobForHistory.docType;
+      const histTitle = jobForHistory.title ? `${jobForHistory.title}` : `${docLabel}（${jobForHistory.pageCount}页）`;
+      await db.createGenerationHistory({
+        userId,
+        module: "layout_design",
+        title: histTitle,
+        summary: jobForHistory.contentText?.slice(0, 200) ?? null,
+        inputParams: { docType: jobForHistory.docType, pageCount: jobForHistory.pageCount, aspectRatio: jobForHistory.aspectRatio, jobId },
+        outputUrl: firstPageUrl,
+        outputContent: null,
+        status: "success",
+        durationMs: null,
+      });
+    }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "未知错误";
     console.error(`[GraphicLayout] Generation failed for job ${jobId}:`, msg);

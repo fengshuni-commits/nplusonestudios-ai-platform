@@ -1299,3 +1299,10 @@
 - [x] 新增历史案例排除：查询用户最近 8 次的历史案例，在 prompt 中明确要求排除
 - [x] 新增轮换多样性方向：8 个方向轮换（地域、年代、规模、奖项等）
 - [x] 测试验证并保存 checkpoint
+
+## 功能：图文排版生成记录
+- [x] 分析图文排版后端实现，找到生成完成的时机
+- [x] 在 generateGraphicLayoutAsync 生成完成后保存 generation_history（module = "layout_design"）
+- [x] 在 History.tsx 添加 layout_design 模块配置（琥珀色主题），支持图片缩略图展示
+- [x] 点击卡片跳转到图文排版页面，过滤器添加图文排版选项
+- [x] 测试验证并保存 checkpoint

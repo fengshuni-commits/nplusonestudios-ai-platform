@@ -45,6 +45,7 @@ import {
   Link2,
   Link2Off,
   Film,
+  LayoutTemplate,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -129,12 +130,20 @@ const MODULE_MAP: Record<string, {
     iconColor: "text-purple-300",
     accentColor: "bg-purple-500/20 text-purple-300",
   },
+  layout_design: {
+    label: "图文排版",
+    icon: LayoutTemplate,
+    gradient: "from-amber-950 to-amber-800",
+    iconColor: "text-amber-300",
+    accentColor: "bg-amber-500/20 text-amber-300",
+  },
 };
 
 // Module display order
 const MODULE_ORDER = [
   "ai_render",
   "ai_video",
+  "layout_design",
   "benchmark_report",
   "benchmark_ppt",
   "meeting_minutes",
@@ -323,12 +332,17 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
     accentColor: "bg-zinc-500/20 text-zinc-300",
   };
   const ModuleIcon = cfg.icon;
-  const isRender = item.module === "ai_render";
+  const isRender = item.module === "ai_render" || item.module === "layout_design";
   const displayUrl = item.latestOutputUrl || item.outputUrl;
   const chainLen = item.chainLength || 1;
   const title = item.latestTitle || item.title;
 
   const handleClick = () => {
+    if (item.module === "layout_design") {
+      // 图文排版：跳转到图文排版页面
+      if (onNavigate) onNavigate("/media/layout");
+      return;
+    }
     if (isRender && onOpenDetail) {
       // AI 效果图：打开迭代链详情
       onOpenDetail(item);
@@ -737,6 +751,7 @@ export default function HistoryPage() {
               <SelectItem value="all">全部模块</SelectItem>
               <SelectItem value="ai_render">AI 效果图</SelectItem>
               <SelectItem value="ai_video">AI 视频</SelectItem>
+              <SelectItem value="layout_design">图文排版</SelectItem>
               <SelectItem value="benchmark_report">案例调研报告</SelectItem>
               <SelectItem value="benchmark_ppt">调研 PPT</SelectItem>
               <SelectItem value="meeting_minutes">会议纪要</SelectItem>
