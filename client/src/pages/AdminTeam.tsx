@@ -9,6 +9,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import {
   Users, Shield, User, UserCheck, UserX, Clock, CheckCircle2, XCircle,
   BarChart3, TrendingUp, TrendingDown, AlertCircle, Sparkles, Loader2,
+  Zap, FileText, Activity, PieChart,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -35,10 +36,12 @@ export default function AdminTeam() {
 
   // ─── Task stats state ──────────────────────────────────
   const { data: taskStats = [], isLoading: loadingStats } = trpc.admin.getMemberTaskStats.useQuery();
+  const { data: aiStats = [], isLoading: loadingAiStats } = trpc.admin.getMemberAiStats.useQuery();
   const { data: aiTools = [] } = trpc.aiTools.list.useQuery({ activeOnly: true });
   const [selectedAiToolId, setSelectedAiToolId] = useState<string>("default");
   const [analysisReport, setAnalysisReport] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiStatsView, setAiStatsView] = useState<"calls" | "generations">("calls");
 
   // ─── Mutations ─────────────────────────────────────────
   const approveMutation = trpc.admin.approveUser.useMutation({
@@ -123,6 +126,10 @@ export default function AdminTeam() {
           <TabsTrigger value="tasks" className="flex items-center gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
             任务视图
+          </TabsTrigger>
+          <TabsTrigger value="ai-stats" className="flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5" />
+            AI 使用统计
           </TabsTrigger>
         </TabsList>
 
@@ -460,8 +467,172 @@ export default function AdminTeam() {
             </>
           )}
         </TabsContent>
-      </Tabs>
 
+        {/* ─── Tab 3: AI 使用统计 ─── */}
+        <TabsContent value="ai-stats" className="space-y-6">
+          {loadingAiStats ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {/* 切换视图 */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={aiStatsView === "calls" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAiStatsView("calls")}
+                  className="gap-1.5"
+                >
+                  <Activity className="h-3.5 w-3.5" />
+                  AI 工具调用
+                </Button>
+                <Button
+                  variant={aiStatsView === "generations" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAiStatsView("generations")}
+                  className="gap-1.5"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  成果生成
+                </Button>
+              </div>
+
+              {/* 成员统计卡片 */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {aiStats.map((m) => (
+                  <Card key={m.userId} className="border-border/60">
+                    <CardContent className="pt-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                          {(m.name || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{m.name}</p>
+                          {m.department && <p className="text-xs text-muted-foreground">{m.department}</p>}
+                        </div>
+                      </div>
+                      {aiStatsView === "calls" ? (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">总调用次数</span>
+                            <span className="font-semibold">{m.totalCalls}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">近 30 天</span>
+                            <span className="font-medium text-blue-500">{m.recentCalls}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">成功率</span>
+                            <span className={m.successRate >= 80 ? "font-medium text-green-500" : "font-medium text-amber-500"}>
+                              {m.successRate}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">平均耗时</span>
+                            <span className="font-medium">
+                              {m.avgDurationMs > 0 ? `${(m.avgDurationMs / 1000).toFixed(1)}s` : '-'}
+                            </span>
+                          </div>
+                          {Object.keys(m.toolBreakdown || {}).length > 0 && (
+                            <div className="mt-2 border-t pt-2">
+                              <p className="mb-1 text-xs text-muted-foreground">工具分布</p>
+                              {Object.entries(m.toolBreakdown || {}).slice(0, 3).map(([tool, count]) => (
+                                <div key={tool} className="flex justify-between text-xs">
+                                  <span className="truncate text-muted-foreground" style={{maxWidth: '70%'}}>{tool}</span>
+                                  <span>{count as number}次</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">总成果数</span>
+                            <span className="font-semibold">{m.totalGenerations}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">近 30 天</span>
+                            <span className="font-medium text-blue-500">{m.recentGenerations}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">成功生成</span>
+                            <span className="font-medium text-green-500">{m.successGenerations}</span>
+                          </div>
+                          {Object.keys(m.moduleBreakdown || {}).length > 0 && (
+                            <div className="mt-2 border-t pt-2">
+                              <p className="mb-1 text-xs text-muted-foreground">模块分布</p>
+                              {Object.entries(m.moduleBreakdown || {}).slice(0, 4).map(([mod, count]) => (
+                                <div key={mod} className="flex justify-between text-xs">
+                                  <span className="truncate text-muted-foreground" style={{maxWidth: '70%'}}>{mod}</span>
+                                  <span>{count as number}次</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* 对比图表 */}
+              {aiStats.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <PieChart className="h-4 w-4" />
+                      {aiStatsView === "calls" ? "AI 工具调用对比" : "成果生成对比"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart
+                        data={aiStats.map((m) => ({
+                          name: m.name,
+                          ...(aiStatsView === "calls"
+                            ? { 总调用: m.totalCalls, 近30天: m.recentCalls }
+                            : { 总成果: m.totalGenerations, 近30天: m.recentGenerations, 成功: m.successGenerations }
+                          ),
+                        }))}
+                        margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip />
+                        <Legend />
+                        {aiStatsView === "calls" ? (
+                          <>
+                            <Bar dataKey="总调用" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                            <Bar dataKey="近30天" fill="hsl(var(--primary) / 0.4)" radius={[3, 3, 0, 0]} />
+                          </>
+                        ) : (
+                          <>
+                            <Bar dataKey="总成果" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                            <Bar dataKey="近30天" fill="hsl(var(--primary) / 0.4)" radius={[3, 3, 0, 0]} />
+                            <Bar dataKey="成功" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                          </>
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+
+              {aiStats.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                  <Zap className="mb-3 h-10 w-10 opacity-30" />
+                  <p className="text-sm">暂无 AI 使用记录</p>
+                  <p className="mt-1 text-xs">当成员使用 AI 工具后，统计数据将在此显示</p>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
       {/* 确认对话框 */}
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>

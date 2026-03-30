@@ -1903,3 +1903,75 @@ export async function getMemberTaskStats() {
     };
   });
 }
+
+export async function getMemberAiStats() {
+  const db = await getDb();
+  if (!db) return [];
+  // Get all approved users
+  const allUsers = await db.select({
+    id: users.id,
+    name: users.name,
+    avatar: users.avatar,
+    department: users.department,
+  }).from(users).where(eq(users.approved, true));
+  if (allUsers.length === 0) return [];
+  // Get AI tool logs per user
+  const toolLogs = await db.select({
+    userId: aiToolLogs.userId,
+    toolId: aiToolLogs.toolId,
+    status: aiToolLogs.status,
+    durationMs: aiToolLogs.durationMs,
+    createdAt: aiToolLogs.createdAt,
+  }).from(aiToolLogs);
+  // Get generation history per user
+  const genHistory = await db.select({
+    userId: generationHistory.userId,
+    module: generationHistory.module,
+    status: generationHistory.status,
+    createdAt: generationHistory.createdAt,
+  }).from(generationHistory);
+  // Get AI tool names
+  const toolList = await db.select({ id: aiTools.id, name: aiTools.name }).from(aiTools);
+  const toolNameMap = Object.fromEntries(toolList.map((t) => [t.id, t.name]));
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  return allUsers.map((u) => {
+    const userLogs = toolLogs.filter((l) => l.userId === u.id);
+    const userGen = genHistory.filter((g) => g.userId === u.id);
+    const recentLogs = userLogs.filter((l) => l.createdAt >= thirtyDaysAgo);
+    const recentGen = userGen.filter((g) => g.createdAt >= thirtyDaysAgo);
+    const totalCalls = userLogs.length;
+    const recentCalls = recentLogs.length;
+    const successCalls = userLogs.filter((l) => l.status === 'success').length;
+    const successRate = totalCalls > 0 ? Math.round((successCalls / totalCalls) * 100) : 0;
+    const durations = userLogs.filter((l) => l.durationMs != null).map((l) => l.durationMs as number);
+    const avgDurationMs = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+    const totalGenerations = userGen.length;
+    const recentGenerations = recentGen.length;
+    const successGenerations = userGen.filter((g) => g.status === 'success').length;
+    const moduleBreakdown: Record<string, number> = {};
+    for (const g of userGen) {
+      moduleBreakdown[g.module] = (moduleBreakdown[g.module] || 0) + 1;
+    }
+    const toolBreakdown: Record<string, number> = {};
+    for (const l of userLogs) {
+      const toolName = toolNameMap[l.toolId] || `Tool#${l.toolId}`;
+      toolBreakdown[toolName] = (toolBreakdown[toolName] || 0) + 1;
+    }
+    return {
+      userId: u.id,
+      name: u.name || 'Unknown',
+      avatar: u.avatar,
+      department: u.department,
+      totalCalls,
+      recentCalls,
+      successRate,
+      avgDurationMs,
+      totalGenerations,
+      recentGenerations,
+      successGenerations,
+      moduleBreakdown,
+      toolBreakdown,
+    };
+  });
+}

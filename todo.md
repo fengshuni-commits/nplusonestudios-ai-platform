@@ -1271,3 +1271,10 @@
 - [x] 前端：任务视图展示汇总图表（recharts 柱状图：各成员完成/延期/进行中对比）
 - [x] 前端：AI 分析员工表现按钮（选择 AI 工具，调用 analyzePerformance，展示分析报告）
 - [x] 测试验证并保存 checkpoint
+
+## 功能：团队管理任务视图 - AI 平台使用统计
+- [x] 查看现有数据表，确认 AI 使用数据来源（aiToolLogs + generationHistory）
+- [x] 后端：新增 admin.getMemberAiStats 接口（按成员汇总：AI 工具调用次数、各工具分布、成果生成数）
+- [x] 前端：任务视图新增「AI 使用」 Tab，展示成员统计卡片（调用次数、成果数、平均耗时、各模块分布）
+- [x] 前端：新增 AI 使用对比图表（recharts 柱状图：各成员 AI 调用次数对比）
+- [x] 测试验证并保存 checkpoint

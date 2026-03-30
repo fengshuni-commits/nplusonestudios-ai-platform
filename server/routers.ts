@@ -2701,6 +2701,9 @@ const adminRouter = router({
   getMemberTaskStats: adminProcedure.query(async () => {
     return db.getMemberTaskStats();
   }),
+  getMemberAiStats: adminProcedure.query(async () => {
+    return db.getMemberAiStats();
+  }),
 
   analyzePerformance: adminProcedure
     .input(z.object({
