@@ -255,7 +255,9 @@ function PageImageViewer({
 export default function MediaLayout() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const assetInputRef = useRef<HTMLInputElement>(null);
+  const assetInputRef = useRef<HTMLInputElement>(null); // per_page 模式用
+  const assetFolderRef = useRef<HTMLInputElement>(null); // by_type 文件夹模式用
+  const byTypeFileRef = useRef<HTMLInputElement>(null); // by_type 单文件模式用
 
   // Style Packs
   const { data: stylePacks = [], refetch: refetchPacks } = trpc.graphicStylePacks.list.useQuery();
@@ -284,10 +286,20 @@ export default function MediaLayout() {
   const [aspectRatio, setAspectRatio] = useState("3:4");
   const [contentText, setContentText] = useState("");
   const [titleInput, setTitleInput] = useState("");
-  const [assetUrls, setAssetUrls] = useState<string[]>([]);
+  // 素材图模式：per_page（按页）或 by_type（按类型文件夹）
+  const [assetMode, setAssetMode] = useState<"per_page" | "by_type">("per_page");
+  // 按页模式：{ pageIndex: url[] }
+  const [perPageAssets, setPerPageAssets] = useState<Record<number, string[]>>({});
+  // 按类型模式：{ typeName: url[] }
+  const [byTypeGroups, setByTypeGroups] = useState<Record<string, string[]>>({});
+  // 按类型模式：当前正在上传的类型名称输入
+  const [newTypeName, setNewTypeName] = useState("");
+  // 当前选中的按页上传的页码
+  const [assetPageTab, setAssetPageTab] = useState(0);
   const [imageToolId, setImageToolId] = useState<number | undefined>(undefined);
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingTypeName, setUploadingTypeName] = useState<string | null>(null);
 
   // Jobs
   const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery();
@@ -429,22 +441,81 @@ export default function MediaLayout() {
     }
   };
 
-  const handleAssetFiles = async (files: FileList) => {
+  // 按页模式：为指定页上传素材图（最多 5 张）
+  const handlePerPageFiles = async (files: FileList, pageIdx: number) => {
     if (files.length === 0) return;
+    const existing = perPageAssets[pageIdx] ?? [];
+    const remaining = 5 - existing.length;
+    if (remaining <= 0) { toast.error(`第 ${pageIdx + 1} 页已达上限（5 张）`); return; }
+    const filesToUpload = Array.from(files).slice(0, remaining);
     setUploadingAsset(true);
     setUploadProgress(0);
-    const total = files.length;
+    const total = filesToUpload.length;
     let done = 0;
     const newUrls: string[] = [];
     try {
-      for (const file of Array.from(files)) {
+      for (const file of filesToUpload) {
         const { url } = await uploadFile(file);
         newUrls.push(url);
         done++;
         setUploadProgress(Math.round((done / total) * 100));
       }
-      setAssetUrls((prev) => [...prev, ...newUrls]);
-      toast.success(`已添加 ${newUrls.length} 张素材图`);
+      setPerPageAssets((prev) => ({ ...prev, [pageIdx]: [...(prev[pageIdx] ?? []), ...newUrls] }));
+      toast.success(`第 ${pageIdx + 1} 页已添加 ${newUrls.length} 张素材图`);
+    } catch (err: any) {
+      toast.error("上传失败：" + err.message);
+    } finally {
+      setUploadingAsset(false);
+      setUploadProgress(0);
+    }
+  };
+
+  // 按类型模式：上传文件夹（自动按文件夹名分组）或指定类型名称上传
+  const handleByTypeFiles = async (files: FileList, typeName?: string) => {
+    if (files.length === 0) return;
+    // 如果没有指定 typeName，尝试从文件路径提取文件夹名
+    const fileArray = Array.from(files);
+    // 按文件夹名分组
+    const grouped: Record<string, File[]> = {};
+    for (const file of fileArray) {
+      // webkitRelativePath 格式：「文件夹名/文件名」
+      const parts = (file as any).webkitRelativePath?.split("/") ?? [];
+      const folderName = parts.length >= 2 ? parts[parts.length - 2] : (typeName || "未分类");
+      if (!grouped[folderName]) grouped[folderName] = [];
+      grouped[folderName].push(file);
+    }
+    // 如果没有文件夹结构，统一归入指定 typeName
+    if (Object.keys(grouped).length === 1 && Object.keys(grouped)[0] === "未分类" && typeName) {
+      grouped[typeName] = grouped["未分类"];
+      delete grouped["未分类"];
+    }
+    setUploadingAsset(true);
+    setUploadProgress(0);
+    const allFiles = fileArray.length;
+    let done = 0;
+    try {
+      const newGroups: Record<string, string[]> = {};
+      for (const [fName, fFiles] of Object.entries(grouped)) {
+        const urls: string[] = [];
+        for (const file of fFiles.filter((f) => f.type.startsWith("image/"))) {
+          const { url } = await uploadFile(file);
+          urls.push(url);
+          done++;
+          setUploadProgress(Math.round((done / allFiles) * 100));
+        }
+        if (urls.length > 0) newGroups[fName] = urls;
+      }
+      setByTypeGroups((prev) => {
+        const merged = { ...prev };
+        for (const [k, v] of Object.entries(newGroups)) {
+          merged[k] = [...(merged[k] ?? []), ...v];
+        }
+        return merged;
+      });
+      const totalAdded = Object.values(newGroups).flat().length;
+      const groupNames = Object.keys(newGroups).join("、");
+      toast.success(`已添加 ${totalAdded} 张素材图（类型：${groupNames}）`);
+      setNewTypeName("");
     } catch (err: any) {
       toast.error("上传失败：" + err.message);
     } finally {
@@ -456,13 +527,29 @@ export default function MediaLayout() {
   const handleGenerate = () => {
     if (!contentText.trim()) { toast.error("请输入内容描述"); return; }
     setGenerating(true);
+    // 构建 assetConfig
+    let assetConfig: { mode: "per_page"; pages: Record<string, string[]> } | { mode: "by_type"; groups: Record<string, string[]> } | undefined;
+    if (assetMode === "per_page") {
+      const hasAssets = Object.values(perPageAssets).some((v) => v.length > 0);
+      if (hasAssets) {
+        assetConfig = {
+          mode: "per_page",
+          pages: Object.fromEntries(Object.entries(perPageAssets).map(([k, v]) => [k, v])),
+        };
+      }
+    } else {
+      const hasAssets = Object.values(byTypeGroups).some((v) => v.length > 0);
+      if (hasAssets) {
+        assetConfig = { mode: "by_type", groups: byTypeGroups };
+      }
+    }
     generateMutation.mutate({
       packId: selectedPackId,
       docType: docType as "brand_manual" | "product_detail" | "project_board" | "custom",
       pageCount,
       aspectRatio,
       contentText: contentText.trim(),
-      assetUrls,
+      assetConfig,
       title: titleInput.trim() || undefined,
       imageToolId: imageToolId ?? undefined,
     });
@@ -710,35 +797,165 @@ export default function MediaLayout() {
                 className="bg-white/5 border-white/10 text-white text-sm min-h-[100px] resize-none" />
             </div>
 
-            {/* Asset images */}
+            {/* Asset images - 双模式素材图上传 */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 flex items-center justify-between">
-                <span>素材图（可选）</span>
-                <span className="text-white/30">{assetUrls.length} 张</span>
-              </Label>
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {assetUrls.map((url, i) => (
-                  <div key={i} className="relative w-12 h-12 rounded overflow-hidden group">
-                    <img src={url} alt="" className="w-full h-full object-cover" />
-                    <div role="button" tabIndex={0} onClick={() => setAssetUrls((prev) => prev.filter((_, j) => j !== i))}
-                      className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer">
-                      <Trash2 className="w-3 h-3 text-white" />
-                    </div>
-                  </div>
-                ))}
-                <div role="button" tabIndex={0} onClick={() => assetInputRef.current?.click()}
-                  className="w-12 h-12 rounded border border-dashed border-white/15 flex items-center justify-center cursor-pointer hover:border-white/30 transition-colors"
-                  title="点击选择多张图片">
-                  {uploadingAsset ? (
-                    <div className="flex flex-col items-center gap-0.5">
-                      <Loader2 className="w-3 h-3 text-white/40 animate-spin" />
-                      {uploadProgress > 0 && <span className="text-[8px] text-white/30">{uploadProgress}%</span>}
-                    </div>
-                  ) : <Plus className="w-3 h-3 text-white/30" />}
-                </div>
+              <Label className="text-xs text-white/50 mb-2 block">素材图（可选）</Label>
+              {/* 模式切换 */}
+              <div className="flex gap-1 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setAssetMode("per_page")}
+                  className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+                    assetMode === "per_page"
+                      ? "bg-[#B87333]/20 text-[#B87333] border border-[#B87333]/30"
+                      : "bg-white/5 text-white/40 border border-white/8 hover:text-white/60"
+                  }`}
+                >按页上传</button>
+                <button
+                  type="button"
+                  onClick={() => setAssetMode("by_type")}
+                  className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+                    assetMode === "by_type"
+                      ? "bg-[#B87333]/20 text-[#B87333] border border-[#B87333]/30"
+                      : "bg-white/5 text-white/40 border border-white/8 hover:text-white/60"
+                  }`}
+                >按类型文件夹</button>
               </div>
-              <input ref={assetInputRef} type="file" accept="image/*" multiple className="hidden"
-                onChange={(e) => { if (e.target.files?.length) handleAssetFiles(e.target.files); e.target.value = ""; }} />
+
+              {/* 按页模式 */}
+              {assetMode === "per_page" && (
+                <div>
+                  {/* 页码标签 */}
+                  <div className="flex gap-1 mb-2 flex-wrap">
+                    {Array.from({ length: pageCount }, (_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setAssetPageTab(i)}
+                        className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                          assetPageTab === i
+                            ? "bg-white/15 text-white"
+                            : "bg-white/5 text-white/40 hover:text-white/60"
+                        }`}
+                      >
+                        第{i + 1}页
+                        {(perPageAssets[i]?.length ?? 0) > 0 && (
+                          <span className="ml-1 text-[#B87333]">({perPageAssets[i].length})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {/* 当前页素材图 */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {(perPageAssets[assetPageTab] ?? []).map((url: string, i: number) => (
+                      <div key={i} className="relative w-12 h-12 rounded overflow-hidden group">
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <div
+                          role="button" tabIndex={0}
+                          onClick={() => setPerPageAssets((prev) => ({
+                            ...prev,
+                            [assetPageTab]: (prev[assetPageTab] ?? []).filter((_: string, j: number) => j !== i)
+                          }))}
+                          className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3 text-white" />
+                        </div>
+                      </div>
+                    ))}
+                    {(perPageAssets[assetPageTab]?.length ?? 0) < 5 && (
+                      <div
+                        role="button" tabIndex={0}
+                        onClick={() => assetInputRef.current?.click()}
+                        className="w-12 h-12 rounded border border-dashed border-white/15 flex items-center justify-center cursor-pointer hover:border-white/30 transition-colors"
+                        title="添加素材图（最多 5 张）"
+                      >
+                        {uploadingAsset ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Loader2 className="w-3 h-3 text-white/40 animate-spin" />
+                            {uploadProgress > 0 && <span className="text-[8px] text-white/30">{uploadProgress}%</span>}
+                          </div>
+                        ) : <Plus className="w-3 h-3 text-white/30" />}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-white/25 mt-1.5">每页最多 5 张，AI 会将该页素材融入排版</p>
+                  <input ref={assetInputRef} type="file" accept="image/*" multiple className="hidden"
+                    onChange={(e) => { if (e.target.files?.length) handlePerPageFiles(e.target.files, assetPageTab); e.target.value = ""; }} />
+                </div>
+              )}
+
+              {/* 按类型模式 */}
+              {assetMode === "by_type" && (
+                <div className="space-y-2">
+                  {/* 已添加的类型组 */}
+                  {Object.entries(byTypeGroups).map(([typeName, urls]) => (
+                    <div key={typeName} className="bg-white/4 rounded-lg p-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-white/70 font-medium">{typeName}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-white/30">{urls.length} 张</span>
+                          <button
+                            type="button"
+                            onClick={() => setByTypeGroups((prev) => { const n = { ...prev }; delete n[typeName]; return n; })}
+                            className="text-white/20 hover:text-white/50 transition-colors"
+                          ><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {urls.slice(0, 6).map((url: string, i: number) => (
+                          <div key={i} className="relative w-9 h-9 rounded overflow-hidden group">
+                            <img src={url} alt="" className="w-full h-full object-cover" />
+                            <div
+                              role="button" tabIndex={0}
+                              onClick={() => setByTypeGroups((prev) => ({
+                                ...prev,
+                                [typeName]: prev[typeName].filter((_: string, j: number) => j !== i)
+                              }))}
+                              className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer"
+                            ><Trash2 className="w-2.5 h-2.5 text-white" /></div>
+                          </div>
+                        ))}
+                        {urls.length > 6 && <span className="text-[10px] text-white/30 self-center">+{urls.length - 6}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {/* 上传文件夹按钮 */}
+                  <button
+                    type="button"
+                    onClick={() => assetFolderRef.current?.click()}
+                    className="w-full py-2 rounded-lg border border-dashed border-white/15 text-xs text-white/40 hover:text-white/60 hover:border-white/25 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {uploadingAsset ? (
+                      <><Loader2 className="w-3 h-3 animate-spin" />上传中 {uploadProgress > 0 ? `${uploadProgress}%` : ""}</>
+                    ) : (
+                      <><FolderOpen className="w-3 h-3" />上传文件夹（自动按文件夹名分组）</>
+                    )}
+                  </button>
+                  {/* 手动指定类型名称上传 */}
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="类型名称（如：室内实景）"
+                      value={newTypeName}
+                      onChange={(e) => setNewTypeName(e.target.value)}
+                      className="flex-1 bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-white placeholder-white/25 outline-none focus:border-white/20"
+                    />
+                    <button
+                      type="button"
+                      disabled={!newTypeName.trim() || uploadingAsset}
+                      onClick={() => byTypeFileRef.current?.click()}
+                      className="px-2 py-1 bg-white/8 rounded-md text-xs text-white/50 hover:text-white/70 disabled:opacity-30 transition-colors"
+                    ><Upload className="w-3 h-3" /></button>
+                  </div>
+                  <p className="text-[10px] text-white/25">上传文件夹时自动按文件夹名分组，AI 会根据每页主题选择合适的素材</p>
+                  <input ref={assetFolderRef} type="file" accept="image/*" multiple className="hidden"
+                    // @ts-ignore
+                    webkitdirectory="" directory=""
+                    onChange={(e) => { if (e.target.files?.length) handleByTypeFiles(e.target.files); e.target.value = ""; }} />
+                  <input ref={byTypeFileRef} type="file" accept="image/*" multiple className="hidden"
+                    onChange={(e) => { if (e.target.files?.length) handleByTypeFiles(e.target.files, newTypeName.trim() || "未分类"); e.target.value = ""; }} />
+                </div>
+              )}
             </div>
 
             {/* AI Tool Selector */}

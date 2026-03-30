@@ -343,4 +343,82 @@ describe("graphicLayout", () => {
     await expect(trpc2.graphicLayout.exportImages({ jobId: job.id })).rejects.toThrow();
     await trpc1.graphicLayout.delete({ id: job.id });
   }, 15000);
+
+  // — assetConfig 新格式测试 —
+  it("generate should accept per_page assetConfig", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    const job = await trpc.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 2,
+      contentText: "Per page asset test",
+      assetConfig: {
+        mode: "per_page",
+        pages: {
+          "0": ["https://example.com/img1.jpg", "https://example.com/img2.jpg"],
+          "1": ["https://example.com/img3.jpg"],
+        },
+      },
+    });
+    expect(job.id).toBeGreaterThan(0);
+    expect(job.status).toBe("pending");
+    await trpc.graphicLayout.delete({ id: job.id });
+  }, 15000);
+
+  it("generate should accept by_type assetConfig", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    const job = await trpc.graphicLayout.generate({
+      docType: "brand_manual",
+      pageCount: 3,
+      contentText: "By type asset test",
+      assetConfig: {
+        mode: "by_type",
+        groups: {
+          "室内实景": ["https://example.com/interior1.jpg", "https://example.com/interior2.jpg"],
+          "外立面": ["https://example.com/facade1.jpg"],
+          "细节": ["https://example.com/detail1.jpg", "https://example.com/detail2.jpg"],
+        },
+      },
+    });
+    expect(job.id).toBeGreaterThan(0);
+    expect(job.status).toBe("pending");
+    await trpc.graphicLayout.delete({ id: job.id });
+  }, 15000);
+
+  it("generate should reject per_page assetConfig with more than 5 images per page", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    await expect(trpc.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 1,
+      contentText: "Too many assets test",
+      assetConfig: {
+        mode: "per_page",
+        pages: {
+          "0": [
+            "https://example.com/img1.jpg",
+            "https://example.com/img2.jpg",
+            "https://example.com/img3.jpg",
+            "https://example.com/img4.jpg",
+            "https://example.com/img5.jpg",
+            "https://example.com/img6.jpg",
+          ],
+        },
+      },
+    })).rejects.toThrow();
+  }, 10000);
+
+  it("generate should still accept legacy assetUrls format", async () => {
+    const ctx = createContext(createTestUser());
+    const trpc = caller(ctx);
+    const job = await trpc.graphicLayout.generate({
+      docType: "custom",
+      pageCount: 1,
+      contentText: "Legacy format test",
+      assetUrls: ["https://example.com/legacy1.jpg", "https://example.com/legacy2.jpg"],
+    });
+    expect(job.id).toBeGreaterThan(0);
+    await trpc.graphicLayout.delete({ id: job.id });
+  }, 15000);
 });

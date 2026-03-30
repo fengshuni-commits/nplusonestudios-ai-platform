@@ -4315,6 +4315,20 @@ const graphicLayoutRouter = router({
       pageCount: z.number().min(1).max(10).default(1),
       aspectRatio: z.string().optional().default("3:4"),
       contentText: z.string().min(1),
+      // 新格式：支持 per_page / by_type 两种模式
+      assetConfig: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("per_page"),
+          // key 为页面索引字符串（"0","1",...），每页最多 5 张
+          pages: z.record(z.string(), z.array(z.string().url()).max(5)),
+        }),
+        z.object({
+          mode: z.literal("by_type"),
+          // key 为类型名称（文件夹名），每类最多 20 张
+          groups: z.record(z.string(), z.array(z.string().url()).max(20)),
+        }),
+      ]).optional(),
+      // 展层兼容旧格式
       assetUrls: z.array(z.string()).optional(),
       title: z.string().optional(),
       imageToolId: z.number().optional(),
@@ -4324,10 +4338,12 @@ const graphicLayoutRouter = router({
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const { graphicLayoutJobs } = await import("../drizzle/schema");
       const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+      // 将 assetConfig 和旧的 assetUrls 合并存入 JSON 字段
+      const storedAssets = input.assetConfig ?? (input.assetUrls ? { mode: "legacy", urls: input.assetUrls } : { mode: "legacy", urls: [] });
       await drizzleDb.insert(graphicLayoutJobs).values({
         userId: ctx.user.id, packId: input.packId ?? null, docType: input.docType,
         pageCount: input.pageCount, aspectRatio: input.aspectRatio ?? "3:4", contentText: input.contentText,
-        assetUrls: input.assetUrls ?? [], title: input.title ?? null, status: "pending",
+        assetUrls: storedAssets, title: input.title ?? null, status: "pending",
       });
       const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
       if (!newJob) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建排版任务失败" });
@@ -4743,7 +4759,39 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
       project_board: "项目图板", custom: "自定义图文排版"
     };
     const docTypeName = docTypeNames[job.docType] ?? "图文排版";
-    const assetUrls = (job.assetUrls as string[]) ?? [];
+    // 解析新的 assetConfig 格式（兼容旧的 string[] 和 legacy 对象）
+    const rawAssets = job.assetUrls as any;
+    type AssetConfig =
+      | { mode: "per_page"; pages: Record<string, string[]> }
+      | { mode: "by_type"; groups: Record<string, string[]> }
+      | { mode: "legacy"; urls: string[] };
+    let assetConfig: AssetConfig;
+    if (Array.isArray(rawAssets)) {
+      assetConfig = { mode: "legacy", urls: rawAssets };
+    } else if (rawAssets && typeof rawAssets === "object" && rawAssets.mode) {
+      assetConfig = rawAssets as AssetConfig;
+    } else {
+      assetConfig = { mode: "legacy", urls: [] };
+    }
+    // 获取指定页的素材图（最多 5 张）
+    const getAssetsForPage = (pageIdx: number): string[] => {
+      if (assetConfig.mode === "per_page") {
+        return (assetConfig.pages[String(pageIdx)] ?? []).slice(0, 5);
+      } else if (assetConfig.mode === "by_type") {
+        // by_type 模式下返回所有类型的前 5 张（合并后取）
+        const all = Object.values(assetConfig.groups).flat();
+        return all.slice(0, 5);
+      } else {
+        return (assetConfig.urls ?? []).slice(0, 5);
+      }
+    };
+    // 获取 by_type 模式下的类型描述（用于 prompt）
+    const getByTypeDescription = (): string => {
+      if (assetConfig.mode !== "by_type") return "";
+      return Object.entries(assetConfig.groups)
+        .map(([typeName, urls]) => `${typeName}(共${urls.length}张)`)
+        .join("、");
+    };
     const aspectRatio = (job as any).aspectRatio ?? "3:4";
 
     // 图幅比例 → 图像生成尺寸
@@ -4765,9 +4813,10 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
     const generatedPages: any[] = [];
 
     for (let pageIdx = 0; pageIdx < job.pageCount; pageIdx++) {
-      // 素材图（如有）
-      const assetImagesForPage = assetUrls.length > 0
-        ? assetUrls.slice(0, 3).map(url => ({ url, mimeType: "image/jpeg" as const }))
+      // 素材图（如有）：按页或按类型取对应素材，最多 5 张
+      const pageAssets = getAssetsForPage(pageIdx);
+      const assetImagesForPage = pageAssets.length > 0
+        ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
         : undefined;
 
       // Step 1: LLM 规划排版结构，输出文字块坐标
@@ -4844,8 +4893,11 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
         `"${b.text}" (${b.role}, ${b.fontSize}px, color ${b.color}, at position ${Math.round(b.x/imgW*100)}% from left, ${Math.round(b.y/imgH*100)}% from top)`
       ).join("; ");
 
-      const assetDesc = assetUrls.length > 0
-        ? `incorporate the provided reference images as visual elements`
+      const byTypeDesc = getByTypeDescription();
+      const assetDesc = pageAssets.length > 0
+        ? (byTypeDesc
+            ? `incorporate the provided reference images as visual elements; available asset categories: ${byTypeDesc} — choose the most suitable ones for this page's theme`
+            : `incorporate the provided reference images as visual elements`)
         : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
 
       const imagePrompt = `Professional ${docTypeName} page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Typography layout: ${textDescriptions}. Style: ${styleGuideHint || "modern minimalist architectural design, high-end brand aesthetic"}. Color scheme: ${colorScheme}. Clean professional layout, no extra decorations.`;
