@@ -29,6 +29,8 @@ export default function AdminApiKeys() {
   const [editKeyId, setEditKeyId] = useState<number | null>(null);
   const [editKeyValue, setEditKeyValue] = useState("");
   const [showNewKey, setShowNewKey] = useState(false);
+  const [editModelNameId, setEditModelNameId] = useState<number | null>(null);
+  const [editModelNameValue, setEditModelNameValue] = useState("");
   const [toolForm, setToolForm] = useState({
     name: "",
     apiEndpoint: "",
@@ -439,6 +441,68 @@ export default function AdminApiKeys() {
                             <p className="text-xs font-mono bg-background rounded px-2 py-1 border text-muted-foreground">
                               {tool.configJson.accessKeyId.substring(0, 8)}...{tool.configJson.accessKeyId.substring(tool.configJson.accessKeyId.length - 4)}
                             </p>
+                          </div>
+                        )}
+
+                        {/* 模型名称：仅 Gemini 工具显示 */}
+                        {(tool.name.toLowerCase().includes("gemini") || tool.apiEndpoint?.includes("generativelanguage.googleapis.com")) && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">模型名称</p>
+                            {editModelNameId === tool.id ? (
+                              <div className="space-y-2">
+                                <Input
+                                  value={editModelNameValue}
+                                  onChange={(e) => setEditModelNameValue(e.target.value)}
+                                  placeholder="例：gemini-3.1-pro-preview"
+                                  className="font-mono text-xs h-8"
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => {
+                                      if (!editModelNameValue.trim()) { toast.error("请输入模型名称"); return; }
+                                      updateTool.mutate({
+                                        id: tool.id,
+                                        configJson: { ...(tool.configJson || {}), modelName: editModelNameValue.trim() },
+                                      });
+                                      setEditModelNameId(null);
+                                      setEditModelNameValue("");
+                                    }}
+                                    disabled={updateTool.isPending}
+                                  >
+                                    保存
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs"
+                                    onClick={() => { setEditModelNameId(null); setEditModelNameValue(""); }}
+                                  >
+                                    取消
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-foreground/80">
+                                  {tool.configJson?.modelName || <span className="text-muted-foreground italic">未设置（使用默认值）</span>}
+                                </p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditModelNameId(tool.id);
+                                    setEditModelNameValue(tool.configJson?.modelName || "");
+                                  }}
+                                >
+                                  {tool.configJson?.modelName ? "修改" : "设置"}
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         )}
                         {tool.apiKeyName && !tool.apiKeyName.startsWith('sk-') && (

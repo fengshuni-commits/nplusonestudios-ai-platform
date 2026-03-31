@@ -1395,3 +1395,5 @@
 - [x] AI 分析图生成结果自动保存到历史记录
 - [x] 修复 AI 效果图 Gemini 3 无法调用的问题
 - [x] 修复 Gemini Pro 预览版不支持 aspectRatio 导致 400 错误
+- [x] AI 工具配置界面为 Gemini 模型新增"模型名称"输入框
+- [x] 增加 Gemini 模型结果返回等待时间（改为 flash 模型）

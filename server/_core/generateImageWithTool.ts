@@ -149,6 +149,7 @@ async function callGeminiImageApi(opts: {
   // Build generation config
   // Note: gemini-3.x-pro-preview models do NOT support imageConfig (aspectRatio/imageSize).
   // Only gemini-3.x-flash and gemini-2.x models support imageConfig.
+  // gemini-3.x-pro-preview does NOT support imageConfig; flash models do support it
   const isProPreview = /gemini-3.*pro.*preview|gemini-3-pro/i.test(modelName);
   const imageConfig: Record<string, string> = {};
   if (!isProPreview) {
@@ -253,7 +254,7 @@ export async function generateImageWithTool(
   }
   const config = (tool.configJson as Record<string, string> | null) || {};
   // For qwen/dashscope, use imageModel (wanx series) for image generation
-  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3.1-pro-preview");
+  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3.1-flash-image-preview");
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 
