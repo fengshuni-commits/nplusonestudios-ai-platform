@@ -112,8 +112,8 @@ async function callGeminiImageApi(opts: {
 }): Promise<Buffer> {
   const { apiKey, modelName, baseUrl, prompt, referenceImages, imageSize, aspectRatio } = opts;
 
-  // Build the request URL
-  const url = `${baseUrl.replace(/\/$/, "")}/models/${modelName}:generateContent?key=${apiKey}`;
+  // Build the request URL (no key in URL; use x-goog-api-key header instead)
+  const url = `${baseUrl.replace(/\/$/, "")}/models/${modelName}:generateContent`;
 
   // Build contents array
   const parts: any[] = [{ text: prompt }];
@@ -161,7 +161,10 @@ async function callGeminiImageApi(opts: {
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(180000), // 3 min timeout for Pro model
   });
@@ -245,7 +248,7 @@ export async function generateImageWithTool(
   }
   const config = (tool.configJson as Record<string, string> | null) || {};
   // For qwen/dashscope, use imageModel (wanx series) for image generation
-  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3.1-flash-image-preview");
+  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3.1-pro-preview");
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 
