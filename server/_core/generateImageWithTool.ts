@@ -130,7 +130,7 @@ async function callGeminiImageApi(opts: {
         });
       } else if (img.url) {
         // Fetch the image and convert to base64
-        const imgResp = await fetch(img.url);
+        const imgResp = await fetch(img.url, { signal: AbortSignal.timeout(30000) });
         if (imgResp.ok) {
           const imgBuf = await imgResp.arrayBuffer();
           const b64 = Buffer.from(imgBuf).toString("base64");
@@ -245,7 +245,7 @@ export async function generateImageWithTool(
   }
   const config = (tool.configJson as Record<string, string> | null) || {};
   // For qwen/dashscope, use imageModel (wanx series) for image generation
-  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3-pro-image-preview");
+  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-2.0-flash-exp-image-generation");
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 

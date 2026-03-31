@@ -198,7 +198,8 @@ export default function DesignAnalysis() {
                   <img
                     src={referencePreview}
                     alt="参考图"
-                    className="w-full rounded-md object-cover max-h-64"
+                    className="w-full rounded-md object-contain"
+                    style={{ maxHeight: "none" }}
                   />
                   {isUploading && (
                     <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded-md">
