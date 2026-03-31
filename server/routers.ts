@@ -1890,7 +1890,7 @@ async function generateBenchmarkInBackground(
       const images = caseImageMap[name] || [];
       const urlPart = url ? `- ${name}: ${url}` : `- ${name}: (URL 未找到)`;
       const imgPart = images.length > 0
-        ? `\n  图片：${images.map(img => url ? `[![${name}](${img})](${url})` : `![${name}](${img})`).join(' ')}`
+        ? `\n  图片：${images.map(img => `[![${name}](${img.imageUrl})](${img.sourcePageUrl})`).join(' ')}`
         : '';
       return urlPart + imgPart;
     }).join('\n');

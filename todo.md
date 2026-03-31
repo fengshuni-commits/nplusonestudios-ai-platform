@@ -1381,4 +1381,5 @@
 - [x] 前端：CustomImage 添加 hover 效果和 tooltip，提示可点击查看来源
 - [x] 保存检查点
 - [x] 修复案例调研报告图片点击无法跳转来源链接的问题
+- [x] 修复图片跳转链接不正确的问题：改用 Tavily result.images 并绑定真实来源页 URL
 - [x] 去掉案例调研 prompt 中的建筑限定词（Phase 0/1/3 及 refine 共 3 处）

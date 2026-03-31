@@ -305,22 +305,27 @@ export async function searchCaseStudy(
   }
 }
 
+/** A single image with its source page URL */
+export interface CaseImage {
+  imageUrl: string;
+  sourcePageUrl: string;
+}
+
 /**
  * Search for images of a specific case study.
- * Uses the same domain-restricted search to ensure images come from
- * the same trusted sources as the case study link.
- * Returns up to 2 image URLs.
+ * Uses per-result images (result.images) so each image is bound to its
+ * actual source page URL, enabling correct click-through links.
+ * Returns up to 2 CaseImage objects.
  */
 export async function searchCaseImages(
   caseName: string,
   projectType?: string
-): Promise<string[]> {
+): Promise<CaseImage[]> {
   if (!TAVILY_API_KEY) return [];
 
   const trustedDomains = getSearchDomains(projectType);
 
   try {
-    // Use same query strategy as searchCaseStudy for consistency
     const query = /[\u4e00-\u9fff]/.test(caseName)
       ? `${caseName} 设计`
       : `${caseName} design`;
@@ -336,6 +341,7 @@ export async function searchCaseImages(
         max_results: 5,
         search_depth: "basic",
         include_images: true,
+        include_image_descriptions: false,
         include_domains: trustedDomains,
         exclude_domains: EXCLUDE_DOMAINS,
       }),
@@ -344,8 +350,17 @@ export async function searchCaseImages(
 
     if (!response.ok) return [];
 
-    const data = (await response.json()) as TavilySearchResponse & { images?: string[] };
-    const images = (data.images || []).filter((url: string) => {
+    type ResultWithImages = TavilySearchResult & {
+      images?: Array<{ url: string; description?: string } | string>;
+    };
+    const data = (await response.json()) as {
+      results?: ResultWithImages[];
+      images?: Array<{ url: string; description?: string } | string>;
+    };
+
+    const collected: CaseImage[] = [];
+
+    const isGoodImage = (url: string): boolean => {
       const u = url.toLowerCase();
       return (
         (u.endsWith('.jpg') || u.endsWith('.jpeg') || u.endsWith('.png') || u.endsWith('.webp')) &&
@@ -356,9 +371,37 @@ export async function searchCaseImages(
         !u.includes('banner') &&
         url.length < 500
       );
-    });
-    console.log(`[Tavily] Images for "${caseName}": ${images.length} found`);
-    return images.slice(0, 2);
+    };
+
+    // Strategy 1: Use per-result images — each image is bound to result.url (true source page)
+    if (data.results && data.results.length > 0) {
+      for (const result of data.results) {
+        if (!result.images || result.images.length === 0) continue;
+        for (const imgItem of result.images) {
+          const imgUrl = typeof imgItem === 'string' ? imgItem : imgItem.url;
+          if (imgUrl && isGoodImage(imgUrl)) {
+            collected.push({ imageUrl: imgUrl, sourcePageUrl: result.url });
+            if (collected.length >= 2) break;
+          }
+        }
+        if (collected.length >= 2) break;
+      }
+    }
+
+    // Strategy 2: Fall back to top-level images, paired with best matching result URL
+    if (collected.length === 0 && data.images && data.images.length > 0) {
+      const bestResultUrl = data.results?.[0]?.url ?? '';
+      for (const imgItem of data.images) {
+        const imgUrl = typeof imgItem === 'string' ? imgItem : (imgItem as { url: string }).url;
+        if (imgUrl && isGoodImage(imgUrl) && bestResultUrl) {
+          collected.push({ imageUrl: imgUrl, sourcePageUrl: bestResultUrl });
+          if (collected.length >= 2) break;
+        }
+      }
+    }
+
+    console.log(`[Tavily] Images for "${caseName}": ${collected.length} found`);
+    return collected;
   } catch (err) {
     console.error(`[Tavily] Image search error for "${caseName}":`, err);
     return [];
@@ -367,14 +410,14 @@ export async function searchCaseImages(
 
 /**
  * Search for images of multiple case studies in parallel
- * Returns a map of caseName -> imageUrls[]
+ * Returns a map of caseName -> CaseImage[] (each image has imageUrl + sourcePageUrl)
  */
 export async function searchCaseStudyImages(
   caseNames: string[],
   projectType?: string
-): Promise<Record<string, string[]>> {
+): Promise<Record<string, CaseImage[]>> {
   const BATCH_SIZE = 3;
-  const results: Record<string, string[]> = {};
+  const results: Record<string, CaseImage[]> = {};
 
   for (let i = 0; i < caseNames.length; i += BATCH_SIZE) {
     const batch = caseNames.slice(i, i + BATCH_SIZE);
