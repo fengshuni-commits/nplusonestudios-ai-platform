@@ -312,7 +312,7 @@ export async function generateImageWithJimeng(
 
 /**
  * 调用即梦 AI 图生图 API（图生图 3.0 - 智能参考）
- * req_key: jimeng_i2i_v1.3
+ * req_key: jimeng_i2i_v30
  */
 export async function imageToImageWithJimeng(
   config: VolcengineConfig,
@@ -321,7 +321,7 @@ export async function imageToImageWithJimeng(
   options?: { width?: number; height?: number; seed?: number }
 ): Promise<ImageGenerationResponse> {
   const body: Record<string, unknown> = {
-    req_key: "jimeng_i2i_v1.3",
+    req_key: "jimeng_i2i_v30",
     prompt,
     image_urls: [imageUrl],
     width: options?.width || 1024,
@@ -353,7 +353,7 @@ export async function imageToImageWithJimeng(
     const pollResult = await callVolcengineVisualApi(
       config,
       "CVSync2AsyncGetResult",
-      { req_key: "jimeng_i2i_v1.3", task_id: taskId, req_json: reqJson },
+      { req_key: "jimeng_i2i_v30", task_id: taskId, req_json: reqJson },
       "2022-08-31"
     );
     const pollCode = pollResult.code as number | undefined;
