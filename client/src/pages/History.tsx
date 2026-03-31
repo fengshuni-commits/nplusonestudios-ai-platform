@@ -95,6 +95,13 @@ const MODULE_MAP: Record<string, {
     iconColor: "text-zinc-300",
     accentColor: "bg-zinc-500/20 text-zinc-300",
   },
+  analysis_image: {
+    label: "AI 分析图",
+    icon: Layers,
+    gradient: "from-teal-900 to-teal-700",
+    iconColor: "text-teal-300",
+    accentColor: "bg-teal-500/20 text-teal-300",
+  },
   meeting_minutes: {
     label: "会议纪要",
     icon: MessageSquare,
@@ -142,6 +149,7 @@ const MODULE_MAP: Record<string, {
 // Module display order
 const MODULE_ORDER = [
   "ai_render",
+  "analysis_image",
   "ai_video",
   "layout_design",
   "benchmark_report",
@@ -419,7 +427,7 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
     accentColor: "bg-zinc-500/20 text-zinc-300",
   };
   const ModuleIcon = cfg.icon;
-  const isRender = item.module === "ai_render" || item.module === "layout_design";
+  const isRender = item.module === "ai_render" || item.module === "layout_design" || item.module === "analysis_image";
   const isMedia = item.module === "media_xiaohongshu" || item.module === "media_wechat" || item.module === "media_instagram";
   const displayUrl = item.latestOutputUrl || item.outputUrl;
   const chainLen = item.chainLength || 1;
@@ -429,6 +437,11 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
     if (item.module === "layout_design") {
       // 图文排版：跳转到图文排版页面
       if (onNavigate) onNavigate("/media/layout");
+      return;
+    }
+    if (item.module === "analysis_image") {
+      // AI 分析图：灯箱查看大图
+      if (displayUrl && onLightbox) onLightbox(displayUrl, title);
       return;
     }
     if (isRender && onOpenDetail) {
@@ -535,8 +548,8 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
         </div>
       )}
 
-      {/* Import to asset library button for ai_render */}
-      {item.module === "ai_render" && (item.latestOutputUrl || item.outputUrl) && onImport && (
+      {/* Import to asset library button for ai_render and analysis_image */}
+      {(item.module === "ai_render" || item.module === "analysis_image") && (item.latestOutputUrl || item.outputUrl) && onImport && (
         <div className="absolute bottom-1.5 right-14 opacity-0 group-hover:opacity-100 transition-opacity z-10"
           onClick={(e) => { e.stopPropagation(); onImport(item.id); }}>
           <div className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-emerald-500/80 hover:text-white transition-colors" title="导入到素材库">
@@ -863,6 +876,7 @@ export default function HistoryPage() {
             <SelectContent>
               <SelectItem value="all">全部模块</SelectItem>
               <SelectItem value="ai_render">AI 效果图</SelectItem>
+              <SelectItem value="analysis_image">AI 分析图</SelectItem>
               <SelectItem value="ai_video">AI 视频</SelectItem>
               <SelectItem value="layout_design">图文排版</SelectItem>
               <SelectItem value="benchmark_report">案例调研报告</SelectItem>

@@ -219,7 +219,7 @@ export default function Home() {
               <div className="space-y-1">
                 {recentGenerations.map((item: any) => {
                   const meta = MODULE_META[item.module] || { label: item.module, icon: <Sparkles className="h-3.5 w-3.5" />, color: "text-gray-600 bg-gray-50" };
-                  const hasImage = item.outputUrl && item.module === "ai_render";
+                  const hasImage = item.outputUrl && (item.module === "ai_render" || item.module === "analysis_image");
                   return (
                     <div key={item.id} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer" onClick={() => setLocation("/history")}>
                       {hasImage ? (
