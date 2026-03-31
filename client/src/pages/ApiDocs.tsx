@@ -388,6 +388,307 @@ const syncApis: ApiDef[] = [
   },
 ];
 
+// ── AI 分析图 API（两步流程）──────────────────────────────
+type AnalysisImageStep = {
+  step: number;
+  name: string;
+  endpoint: string;
+  method: "POST" | "GET";
+  description: string;
+  params: ApiParam[];
+  responseFields: ApiResponseField[];
+  requestExample: Record<string, unknown>;
+  responseExample: Record<string, unknown>;
+  curlExample: string;
+};
+
+const ASPECT_RATIO_OPTIONS = [
+  { label: "1:1 正方形", value: "1024x1024" },
+  { label: "4:3 横版", value: "1024x768" },
+  { label: "3:2 横版", value: "1024x683" },
+  { label: "16:9 宽屏", value: "1024x576" },
+  { label: "3:4 竖版", value: "768x1024" },
+  { label: "2:3 竖版", value: "683x1024" },
+];
+
+const analysisImageSteps: AnalysisImageStep[] = [
+  {
+    step: 1,
+    name: "提交分析图生成任务",
+    endpoint: "analysisImage.submit",
+    method: "POST",
+    description: "提交 AI 分析图生成任务，支持一次生成 1-3 张并行图片，立即返回 jobId 数组，后台异步生成（约 30-60 秒）",
+    params: [
+      { name: "type", type: "string", required: true, description: "分析类型：material（材质分析图）或 soft_furnishing（软装配图）" },
+      { name: "referenceImageUrl", type: "string", required: true, description: "参考图片 URL（已上传至素材库的图片）" },
+      { name: "aspectRatio", type: "string", required: false, default: "\"1024x1024\"", description: `图片尺寸，格式 \"WxH\"。可选值：${ASPECT_RATIO_OPTIONS.map(o => `${o.value}（${o.label}）`).join('、')}` },
+      { name: "count", type: "number", required: false, default: "1", description: "生成数量 1-3，选 3 时并行提交三个独立 job" },
+      { name: "extraPrompt", type: "string", required: false, description: "额外提示词，追加到系统提示词末尾（可选）" },
+      { name: "toolId", type: "number", required: false, description: "指定 AI 工具 ID（可选，不传则使用默认工具）" },
+    ],
+    responseFields: [
+      { name: "jobId", type: "string", description: "第一个任务 ID（count=1 时使用此字段轮询）" },
+      { name: "jobIds", type: "string[]", description: "所有任务 ID 数组（count>1 时使用此字段批量轮询）" },
+    ],
+    requestExample: {
+      type: "material",
+      referenceImageUrl: "https://cdn.example.com/space-photo.jpg",
+      aspectRatio: "1024x576",
+      count: 3,
+    },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            jobId: "V1StGXR8_Z5jdHi6B-myT",
+            jobIds: ["V1StGXR8_Z5jdHi6B-myT", "K9mNpQR2_X7keLm3C-abZ", "R3pQwXY4_A8mfNn5D-cdE"],
+          }
+        }
+      }
+    },
+    curlExample: `curl -X POST '${BASE_URL}/api/trpc/analysisImage.submit' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"type":"material","referenceImageUrl":"https://cdn.example.com/space.jpg","aspectRatio":"1024x576","count":3}}'`,
+  },
+  {
+    step: 2,
+    name: "轮询单个任务状态",
+    endpoint: "analysisImage.pollJob",
+    method: "GET",
+    description: "查询单个分析图任务的状态。建议每 3 秒轮询一次，直到 status 变为 done 或 failed",
+    params: [
+      { name: "jobId", type: "string", required: true, description: "第一步返回的任务 ID" },
+    ],
+    responseFields: [
+      { name: "status", type: "string", description: "任务状态：pending / processing / done / failed / not_found" },
+      { name: "url", type: "string", description: "生成的图片 CDN URL（仅 status=done 时返回）" },
+      { name: "historyId", type: "number", description: "生成记录 ID（仅 status=done 时返回）" },
+      { name: "error", type: "string", description: "错误信息（仅 status=failed 时返回）" },
+    ],
+    requestExample: { jobId: "V1StGXR8_Z5jdHi6B-myT" },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            status: "done",
+            url: "https://d2xsxph8kpxj0f.cloudfront.net/analysis/xxx.jpg",
+            historyId: 840020,
+          }
+        }
+      }
+    },
+    curlExample: `curl -G '${BASE_URL}/api/trpc/analysisImage.pollJob' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  --data-urlencode 'input={"json":{"jobId":"V1StGXR8_Z5jdHi6B-myT"}}'`,
+  },
+  {
+    step: 3,
+    name: "批量轮询多个任务状态",
+    endpoint: "analysisImage.pollJobs",
+    method: "GET",
+    description: "一次查询多个分析图任务的状态（count>1 时推荐使用），减少请求次数",
+    params: [
+      { name: "jobIds", type: "string[]", required: true, description: "第一步返回的 jobIds 数组" },
+    ],
+    responseFields: [
+      { name: "jobId", type: "string", description: "任务 ID" },
+      { name: "status", type: "string", description: "任务状态：pending / processing / done / failed / not_found" },
+      { name: "url", type: "string", description: "生成的图片 CDN URL（仅 status=done 时返回）" },
+      { name: "historyId", type: "number", description: "生成记录 ID（仅 status=done 时返回）" },
+      { name: "error", type: "string", description: "错误信息（仅 status=failed 时返回）" },
+    ],
+    requestExample: { jobIds: ["V1StGXR8_Z5jdHi6B-myT", "K9mNpQR2_X7keLm3C-abZ", "R3pQwXY4_A8mfNn5D-cdE"] },
+    responseExample: {
+      result: {
+        data: {
+          json: [
+            { jobId: "V1StGXR8_Z5jdHi6B-myT", status: "done", url: "https://cdn.../analysis/1.jpg", historyId: 840020 },
+            { jobId: "K9mNpQR2_X7keLm3C-abZ", status: "processing" },
+            { jobId: "R3pQwXY4_A8mfNn5D-cdE", status: "pending" },
+          ]
+        }
+      }
+    },
+    curlExample: `curl -G '${BASE_URL}/api/trpc/analysisImage.pollJobs' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  --data-urlencode 'input={"json":{"jobIds":["V1StGXR8_Z5jdHi6B-myT","K9mNpQR2_X7keLm3C-abZ"]}}'`,
+  },
+];
+
+// ── 图文排版 API（两步流程）──────────────────────────────
+type GraphicLayoutStep = {
+  step: number;
+  name: string;
+  endpoint: string;
+  method: "POST" | "GET";
+  description: string;
+  params: ApiParam[];
+  responseFields: ApiResponseField[];
+  requestExample: Record<string, unknown>;
+  responseExample: Record<string, unknown>;
+  curlExample: string;
+};
+
+const graphicLayoutSteps: GraphicLayoutStep[] = [
+  {
+    step: 1,
+    name: "提交图文排版生成任务",
+    endpoint: "graphicLayout.generate",
+    method: "POST",
+    description: "提交图文排版生成任务，支持品牌手册、商品详情页、项目图板等类型，可生成 1-10 页，后台异步生成（每页约 30-60 秒）",
+    params: [
+      { name: "docType", type: "string", required: true, description: "文档类型：brand_manual（品牌手册）/ product_detail（商品详情页）/ project_board（项目图板）/ custom（自定义）" },
+      { name: "contentText", type: "string", required: true, description: "内容描述，如品牌理念、产品信息、项目介绍等" },
+      { name: "pageCount", type: "number", required: false, default: "1", description: "生成页数（1-10）" },
+      { name: "aspectRatio", type: "string", required: false, default: "\"3:4\"", description: "页面比例：3:4（默认竖版）/ 4:3（横版）/ 1:1 / 16:9 / 9:16 / A4 / A3" },
+      { name: "packId", type: "number", required: false, description: "参考版式包 ID（从 graphicStylePacks.list 获取，可选）" },
+      { name: "assetConfig", type: "object", required: false, description: "素材配置，支持 per_page（按页分配）或 by_type（按类型分组）两种模式（见 JSON 示例）" },
+      { name: "title", type: "string", required: false, description: "文档标题（可选）" },
+      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（可选）" },
+    ],
+    responseFields: [
+      { name: "id", type: "number", description: "排版任务 ID，用于后续查询状态" },
+      { name: "status", type: "string", description: "初始状态：pending" },
+    ],
+    requestExample: {
+      docType: "project_board",
+      contentText: "N+1 STUDIOS 办公空间设计项目，现代简约风格，强调开放协作与创意氛围",
+      pageCount: 3,
+      aspectRatio: "3:4",
+      assetConfig: {
+        mode: "per_page",
+        pages: {
+          "0": ["https://cdn.example.com/photo1.jpg", "https://cdn.example.com/photo2.jpg"],
+          "1": ["https://cdn.example.com/photo3.jpg"],
+          "2": ["https://cdn.example.com/photo4.jpg", "https://cdn.example.com/photo5.jpg"],
+        }
+      },
+      title: "百悦科技园项目图板",
+    },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            id: 1001,
+            status: "pending",
+          }
+        }
+      }
+    },
+    curlExample: `curl -X POST '${BASE_URL}/api/trpc/graphicLayout.generate' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"docType":"project_board","contentText":"N+1 STUDIOS 办公空间设计项目","pageCount":3,"aspectRatio":"3:4","title":"百悦科技园项目图板"}}'`,
+  },
+  {
+    step: 2,
+    name: "查询排版任务状态",
+    endpoint: "graphicLayout.status",
+    method: "GET",
+    description: "查询图文排版任务的当前状态，建议每 5 秒轮询一次。完成后返回完整的页面数据（含图片 URL 和文字层信息）",
+    params: [
+      { name: "id", type: "number", required: true, description: "第一步返回的排版任务 ID" },
+    ],
+    responseFields: [
+      { name: "status", type: "string", description: "任务状态：pending / processing / done / failed" },
+      { name: "pages", type: "object[]", description: "页面数据数组（仅 status=done 时返回），每页含 pageIndex、imageUrl、textBlocks 等字段" },
+      { name: "errorMessage", type: "string", description: "错误信息（仅 status=failed 时返回）" },
+    ],
+    requestExample: { id: 1001 },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            id: 1001,
+            status: "done",
+            docType: "project_board",
+            pageCount: 3,
+            aspectRatio: "3:4",
+            pages: [
+              {
+                pageIndex: 0,
+                imageUrl: "https://cdn.../graphic-layout/page-0.jpg",
+                textBlocks: [
+                  { id: "tb_1", text: "百悦科技园", x: 80, y: 120, width: 400, height: 60, fontSize: 48, color: "#1a1a1a", align: "left" }
+                ],
+              },
+            ],
+          }
+        }
+      }
+    },
+    curlExample: `curl -G '${BASE_URL}/api/trpc/graphicLayout.status' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  --data-urlencode 'input={"json":{"id":1001}}'`,
+  },
+  {
+    step: 3,
+    name: "局部重绘文字区域",
+    endpoint: "graphicLayout.inpaintTextBlock",
+    method: "POST",
+    description: "对已生成页面中的某个文字块进行 AI 局部重绘，修改文案内容。重绘后返回新的整页图片 URL",
+    params: [
+      { name: "jobId", type: "number", required: true, description: "排版任务 ID" },
+      { name: "pageIndex", type: "number", required: true, description: "目标页面索引（从 0 开始）" },
+      { name: "blockId", type: "string", required: true, description: "文字块 ID（从 status 接口的 textBlocks[].id 获取）" },
+      { name: "newText", type: "string", required: true, description: "替换后的新文案内容" },
+      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（可选）" },
+    ],
+    responseFields: [
+      { name: "success", type: "boolean", description: "操作是否成功" },
+      { name: "newImageUrl", type: "string", description: "重绘后的新页面图片 URL" },
+    ],
+    requestExample: {
+      jobId: 1001,
+      pageIndex: 0,
+      blockId: "tb_1",
+      newText: "百悦科技园·创新中心",
+    },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            success: true,
+            newImageUrl: "https://cdn.../graphic-layout/page-0-v2.jpg",
+          }
+        }
+      }
+    },
+    curlExample: `curl -X POST '${BASE_URL}/api/trpc/graphicLayout.inpaintTextBlock' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"jobId":1001,"pageIndex":0,"blockId":"tb_1","newText":"百悦科技园·创新中心"}}'`,
+  },
+  {
+    step: 4,
+    name: "导出 PDF",
+    endpoint: "graphicLayout.exportPdf",
+    method: "POST",
+    description: "将已完成的图文排版任务导出为 PDF 文件，上传至 S3 并返回下载 URL",
+    params: [
+      { name: "jobId", type: "number", required: true, description: "排版任务 ID（status 必须为 done）" },
+    ],
+    responseFields: [
+      { name: "url", type: "string", description: "PDF 文件的 CDN 下载 URL" },
+    ],
+    requestExample: { jobId: 1001 },
+    responseExample: {
+      result: {
+        data: {
+          json: {
+            url: "https://cdn.../graphic-layout-pdf/1001-1743000000000.pdf",
+          }
+        }
+      }
+    },
+    curlExample: `curl -X POST '${BASE_URL}/api/trpc/graphicLayout.exportPdf' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"json":{"jobId":1001}}'`,
+  },
+];
+
 // ── 案例调研异步 API（三步流程）──────────────────────────
 type BenchmarkApiStep = {
   step: number;
@@ -776,6 +1077,125 @@ export default function ApiDocs() {
           </Card>
         </div>
 
+        {/* ── AI 分析图 API ── */}
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">AI 分析图 API</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            AI 分析图生成耗时约 30-60 秒，采用<strong>异步任务模式</strong>。支持一次提交 1-3 张并行生成，使用 <code className="font-mono text-xs bg-slate-100 px-1 rounded">pollJobs</code> 批量轮询效率更高。
+          </p>
+
+          {/* 流程示意 */}
+          <div className="flex items-center gap-2 p-4 bg-teal-50 border border-teal-200 rounded-xl mb-4 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-semibold">
+              <span>1</span> analysisImage.submit
+            </div>
+            <ArrowRight className="w-4 h-4 text-teal-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-100 text-teal-800 rounded-lg text-sm font-semibold">
+              <Clock className="w-3.5 h-3.5" /> 每 3s 轮询
+            </div>
+            <ArrowRight className="w-4 h-4 text-teal-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-100 text-teal-800 rounded-lg text-sm font-semibold">
+              <span>2</span> pollJob（单张）
+            </div>
+            <ArrowRight className="w-4 h-4 text-teal-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-100 text-teal-800 rounded-lg text-sm font-semibold">
+              <span>2'</span> pollJobs（多张）
+            </div>
+            <ArrowRight className="w-4 h-4 text-teal-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">
+              status = done → 获取图片 URL
+            </div>
+          </div>
+
+          {/* 比例说明 */}
+          <Card className="mb-4 p-4 bg-teal-50 border-teal-200">
+            <p className="text-xs font-semibold text-teal-800 mb-2">支持的图片尺寸（aspectRatio 参数）</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {ASPECT_RATIO_OPTIONS.map(opt => (
+                <div key={opt.value} className="flex items-center gap-2 p-2 bg-white rounded border border-teal-100">
+                  <code className="text-xs font-mono text-teal-700">{opt.value}</code>
+                  <span className="text-xs text-slate-500">{opt.label}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* 接口卡片 */}
+          <div className="space-y-4 mb-6">
+            {analysisImageSteps.map((step, idx) => (
+              <AnalysisImageStepCard
+                key={idx}
+                step={step}
+                apiEndpoint={apiEndpoint}
+                copiedKey={copiedKey}
+                copyToClipboard={copyToClipboard}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* ── 图文排版 API ── */}
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">图文排版 API</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            图文排版支持品牌手册、商品详情页、项目图板等类型，每页独立异步生成（约 30-60 秒/页）。生成完成后支持对文字区域进行 AI 局部重绘修改，并可导出 PDF。
+          </p>
+
+          {/* 流程示意 */}
+          <div className="flex items-center gap-2 p-4 bg-purple-50 border border-purple-200 rounded-xl mb-4 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-semibold">
+              <span>1</span> graphicLayout.generate
+            </div>
+            <ArrowRight className="w-4 h-4 text-purple-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg text-sm font-semibold">
+              <Clock className="w-3.5 h-3.5" /> 每 5s 轮询
+            </div>
+            <ArrowRight className="w-4 h-4 text-purple-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg text-sm font-semibold">
+              <span>2</span> graphicLayout.status
+            </div>
+            <ArrowRight className="w-4 h-4 text-purple-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg text-sm font-semibold">
+              <span>3</span> inpaintTextBlock（可选）
+            </div>
+            <ArrowRight className="w-4 h-4 text-purple-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg text-sm font-semibold">
+              <span>4</span> exportPdf（可选）
+            </div>
+          </div>
+
+          {/* 文档类型说明 */}
+          <Card className="mb-4 p-4 bg-purple-50 border-purple-200">
+            <p className="text-xs font-semibold text-purple-800 mb-2">文档类型（docType 参数）</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                { value: "brand_manual", label: "品牌手册" },
+                { value: "product_detail", label: "商品详情页" },
+                { value: "project_board", label: "项目图板" },
+                { value: "custom", label: "自定义排版" },
+              ].map(t => (
+                <div key={t.value} className="flex flex-col p-2 bg-white rounded border border-purple-100">
+                  <code className="text-xs font-mono text-purple-700">{t.value}</code>
+                  <span className="text-xs text-slate-500 mt-0.5">{t.label}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* 接口卡片 */}
+          <div className="space-y-4 mb-6">
+            {graphicLayoutSteps.map((step, idx) => (
+              <GraphicLayoutStepCard
+                key={idx}
+                step={step}
+                apiEndpoint={apiEndpoint}
+                copiedKey={copiedKey}
+                copyToClipboard={copyToClipboard}
+              />
+            ))}
+          </div>
+        </div>
+
         {/* ── 案例调研 API（异步三步流程）── */}
         <div className="mb-4">
           <h2 className="text-xl font-bold text-slate-900 mb-1">案例调研 API</h2>
@@ -1156,6 +1576,156 @@ function BenchmarkStepCard({
             <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">
               {JSON.stringify(step.responseExample, null, 2)}
             </pre>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </Card>
+  );
+}
+
+// ── AI 分析图步骤卡片组件 ──────────────────────────────────
+function AnalysisImageStepCard({
+  step,
+  apiEndpoint,
+  copiedKey,
+  copyToClipboard,
+}: {
+  step: AnalysisImageStep;
+  apiEndpoint: string;
+  copiedKey: string | null;
+  copyToClipboard: (text: string, key: string) => void;
+}) {
+  const stepKey = `ai-${step.step}`;
+  return (
+    <Card className="p-6 bg-white border-slate-200 hover:shadow-md transition">
+      <div className="mb-5">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
+              {step.step}
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">{step.name}</h3>
+              <p className="text-slate-500 text-sm mt-0.5">{step.description}</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-xs font-semibold border-teal-300 text-teal-700 shrink-0 ml-4">
+            {step.method}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <code className="flex-1 text-sm font-mono text-slate-700">
+            <span className="text-slate-400">{apiEndpoint}/</span>
+            <span className="text-teal-600 font-semibold">{step.endpoint}</span>
+          </code>
+          <Button size="sm" variant="ghost" onClick={() => copyToClipboard(`${apiEndpoint}/${step.endpoint}`, `ep-${stepKey}`)} className="gap-1 text-xs">
+            {copiedKey === `ep-${stepKey}` ? <><Check className="w-3 h-3" /> 已复制</> : <Copy className="w-3 h-3" />}
+          </Button>
+        </div>
+      </div>
+      <Tabs defaultValue="curl" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsTrigger value="curl">curl 示例</TabsTrigger>
+          <TabsTrigger value="params">请求参数</TabsTrigger>
+          <TabsTrigger value="response">返回字段</TabsTrigger>
+          <TabsTrigger value="json">JSON 示例</TabsTrigger>
+        </TabsList>
+        <TabsContent value="curl">
+          <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500">将 <code className="font-mono bg-slate-100 px-1 rounded">sk_1774xxxxxxxxx_xxxxxxxxxx</code> 替换为你的真实 Token</p>
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(step.curlExample, `curl-${stepKey}`)} className="gap-1 text-xs">
+                {copiedKey === `curl-${stepKey}` ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制</>}
+              </Button>
+            </div>
+            <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">{step.curlExample}</pre>
+          </div>
+        </TabsContent>
+        <TabsContent value="params"><ParamTable params={step.params} /></TabsContent>
+        <TabsContent value="response"><ResponseTable fields={step.responseFields} /></TabsContent>
+        <TabsContent value="json" className="space-y-4">
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">请求体（-d 参数中的 json 字段）</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">{JSON.stringify(step.requestExample, null, 2)}</pre>
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">完整返回示例</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">{JSON.stringify(step.responseExample, null, 2)}</pre>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </Card>
+  );
+}
+
+// ── 图文排版步骤卡片组件 ──────────────────────────────────
+function GraphicLayoutStepCard({
+  step,
+  apiEndpoint,
+  copiedKey,
+  copyToClipboard,
+}: {
+  step: GraphicLayoutStep;
+  apiEndpoint: string;
+  copiedKey: string | null;
+  copyToClipboard: (text: string, key: string) => void;
+}) {
+  const stepKey = `gl-${step.step}`;
+  return (
+    <Card className="p-6 bg-white border-slate-200 hover:shadow-md transition">
+      <div className="mb-5">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
+              {step.step}
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">{step.name}</h3>
+              <p className="text-slate-500 text-sm mt-0.5">{step.description}</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-xs font-semibold border-purple-300 text-purple-700 shrink-0 ml-4">
+            {step.method}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <code className="flex-1 text-sm font-mono text-slate-700">
+            <span className="text-slate-400">{apiEndpoint}/</span>
+            <span className="text-purple-600 font-semibold">{step.endpoint}</span>
+          </code>
+          <Button size="sm" variant="ghost" onClick={() => copyToClipboard(`${apiEndpoint}/${step.endpoint}`, `ep-${stepKey}`)} className="gap-1 text-xs">
+            {copiedKey === `ep-${stepKey}` ? <><Check className="w-3 h-3" /> 已复制</> : <Copy className="w-3 h-3" />}
+          </Button>
+        </div>
+      </div>
+      <Tabs defaultValue="curl" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsTrigger value="curl">curl 示例</TabsTrigger>
+          <TabsTrigger value="params">请求参数</TabsTrigger>
+          <TabsTrigger value="response">返回字段</TabsTrigger>
+          <TabsTrigger value="json">JSON 示例</TabsTrigger>
+        </TabsList>
+        <TabsContent value="curl">
+          <div className="relative">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-slate-500">将 <code className="font-mono bg-slate-100 px-1 rounded">sk_1774xxxxxxxxx_xxxxxxxxxx</code> 替换为你的真实 Token</p>
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(step.curlExample, `curl-${stepKey}`)} className="gap-1 text-xs">
+                {copiedKey === `curl-${stepKey}` ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制</>}
+              </Button>
+            </div>
+            <pre className="p-4 bg-slate-900 text-green-300 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed whitespace-pre">{step.curlExample}</pre>
+          </div>
+        </TabsContent>
+        <TabsContent value="params"><ParamTable params={step.params} /></TabsContent>
+        <TabsContent value="response"><ResponseTable fields={step.responseFields} /></TabsContent>
+        <TabsContent value="json" className="space-y-4">
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">请求体（-d 参数中的 json 字段）</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">{JSON.stringify(step.requestExample, null, 2)}</pre>
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-900 mb-2 text-sm">完整返回示例</h4>
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-lg overflow-x-auto text-xs font-mono">{JSON.stringify(step.responseExample, null, 2)}</pre>
           </div>
         </TabsContent>
       </Tabs>
