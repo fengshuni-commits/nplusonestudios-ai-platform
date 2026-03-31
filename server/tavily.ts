@@ -338,14 +338,14 @@ export async function searchCaseImages(
       },
       body: JSON.stringify({
         query,
-        max_results: 5,
-        search_depth: "basic",
+        max_results: 8,
+        search_depth: "advanced",
         include_images: true,
         include_image_descriptions: false,
         include_domains: trustedDomains,
         exclude_domains: EXCLUDE_DOMAINS,
       }),
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(25000),
     });
 
     if (!response.ok) return [];
@@ -381,10 +381,10 @@ export async function searchCaseImages(
           const imgUrl = typeof imgItem === 'string' ? imgItem : imgItem.url;
           if (imgUrl && isGoodImage(imgUrl)) {
             collected.push({ imageUrl: imgUrl, sourcePageUrl: result.url });
-            if (collected.length >= 2) break;
+            if (collected.length >= 3) break;
           }
         }
-        if (collected.length >= 2) break;
+        if (collected.length >= 3) break;
       }
     }
 
@@ -395,7 +395,7 @@ export async function searchCaseImages(
         const imgUrl = typeof imgItem === 'string' ? imgItem : (imgItem as { url: string }).url;
         if (imgUrl && isGoodImage(imgUrl) && bestResultUrl) {
           collected.push({ imageUrl: imgUrl, sourcePageUrl: bestResultUrl });
-          if (collected.length >= 2) break;
+          if (collected.length >= 3) break;
         }
       }
     }
@@ -430,8 +430,9 @@ export async function searchCaseStudyImages(
     for (const { name, images } of batchResults) {
       results[name] = images;
     }
+    // advanced search depth takes longer; add delay to avoid rate limiting
     if (i + BATCH_SIZE < caseNames.length) {
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 600));
     }
   }
 
