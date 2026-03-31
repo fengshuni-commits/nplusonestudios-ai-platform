@@ -269,7 +269,7 @@ export default function DesignAnalysis() {
             </CardHeader>
             <CardContent>
               <AiToolSelector
-                capability="image_generation"
+                capability="rendering"
                 value={toolId}
                 onChange={setToolId}
                 showBuiltIn={true}

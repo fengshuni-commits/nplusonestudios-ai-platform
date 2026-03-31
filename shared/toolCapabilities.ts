@@ -61,8 +61,8 @@ const CAPABILITY_RULES: CapabilityRule[] = [
     capabilities: ["document", "analysis", "media"],
   },
   {
-    keywords: ["gemini", "gemini-pro", "gemini-flash", "gemini-ultra"],
-    capabilities: ["rendering", "document", "analysis", "media"],
+    keywords: ["gemini", "gemini-pro", "gemini-flash", "gemini-ultra", "gemini-2.0", "gemini-3", "imagen", "image-generation"],
+    capabilities: ["rendering", "image", "document", "analysis", "media"],
   },
   {
     keywords: ["claude-3", "claude3", "claude-sonnet", "claude-opus", "claude-haiku", "anthropic"],
