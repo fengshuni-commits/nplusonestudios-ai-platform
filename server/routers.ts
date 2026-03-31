@@ -5099,6 +5099,129 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
   }
 }
 
+// ─── Analysis Image Router ──────────────────────────────────────────────────
+
+async function generateAnalysisImageInBackground(
+  jobId: string,
+  input: {
+    type: "material" | "soft_furnishing";
+    toolId?: number;
+    referenceImageUrl: string;
+    extraPrompt?: string;
+  },
+  userId: number,
+  userName: string | null
+) {
+  try {
+    await db.updateAnalysisImageJob(jobId, { status: "processing" });
+
+    // Get built-in prompt for this type
+    const builtinPrompt = await db.getAnalysisImagePrompt(input.type);
+    const basePrompt = builtinPrompt?.prompt ?? (
+      input.type === "material"
+        ? "Generate a professional material palette board based on the reference image."
+        : "Generate a professional soft furnishing mood board based on the reference image."
+    );
+    const fullPrompt = input.extraPrompt ? `${basePrompt}\n\n${input.extraPrompt}` : basePrompt;
+
+    await db.updateAnalysisImageJob(jobId, { fullPrompt });
+
+    // Generate image
+    let resultUrl: string;
+    if (input.toolId) {
+      const result = await generateImageWithTool({
+        toolId: input.toolId,
+        prompt: fullPrompt,
+        originalImages: [{ url: input.referenceImageUrl, mimeType: "image/jpeg" }],
+      });
+      resultUrl = result.url;
+    } else {
+      const result = await generateImage({
+        prompt: fullPrompt,
+        originalImages: [{ url: input.referenceImageUrl, mimeType: "image/jpeg" }],
+      });
+      resultUrl = result.url || "";
+    }
+
+    // Save to generationHistory
+    const historyEntry = await db.createGenerationHistory({
+      userId,
+      module: "analysis_image",
+      title: input.type === "material" ? "材质搜配图" : "软装搜配图",
+      outputUrl: resultUrl,
+      inputParams: { type: input.type, toolId: input.toolId, referenceImageUrl: input.referenceImageUrl, fullPrompt },
+    });
+
+    await db.updateAnalysisImageJob(jobId, { status: "done", resultUrl, historyId: historyEntry.id });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "未知错误";
+    console.error(`[AnalysisImage] Generation failed for job ${jobId}:`, msg);
+    await db.updateAnalysisImageJob(jobId, { status: "failed", error: msg });
+  }
+}
+
+const analysisImageRouter = router({
+  /** Get all built-in prompts */
+  listPrompts: protectedProcedure.query(async () => {
+    return db.listAnalysisImagePrompts();
+  }),
+
+  /** Update a built-in prompt */
+  updatePrompt: protectedProcedure
+    .input(z.object({
+      type: z.enum(["material", "soft_furnishing"]),
+      prompt: z.string().min(1),
+      label: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.upsertAnalysisImagePrompt(input.type, {
+        prompt: input.prompt,
+        label: input.label,
+        description: input.description,
+        updatedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
+
+  /** Submit a new analysis image generation job */
+  submit: protectedProcedure
+    .input(z.object({
+      type: z.enum(["material", "soft_furnishing"]),
+      toolId: z.number().optional(),
+      referenceImageUrl: z.string().url(),
+      extraPrompt: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const jobId = nanoid();
+      await db.createAnalysisImageJob({
+        id: jobId,
+        userId: ctx.user.id,
+        type: input.type,
+        toolId: input.toolId ?? null,
+        referenceImageUrl: input.referenceImageUrl,
+      });
+      generateAnalysisImageInBackground(jobId, input, ctx.user.id, ctx.user.name || null).catch(console.error);
+      return { jobId };
+    }),
+
+  /** Poll job status */
+  pollJob: protectedProcedure
+    .input(z.object({ jobId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const job = await db.getAnalysisImageJob(input.jobId);
+      if (!job) return { status: "not_found" as const };
+      if (job.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (job.status === "done") {
+        return { status: "done" as const, url: job.resultUrl || "", historyId: job.historyId };
+      }
+      if (job.status === "failed") {
+        return { status: "failed" as const, error: job.error || "生成失败" };
+      }
+      return { status: job.status as "pending" | "processing" };
+    }),
+});
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -5369,7 +5492,7 @@ export const appRouter = router({system: systemRouter,
         return { success };
       }),
   }),
+  analysisImage: analysisImageRouter,
 });
-
 export type AppRouter = typeof appRouter;
 

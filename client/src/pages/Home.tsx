@@ -39,12 +39,14 @@ import {
   ExternalLink,
   Lock,
   ChevronRight,
+  Layers,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 
 const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   ai_render: { label: "AI 效果图", icon: <ImageIcon className="h-3.5 w-3.5" />, color: "text-primary bg-primary/10" },
+  analysis_image: { label: "AI 分析图", icon: <Layers className="h-3.5 w-3.5" />, color: "text-primary bg-primary/10" },
   benchmark_report: { label: "案例调研", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
   benchmark_ppt: { label: "调研 PPT", icon: <FileText className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-muted" },
   meeting_minutes: { label: "会议纪要", icon: <MessageSquare className="h-3.5 w-3.5" />, color: "text-foreground/70 bg-secondary" },
@@ -56,6 +58,7 @@ const MODULE_META: Record<string, { label: string; icon: React.ReactNode; color:
 const QUICK_ACTIONS = [
   { icon: PenTool, label: "案例调研", desc: "AI 生成对标案例分析报告", path: "/design/planning", accent: "from-primary/10 to-primary/5 border-primary/20", iconColor: "text-primary" },
   { icon: Sparkles, label: "AI 效果图", desc: "一键渲染空间效果图", path: "/design/tools", accent: "from-primary/8 to-primary/3 border-primary/15", iconColor: "text-primary/80" },
+  { icon: Layers, label: "AI 分析图", desc: "材质搜配图与软装搜配图", path: "/design/analysis", accent: "from-primary/8 to-primary/3 border-primary/15", iconColor: "text-primary/80" },
   { icon: Presentation, label: "演示文稿", desc: "AI 生成图文并茂演示文稿", path: "/design/presentation", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/70" },
   { icon: MessageSquare, label: "会议纪要", desc: "语音转文字自动整理", path: "/meeting", accent: "from-muted to-muted/50 border-border", iconColor: "text-foreground/70" },
   { icon: Newspaper, label: "内容创作", desc: "小红书 / 公众号推文", path: "/media/xiaohongshu", accent: "from-rose-500/10 to-rose-500/5 border-rose-200/60", iconColor: "text-rose-600" },

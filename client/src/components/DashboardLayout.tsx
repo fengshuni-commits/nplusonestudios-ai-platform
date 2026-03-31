@@ -43,6 +43,7 @@ import {
   BookImage,
   Film,
   Activity,
+  Layers,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { HelpGuide } from "./HelpGuide";
@@ -74,6 +75,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: Compass, label: "案例调研", path: "/design/planning" },
       { icon: Ruler, label: "AI效果图", path: "/design/tools" },
+      { icon: Layers, label: "AI分析图", path: "/design/analysis" },
       { icon: Film, label: "AI视频", path: "/design/video" },
       { icon: Palette, label: "AI平面图", path: "/design/color-plan" },
       { icon: Presentation, label: "演示文稿", path: "/design/presentation" },

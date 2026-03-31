@@ -1384,3 +1384,8 @@
 - [x] 修复图片跳转链接不正确的问题：改用 Tavily result.images 并绑定真实来源页 URL
 - [x] 去掉案例调研 prompt 中的建筑限定词（Phase 0/1/3 及 refine 共 3 处）
 - [x] 将图片搜索深度升级为 advanced 模式，提升图片数量和质量
+- [x] AI 分析图：新增 analysis_image_prompts 表（存储材质/软装内置提示词）并执行迁移
+- [x] AI 分析图：后端 analysisImage router（submit/pollJob）及 analysisPrompts CRUD
+- [x] AI 分析图：前端 DesignAnalysis.tsx 页面（上传图片、选工具、选类型、生成）
+- [x] AI 分析图：出品标准页面新增「分析图提示词」Tab
+- [x] AI 分析图：注册路由、导航项、首页快捷入口

@@ -630,3 +630,48 @@ export const graphicLayoutJobs = mysqlTable("graphic_layout_jobs", {
 });
 export type GraphicLayoutJob = typeof graphicLayoutJobs.$inferSelect;
 export type InsertGraphicLayoutJob = typeof graphicLayoutJobs.$inferInsert;
+
+// ─── Analysis Image Prompts (分析图内置提示词) ─────────────────────────────────
+// 存储「材质搭配图」和「软装搭配图」的内置生图提示词，可在出品标准中编辑
+export const analysisImagePrompts = mysqlTable("analysis_image_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  // 类型：material（材质搭配图）| soft_furnishing（软装搭配图）
+  type: mysqlEnum("type", ["material", "soft_furnishing"]).notNull().unique(),
+  // 显示名称
+  label: varchar("label", { length: 128 }).notNull(),
+  // 内置提示词（注入到 AI 生图的 prompt 中）
+  prompt: text("prompt").notNull(),
+  // 提示词说明（给编辑者的备注）
+  description: text("description"),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AnalysisImagePrompt = typeof analysisImagePrompts.$inferSelect;
+export type InsertAnalysisImagePrompt = typeof analysisImagePrompts.$inferInsert;
+
+// ─── Analysis Image Jobs (分析图生成任务) ─────────────────────────────────────
+export const analysisImageJobs = mysqlTable("analysis_image_jobs", {
+  id: varchar("id", { length: 64 }).primaryKey(), // nanoid job ID
+  userId: int("userId").notNull(),
+  // 分析图类型
+  type: mysqlEnum("type", ["material", "soft_furnishing"]).notNull(),
+  // 使用的 AI 工具 ID
+  toolId: int("toolId"),
+  // 上传的参考图 URL（S3）
+  referenceImageUrl: text("referenceImageUrl").notNull(),
+  // 最终使用的完整 prompt（内置提示词 + 用户附加说明）
+  fullPrompt: text("fullPrompt"),
+  // 生成状态
+  status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  // 生成结果图 URL（S3）
+  resultUrl: text("resultUrl"),
+  // 错误信息
+  error: text("error"),
+  // 关联的 generationHistory.id
+  historyId: int("historyId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AnalysisImageJob = typeof analysisImageJobs.$inferSelect;
+export type InsertAnalysisImageJob = typeof analysisImageJobs.$inferInsert;

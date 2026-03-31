@@ -31,6 +31,7 @@ import Home from "./pages/Home";
 import DesignBrief from "./pages/DesignBrief";
 import PresentationPage from "./pages/Presentation";
 import ColorPlan from "./pages/ColorPlan";
+import DesignAnalysis from "./pages/DesignAnalysis";
 import MediaLayout from "./pages/MediaLayout";
 import MediaPortfolio from "./pages/MediaPortfolio";
 import VideoGeneration from "./pages/VideoGeneration";
@@ -69,6 +70,7 @@ function Router() {
         <Route path="/projects/:id" component={ProjectDetail} />
         <Route path="/meeting" component={MeetingMinutes} />
         <Route path="/design/brief" component={DesignBrief} />
+        <Route path="/design/analysis" component={DesignAnalysis} />
 
         {/* 媒体板块 */}
         <Route path="/media/xiaohongshu" component={MediaXiaohongshu} />

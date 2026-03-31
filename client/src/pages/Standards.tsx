@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout,
   Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash, RefreshCw,
-  ChevronRight, Package, Cpu
+  ChevronRight, Package, Cpu, Layers, Sofa, Save
 } from "lucide-react";
 
 // ─── PPT Layout Standards ─────────────────────────────────────────────────────
@@ -434,9 +434,136 @@ function AiLayoutSlideCard({ layout, styleGuide }: { layout: any; styleGuide: an
   );
 }
 
-// ─── PPT Layout Standards Tab ─────────────────────────────────────────────────
+// ─── Analysis Prompts Tab ─────────────────────────────────────────────────────
 
-function PptLayoutStandardsTab() {
+const ANALYSIS_PROMPT_TYPES = [
+  { id: "material" as const, label: "材质搜配图", icon: Layers, desc: "提取空间主要材质，生成专业材质板" },
+  { id: "soft_furnishing" as const, label: "软装搜配图", icon: Sofa, desc: "提取软装元素，生成软装搜配情绪板" },
+];
+
+function AnalysisPromptsTab() {
+  const utils = trpc.useUtils();
+  const { data: prompts = [], isLoading } = trpc.analysisImage.listPrompts.useQuery();
+  const updateMutation = trpc.analysisImage.updatePrompt.useMutation({
+    onSuccess: () => {
+      utils.analysisImage.listPrompts.invalidate();
+      toast.success("提示词已保存");
+    },
+    onError: (e) => toast.error("保存失败：" + e.message),
+  });
+
+  // Local edit state: type -> draft prompt text
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [editingType, setEditingType] = useState<string | null>(null);
+
+  // Initialize drafts when data loads
+  const promptMap = Object.fromEntries((prompts as Array<{ type: string; prompt: string; label: string; description?: string | null }>).map(p => [p.type, p]));
+
+  const handleEdit = (type: string) => {
+    const current = promptMap[type]?.prompt ?? "";
+    setDrafts(d => ({ ...d, [type]: current }));
+    setEditingType(type);
+  };
+
+  const handleSave = (type: "material" | "soft_furnishing") => {
+    const draft = drafts[type];
+    if (!draft?.trim()) { toast.error("提示词不能为空"); return; }
+    updateMutation.mutate({ type, prompt: draft.trim() });
+    setEditingType(null);
+  };
+
+  const handleCancel = (type: string) => {
+    setEditingType(null);
+    setDrafts(d => { const n = { ...d }; delete n[type]; return n; });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">分析图内置提示词</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                配置 AI 分析图生成时使用的内置提示词。提示词将直接发送给生图 AI，建议使用英文以获得更好效果。
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">加载中…</span>
+            </div>
+          ) : (
+            ANALYSIS_PROMPT_TYPES.map(({ id, label, icon: Icon, desc }) => {
+              const current = promptMap[id];
+              const isEditing = editingType === id;
+              const draftValue = drafts[id] ?? current?.prompt ?? "";
+              return (
+                <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className="text-xs text-muted-foreground">{desc}</p>
+                      </div>
+                    </div>
+                    {!isEditing && (
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5">
+                        <Pencil className="h-3.5 w-3.5" />编辑
+                      </Button>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div className="flex flex-col gap-2">
+                      <Textarea
+                        value={draftValue}
+                        onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))}
+                        rows={8}
+                        className="text-sm font-mono resize-y"
+                        placeholder="输入提示词（建议英文）…"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        此提示词将作为基础提示词发送给 AI。用户在分析图页面输入的「附加说明」将追加到此提示词之后。
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSave(id as "material" | "soft_furnishing")}
+                          disabled={updateMutation.isPending}
+                          className="gap-1.5"
+                        >
+                          {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          保存
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-muted/50 rounded-md p-3 border border-border">
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                        {current?.prompt || <span className="italic">暂无提示词</span>}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── PPT Layout Standards Tab ─────────────────────────────────────────────────────
+
+function PptLayoutStandardsTab(){
   const utils = trpc.useUtils();
   const { data: packs = [] } = trpc.layoutPacks.list.useQuery();
   const donePacks = (packs as LayoutPack[]).filter(p => p.status === "done");
@@ -1040,7 +1167,10 @@ export default function Standards() {
             <Layout className="h-4 w-4" />演示文稿版式标准
           </TabsTrigger>
           <TabsTrigger value="ai-layout-learning" className="gap-1.5">
-            <Sparkles className="h-4 w-4" />AI 版式学习
+            <Sparkles className="h-4 w-4" />Â AI 版式学习
+          </TabsTrigger>
+          <TabsTrigger value="analysis-prompts" className="gap-1.5">
+            <Layers className="h-4 w-4" />分析图提示词
           </TabsTrigger>
         </TabsList>
 
@@ -1207,6 +1337,11 @@ export default function Standards() {
         {/* ─── AI 版式学习 Tab ─── */}
         <TabsContent value="ai-layout-learning">
           <AILayoutLearning />
+        </TabsContent>
+
+        {/* ─── 分析图提示词 Tab ─── */}
+        <TabsContent value="analysis-prompts">
+          <AnalysisPromptsTab />
         </TabsContent>
       </Tabs>
     </div>

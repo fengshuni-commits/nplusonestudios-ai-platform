@@ -28,6 +28,8 @@ import {
   aiToolDefaults,
   videoHistory, InsertVideoHistory,
   apiTokens, InsertApiToken, ApiToken,
+  analysisImagePrompts,
+  analysisImageJobs,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2176,4 +2178,81 @@ export async function getAiToolStatsByUserAndAction(days: number) {
     successCalls: number;
     failedCalls: number;
   }>);
+}
+
+// ─── Analysis Image Prompts ──────────────────────────────────────────────────
+export async function listAnalysisImagePrompts() {
+  const db = await getDb();
+  if (!db) return [];
+  const { analysisImagePrompts } = await import("../drizzle/schema");
+  return db.select().from(analysisImagePrompts).orderBy(analysisImagePrompts.type);
+}
+
+export async function getAnalysisImagePrompt(type: "material" | "soft_furnishing") {
+  const db = await getDb();
+  if (!db) return null;
+  const { analysisImagePrompts } = await import("../drizzle/schema");
+  const rows = await db.select().from(analysisImagePrompts).where(eq(analysisImagePrompts.type, type)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertAnalysisImagePrompt(
+  type: "material" | "soft_furnishing",
+  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { analysisImagePrompts } = await import("../drizzle/schema");
+  const existing = await getAnalysisImagePrompt(type);
+  if (existing) {
+    await db.update(analysisImagePrompts).set({ ...data, updatedAt: new Date() }).where(eq(analysisImagePrompts.type, type));
+    return { ...existing, ...data };
+  } else {
+    const label = type === "material" ? "材质搭配图" : "软装搭配图";
+    const result = await db.insert(analysisImagePrompts).values({ type, label: data.label ?? label, prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
+    return { id: Number((result as any).insertId), type, label: data.label ?? label, prompt: data.prompt };
+  }
+}
+
+// ─── Analysis Image Jobs ─────────────────────────────────────────────────────
+export async function createAnalysisImageJob(data: {
+  id: string;
+  userId: number;
+  type: "material" | "soft_furnishing";
+  toolId?: number | null;
+  referenceImageUrl: string;
+  fullPrompt?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { analysisImageJobs } = await import("../drizzle/schema");
+  await db.insert(analysisImageJobs).values({ ...data, status: "pending" });
+  return data.id;
+}
+
+export async function getAnalysisImageJob(id: string) {
+  const db = await getDb();
+  if (!db) return null;
+  // Use raw SQL to bypass ORM cache (REPEATABLE READ isolation)
+  const [rows] = await db.execute(sql`SELECT * FROM analysis_image_jobs WHERE id = ${id} LIMIT 1`);
+  const row = (rows as unknown as any[])[0];
+  if (!row) return null;
+  return {
+    ...row,
+    createdAt: new Date(row.createdAt as string),
+    updatedAt: new Date(row.updatedAt as string),
+  };
+}
+
+export async function updateAnalysisImageJob(id: string, data: {
+  status?: "pending" | "processing" | "done" | "failed";
+  resultUrl?: string | null;
+  fullPrompt?: string | null;
+  error?: string | null;
+  historyId?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { analysisImageJobs } = await import("../drizzle/schema");
+  await db.update(analysisImageJobs).set({ ...data, updatedAt: new Date() }).where(eq(analysisImageJobs.id, id));
 }
