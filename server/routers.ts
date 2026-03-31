@@ -1757,7 +1757,7 @@ async function refineBenchmarkInBackground(
             const bjDate2 = new Date(Date.now() + 8 * 3600 * 1000);
             const [y2, m2, d2] = bjDate2.toISOString().slice(0, 10).split('-');
             const dateStr2 = `${y2}年${m2}月${d2}日`;
-            return `你是 N+1 STUDIOS 的建筑设计对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
+            return `你是 N+1 STUDIOS 的对标调研专家。用户对已生成的对标调研报告有修改意见，请根据反馈对报告进行调整和优化。
 
 **当前日期**：${dateStr2}（北京时间）。报告中如需标注日期，请使用此日期。${caseRefsSection}
 
@@ -1825,7 +1825,7 @@ async function generateBenchmarkInBackground(
       messages: [
         {
           role: "system",
-          content: `你是一位建筑设计专家。请从用户的项目需求描述中，提取 4-6 个最关键的设计维度关键词（如空间类型、功能特征、设计风格、技术要求、用户体验等）。
+          content: `你是一位设计专家。请从用户的项目需求描述中，提取 4-6 个最关键的设计维度关键词（如空间类型、功能特征、设计风格、技术要求、用户体验等）。
 这些关键词将用于引导案例搜索，应该具体且有区分度，避免过于宽泛。
 只返回关键词列表，每行一个，无需解释。`
         },
@@ -1903,7 +1903,7 @@ async function generateBenchmarkInBackground(
             const bjDate = new Date(Date.now() + 8 * 3600 * 1000);
             const [y, m, d] = bjDate.toISOString().slice(0, 10).split('-');
             const dateStr = `${y}年${m}月${d}日`;
-            return `你是 N+1 STUDIOS 的建筑设计对标调研专家。请根据用户提供的项目信息和以下对标案例列表，生成一份专业的对标调研报告。
+            return `你是 N+1 STUDIOS 的对标调研专家。请根据用户提供的项目信息和以下对标案例列表，生成一份专业的对标调研报告。
 
 **当前日期**：${dateStr}（北京时间）。报告中如需标注日期，请使用此日期。
 
