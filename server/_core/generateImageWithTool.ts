@@ -147,9 +147,14 @@ async function callGeminiImageApi(opts: {
   }
 
   // Build generation config
+  // Note: gemini-3.x-pro-preview models do NOT support imageConfig (aspectRatio/imageSize).
+  // Only gemini-3.x-flash and gemini-2.x models support imageConfig.
+  const isProPreview = /gemini-3.*pro.*preview|gemini-3-pro/i.test(modelName);
   const imageConfig: Record<string, string> = {};
-  if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
-  if (imageSize) imageConfig.imageSize = imageSize;
+  if (!isProPreview) {
+    if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
+    if (imageSize) imageConfig.imageSize = imageSize;
+  }
 
   const body: Record<string, any> = {
     contents: [{ parts }],

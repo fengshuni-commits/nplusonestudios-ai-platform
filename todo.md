@@ -1394,3 +1394,4 @@
 - [x] 修复 AI 分析图调用 Gemini 3 生成失败
 - [x] AI 分析图生成结果自动保存到历史记录
 - [x] 修复 AI 效果图 Gemini 3 无法调用的问题
+- [x] 修复 Gemini Pro 预览版不支持 aspectRatio 导致 400 错误
