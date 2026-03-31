@@ -245,7 +245,7 @@ export async function generateImageWithTool(
   }
   const config = (tool.configJson as Record<string, string> | null) || {};
   // For qwen/dashscope, use imageModel (wanx series) for image generation
-  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-2.0-flash-exp-image-generation");
+  const modelName = config.imageModel || config.modelName || (provider === "qwen" ? "wanx2.1-t2i-turbo" : "gemini-3.1-flash-image-preview");
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 
