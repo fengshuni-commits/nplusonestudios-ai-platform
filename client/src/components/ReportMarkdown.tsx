@@ -1,15 +1,17 @@
 /**
  * ReportMarkdown
  *
- * A wrapper around <Streamdown> that customizes link rendering:
+ * A wrapper around <Streamdown> that customizes link and image rendering:
  * - Links whose href contains "?q=" are search-page fallbacks.
  *   They get a small "搜索页" badge so the reader knows it's a fallback.
  * - All other links open in a new tab as normal.
+ * - Images wrapped in links ([![alt](img)](url) format) are rendered as
+ *   clickable images that open the source page in a new tab.
  */
 
 import { Streamdown } from "streamdown";
 import { ExternalLink, Search } from "lucide-react";
-import { useState } from "react";
+import { useState, isValidElement, Children } from "react";
 
 interface ReportMarkdownProps {
   children: string;
@@ -22,9 +24,26 @@ function isSearchPage(href: string): boolean {
     const url = new URL(href);
     return url.searchParams.has("q");
   } catch {
-    // Relative URLs or malformed – check naively
     return href.includes("?q=") || href.includes("&q=");
   }
+}
+
+/** Detect whether children contain only an image (for [![img](url)](link) pattern) */
+function hasOnlyImageChild(children: React.ReactNode): boolean {
+  const arr = Children.toArray(children);
+  if (arr.length !== 1) return false;
+  const child = arr[0];
+  // Check if it's a React element with type === 'img' or our CustomImage span wrapper
+  if (!isValidElement(child)) return false;
+  // Streamdown passes the img element through our CustomImage component,
+  // which returns a <span> wrapping an <img>. We detect by checking if
+  // the child element has a 'src' prop (raw img) or is a span with img inside.
+  const props = child.props as Record<string, unknown>;
+  return (
+    (child.type === "img" && typeof props.src === "string") ||
+    // CustomImage renders as <span class="block my-3 group/img">
+    (child.type === "span" && typeof props.className === "string" && (props.className as string).includes("group/img"))
+  );
 }
 
 /** Custom link renderer injected into Streamdown via `components` */
@@ -35,6 +54,22 @@ function CustomLink({
 }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   const url = href ?? "";
   const isSearch = isSearchPage(url);
+
+  // If the link wraps an image ([![alt](img)](url) pattern), render as image link
+  if (hasOnlyImageChild(children)) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block cursor-pointer"
+        title="点击查看来源"
+        {...rest}
+      >
+        {children}
+      </a>
+    );
+  }
 
   return (
     <a
