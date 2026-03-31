@@ -5108,6 +5108,8 @@ async function generateAnalysisImageInBackground(
     toolId?: number;
     referenceImageUrl: string;
     extraPrompt?: string;
+    width?: number;
+    height?: number;
   },
   userId: number,
   userName: string | null
@@ -5126,6 +5128,9 @@ async function generateAnalysisImageInBackground(
 
     await db.updateAnalysisImageJob(jobId, { fullPrompt });
 
+    // Build size string if width/height provided
+    const sizeStr = (input.width && input.height) ? `${input.width}x${input.height}` : undefined;
+
     // Generate image
     let resultUrl: string;
     if (input.toolId) {
@@ -5133,12 +5138,14 @@ async function generateAnalysisImageInBackground(
         toolId: input.toolId,
         prompt: fullPrompt,
         originalImages: [{ url: input.referenceImageUrl, mimeType: "image/jpeg" }],
+        size: sizeStr,
       });
       resultUrl = result.url;
     } else {
       const result = await generateImage({
         prompt: fullPrompt,
         originalImages: [{ url: input.referenceImageUrl, mimeType: "image/jpeg" }],
+        size: sizeStr,
       });
       resultUrl = result.url || "";
     }
@@ -5184,28 +5191,55 @@ const analysisImageRouter = router({
       return { success: true };
     }),
 
-  /** Submit a new analysis image generation job */
+  /** Submit a new analysis image generation job (supports count=1..3 parallel jobs) */
   submit: protectedProcedure
     .input(z.object({
       type: z.enum(["material", "soft_furnishing"]),
       toolId: z.number().optional(),
       referenceImageUrl: z.string().url(),
       extraPrompt: z.string().optional(),
+      // 图片比例，格式 "WxH"，如 "1024x1024"
+      aspectRatio: z.string().optional(),
+      // 生成数量 1-3
+      count: z.number().min(1).max(3).default(1),
     }))
     .mutation(async ({ input, ctx }) => {
-      const jobId = nanoid();
-      await db.createAnalysisImageJob({
-        id: jobId,
-        userId: ctx.user.id,
-        type: input.type,
-        toolId: input.toolId ?? null,
-        referenceImageUrl: input.referenceImageUrl,
-      });
-      generateAnalysisImageInBackground(jobId, input, ctx.user.id, ctx.user.name || null).catch(console.error);
-      return { jobId };
+      // Parse width/height from aspectRatio string
+      let width: number | undefined;
+      let height: number | undefined;
+      if (input.aspectRatio) {
+        const parts = input.aspectRatio.split("x");
+        if (parts.length === 2) {
+          width = parseInt(parts[0], 10);
+          height = parseInt(parts[1], 10);
+        }
+      }
+
+      const jobIds: string[] = [];
+      for (let i = 0; i < input.count; i++) {
+        const jobId = nanoid();
+        await db.createAnalysisImageJob({
+          id: jobId,
+          userId: ctx.user.id,
+          type: input.type,
+          toolId: input.toolId ?? null,
+          referenceImageUrl: input.referenceImageUrl,
+          width: width ?? null,
+          height: height ?? null,
+        });
+        generateAnalysisImageInBackground(
+          jobId,
+          { ...input, width, height },
+          ctx.user.id,
+          ctx.user.name || null
+        ).catch(console.error);
+        jobIds.push(jobId);
+      }
+
+      return { jobId: jobIds[0], jobIds };
     }),
 
-  /** Poll job status */
+  /** Poll single job status */
   pollJob: protectedProcedure
     .input(z.object({ jobId: z.string() }))
     .query(async ({ input, ctx }) => {
@@ -5219,6 +5253,22 @@ const analysisImageRouter = router({
         return { status: "failed" as const, error: job.error || "生成失败" };
       }
       return { status: job.status as "pending" | "processing" };
+    }),
+
+  /** Poll multiple jobs status */
+  pollJobs: protectedProcedure
+    .input(z.object({ jobIds: z.array(z.string()) }))
+    .query(async ({ input, ctx }) => {
+      const results = await Promise.all(
+        input.jobIds.map(async (jobId) => {
+          const job = await db.getAnalysisImageJob(jobId);
+          if (!job || job.userId !== ctx.user.id) return { jobId, status: "not_found" as const };
+          if (job.status === "done") return { jobId, status: "done" as const, url: job.resultUrl || "", historyId: job.historyId };
+          if (job.status === "failed") return { jobId, status: "failed" as const, error: job.error || "生成失败" };
+          return { jobId, status: job.status as "pending" | "processing" };
+        })
+      );
+      return results;
     }),
 });
 

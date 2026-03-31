@@ -2222,6 +2222,8 @@ export async function createAnalysisImageJob(data: {
   toolId?: number | null;
   referenceImageUrl: string;
   fullPrompt?: string | null;
+  width?: number | null;
+  height?: number | null;
 }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");

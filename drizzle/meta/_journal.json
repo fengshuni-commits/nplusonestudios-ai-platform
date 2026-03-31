@@ -239,6 +239,13 @@
       "when": 1774961739545,
       "tag": "0033_clever_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1774972941991,
+      "tag": "0034_hard_red_hulk",
+      "breakpoints": true
     }
   ]
 }

@@ -3,17 +3,17 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   Loader2, Upload, X, Download, ZoomIn, Layers, Sofa, ImageIcon,
-  Sparkles, RefreshCw,
+  Sparkles, RefreshCw, Images,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 
-// ─── Type constants ──────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const ANALYSIS_TYPES = [
   {
     id: "material" as const,
@@ -31,6 +31,33 @@ const ANALYSIS_TYPES = [
 
 type AnalysisType = "material" | "soft_furnishing";
 
+// Aspect ratio options: label → "WxH" value
+const ASPECT_RATIOS = [
+  { label: "1:1", value: "1024x1024", desc: "方形" },
+  { label: "4:3", value: "1024x768", desc: "横版" },
+  { label: "3:2", value: "1024x683", desc: "横版" },
+  { label: "16:9", value: "1024x576", desc: "宽屏" },
+  { label: "3:4", value: "768x1024", desc: "竖版" },
+  { label: "2:3", value: "683x1024", desc: "竖版" },
+] as const;
+
+type AspectRatioValue = typeof ASPECT_RATIOS[number]["value"];
+
+const COUNT_OPTIONS = [
+  { value: 1, label: "1 张" },
+  { value: 3, label: "3 张" },
+] as const;
+
+// ─── Result item type ─────────────────────────────────────────────────────────
+interface ResultItem {
+  jobId: string;
+  url?: string;
+  type: AnalysisType;
+  historyId?: number;
+  status: "pending" | "processing" | "done" | "failed";
+  error?: string;
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function DesignAnalysis() {
   // Upload state
@@ -40,15 +67,19 @@ export default function DesignAnalysis() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Generation state
+  // Generation options
   const [selectedType, setSelectedType] = useState<AnalysisType>("material");
   const [toolId, setToolId] = useState<number | undefined>(undefined);
   const [extraPrompt, setExtraPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioValue>("1024x1024");
+  const [count, setCount] = useState<1 | 3>(1);
 
-  // Results state
-  const [results, setResults] = useState<Array<{ url: string; type: AnalysisType; historyId?: number }>>([]);
+  // Generation state
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [activeJobIds, setActiveJobIds] = useState<string[]>([]);
+
+  // Results: keyed by jobId, accumulates across sessions
+  const [results, setResults] = useState<ResultItem[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Polling
@@ -79,12 +110,10 @@ export default function DesignAnalysis() {
     }
 
     setReferenceFile(file);
-    // Local preview
     const reader = new FileReader();
     reader.onload = (ev) => setReferencePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
 
-    // Upload to S3
     setIsUploading(true);
     try {
       const base64 = await fileToBase64(file);
@@ -111,25 +140,78 @@ export default function DesignAnalysis() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ─── Generation ──────────────────────────────────────────────────────────
-  const startPolling = (jobId: string, type: AnalysisType) => {
+  // ─── Polling logic ────────────────────────────────────────────────────────
+  const startPolling = (jobIds: string[], type: AnalysisType) => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+
+    // Track which jobs are still pending
+    const pendingSet = new Set(jobIds);
+
     pollTimerRef.current = setInterval(async () => {
+      if (pendingSet.size === 0) {
+        clearInterval(pollTimerRef.current!);
+        pollTimerRef.current = null;
+        setIsGenerating(false);
+        setActiveJobIds([]);
+        return;
+      }
+
       try {
-        const result = await utils.analysisImage.pollJob.fetch({ jobId });
-        if (result.status === "done") {
+        const pollResults = await utils.analysisImage.pollJobs.fetch({
+          jobIds: Array.from(pendingSet),
+        });
+
+        let anyCompleted = false;
+
+        for (const r of pollResults) {
+          if (r.status === "done") {
+            pendingSet.delete(r.jobId);
+            anyCompleted = true;
+            setResults(prev => {
+              // Update existing placeholder or prepend
+              const idx = prev.findIndex(x => x.jobId === r.jobId);
+              const newItem: ResultItem = {
+                jobId: r.jobId,
+                url: r.url,
+                type,
+                historyId: r.historyId ?? undefined,
+                status: "done",
+              };
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = newItem;
+                return next;
+              }
+              return [newItem, ...prev];
+            });
+          } else if (r.status === "failed") {
+            pendingSet.delete(r.jobId);
+            anyCompleted = true;
+            setResults(prev => {
+              const idx = prev.findIndex(x => x.jobId === r.jobId);
+              const newItem: ResultItem = {
+                jobId: r.jobId,
+                type,
+                status: "failed",
+                error: r.error,
+              };
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = newItem;
+                return next;
+              }
+              return [newItem, ...prev];
+            });
+            toast.error(`第 ${pollResults.indexOf(r) + 1} 张生成失败：${r.error}`);
+          }
+        }
+
+        if (anyCompleted && pendingSet.size === 0) {
           clearInterval(pollTimerRef.current!);
           pollTimerRef.current = null;
           setIsGenerating(false);
-          setCurrentJobId(null);
-          setResults(prev => [{ url: result.url, type, historyId: result.historyId ?? undefined }, ...prev]);
-          toast.success("生成完成");
-        } else if (result.status === "failed") {
-          clearInterval(pollTimerRef.current!);
-          pollTimerRef.current = null;
-          setIsGenerating(false);
-          setCurrentJobId(null);
-          toast.error(`生成失败：${result.error}`);
+          setActiveJobIds([]);
+          toast.success("全部生成完成");
         }
       } catch {
         // Network error — keep polling
@@ -137,6 +219,7 @@ export default function DesignAnalysis() {
     }, 3000);
   };
 
+  // ─── Generate ─────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!referenceUrl) {
       toast.error("请先上传参考图片");
@@ -149,14 +232,26 @@ export default function DesignAnalysis() {
 
     setIsGenerating(true);
     try {
-      const { jobId } = await submitMutation.mutateAsync({
+      const { jobIds } = await submitMutation.mutateAsync({
         type: selectedType,
         toolId,
         referenceImageUrl: referenceUrl,
         extraPrompt: extraPrompt.trim() || undefined,
+        aspectRatio,
+        count,
       });
-      setCurrentJobId(jobId);
-      startPolling(jobId, selectedType);
+
+      setActiveJobIds(jobIds);
+
+      // Insert pending placeholders at the top
+      const placeholders: ResultItem[] = jobIds.map(jobId => ({
+        jobId,
+        type: selectedType,
+        status: "pending" as const,
+      }));
+      setResults(prev => [...placeholders, ...prev]);
+
+      startPolling(jobIds, selectedType);
     } catch (err: unknown) {
       setIsGenerating(false);
       const msg = err instanceof Error ? err.message : "提交失败";
@@ -164,8 +259,8 @@ export default function DesignAnalysis() {
     }
   };
 
-  // ─── Download ────────────────────────────────────────────────────────────
-  const handleDownload = async (url: string, type: AnalysisType) => {
+  // ─── Download ─────────────────────────────────────────────────────────────
+  const handleDownload = (url: string, type: AnalysisType) => {
     const label = type === "material" ? "材质搭配图" : "软装搭配图";
     const a = document.createElement("a");
     a.href = url;
@@ -175,6 +270,12 @@ export default function DesignAnalysis() {
   };
 
   const selectedTypeInfo = ANALYSIS_TYPES.find(t => t.id === selectedType)!;
+  const selectedRatioInfo = ASPECT_RATIOS.find(r => r.value === aspectRatio)!;
+
+  // Count pending/processing jobs in current batch
+  const pendingCount = results.filter(
+    r => activeJobIds.includes(r.jobId) && (r.status === "pending" || r.status === "processing")
+  ).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -199,7 +300,6 @@ export default function DesignAnalysis() {
                     src={referencePreview}
                     alt="参考图"
                     className="w-full rounded-md object-contain"
-                    style={{ maxHeight: "none" }}
                   />
                   {isUploading && (
                     <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded-md">
@@ -263,6 +363,76 @@ export default function DesignAnalysis() {
             </CardContent>
           </Card>
 
+          {/* Aspect ratio & size */}
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">图片比例</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-2">
+                {ASPECT_RATIOS.map((ratio) => {
+                  const isSelected = aspectRatio === ratio.value;
+                  return (
+                    <button
+                      key={ratio.value}
+                      onClick={() => setAspectRatio(ratio.value)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-md border text-center transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/40"
+                      }`}
+                    >
+                      {/* Visual ratio preview */}
+                      <div className="flex items-center justify-center w-8 h-8">
+                        <RatioPreview ratio={ratio.label} />
+                      </div>
+                      <span className={`text-xs font-medium ${isSelected ? "text-primary" : "text-foreground"}`}>
+                        {ratio.label}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">{ratio.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                当前：{selectedRatioInfo.label}（{aspectRatio.replace("x", " × ")} px）
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Generation count */}
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">生成数量</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                {COUNT_OPTIONS.map((opt) => {
+                  const isSelected = count === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => setCount(opt.value as 1 | 3)}
+                      className={`flex items-center gap-2 flex-1 justify-center py-2 px-3 rounded-md border text-sm font-medium transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {opt.value === 3 && <Images className="h-3.5 w-3.5" />}
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {count === 3 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  将并行生成 3 张，消耗约 3 倍 AI 调用额度
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           {/* AI tool selector */}
           <Card className="border-border">
             <CardHeader className="pb-3">
@@ -307,12 +477,12 @@ export default function DesignAnalysis() {
             {isGenerating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                正在生成{selectedTypeInfo.label}…
+                正在生成{count > 1 ? ` ${pendingCount}/${count} 张` : ""}…
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                生成{selectedTypeInfo.label}
+                生成{selectedTypeInfo.label}{count > 1 ? ` ×${count}` : ""}
               </>
             )}
           </Button>
@@ -320,16 +490,7 @@ export default function DesignAnalysis() {
 
         {/* ─── Right panel: results ─── */}
         <div className="flex flex-col gap-4">
-          {isGenerating && results.length === 0 && (
-            <Card className="border-border flex-1">
-              <CardContent className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm">AI 正在生成{selectedTypeInfo.label}，请稍候…</p>
-                <p className="text-xs">通常需要 20–60 秒</p>
-              </CardContent>
-            </Card>
-          )}
-
+          {/* Empty state */}
           {results.length === 0 && !isGenerating && (
             <Card className="border-border flex-1">
               <CardContent className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
@@ -339,58 +500,90 @@ export default function DesignAnalysis() {
             </Card>
           )}
 
+          {/* Results grid */}
           {results.length > 0 && (
             <div className="flex flex-col gap-4">
               {isGenerating && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  正在生成新的{selectedTypeInfo.label}…
+                  正在生成新的{selectedTypeInfo.label}，已完成 {count - pendingCount}/{count} 张…
                 </div>
               )}
-              {results.map((result, idx) => {
-                const typeInfo = ANALYSIS_TYPES.find(t => t.id === result.type)!;
-                return (
-                  <Card key={idx} className="border-border overflow-hidden">
-                    <CardHeader className="pb-2 flex-row items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <typeInfo.icon className="h-4 w-4 text-primary" />
-                        <CardTitle className="text-sm font-medium">{typeInfo.label}</CardTitle>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {result.historyId && (
-                          <FeedbackButtons historyId={result.historyId} module="analysis_image" />
+
+              {/* Grid: 1 col normally, 2 col when count=3 and multiple done */}
+              <div className={`grid gap-4 ${results.filter(r => r.status === "done").length > 1 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
+                {results.map((result, idx) => {
+                  const typeInfo = ANALYSIS_TYPES.find(t => t.id === result.type)!;
+                  const isPending = result.status === "pending" || result.status === "processing";
+                  const isFailed = result.status === "failed";
+
+                  return (
+                    <Card key={result.jobId} className="border-border overflow-hidden">
+                      <CardHeader className="pb-2 flex-row items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <typeInfo.icon className="h-4 w-4 text-primary" />
+                          <CardTitle className="text-sm font-medium">{typeInfo.label}</CardTitle>
+                          {isPending && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              生成中
+                            </span>
+                          )}
+                          {isFailed && (
+                            <span className="text-xs text-destructive">生成失败</span>
+                          )}
+                        </div>
+                        {result.status === "done" && result.url && (
+                          <div className="flex items-center gap-1">
+                            {result.historyId && (
+                              <FeedbackButtons historyId={result.historyId} module="analysis_image" />
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => setLightboxUrl(result.url!)}
+                              title="放大查看"
+                            >
+                              <ZoomIn className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleDownload(result.url!, result.type)}
+                              title="下载"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => setLightboxUrl(result.url)}
-                          title="放大查看"
-                        >
-                          <ZoomIn className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleDownload(result.url, result.type)}
-                          title="下载"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <img
-                        src={result.url}
-                        alt={typeInfo.label}
-                        className="w-full object-contain cursor-zoom-in"
-                        onClick={() => setLightboxUrl(result.url)}
-                      />
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        {isPending && (
+                          <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground bg-muted/20">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <p className="text-xs">AI 正在生成，通常需要 20–60 秒</p>
+                          </div>
+                        )}
+                        {isFailed && (
+                          <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground bg-destructive/5">
+                            <p className="text-xs text-destructive">{result.error || "生成失败，请重试"}</p>
+                          </div>
+                        )}
+                        {result.status === "done" && result.url && (
+                          <img
+                            src={result.url}
+                            alt={typeInfo.label}
+                            className="w-full object-contain cursor-zoom-in"
+                            onClick={() => setLightboxUrl(result.url!)}
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
 
               {/* Re-generate button */}
               <Button
@@ -400,7 +593,7 @@ export default function DesignAnalysis() {
                 className="gap-2 self-start"
               >
                 <RefreshCw className="h-4 w-4" />
-                重新生成
+                重新生成{count > 1 ? ` ×${count}` : ""}
               </Button>
             </div>
           )}
@@ -423,7 +616,27 @@ export default function DesignAnalysis() {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── RatioPreview: visual aspect ratio indicator ──────────────────────────────
+function RatioPreview({ ratio }: { ratio: string }) {
+  const [w, h] = ratio.split(":").map(Number);
+  const maxSize = 24;
+  let boxW: number, boxH: number;
+  if (w >= h) {
+    boxW = maxSize;
+    boxH = Math.round((h / w) * maxSize);
+  } else {
+    boxH = maxSize;
+    boxW = Math.round((w / h) * maxSize);
+  }
+  return (
+    <div
+      className="border-2 border-current rounded-sm opacity-60"
+      style={{ width: boxW, height: boxH }}
+    />
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

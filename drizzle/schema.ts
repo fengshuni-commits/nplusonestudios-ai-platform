@@ -664,6 +664,10 @@ export const analysisImageJobs = mysqlTable("analysis_image_jobs", {
   fullPrompt: text("fullPrompt"),
   // 生成状态
   status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
+  // 图片宽度（像素）
+  width: int("width"),
+  // 图片高度（像素）
+  height: int("height"),
   // 生成结果图 URL（S3）
   resultUrl: text("resultUrl"),
   // 错误信息
