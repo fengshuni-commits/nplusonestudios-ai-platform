@@ -8,8 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import {
-  Presentation,
+import { Presentation,
   ImageIcon,
   X,
   Download,
@@ -20,6 +19,9 @@ import {
   ChevronUp,
   Clock,
   FileDown,
+  Upload,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Dialog,
@@ -116,6 +118,23 @@ export default function PresentationPage() {
   );
   const uploadMutation = trpc.upload.file.useMutation();
   const generateMutation = trpc.presentation.generate.useMutation();
+  const convertFromFileMutation = trpc.presentation.convertFromFile.useMutation();
+
+  // ── File convert mode state ──────────────────────────────────────────────
+  type ConvertMode = "text" | "file";
+  const [convertMode, setConvertMode] = useState<ConvertMode>("file");
+
+  type UploadedFile = {
+    file: File;
+    previewUrl: string; // for images; empty for PDF
+    uploadedUrl?: string;
+    uploading?: boolean;
+    error?: string;
+    fileType: "pdf" | "image";
+  };
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [convertTitle, setConvertTitle] = useState("");
+  const fileConvertInputRef = useRef<HTMLInputElement>(null);
 
   // Poll job status
   const { data: jobStatus } = trpc.presentation.status.useQuery(
@@ -268,6 +287,114 @@ export default function PresentationPage() {
 
   const canGenerate = title.trim().length > 0 && content.trim().length > 0 && !isGenerating;
 
+  // Handle file selection for convert mode
+  const handleFileConvertSelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newFiles: UploadedFile[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isPdf = file.type === "application/pdf";
+      const isImage = file.type.startsWith("image/");
+      if (!isPdf && !isImage) continue;
+      // Limit: 1 PDF or up to 20 images
+      if (isPdf && uploadedFiles.some(f => f.fileType === "pdf")) {
+        toast.error("每次只能上传一个 PDF 文件");
+        continue;
+      }
+      if (uploadedFiles.length + newFiles.length >= 20) {
+        toast.error("最多支持 20 张图片");
+        break;
+      }
+      const previewUrl = isImage ? URL.createObjectURL(file) : "";
+      newFiles.push({ file, previewUrl, uploading: true, fileType: isPdf ? "pdf" : "image" });
+    }
+    if (newFiles.length === 0) return;
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+
+    // Upload each file
+    for (const uf of newFiles) {
+      try {
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(uf.file);
+        });
+        const result = await uploadMutation.mutateAsync({
+          fileName: uf.file.name,
+          contentType: uf.file.type,
+          fileData: base64.split(",")[1] || base64,
+          folder: "presentation-convert",
+        });
+        setUploadedFiles(prev =>
+          prev.map(p =>
+            p.previewUrl === uf.previewUrl && p.file.name === uf.file.name
+              ? { ...p, uploading: false, uploadedUrl: result.url }
+              : p
+          )
+        );
+      } catch {
+        setUploadedFiles(prev =>
+          prev.map(p =>
+            p.previewUrl === uf.previewUrl && p.file.name === uf.file.name
+              ? { ...p, uploading: false, error: "上传失败" }
+              : p
+          )
+        );
+      }
+    }
+  }, [uploadedFiles, uploadMutation]);
+
+  const removeConvertFile = (idx: number) => {
+    setUploadedFiles(prev => {
+      const copy = [...prev];
+      const removed = copy.splice(idx, 1)[0];
+      if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return copy;
+    });
+  };
+
+  const handleConvertFromFile = async () => {
+    const readyFiles = uploadedFiles.filter(f => f.uploadedUrl);
+    if (readyFiles.length === 0) {
+      toast.error("请先上传 PDF 或图片文件");
+      return;
+    }
+    const pendingUploads = uploadedFiles.filter(f => f.uploading);
+    if (pendingUploads.length > 0) {
+      toast.error("文件上传中，请稍候");
+      return;
+    }
+
+    const hasPdf = readyFiles.some(f => f.fileType === "pdf");
+    const fileType: "pdf" | "images" = hasPdf ? "pdf" : "images";
+    const fileUrls = readyFiles.map(f => f.uploadedUrl!);
+
+    setIsGenerating(true);
+    setGenerationProgress(5);
+    setGenerationStage("structuring");
+    setGenerationError(null);
+    setResultUrl(null);
+    setResultTitle(null);
+    setResultSlideCount(null);
+    setResultSlides([]);
+
+    try {
+      const result = await convertFromFileMutation.mutateAsync({
+        fileUrls,
+        fileType,
+        title: convertTitle.trim() || undefined,
+      });
+      setJobId(result.jobId);
+    } catch (err: any) {
+      setIsGenerating(false);
+      setGenerationError(err?.message || "启动转换失败");
+      toast.error(`转换失败：${err?.message}`);
+    }
+  };
+
+  const canConvert = uploadedFiles.some(f => f.uploadedUrl) && !isGenerating;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -275,7 +402,9 @@ export default function PresentationPage() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">演示文稿</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            输入演示内容，可选上传项目图片，AI 自动生成图文并茂的 PPT 文件
+            {convertMode === "file"
+              ? "上传 PDF 或图片，AI 逐页分析布局，生成可编辑的 .pptx 文件"
+              : "输入演示内容，可选上传项目图片，AI 自动生成图文并茂的 PPT 文件"}
           </p>
         </div>
       </div>
@@ -289,8 +418,147 @@ export default function PresentationPage() {
                 <Presentation className="h-4 w-4 text-primary" />
                 演示参数
               </CardTitle>
+              {/* Mode Tab */}
+              <div className="flex rounded-lg border border-border overflow-hidden mt-2">
+                <button
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors ${
+                    convertMode === "file"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-secondary/50"
+                  }`}
+                  onClick={() => setConvertMode("file")}
+                  disabled={isGenerating}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  文件转换
+                </button>
+                <button
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors ${
+                    convertMode === "text"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-secondary/50"
+                  }`}
+                  onClick={() => setConvertMode("text")}
+                  disabled={isGenerating}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI 创作
+                </button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
+
+              {/* ── FILE CONVERT MODE ── */}
+              {convertMode === "file" && (
+                <>
+                  {/* Title (optional) */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="convert-title" className="text-xs font-medium">
+                      文稿标题（可选）
+                    </Label>
+                    <Input
+                      id="convert-title"
+                      placeholder="如不填则自动使用文件名"
+                      value={convertTitle}
+                      onChange={e => setConvertTitle(e.target.value)}
+                      disabled={isGenerating}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  {/* File upload zone */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium">
+                      上传文件 <span className="text-destructive">*</span>
+                    </Label>
+                    <div
+                      className="border-2 border-dashed border-border rounded-lg p-5 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                      onClick={() => fileConvertInputRef.current?.click()}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault();
+                        handleFileConvertSelect(e.dataTransfer.files);
+                      }}
+                    >
+                      <Upload className="h-7 w-7 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm font-medium text-foreground mb-0.5">点击或拖拽上传</p>
+                      <p className="text-xs text-muted-foreground">支持 PDF（自动识别每页）或多张图片</p>
+                    </div>
+                    <input
+                      ref={fileConvertInputRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      multiple
+                      className="hidden"
+                      onChange={e => handleFileConvertSelect(e.target.files)}
+                    />
+
+                    {/* File list */}
+                    {uploadedFiles.length > 0 && (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                        {uploadedFiles.map((uf, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 p-2 rounded-md border border-border bg-secondary/20"
+                          >
+                            {uf.fileType === "pdf" ? (
+                              <FileText className="h-4 w-4 text-primary shrink-0" />
+                            ) : uf.previewUrl ? (
+                              <img src={uf.previewUrl} alt="" className="h-8 w-8 object-cover rounded shrink-0" />
+                            ) : (
+                              <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                            )}
+                            <span className="text-xs text-foreground truncate flex-1">{uf.file.name}</span>
+                            {uf.uploading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
+                            {uf.uploadedUrl && !uf.uploading && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+                            {uf.error && <span className="text-xs text-destructive shrink-0">失败</span>}
+                            {!uf.uploading && (
+                              <button
+                                className="shrink-0 hover:text-destructive transition-colors"
+                                onClick={() => removeConvertFile(idx)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="rounded-md bg-secondary/30 p-3 text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground">转换说明</p>
+                    <p>• 文字内容将提取为可编辑文本框</p>
+                    <p>• 多张独立图片分别嵌入，可单独移动和缩放</p>
+                    <p>• 单张复合插画作为整体图片嵌入</p>
+                    <p>• 处理时间约 1–3 分钟（每页需 AI 分析）</p>
+                  </div>
+
+                  {/* Convert button */}
+                  <Button
+                    className="w-full"
+                    onClick={handleConvertFromFile}
+                    disabled={!canConvert}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        转换中…
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        开始转换
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+
+              {/* ── TEXT / AI CREATE MODE ── */}
+              {convertMode === "text" && (
+                <>
               {/* Project import */}
               <Button
                 variant="outline"
@@ -464,6 +732,9 @@ export default function PresentationPage() {
                   </>
                 )}
               </Button>
+                </>
+              )}
+
             </CardContent>
           </Card>
         </div>

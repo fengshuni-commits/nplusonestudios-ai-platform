@@ -3940,7 +3940,328 @@ const presentationRouter = router({
       }
       return { status: "processing" as const, progress: job.progress || 0, stage: job.stage || "structuring" };
     }),
+  convertFromFile: protectedProcedure
+    .input(z.object({
+      fileUrls: z.array(z.string()).min(1),
+      fileType: z.enum(["pdf", "images"]),
+      title: z.string().optional(),
+      toolId: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const jobId = `pres_convert_${nanoid()}`;
+      presentationJobStore.set(jobId, { status: "processing", progress: 5, stage: "structuring" });
+      generatePresentationFromFileInBackground(jobId, input, ctx.user.id).catch(err => {
+        console.error("[PresentationConvert] Background job failed:", err);
+        presentationJobStore.set(jobId, { status: "failed", error: err?.message || "文件转换失败" });
+      });
+      return { jobId };
+    }),
 });
+
+// ─── Presentation: Convert from File (PDF/Images → PPTX) ──────────────────
+
+async function generatePresentationFromFileInBackground(
+  jobId: string,
+  input: { fileUrls: string[]; fileType: "pdf" | "images"; title?: string; toolId?: number },
+  userId?: number
+) {
+  const { execSync } = await import("child_process");
+  const fs = await import("fs");
+  const path = await import("path");
+  const os = await import("os");
+  const https = await import("https");
+  const http = await import("http");
+
+  try {
+    presentationJobStore.set(jobId, { status: "processing", progress: 5, stage: "structuring" });
+
+    // ── Step 1: Collect page images ──────────────────────────────────────────
+    const pageImageBase64s: Array<{ data: string; ext: string; url: string }> = [];
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pres-convert-"));
+
+    const downloadToFile = (url: string, destPath: string): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const proto = url.startsWith("https") ? https : http;
+        const file = fs.createWriteStream(destPath);
+        proto.get(url, (res: any) => {
+          res.pipe(file);
+          file.on("finish", () => { file.close(); resolve(); });
+        }).on("error", (err: any) => { fs.unlink(destPath, () => {}); reject(err); });
+      });
+    };
+
+    if (input.fileType === "pdf") {
+      // Download PDF and convert each page to PNG via pdftoppm
+      const pdfPath = path.join(tmpDir, "input.pdf");
+      await downloadToFile(input.fileUrls[0], pdfPath);
+      const outPrefix = path.join(tmpDir, "page");
+      execSync(`pdftoppm -r 150 -png "${pdfPath}" "${outPrefix}"`, { timeout: 120000 });
+      const pngFiles = fs.readdirSync(tmpDir)
+        .filter((f: string) => f.startsWith("page") && f.endsWith(".png"))
+        .sort()
+        .map((f: string) => path.join(tmpDir, f));
+      for (const pngPath of pngFiles.slice(0, 30)) {
+        const buf = fs.readFileSync(pngPath);
+        pageImageBase64s.push({ data: buf.toString("base64"), ext: "png", url: "" });
+      }
+    } else {
+      // Direct image URLs
+      for (const imgUrl of input.fileUrls.slice(0, 30)) {
+        try {
+          const b64 = await downloadImageAsBase64(imgUrl);
+          if (b64) {
+            const mimeMatch = b64.match(/^data:(image\/\w+);/);
+            const ext = mimeMatch ? mimeMatch[1].split("/")[1] : "jpeg";
+            const raw = b64.replace(/^data:image\/\w+;base64,/, "");
+            pageImageBase64s.push({ data: raw, ext, url: imgUrl });
+          }
+        } catch (e) { console.error("[PresentationConvert] Failed to load image:", e); }
+      }
+    }
+
+    if (pageImageBase64s.length === 0) {
+      throw new Error("未能提取任何页面图片，请检查文件格式");
+    }
+
+    presentationJobStore.set(jobId, { status: "processing", progress: 20, stage: "structuring" });
+
+    // ── Step 2: AI analyze each page ─────────────────────────────────────────
+    const slideAnalyses: Array<{
+      bgColor: string;
+      textElements: Array<{ text: string; x: number; y: number; w: number; h: number; fontSize: number; bold: boolean; color: string; align: string }>;
+      imageRegions: Array<{ x: number; y: number; w: number; h: number; description: string }>;
+      hasMultipleImages: boolean;
+      pageWidth: number;
+      pageHeight: number;
+    }> = [];
+
+    const totalPages = pageImageBase64s.length;
+    for (let i = 0; i < totalPages; i++) {
+      const pg = pageImageBase64s[i];
+      const progress = 20 + Math.round((i / totalPages) * 50);
+      presentationJobStore.set(jobId, { status: "processing", progress, stage: "structuring" });
+
+      try {
+        const analysisResp = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `你是一个专业的PPT页面布局分析专家。请分析给定的幻灯片页面图片，提取其中的所有文字元素和图片区域信息，以便用pptxgenjs精确重建该页面。
+
+重要规则：
+1. 坐标系：x/y/w/h 均为百分比值（0-100），相对于页面宽高
+2. 文字元素：提取所有可见文字，包括标题、正文、标注说明、页码等
+3. 图片区域：识别页面中的图片/插图/照片区域（不包括背景色块）
+4. 如果页面有多张独立图片（如2张效果图并排），分别列出每张图片的区域
+5. 背景色：使用十六进制颜色值（如 #F5F0EB）
+6. 文字颜色：使用十六进制颜色值
+7. fontSize：估算字号（标题通常36-60pt，正文14-18pt，说明文字10-12pt）
+8. align：left/center/right
+9. 如果整页就是一张图片（无独立文字），imageRegions 填满整页（x:0,y:0,w:100,h:100），textElements 为空数组`
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url" as const,
+                  image_url: { url: `data:image/${pg.ext};base64,${pg.data}`, detail: "high" as const }
+                },
+                {
+                  type: "text" as const,
+                  text: "请分析这张幻灯片页面，提取所有文字元素和图片区域信息。"
+                }
+              ]
+            }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "slide_analysis",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  bgColor: { type: "string", description: "背景色十六进制值" },
+                  pageWidth: { type: "number", description: "页面宽高比的宽度（如16）" },
+                  pageHeight: { type: "number", description: "页面宽高比的高度（如9）" },
+                  hasMultipleImages: { type: "boolean", description: "页面是否有多张独立图片" },
+                  textElements: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        text: { type: "string" },
+                        x: { type: "number" }, y: { type: "number" },
+                        w: { type: "number" }, h: { type: "number" },
+                        fontSize: { type: "number" },
+                        bold: { type: "boolean" },
+                        color: { type: "string" },
+                        align: { type: "string" }
+                      },
+                      required: ["text","x","y","w","h","fontSize","bold","color","align"],
+                      additionalProperties: false
+                    }
+                  },
+                  imageRegions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        x: { type: "number" }, y: { type: "number" },
+                        w: { type: "number" }, h: { type: "number" },
+                        description: { type: "string" }
+                      },
+                      required: ["x","y","w","h","description"],
+                      additionalProperties: false
+                    }
+                  }
+                },
+                required: ["bgColor","pageWidth","pageHeight","hasMultipleImages","textElements","imageRegions"],
+                additionalProperties: false
+              }
+            }
+          }
+        });
+        const content = typeof analysisResp.choices[0]?.message?.content === "string"
+          ? analysisResp.choices[0].message.content : "{}";
+        const parsed = JSON.parse(content);
+        slideAnalyses.push(parsed);
+      } catch (e) {
+        console.error(`[PresentationConvert] Page ${i} analysis failed:`, e);
+        // Fallback: treat whole page as image
+        slideAnalyses.push({
+          bgColor: "#FFFFFF", pageWidth: 16, pageHeight: 9,
+          textElements: [], imageRegions: [{ x: 0, y: 0, w: 100, h: 100, description: "page" }],
+          hasMultipleImages: false
+        });
+      }
+    }
+
+    presentationJobStore.set(jobId, { status: "processing", progress: 72, stage: "building_pptx" });
+
+    // ── Step 3: Build PPTX with pptxgenjs ────────────────────────────────────
+    const PptxGenJS = await getPptxGenJS();
+    const pptx = new PptxGenJS();
+
+    // Determine slide dimensions from first page analysis
+    const firstAnalysis = slideAnalyses[0];
+    const pw = firstAnalysis?.pageWidth || 16;
+    const ph = firstAnalysis?.pageHeight || 9;
+    // Standard sizes: 16:9 = 10x5.625in, 4:3 = 10x7.5in, 3:4 portrait = 7.5x10in
+    let slideW = 10, slideH = 5.625;
+    if (Math.abs(pw / ph - 4 / 3) < 0.1) { slideW = 10; slideH = 7.5; }
+    else if (Math.abs(pw / ph - 3 / 4) < 0.1) { slideW = 7.5; slideH = 10; }
+    else if (Math.abs(pw / ph - 1) < 0.05) { slideW = 10; slideH = 10; }
+    pptx.defineLayout({ name: "CUSTOM", width: slideW, height: slideH });
+    pptx.layout = "CUSTOM";
+
+    for (let i = 0; i < pageImageBase64s.length; i++) {
+      const pg = pageImageBase64s[i];
+      const analysis = slideAnalyses[i];
+      const slide = pptx.addSlide();
+
+      // Background color
+      const bgHex = (analysis.bgColor || "#FFFFFF").replace("#", "");
+      slide.background = { fill: bgHex };
+
+      // Add image regions
+      if (analysis.imageRegions && analysis.imageRegions.length > 0) {
+        for (const region of analysis.imageRegions) {
+          // Crop the region from the page image using sharp
+          try {
+            const sharp = (await import("sharp")).default;
+            const imgBuf = Buffer.from(pg.data, "base64");
+            const meta = await sharp(imgBuf).metadata();
+            const imgW = meta.width || 800;
+            const imgH = meta.height || 600;
+            const cropX = Math.round((region.x / 100) * imgW);
+            const cropY = Math.round((region.y / 100) * imgH);
+            const cropW = Math.max(1, Math.round((region.w / 100) * imgW));
+            const cropH = Math.max(1, Math.round((region.h / 100) * imgH));
+            const cropped = await sharp(imgBuf)
+              .extract({ left: cropX, top: cropY, width: Math.min(cropW, imgW - cropX), height: Math.min(cropH, imgH - cropY) })
+              .png().toBuffer();
+            const croppedB64 = cropped.toString("base64");
+            slide.addImage({
+              data: `data:image/png;base64,${croppedB64}`,
+              x: `${region.x}%`, y: `${region.y}%`,
+              w: `${region.w}%`, h: `${region.h}%`,
+              sizing: { type: "contain", w: `${region.w}%`, h: `${region.h}%` }
+            });
+          } catch (e) {
+            // Fallback: use full page image
+            slide.addImage({
+              data: `data:image/${pg.ext};base64,${pg.data}`,
+              x: `${region.x}%`, y: `${region.y}%`,
+              w: `${region.w}%`, h: `${region.h}%`
+            });
+          }
+        }
+      }
+
+      // Add text elements
+      if (analysis.textElements && analysis.textElements.length > 0) {
+        for (const el of analysis.textElements) {
+          if (!el.text || el.text.trim() === "") continue;
+          const colorHex = (el.color || "#000000").replace("#", "");
+          try {
+            slide.addText(el.text, {
+              x: `${el.x}%`, y: `${el.y}%`,
+              w: `${el.w}%`, h: `${el.h}%`,
+              fontSize: Math.max(8, Math.min(72, el.fontSize || 16)),
+              bold: el.bold || false,
+              color: colorHex,
+              align: (el.align as "left" | "center" | "right") || "left",
+              fontFace: "Microsoft YaHei",
+              wrap: true,
+              valign: "top",
+              margin: 0
+            });
+          } catch (e) {
+            console.error(`[PresentationConvert] addText failed on page ${i}:`, e);
+          }
+        }
+      }
+    }
+
+    // ── Step 4: Save and upload ───────────────────────────────────────────────
+    presentationJobStore.set(jobId, { status: "processing", progress: 88, stage: "building_pptx" });
+    const pptxBuffer: Buffer = await pptx.write({ outputType: "nodebuffer" }) as Buffer;
+    const fileName = `${input.title || "presentation"}-converted-${Date.now()}.pptx`;
+    const { url: pptxUrl } = await storagePut(
+      `presentations/${fileName}`,
+      pptxBuffer,
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    );
+
+    // Save to history
+    if (userId) {
+      await db.createGenerationHistory({
+        userId,
+        module: "presentation",
+        title: input.title || `转换文稿 (${pageImageBase64s.length}页)`,
+        summary: `从文件转换，共 ${pageImageBase64s.length} 页`,
+        outputUrl: pptxUrl,
+        status: "success",
+        durationMs: 0,
+      }).catch((e: any) => { console.error("[PresentationConvert] History save failed:", e); });
+    }
+
+    // Cleanup temp dir
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+
+    presentationJobStore.set(jobId, {
+      status: "done", url: pptxUrl,
+      title: input.title || `转换文稿 (${pageImageBase64s.length}页)`,
+      slideCount: pageImageBase64s.length,
+      imageCount: pageImageBase64s.length,
+      slides: []
+    });
+  } catch (err: any) {
+    console.error("[PresentationConvert] Failed:", err);
+    presentationJobStore.set(jobId, { status: "failed", error: err?.message || "文件转换失败" });
+  }
+}
 
 // ─── Personal Tasks Router ──────────────────────────────────────────────────
 const personalTasksRouter = router({
