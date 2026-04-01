@@ -3946,6 +3946,7 @@ const presentationRouter = router({
       fileType: z.enum(["pdf", "images"]),
       title: z.string().optional(),
       toolId: z.number().optional(),
+      inpaintToolId: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const jobId = `pres_convert_${nanoid()}`;
@@ -3962,7 +3963,7 @@ const presentationRouter = router({
 
 async function generatePresentationFromFileInBackground(
   jobId: string,
-  input: { fileUrls: string[]; fileType: "pdf" | "images"; title?: string; toolId?: number },
+  input: { fileUrls: string[]; fileType: "pdf" | "images"; title?: string; toolId?: number; inpaintToolId?: number },
   userId?: number
 ) {
   const { execSync } = await import("child_process");
@@ -4138,28 +4139,126 @@ async function generatePresentationFromFileInBackground(
     }
 
     presentationJobStore.set(jobId, { status: "processing", progress: 72, stage: "building_pptx" });
-
+    // ── Step 2.5: Inpainting (if tool selected) ──────────────────────────────
+    // For each page, if inpaintToolId is set and there are text elements,
+    // use the selected AI tool to remove text from the image.
+    const inpaintedPageImages: Array<{ data: string; ext: string; url: string }> = [...pageImageBase64s];
+    if (input.inpaintToolId) {
+      const totalInpaintPages = pageImageBase64s.length;
+      for (let i = 0; i < totalInpaintPages; i++) {
+        const pg = pageImageBase64s[i];
+        const analysis = slideAnalyses[i];
+        if (!analysis.textElements || analysis.textElements.length === 0) continue;
+        const inpaintProgress = 72 + Math.round((i / totalInpaintPages) * 15);
+        presentationJobStore.set(jobId, { status: "processing", progress: inpaintProgress, stage: "inpainting" });
+        try {
+          const sharpMod = (await import("sharp")).default;
+          const imgBuf = Buffer.from(pg.data, "base64");
+          const meta = await sharpMod(imgBuf).metadata();
+          const imgW = meta.width || 800;
+          const imgH = meta.height || 600;
+          // Get tool info to determine provider
+          const toolRow = await db.getAiToolById(input.inpaintToolId);
+          const provider = toolRow?.provider || "";
+          if (provider === "jimeng" || provider === "volcengine") {
+            // ── 即梦 Inpainting: generate mask image ──
+            // Create a black mask with white regions over text areas
+            const maskBuf = await sharpMod({
+              create: { width: imgW, height: imgH, channels: 3, background: { r: 0, g: 0, b: 0 } }
+            }).png().toBuffer();
+            // Draw white rectangles over text regions
+            const maskComposites: any[] = [];
+            for (const el of analysis.textElements) {
+              const rx = Math.max(0, Math.round((el.x / 100) * imgW) - 4);
+              const ry = Math.max(0, Math.round((el.y / 100) * imgH) - 4);
+              const rw = Math.min(imgW - rx, Math.round((el.w / 100) * imgW) + 8);
+              const rh = Math.min(imgH - ry, Math.round((el.h / 100) * imgH) + 8);
+              const whitePatch = await sharpMod({
+                create: { width: rw, height: rh, channels: 3, background: { r: 255, g: 255, b: 255 } }
+              }).png().toBuffer();
+              maskComposites.push({ input: whitePatch, left: rx, top: ry });
+            }
+            const finalMask = maskComposites.length > 0
+              ? await sharpMod(maskBuf).composite(maskComposites).png().toBuffer()
+              : maskBuf;
+            // Upload original and mask to S3
+            const origKey = `presentations/inpaint/${jobId}-page${i}-orig.png`;
+            const maskKey = `presentations/inpaint/${jobId}-page${i}-mask.png`;
+            const [{ url: origUrl }, { url: maskUrl }] = await Promise.all([
+              storagePut(origKey, imgBuf, "image/png"),
+              storagePut(maskKey, finalMask, "image/png"),
+            ]);
+            // Call jimeng inpainting
+            const inpaintResult = await generateImageWithTool({
+              toolId: input.inpaintToolId,
+              prompt: "Remove all text from the image, fill with the surrounding background texture and color, keep the rest of the image unchanged",
+              originalImages: [{ url: origUrl, mimeType: "image/png" }],
+              jimengMode: "inpaint",
+              maskImageUrl: maskUrl
+            });
+            if (inpaintResult?.url) {
+              // Download the inpainted image and store as base64
+              try {
+                const dlResp = await fetch(inpaintResult.url, { signal: AbortSignal.timeout(60000) });
+                if (dlResp.ok) {
+                  const dlBuf = Buffer.from(await dlResp.arrayBuffer());
+                  inpaintedPageImages[i] = { data: dlBuf.toString("base64"), ext: "png", url: inpaintResult.url };
+                }
+              } catch (dlErr) {
+                console.error(`[PresentationConvert] Failed to download inpainted image:`, dlErr);
+              }
+            }
+          } else {
+            // ── Gemini / other: use image editing prompt ──
+            // Upload original image to S3 for URL-based access
+            const origKey = `presentations/inpaint/${jobId}-page${i}-orig.png`;
+            const { url: origUrl } = await storagePut(origKey, imgBuf, "image/png");
+            const inpaintResult = await generateImageWithTool({
+              toolId: input.inpaintToolId,
+              prompt: "Remove all visible text labels, titles, captions, and annotations from this image. Fill the areas where text was with the surrounding background color and texture. Keep all non-text visual elements (illustrations, photos, shapes, lines) completely unchanged. The result should look like the original image but with all text removed.",
+              originalImages: [{ url: origUrl, mimeType: "image/png" }]
+            });
+            if (inpaintResult?.url) {
+              try {
+                const dlResp = await fetch(inpaintResult.url, { signal: AbortSignal.timeout(60000) });
+                if (dlResp.ok) {
+                  const dlBuf = Buffer.from(await dlResp.arrayBuffer());
+                  inpaintedPageImages[i] = { data: dlBuf.toString("base64"), ext: "png", url: inpaintResult.url };
+                }
+              } catch (dlErr) {
+                console.error(`[PresentationConvert] Failed to download inpainted image:`, dlErr);
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[PresentationConvert] Inpainting failed for page ${i}:`, e);
+          // Keep original image on failure
+        }
+      }
+    }
     // ── Step 3: Build PPTX with pptxgenjs ────────────────────────────────────
     const PptxGenJS = await getPptxGenJS();
     const pptx = new PptxGenJS();
-
-    // Determine slide dimensions from first page analysis
-    const firstAnalysis = slideAnalyses[0];
-    const pw = firstAnalysis?.pageWidth || 16;
-    const ph = firstAnalysis?.pageHeight || 9;
-    // Standard sizes: 16:9 = 10x5.625in, 4:3 = 10x7.5in, 3:4 portrait = 7.5x10in
-    let slideW = 10, slideH = 5.625;
-    if (Math.abs(pw / ph - 4 / 3) < 0.1) { slideW = 10; slideH = 7.5; }
-    else if (Math.abs(pw / ph - 3 / 4) < 0.1) { slideW = 7.5; slideH = 10; }
-    else if (Math.abs(pw / ph - 1) < 0.05) { slideW = 10; slideH = 10; }
+    // Determine slide dimensions from actual pixel dimensions of first page image
+    const sharpForDims = (await import("sharp")).default;
+    let slideW = 10, slideH = 5.625; // default 16:9
+    try {
+      const firstPg = pageImageBase64s[0];
+      const firstMeta = await sharpForDims(Buffer.from(firstPg.data, "base64")).metadata();
+      const pixW = firstMeta.width || 1920;
+      const pixH = firstMeta.height || 1080;
+      // Use 10 inches as base width, scale height proportionally
+      slideW = 10;
+      slideH = Math.round((10 * pixH / pixW) * 1000) / 1000;
+    } catch (e) {
+      console.error("[PresentationConvert] Could not determine slide dimensions:", e);
+    }
     pptx.defineLayout({ name: "CUSTOM", width: slideW, height: slideH });
     pptx.layout = "CUSTOM";
-
-    for (let i = 0; i < pageImageBase64s.length; i++) {
-      const pg = pageImageBase64s[i];
+    for (let i = 0; i < inpaintedPageImages.length; i++) {
+      const pg = inpaintedPageImages[i];
       const analysis = slideAnalyses[i];
       const slide = pptx.addSlide();
-
       // Background color
       const bgHex = (analysis.bgColor || "#FFFFFF").replace("#", "");
       slide.background = { fill: bgHex };

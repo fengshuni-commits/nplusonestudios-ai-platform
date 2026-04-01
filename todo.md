@@ -1476,3 +1476,10 @@
 - [x] 前端：生成完成后展示预览面板（每页缩略图 + 识别内容对比）
 - [x] 前端：预览面板支持翻页查看所有幻灯片
 - [x] 前端：下载按钮在预览面板下方，确认后再下载
+
+## 演示文稿文件转换 - Inpainting 工具选择
+- [x] 后端：convertFromFile tRPC schema 新增 inpaintToolId 参数（z.number().optional()）
+- [x] 后端：generatePresentationFromFileInBackground 支持 inpaintToolId，实现 Jimeng（mask 生成）和 Gemini（图像编辑）两种 inpainting 流程
+- [x] 前端：文件转换模式新增「文字去除 AI」选择器（AiToolSelector，showBuiltIn=false，仅显示用户配置的外部工具）
+- [x] 前端：handleConvertFromFile 将 inpaintToolId 传递给后端
+- [x] PPT 幻灯片比例根据原图实际像素尺寸动态计算（非固定 16:9）

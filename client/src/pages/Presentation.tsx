@@ -138,6 +138,7 @@ export default function PresentationPage() {
   };
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [convertTitle, setConvertTitle] = useState("");
+  const [inpaintToolId, setInpaintToolId] = useState<number | undefined>(undefined);
   const fileConvertInputRef = useRef<HTMLInputElement>(null);
 
   // Poll job status
@@ -401,6 +402,7 @@ export default function PresentationPage() {
         fileUrls,
         fileType,
         title: convertTitle.trim() || undefined,
+        inpaintToolId: inpaintToolId,
       });
       setJobId(result.jobId);
     } catch (err: any) {
@@ -543,10 +545,26 @@ export default function PresentationPage() {
                     )}
                   </div>
 
+                  {/* Inpainting tool selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">文字去除 AI（可选）</Label>
+                    <AiToolSelector
+                      capability="image"
+                      value={inpaintToolId}
+                      onChange={setInpaintToolId}
+                      label="选择 AI 工具去除图片中的文字"
+                      showBuiltIn={false}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      选择后，AI 将自动去除图片中的文字并生成独立可编辑文本框；不选则直接叠加文本框
+                    </p>
+                  </div>
+
                   {/* Info */}
                   <div className="rounded-md bg-secondary/30 p-3 text-xs text-muted-foreground space-y-1">
                     <p className="font-medium text-foreground">转换说明</p>
                     <p>• 文字内容将提取为可编辑文本框</p>
+                    <p>• 选择文字去除 AI 后，原图中的文字将被 AI 修复去除</p>
                     <p>• 多张独立图片分别嵌入，可单独移动和缩放</p>
                     <p>• 单张复合插画作为整体图片嵌入</p>
                     <p>• 处理时间约 1–3 分钟（每页需 AI 分析）</p>
