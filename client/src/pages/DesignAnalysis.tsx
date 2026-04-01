@@ -236,6 +236,7 @@ export default function DesignAnalysis() {
         type: selectedType,
         toolId,
         referenceImageUrl: referenceUrl,
+        referenceImageContentType: referenceFile?.type || undefined,
         extraPrompt: extraPrompt.trim() || undefined,
         aspectRatio,
         count,

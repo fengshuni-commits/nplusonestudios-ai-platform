@@ -1448,3 +1448,8 @@
 - [x] 「保存到素材库」按钮：将所有页面图片批量保存到素材库
 - [x] 后端：graphicLayout.saveToAssets 接口（批量保存所有页图片到素材库，支持 projectId）
 - [x] 后端：graphicLayout.updateJob 接口（更新 projectId 关联）
+
+## Bug 修复：AI 效果图 PNG 格式支持
+- [x] 修复后端硬编码 mimeType 为 image/jpeg 的问题（应根据实际文件类型动态设置）
+- [x] 前端上传时传递 contentType 字段到后端
+- [x] 验证 PNG/JPEG/WEBP 等格式均可正常上传和生成

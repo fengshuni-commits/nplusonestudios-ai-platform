@@ -5287,6 +5287,7 @@ async function generateAnalysisImageInBackground(
     type: "material" | "soft_furnishing";
     toolId?: number;
     referenceImageUrl: string;
+    referenceImageContentType?: string;
     extraPrompt?: string;
     width?: number;
     height?: number;
@@ -5311,20 +5312,26 @@ async function generateAnalysisImageInBackground(
     // Build size string if width/height provided
     const sizeStr = (input.width && input.height) ? `${input.width}x${input.height}` : undefined;
 
+    // Detect mimeType from URL extension or contentType
+    const refMimeType = input.referenceImageContentType ||
+      (/\.png$/i.test(input.referenceImageUrl) ? "image/png" :
+       /\.webp$/i.test(input.referenceImageUrl) ? "image/webp" :
+       "image/jpeg");
+
     // Generate image
     let resultUrl: string;
     if (input.toolId) {
       const result = await generateImageWithTool({
         toolId: input.toolId,
         prompt: fullPrompt,
-        originalImages: [{ url: input.referenceImageUrl, mimeType: "image/jpeg" }],
+        originalImages: [{ url: input.referenceImageUrl, mimeType: refMimeType }],
         size: sizeStr,
       });
       resultUrl = result.url;
     } else {
       const result = await generateImage({
         prompt: fullPrompt,
-        originalImages: [{ url: input.referenceImageUrl, mimeType: "image/jpeg" }],
+        originalImages: [{ url: input.referenceImageUrl, mimeType: refMimeType }],
         size: sizeStr,
       });
       resultUrl = result.url || "";
@@ -5377,6 +5384,7 @@ const analysisImageRouter = router({
       type: z.enum(["material", "soft_furnishing"]),
       toolId: z.number().optional(),
       referenceImageUrl: z.string().url(),
+      referenceImageContentType: z.string().optional(),
       extraPrompt: z.string().optional(),
       // 图片比例，格式 "WxH"，如 "1024x1024"
       aspectRatio: z.string().optional(),
