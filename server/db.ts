@@ -2292,3 +2292,12 @@ export async function upsertGraphicLayoutPrompt(
     return { id: Number((result as any).insertId), type, label: data.label ?? defaultLabel, prompt: data.prompt };
   }
 }
+
+export async function getGraphicStylePackById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { graphicStylePacks } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  const rows = await db.select().from(graphicStylePacks).where(eq(graphicStylePacks.id, id)).limit(1);
+  return rows[0] ?? null;
+}

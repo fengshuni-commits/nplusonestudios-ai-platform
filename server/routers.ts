@@ -4431,6 +4431,7 @@ const graphicLayoutRouter = router({
   generate: protectedProcedure
     .input(z.object({
       packId: z.number().optional(),
+      stylePrompt: z.string().optional(), // 直接传入提取的风格提示词，替代 packId
       docType: z.enum(["brand_manual", "product_detail", "project_board", "custom"]),
       pageCount: z.number().min(1).max(10).default(1),
       aspectRatio: z.string().optional().default("3:4"),
@@ -4467,7 +4468,7 @@ const graphicLayoutRouter = router({
       });
       const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
       if (!newJob) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建排版任务失败" });
-      generateGraphicLayoutAsync(newJob.id, ctx.user.id, input.imageToolId).catch(console.error);
+      generateGraphicLayoutAsync(newJob.id, ctx.user.id, input.imageToolId, input.stylePrompt).catch(console.error);
       return { id: newJob.id, status: "pending" as const };
     }),
 
@@ -4761,6 +4762,64 @@ const graphicLayoutRouter = router({
       });
       return { success: true };
     }),
+
+  // 从参考图直接提取风格提示词（自然语言字符串）
+  extractStylePrompt: protectedProcedure
+    .input(z.object({
+      imageUrls: z.array(z.string().url()).min(1).max(10).optional(),
+      packId: z.number().optional(),
+    }).refine(data => data.imageUrls || data.packId, {
+      message: "必须提供 imageUrls 或 packId 之一",
+    }))
+    .mutation(async ({ input }) => {
+      let imageUrls: string[] = [];
+      if (input.packId) {
+        // 从数据库查询版式包的 fileUrl
+        const pack = await db.getGraphicStylePackById(input.packId);
+        if (!pack || pack.status !== "done") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "版式包不存在或未完成提取" });
+        }
+        imageUrls = [pack.sourceFileUrl ?? ""].filter(Boolean);
+      } else if (input.imageUrls) {
+        imageUrls = input.imageUrls;
+      }
+      const { invokeLLM } = await import("./_core/llm");
+      const imageContents: any[] = [];
+      for (const url of imageUrls.slice(0, 6)) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const buf = await res.arrayBuffer();
+          const b64 = Buffer.from(buf).toString("base64");
+          const ct = res.headers.get("content-type") || "image/jpeg";
+          imageContents.push({ type: "image_url", image_url: { url: `data:${ct};base64,${b64}`, detail: "high" } });
+        } catch { /* skip */ }
+      }
+      if (imageContents.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "图片加载失败，请检查图片地址" });
+      }
+      const response = await invokeLLM({
+        model: "gemini-3-flash-preview",
+        messages: [
+          {
+            role: "system",
+            content: `You are a senior art director. Analyze the provided design reference image(s) and write a concise visual style prompt that captures the essence of this design.\n\nWrite in Chinese if the design contains Chinese text, otherwise in English. Cover in 3-5 sentences:\n- Overall mood and aesthetic feeling\n- Color palette (name the actual colors you see, include hex codes for distinctive colors)\n- Typography character (weight, scale contrast, style)\n- Layout structure (how images and text relate, spatial rhythm, density, margins)\n- Any distinctive visual techniques or elements\n\nWrite as a direct style instruction to an image generation AI. Be specific and vivid, not generic. Start with the most distinctive visual characteristic.`,
+          },
+          {
+            role: "user",
+            content: [
+              ...imageContents,
+              { type: "text", text: `Analyze ${imageContents.length > 1 ? "these " + imageContents.length + " reference images" : "this reference image"} and write a style prompt I can use to generate designs in this style.` },
+            ],
+          },
+        ],
+      });
+      const stylePrompt = response.choices[0]?.message?.content;
+      if (!stylePrompt || typeof stylePrompt !== "string") {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "提取失败，请重试" });
+      }
+      return { stylePrompt: stylePrompt.trim() };
+    }),
 });
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 
@@ -4878,7 +4937,7 @@ Then extract the specific color values you actually see in the screenshots (read
 
 // ─── Graphic Layout Async Generation ─────────────────────────────────────────
 
-async function generateGraphicLayoutAsync(jobId: number, userId: number, imageToolId?: number) {
+async function generateGraphicLayoutAsync(jobId: number, userId: number, imageToolId?: number, stylePrompt?: string) {
   const drizzleDb = await db.getDb();
   if (!drizzleDb) return;
   const { graphicLayoutJobs, graphicStylePacks } = await import("../drizzle/schema");
@@ -4890,12 +4949,15 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
 
     let styleGuideHint = "";
     let packStyleGuide: any = null;
-    if (job.packId) {
+    if (stylePrompt) {
+      // 直接使用用户提供的风格提示词（新流程）
+      styleGuideHint = `【参考风格提示词】\n${stylePrompt}`;
+    } else if (job.packId) {
+      // 兼容旧版式包流程
       const [pack] = await drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.id, job.packId)).limit(1);
       if (pack?.styleGuide) {
         packStyleGuide = pack.styleGuide as any;
         const sg = packStyleGuide;
-        // 构建详细的风格指导，强调配色精确性
         styleGuideHint = [
           `【版式包：${pack.name}】`,
           `配色方案（必须严格执行）：主色 ${sg.colorPalette?.primary}  背景 ${sg.colorPalette?.background}  文字 ${sg.colorPalette?.text}  强调色 ${sg.colorPalette?.accent}`,
@@ -5006,21 +5068,20 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
         : "";
 
       // Step 1: LLM 规划排版结构，输出文字块坐标
-      const planResponse = await invokeLLM({
+        const planResponse = await invokeLLM({
         messages: [
           {
             role: "system",
             content: `${layoutPlanSystemPrompt}
-
 页面尺寸：${imgW}x${imgH}px
-配色：${colorScheme}
-${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}${byTypeInstruction ? "\n" + byTypeInstruction : ""}`
+${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
+
+⚠️ 优先级规则：如果用户的内容描述中包含配色、版式、风格等具体要求，必须以用户描述为准，覆盖上方参考风格中的对应设置。用户描述的优先级高于一切参考风格。${byTypeInstruction ? "\n" + byTypeInstruction : ""}`
           },
           {
             role: "user",
             content: `文档类型：${docTypeName}，第 ${pageIdx + 1} 页 / 共 ${job.pageCount} 页
-内容描述：${job.contentText}
-
+内容描述（最高优先级，其中的配色/版式/风格要求必须覆盖参考风格）：${job.contentText}
 请规划这一页的排版结构，输出文字块列表。`
           }
         ],
@@ -5097,7 +5158,11 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}${byT
             sg.typography?.style ? `Typography: ${sg.typography.style}.` : "",
           ].filter(Boolean).join(" ")
         : "";
-      const imagePrompt = `${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
+      // 如果用户描述中包含配色/风格要求，在 prompt 开头明确声明优先级
+      const userDescPrefix = job.contentText.match(/(背景|配色|风格|色调|#[0-9a-fA-F]{6})/)
+        ? `USER REQUIREMENT (HIGHEST PRIORITY, OVERRIDES STYLE REFERENCE): ${job.contentText}. `
+        : "";
+      const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
 
       // Step 3: 调用图像 API 生成整页图片
       const genResult = await generateImageWithTool({

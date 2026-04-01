@@ -1423,3 +1423,13 @@
 ## 图文排版版式学习 Prompt 改进（Lovart 方法）
 - [x] 改进版式学习提取 prompt：从“规则列表”改为“设计师视角的自由描述”
 - [x] 改进生成时的 styleGuide 使用方式：作为视觉 DNA 注入而非约束规则
+
+## 图文排版版式学习彻底重构（参考图→提示词→生图）
+- [x] 后端：新增 extractStylePrompt 接口（支持 packId 或 imageUrls 输入，使用 gemini-3-flash-preview）
+- [x] 后端：invokeLLM 支持传入 model 参数
+- [x] 后端：generate 接口新增 stylePrompt 参数，generateGraphicLayoutAsync 优先使用 stylePrompt
+- [x] 后端：用户描述中的配色/版式要求优先级高于参考风格（覆盖 styleGuideHint）
+- [x] 前端：版式包区域新增"提取风格提示词"按钮和可编辑文本框
+- [x] 前端：生成时优先传 stylePrompt，兼容旧版 packId 流程
+- [x] 修复背景色默认值（从黑色改为中性白/浅灰）
+- [x] 修复 AI 自动填充未提供文字的问题（prompt 明确禁止）

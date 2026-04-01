@@ -265,6 +265,20 @@ export default function MediaLayout() {
   const [uploadingPack, setUploadingPack] = useState(false);
   const [showPackUpload, setShowPackUpload] = useState(false);
   const [packNameInput, setPackNameInput] = useState("");
+  // 新增：风格提示词提取
+  const [stylePrompt, setStylePrompt] = useState<string>("");
+  const [extractingPrompt, setExtractingPrompt] = useState(false);
+  const extractPromptMutation = trpc.graphicLayout.extractStylePrompt.useMutation({
+    onSuccess: (data) => {
+      setStylePrompt(data.stylePrompt);
+      setExtractingPrompt(false);
+      toast.success("风格提示词提取成功！可以编辑后生成");
+    },
+    onError: (err) => {
+      toast.error("提取失败：" + err.message);
+      setExtractingPrompt(false);
+    },
+  });
 
   const deletePackMutation = trpc.graphicStylePacks.delete.useMutation({
     onSuccess: () => { refetchPacks(); toast.success("版式包已删除"); },
@@ -546,7 +560,8 @@ export default function MediaLayout() {
       }
     }
     generateMutation.mutate({
-      packId: selectedPackId,
+      packId: stylePrompt ? undefined : selectedPackId, // 有提示词时不传 packId
+      stylePrompt: stylePrompt.trim() || undefined,
       docType: docType as "brand_manual" | "product_detail" | "project_board" | "custom",
       pageCount,
       aspectRatio,
@@ -738,6 +753,53 @@ export default function MediaLayout() {
                 ))}
               </div>
             )}
+
+            {/* 风格提示词提取区域 */}
+            <div className="mt-4 pt-4 border-t border-white/8">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-white/70">风格提示词</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!selectedPackId) {
+                      toast.error("请先选择一个版式包");
+                      return;
+                    }
+                    const pack = (stylePacks as StylePack[]).find(p => p.id === selectedPackId);
+                    if (!pack || pack.status !== "done") {
+                      toast.error("请等待版式包提取完成");
+                      return;
+                    }
+                    setExtractingPrompt(true);
+                    extractPromptMutation.mutate({ packId: selectedPackId });
+                  }}
+                  disabled={extractingPrompt || !selectedPackId}
+                  className="h-7 text-[10px] border-[#B87333]/40 text-[#B87333] hover:bg-[#B87333]/10"
+                >
+                  {extractingPrompt ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      提取中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      提取提示词
+                    </>
+                  )}
+                </Button>
+              </div>
+              <Textarea
+                value={stylePrompt}
+                onChange={(e) => setStylePrompt(e.target.value)}
+                placeholder="点击“提取提示词”按钮从选中的版式包中提取风格描述，或直接输入你的风格要求。提示词会直接传给图像模型，指导生成风格。"
+                className="min-h-[100px] text-xs bg-black/20 border-white/8 text-white/90 placeholder:text-white/30 resize-none"
+              />
+              <p className="text-[10px] text-white/40 mt-1.5">
+                提示：提取后可以编辑提示词，或直接输入你的风格要求。如果你在下方的内容描述中包含配色/版式要求，会自动覆盖这里的提示词。
+              </p>
+            </div>
           </div>
 
           {/* Generate Config */}
