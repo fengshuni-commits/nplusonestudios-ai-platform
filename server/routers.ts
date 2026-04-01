@@ -4738,6 +4738,29 @@ const graphicLayoutRouter = router({
       const { url } = await storagePut(fileKey, zipBuffer, "application/zip");
       return { url, filename: `${safeTitle}-图片.zip`, pageCount: imageEntries.length };
     }),
+
+  /** 列出图文排版提示词配置 */
+  listPrompts: protectedProcedure.query(async () => {
+    return db.listGraphicLayoutPrompts();
+  }),
+
+  /** 更新图文排版提示词配置 */
+  updatePrompt: protectedProcedure
+    .input(z.object({
+      type: z.enum(["layout_plan_system", "image_generation"]),
+      prompt: z.string().min(1),
+      label: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.upsertGraphicLayoutPrompt(input.type, {
+        prompt: input.prompt,
+        label: input.label,
+        description: input.description,
+        updatedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
 });
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 
@@ -4805,12 +4828,21 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
     ];
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: `你是一个专业的图文排版设计分析师。分析提供的图文排版参考截图，提取其设计风格特征。
+        { role: "system", content: `你是一个专业的图文排版设计分析师。仔细分析提供的图文排版参考截图，提取其设计风格特征。
+
 分析要求：
-1. 配色：主色、背景色、文字色、强调色（准确 hex）
-2. 字体：标题和正文字体风格
-3. 排版模式：识别常见的图文排版模式（大图+文字叠加、左文右图等）
-4. 视觉风格：整体调性、风格、密度` },
+1. 配色（最重要）：从截图中直接读取实际使用的颜色，输出准确的 hex 色値（如 #1a2b3c）。不得猜测或使用近似色。
+   - primary：截图中出现频率最高的主要品牌色
+   - background：页面背景色（从截图背景区域取色）
+   - text：正文文字颜色
+   - accent：强调色或边框色
+   - secondary：次要配色
+2. 字体：判断标题和正文的字体风格（无衡线、衡线、手写体等）
+3. 排版模式：识别具体的图文排版模式（如：全幅大图+文字叠加、左文右图分栏、上图下文、网格布局等）
+4. 视觉风格：整体调性、风格关键词、内容密度、空间感
+5. spacingDensity：内容密度（sparse/balanced/dense）
+
+重要：配色必须来自对截图的直接观察，不得使用默认黑白色或常见模板配色。` },
         { role: "user", content: userContent },
       ],
       response_format: {
@@ -4870,9 +4902,34 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
       if (pack?.styleGuide) {
         packStyleGuide = pack.styleGuide as any;
         const sg = packStyleGuide;
-        styleGuideHint = `参考版式包风格（${pack.name}）：配色主色 ${sg.colorPalette?.primary}，背景 ${sg.colorPalette?.background}，文字 ${sg.colorPalette?.text}，强调 ${sg.colorPalette?.accent}；字体 ${sg.typography?.titleFont} / ${sg.typography?.bodyFont}；风格关键词：${sg.styleKeywords?.join("、")}；调性：${sg.tone === "dark" ? "深色系" : sg.tone === "light" ? "浅色系" : "混合"}`;
+        // 构建详细的风格指导，强调配色精确性
+        styleGuideHint = [
+          `【版式包：${pack.name}】`,
+          `配色方案（必须严格执行）：主色 ${sg.colorPalette?.primary}  背景 ${sg.colorPalette?.background}  文字 ${sg.colorPalette?.text}  强调色 ${sg.colorPalette?.accent}`,
+          `字体：标题使用 ${sg.typography?.titleFont}，正文使用 ${sg.typography?.bodyFont}`,
+          `调性：${sg.tone === "dark" ? "深色系，背景深色" : sg.tone === "light" ? "浅色系，背景浅色" : "混合调性"}`,
+          sg.styleKeywords?.length ? `风格关键词：${sg.styleKeywords.join("、")}` : "",
+          sg.layoutPatterns?.length ? `排版模式：${sg.layoutPatterns.join("、")}` : "",
+          sg.spacingDensity ? `空间密度：${sg.spacingDensity}` : "",
+        ].filter(Boolean).join("\n");
       }
     }
+    // 从数据库读取自定义提示词
+    const [layoutPlanPromptRow, imageGenPromptRow] = await Promise.all([
+      db.getGraphicLayoutPrompt("layout_plan_system"),
+      db.getGraphicLayoutPrompt("image_generation"),
+    ]);
+    const layoutPlanSystemPrompt = layoutPlanPromptRow?.prompt ?? `你是一个专业的品牌视觉设计师。请为图文排版页面规划排版结构，输出每个文字块的内容和位置。
+
+规则：
+- 文字块不得超出页面边界，不得相互重叠
+- 每个文字块的 x/y 是左上角坐标，width/height 是文字区域尺寸（单位 px）
+- 留出足够边距（至少 40px）
+- fontSize 单位 px，标题 48-80px，副标题 24-36px，正文 16-22px
+- 最多 6 个文字块
+- 严格使用版式包中提取的配色方案，不得使用默认黑白配色
+- 排版结构应忠实还原参考版式的视觉层次和空间分布`;
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. Clean layout with precise typography placement. No watermarks, no extra decorations, photorealistic quality.";
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
@@ -4960,17 +5017,11 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
         messages: [
           {
             role: "system",
-            content: `你是一个专业的品牌视觉设计师。请为图文排版页面规划排版结构，输出每个文字块的内容和位置。
+            content: `${layoutPlanSystemPrompt}
 
-规则：
-- 页面尺寸：${imgW}x${imgH}px
-- 配色：${colorScheme}
-- ${styleGuideHint || "风格：现代简约，专业感强"}
-- 文字块不得超出页面边界，不得相互重叠
-- 每个文字块的 x/y 是左上角坐标，width/height 是文字区域尺寸（单位 px）
-- 留出足够边距（至少 40px）
-- fontSize 单位 px，标题 48-80px，副标题 24-36px，正文 16-22px
-- 最多 6 个文字块${byTypeInstruction}`
+页面尺寸：${imgW}x${imgH}px
+配色：${colorScheme}
+${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}${byTypeInstruction ? "\n" + byTypeInstruction : ""}`
           },
           {
             role: "user",
@@ -5044,7 +5095,11 @@ async function generateGraphicLayoutAsync(jobId: number, userId: number, imageTo
             : `incorporate the provided reference images as visual elements`)
         : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
 
-      const imagePrompt = `Professional ${docTypeName} page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Typography layout: ${textDescriptions}. Style: ${styleGuideHint || "modern minimalist architectural design, high-end brand aesthetic"}. Color scheme: ${colorScheme}. Clean professional layout, no extra decorations.`;
+      // 构建图像生成 prompt，包含版式包配色和自定义风格后缀
+      const styleHintEn = sg
+        ? `Style pack "${(drizzleDb.select().from(graphicStylePacks) as any).name || "custom"}": primary color ${sg.colorPalette?.primary}, background ${sg.colorPalette?.background}, text color ${sg.colorPalette?.text}, accent ${sg.colorPalette?.accent}. Keywords: ${sg.styleKeywords?.join(", ") ?? ""}.`
+        : "";
+      const imagePrompt = `Professional ${docTypeName} page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Typography layout: ${textDescriptions}. ${styleHintEn} Color scheme: background ${bgColor}, use exact hex colors from style guide. ${imageGenStyleSuffix}`;
 
       // Step 3: 调用图像 API 生成整页图片
       const genResult = await generateImageWithTool({

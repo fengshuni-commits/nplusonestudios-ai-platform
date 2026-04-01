@@ -561,6 +561,144 @@ function AnalysisPromptsTab() {
   );
 }
 
+// ─── Graphic Layout Prompts Tab ──────────────────────────────────────────────
+const GRAPHIC_LAYOUT_PROMPT_TYPES = [
+  {
+    id: "layout_plan_system" as const,
+    label: "排版规划系统提示词",
+    icon: Layout,
+    desc: "控制 AI 排版规划的行为。页面尺寸、配色、版式包风格等参数会自动注入，此处填写通用规则和质量要求。",
+  },
+  {
+    id: "image_generation" as const,
+    label: "图像生成风格提示词",
+    icon: Sparkles,
+    desc: "追加到每个图像生成 prompt 末尾的风格描述。使用英文效果更好。",
+  },
+];
+
+function GraphicLayoutPromptsTab() {
+  const utils = trpc.useUtils();
+  const { data: prompts = [], isLoading } = trpc.graphicLayout.listPrompts.useQuery();
+  const updateMutation = trpc.graphicLayout.updatePrompt.useMutation({
+    onSuccess: () => {
+      utils.graphicLayout.listPrompts.invalidate();
+      toast.success("提示词已保存");
+    },
+    onError: (e) => toast.error("保存失败：" + e.message),
+  });
+
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [editingType, setEditingType] = useState<string | null>(null);
+
+  const promptMap = Object.fromEntries(
+    (prompts as Array<{ type: string; prompt: string; label: string; description?: string | null }>).map(p => [p.type, p])
+  );
+
+  const handleEdit = (type: string) => {
+    const current = promptMap[type]?.prompt ?? "";
+    setDrafts(d => ({ ...d, [type]: current }));
+    setEditingType(type);
+  };
+
+  const handleSave = (type: "layout_plan_system" | "image_generation") => {
+    const draft = drafts[type];
+    if (!draft?.trim()) { toast.error("提示词不能为空"); return; }
+    updateMutation.mutate({ type, prompt: draft.trim() });
+    setEditingType(null);
+  };
+
+  const handleCancel = (type: string) => {
+    setEditingType(null);
+    setDrafts(d => { const n = { ...d }; delete n[type]; return n; });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2">
+            <Layout className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">图文排版提示词</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                配置图文排版生成时使用的系统提示词。修改后立即生效，无需重启。
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">加载中…</span>
+            </div>
+          ) : (
+            GRAPHIC_LAYOUT_PROMPT_TYPES.map(({ id, label, icon: Icon, desc }) => {
+              const current = promptMap[id];
+              const isEditing = editingType === id;
+              const draftValue = drafts[id] ?? current?.prompt ?? "";
+              return (
+                <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className="text-xs text-muted-foreground">{desc}</p>
+                      </div>
+                    </div>
+                    {!isEditing && (
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5">
+                        <Pencil className="h-3.5 w-3.5" />编辑
+                      </Button>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div className="flex flex-col gap-2">
+                      <Textarea
+                        value={draftValue}
+                        onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))}
+                        rows={10}
+                        className="text-sm font-mono resize-y"
+                        placeholder={id === "image_generation" ? "输入风格描述（建议英文）…" : "输入系统提示词…"}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {id === "layout_plan_system"
+                          ? "页面尺寸、配色方案、版式包风格等参数会自动注入到此提示词之后。"
+                          : "此文本将追加到每个图像生成 prompt 的末尾，用于统一风格基调。"}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSave(id as "layout_plan_system" | "image_generation")}
+                          disabled={updateMutation.isPending}
+                          className="gap-1.5"
+                        >
+                          {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          保存
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-muted/50 rounded-md p-3 border border-border">
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                        {current?.prompt || <span className="italic">暂无提示词（将使用内置默认值）</span>}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── PPT Layout Standards Tab ─────────────────────────────────────────────────────
 
 function PptLayoutStandardsTab(){
@@ -1172,6 +1310,9 @@ export default function Standards() {
           <TabsTrigger value="analysis-prompts" className="gap-1.5">
             <Layers className="h-4 w-4" />分析图提示词
           </TabsTrigger>
+          <TabsTrigger value="graphic-layout-prompts" className="gap-1.5">
+            <Layout className="h-4 w-4" />图文排版提示词
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── 演示文稿版式标准 Tab ─── */}
@@ -1342,6 +1483,11 @@ export default function Standards() {
         {/* ─── 分析图提示词 Tab ─── */}
         <TabsContent value="analysis-prompts">
           <AnalysisPromptsTab />
+        </TabsContent>
+
+        {/* ─── 图文排版提示词 Tab ─── */}
+        <TabsContent value="graphic-layout-prompts">
+          <GraphicLayoutPromptsTab />
         </TabsContent>
       </Tabs>
     </div>

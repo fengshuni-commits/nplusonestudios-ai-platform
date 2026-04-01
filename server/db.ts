@@ -2258,3 +2258,37 @@ export async function updateAnalysisImageJob(id: string, data: {
   const { analysisImageJobs } = await import("../drizzle/schema");
   await db.update(analysisImageJobs).set({ ...data, updatedAt: new Date() }).where(eq(analysisImageJobs.id, id));
 }
+
+// ─── Graphic Layout Prompts ──────────────────────────────────────────────────
+export async function listGraphicLayoutPrompts() {
+  const db = await getDb();
+  if (!db) return [];
+  const { graphicLayoutPrompts } = await import("../drizzle/schema");
+  return db.select().from(graphicLayoutPrompts).orderBy(graphicLayoutPrompts.type);
+}
+
+export async function getGraphicLayoutPrompt(type: "layout_plan_system" | "image_generation") {
+  const db = await getDb();
+  if (!db) return null;
+  const { graphicLayoutPrompts } = await import("../drizzle/schema");
+  const rows = await db.select().from(graphicLayoutPrompts).where(eq(graphicLayoutPrompts.type, type)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertGraphicLayoutPrompt(
+  type: "layout_plan_system" | "image_generation",
+  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { graphicLayoutPrompts } = await import("../drizzle/schema");
+  const existing = await getGraphicLayoutPrompt(type);
+  const defaultLabel = type === "layout_plan_system" ? "排版规划系统提示词" : "图像生成风格提示词";
+  if (existing) {
+    await db.update(graphicLayoutPrompts).set({ ...data, updatedAt: new Date() }).where(eq(graphicLayoutPrompts.type, type));
+    return { ...existing, ...data };
+  } else {
+    const result = await db.insert(graphicLayoutPrompts).values({ type, label: data.label ?? defaultLabel, prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
+    return { id: Number((result as any).insertId), type, label: data.label ?? defaultLabel, prompt: data.prompt };
+  }
+}

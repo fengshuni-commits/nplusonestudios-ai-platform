@@ -1415,3 +1415,7 @@
 ## 图文排版版式学习修复
 - [x] 修复 extractGraphicStylePackAsync：用 fetch 替换 https.get（支持重定向）
 - [x] 修复 extractGraphicStylePackAsync：图片转换失败时直接报错（不再静默 fallback）
+
+## 图文排版版式学习与出品标准
+- [x] 加强版式学习 prompt，使配色/排版更忠实于参考图（减少默认模板偏差）
+- [x] 将图文排版默认提示词移入“出品标准”，支持查看和编辑

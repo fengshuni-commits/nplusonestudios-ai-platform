@@ -679,3 +679,21 @@ export const analysisImageJobs = mysqlTable("analysis_image_jobs", {
 });
 export type AnalysisImageJob = typeof analysisImageJobs.$inferSelect;
 export type InsertAnalysisImageJob = typeof analysisImageJobs.$inferInsert;
+
+// ─── Graphic Layout Prompts (图文排版提示词) ──────────────────────────────────
+export const graphicLayoutPrompts = mysqlTable("graphic_layout_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  // 提示词类型：layout_plan_system（排版规划系统提示词）| image_generation（图像生成提示词后缀）
+  type: mysqlEnum("type", ["layout_plan_system", "image_generation"]).notNull().unique(),
+  // 显示名称
+  label: varchar("label", { length: 128 }).notNull(),
+  // 提示词内容
+  prompt: text("prompt").notNull(),
+  // 提示词说明（给编辑者的备注）
+  description: text("description"),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GraphicLayoutPrompt = typeof graphicLayoutPrompts.$inferSelect;
+export type InsertGraphicLayoutPrompt = typeof graphicLayoutPrompts.$inferInsert;
