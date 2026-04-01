@@ -46,14 +46,18 @@ export default function DesignTools() {
   const [editImgDims, setEditImgDims] = useState<{ dw: number; dh: number; nw: number; nh: number } | null>(null);
   const editImgRef = useRef<HTMLImageElement>(null);
 
-  // Material (dual: asset library + local upload)
-  const [materialUrl, setMaterialUrl] = useState<string | null>(null);
-  const [materialName, setMaterialName] = useState<string | null>(null);
-  const [materialPreview, setMaterialPreview] = useState<string | null>(null);
-  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  // Material (multi: up to 4 images, each can be from asset library or local upload)
+  interface MaterialItem {
+    url: string | null;      // S3 URL (from asset library or after upload)
+    file: File | null;       // local file (before upload)
+    preview: string;         // data URL or S3 URL for display
+    name: string;
+  }
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [assetSearch, setAssetSearch] = useState("");
   const materialFileRef = useRef<HTMLInputElement>(null);
+  const MAX_MATERIALS = 4;
 
   // Edit chain tracking
   const [parentHistoryId, setParentHistoryId] = useState<number | undefined>(undefined);
@@ -340,33 +344,34 @@ export default function DesignTools() {
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); }, []);
 
-  // ─── Material handlers (dual: library + local upload) ──
+  // ─── Material handlers (multi: up to 4 images) ──
   const handleSelectAsset = useCallback((asset: any) => {
-    setMaterialUrl(asset.fileUrl);
-    setMaterialPreview(asset.thumbnailUrl || asset.fileUrl);
-    setMaterialName(asset.name);
-    setMaterialFile(null);
+    setMaterials(prev => {
+      if (prev.length >= MAX_MATERIALS) { toast.error(`最多添加 ${MAX_MATERIALS} 张素材图片`); return prev; }
+      if (prev.some(m => m.url === asset.fileUrl)) { toast.error("该素材已添加"); return prev; }
+      return [...prev, { url: asset.fileUrl, file: null, preview: asset.thumbnailUrl || asset.fileUrl, name: asset.name }];
+    });
     setShowAssetPicker(false);
     setAssetSearch("");
-    toast.success(`已选择素材: ${asset.name}`);
+    toast.success(`已添加素材: ${asset.name}`);
   }, []);
 
   const handleMaterialFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !validateImageFile(file)) return;
-    setMaterialFile(file);
-    setMaterialUrl(null);
-    setMaterialName(file.name);
-    const dataUrl = await readFileAsDataUrl(file);
-    setMaterialPreview(dataUrl);
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    for (const file of files) {
+      if (!validateImageFile(file)) continue;
+      const dataUrl = await readFileAsDataUrl(file);
+      setMaterials(prev => {
+        if (prev.length >= MAX_MATERIALS) { toast.error(`最多添加 ${MAX_MATERIALS} 张素材图片`); return prev; }
+        return [...prev, { url: null, file, preview: dataUrl, name: file.name }];
+      });
+    }
+    if (materialFileRef.current) materialFileRef.current.value = "";
   }, [validateImageFile, readFileAsDataUrl]);
 
-  const handleRemoveMaterial = useCallback(() => {
-    setMaterialUrl(null);
-    setMaterialPreview(null);
-    setMaterialName(null);
-    setMaterialFile(null);
-    if (materialFileRef.current) materialFileRef.current.value = "";
+  const handleRemoveMaterial = useCallback((index: number) => {
+    setMaterials(prev => prev.filter((_, i) => i !== index));
   }, []);
 
   // ─── Use generated image as reference ─────────────────
@@ -474,31 +479,37 @@ export default function DesignTools() {
         setIsUploading(false);
       }
 
-      // Material image: upload local file if needed, and sync to asset library
-      if (materialUrl) {
-        materialImageUrl = materialUrl;
-      } else if (materialFile) {
+      // Material images: upload local files if needed, sync to asset library
+      const resolvedMaterialUrls: string[] = [];
+      if (materials.length > 0) {
         setIsUploading(true);
         try {
-          const base64 = await fileToBase64(materialFile);
-          // Upload to assets storage
-          const uploadResult = await assetsUploadMutation.mutateAsync({
-            fileName: materialFile.name, fileData: base64, contentType: materialFile.type,
-          });
-          materialImageUrl = uploadResult.url;
-          // Sync to asset library
-          await createAssetMutation.mutateAsync({
-            name: materialFile.name.replace(/\.[^.]+$/, ""),
-            fileUrl: uploadResult.url,
-            fileKey: uploadResult.key,
-            fileType: materialFile.type,
-            fileSize: materialFile.size,
-            thumbnailUrl: uploadResult.url,
-            category: "image",
-            tags: "素材,AI效果图上传",
-          });
-          toast.success("素材已同步到素材库");
-          refetchAssets();
+          for (const mat of materials) {
+            if (mat.url) {
+              resolvedMaterialUrls.push(mat.url);
+            } else if (mat.file) {
+              const base64 = await fileToBase64(mat.file);
+              const uploadResult = await assetsUploadMutation.mutateAsync({
+                fileName: mat.file.name, fileData: base64, contentType: mat.file.type,
+              });
+              resolvedMaterialUrls.push(uploadResult.url);
+              // Sync to asset library
+              await createAssetMutation.mutateAsync({
+                name: mat.file.name.replace(/\.[^.]+$/, ""),
+                fileUrl: uploadResult.url,
+                fileKey: uploadResult.key,
+                fileType: mat.file.type,
+                fileSize: mat.file.size,
+                thumbnailUrl: uploadResult.url,
+                category: "image",
+                tags: "素材,AI效果图上传",
+              });
+            }
+          }
+          if (resolvedMaterialUrls.length > 0) {
+            toast.success("素材已同步到素材库");
+            refetchAssets();
+          }
         } catch { toast.error("素材上传失败"); setIsGenerating(false); setIsUploading(false); return; }
         setIsUploading(false);
       }
@@ -508,7 +519,8 @@ export default function DesignTools() {
       generateMutation.mutate({
         prompt, styleId, toolId,
         referenceImageUrl, parentHistoryId,
-        materialImageUrl, maskImageData,
+        materialImageUrls: resolvedMaterialUrls.length > 0 ? resolvedMaterialUrls : undefined,
+        maskImageData,
         aspectRatio: aspectRatio !== "auto" ? aspectRatio : undefined,
         resolution: resolution !== "standard" ? resolution : undefined,
       });
@@ -648,47 +660,55 @@ export default function DesignTools() {
               />
             </div>
 
-            {/* ── Material: dual entry (asset library + local upload) ── */}
+            {/* ── Material: multi-image (up to 4) ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <FolderOpen className="h-3.5 w-3.5" />
                 增加素材
-                <span className="text-xs text-muted-foreground font-normal">（可选）</span>
+                <span className="text-xs text-muted-foreground font-normal">（可选，最多 {MAX_MATERIALS} 张）</span>
               </Label>
 
-              {materialPreview ? (
-                <div className="relative group rounded-lg overflow-hidden border border-border bg-muted">
-                  <img src={materialPreview} alt="素材图片" className="w-full h-24 object-contain bg-black/5" />
-                  <button
-                    type="button"
-                    onClick={handleRemoveMaterial}
-                    className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent px-2 py-1">
-                    <p className="text-[10px] text-white/90 truncate">{materialName || "素材"}</p>
-                  </div>
+              {/* Existing materials grid */}
+              {materials.length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {materials.map((mat, idx) => (
+                    <div key={idx} className="relative group rounded-md overflow-hidden border border-border bg-muted aspect-square">
+                      <img src={mat.preview} alt={mat.name} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMaterial(idx)}
+                        className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5">
+                        <p className="text-[9px] text-white/90 truncate">{mat.name}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ) : (
+              )}
+
+              {/* Add buttons (shown when under limit) */}
+              {materials.length < MAX_MATERIALS && (
                 <div className="grid grid-cols-2 gap-2">
                   <div
                     onClick={() => setShowAssetPicker(true)}
-                    className="border border-dashed border-border/60 rounded-lg p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
+                    className="border border-dashed border-border/60 rounded-lg p-2.5 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
                   >
-                    <FolderOpen className="h-4 w-4 text-muted-foreground/50" />
-                    <span className="text-[11px] text-muted-foreground">素材库选择</span>
+                    <FolderOpen className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    <span className="text-[10px] text-muted-foreground">素材库选择</span>
                   </div>
                   <div
                     onClick={() => materialFileRef.current?.click()}
-                    className="border border-dashed border-border/60 rounded-lg p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
+                    className="border border-dashed border-border/60 rounded-lg p-2.5 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary/40 hover:bg-muted/50 transition-colors"
                   >
-                    <Upload className="h-4 w-4 text-muted-foreground/50" />
-                    <span className="text-[11px] text-muted-foreground">本地上传</span>
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    <span className="text-[10px] text-muted-foreground">本地上传</span>
                   </div>
                 </div>
               )}
-              <input ref={materialFileRef} type="file" accept="image/*" className="hidden" onChange={handleMaterialFileSelect} />
+              <input ref={materialFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleMaterialFileSelect} />
             </div>
 
             {/* ── Style + Aspect Ratio + Resolution ── */}
@@ -756,11 +776,11 @@ export default function DesignTools() {
               )}
             </Button>
 
-            {(hasReference || maskDataUrl || materialPreview) && (
+            {(hasReference || maskDataUrl || materials.length > 0) && (
               <p className="text-[11px] text-muted-foreground/70 text-center">
                 {maskDataUrl
                   ? "将只修改标注区域，保持其余部分不变"
-                  : materialPreview && hasReference
+                  : materials.length > 0 && hasReference
                     ? "将结合基础图与素材图片共同生成新图像"
                     : hasReference
                       ? "将基于基础图片和描述共同生成新图像"

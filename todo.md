@@ -1453,3 +1453,11 @@
 - [x] 修复后端硬编码 mimeType 为 image/jpeg 的问题（应根据实际文件类型动态设置）
 - [x] 前端上传时传递 contentType 字段到后端
 - [x] 验证 PNG/JPEG/WEBP 等格式均可正常上传和生成
+
+## AI 效果图：多素材图片上传支持
+- [x] 后端：generate 接口新增 materialImageUrls 数组参数（支持多张素材图）
+- [x] 后端：generateRenderingInBackground 将多张素材图合并到 originalImages 中
+- [x] 前端：素材图片区域改为多图列表（最多 4 张）
+- [x] 前端：支持本地上传多张素材图片
+- [x] 前端：支持从素材库选取多张素材图片
+- [x] 前端：每张素材图显示缩略图和删除按钮

@@ -2109,6 +2109,7 @@ async function generateRenderingInBackground(
     referenceImageUrl?: string;
     parentHistoryId?: number;
     materialImageUrl?: string;
+    materialImageUrls?: string[]; // 多素材支持
     maskImageData?: string;
     aspectRatio?: string;
     resolution?: string;
@@ -2200,7 +2201,15 @@ async function generateRenderingInBackground(
         originalImages.push({ url: input.referenceImageUrl, mimeType: "image/png" });
       }
     }
-    if (input.materialImageUrl) originalImages.push({ url: input.materialImageUrl, mimeType: "image/png" });
+    // Support both single materialImageUrl (legacy) and multiple materialImageUrls
+    const allMaterialUrls = [
+      ...(input.materialImageUrls || []),
+      ...(input.materialImageUrl && !(input.materialImageUrls?.includes(input.materialImageUrl)) ? [input.materialImageUrl] : []),
+    ];
+    for (const matUrl of allMaterialUrls) {
+      const matMime = /\.png$/i.test(matUrl) ? "image/png" : /\.webp$/i.test(matUrl) ? "image/webp" : "image/jpeg";
+      originalImages.push({ url: matUrl, mimeType: matMime });
+    }
     if (styleRefImageUrl) originalImages.push({ url: styleRefImageUrl, mimeType: "image/png" });
     if (originalImages.length > 0) genOpts.originalImages = originalImages;
     if (imageSize) genOpts.size = imageSize;
@@ -2243,6 +2252,7 @@ async function generateRenderingInBackground(
         style: input.style,
         referenceImageUrl: input.referenceImageUrl || null,
         materialImageUrl: input.materialImageUrl || null,
+        materialImageUrls: input.materialImageUrls || null,
         hasMask: !!input.maskImageData,
         aspectRatio: input.aspectRatio || null,
         resolution: input.resolution || null,
@@ -2287,6 +2297,7 @@ const renderingRouter = router({
       referenceImageUrl: z.string().url().optional(),
       parentHistoryId: z.number().optional(),
       materialImageUrl: z.string().url().optional(),
+      materialImageUrls: z.array(z.string().url()).max(4).optional(), // 最多 4 张素材
       maskImageData: z.string().optional(),
       aspectRatio: z.string().optional(),
       resolution: z.string().optional(),
