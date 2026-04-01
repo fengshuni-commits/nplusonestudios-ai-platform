@@ -1483,3 +1483,12 @@
 - [x] 前端：文件转换模式新增「文字去除 AI」选择器（AiToolSelector，showBuiltIn=false，仅显示用户配置的外部工具）
 - [x] 前端：handleConvertFromFile 将 inpaintToolId 传递给后端
 - [x] PPT 幻灯片比例根据原图实际像素尺寸动态计算（非固定 16:9）
+
+## 演示文稿 PPT 真实预览功能
+- [x] 后端：convertPptxToPreviewImages 辅助函数（PPTX → PDF → PNG，上传 S3）
+- [x] 后端：AI 创作模式生成完成后调用预览图转换，返回 previewImages 字段
+- [x] 后端：文件转换模式生成完成后调用预览图转换，返回 previewImages 字段
+- [x] 后端：status 接口在 done 状态中返回 previewImages
+- [x] 前端：jobStatus done 时保存 previewImages 到 resultPreviewImages state
+- [x] 前端：用真实 PPTX 截图替代 React 模拟渲染（两种模式统一）
+- [x] 前端：文件转换模式保留原始页面对比面板（可折叠）

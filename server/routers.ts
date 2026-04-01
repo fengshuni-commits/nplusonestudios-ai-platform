@@ -40,10 +40,59 @@ import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
 type PptJob =
   | { status: "processing"; progress: number; stage: string }
-  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[]; pageImages?: string[]; pageSummaries?: Array<{ texts: string[]; imageCount: number }> }
+  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[]; pageImages?: string[]; pageSummaries?: Array<{ texts: string[]; imageCount: number }>; previewImages?: string[] }
   | { status: "failed"; error: string };
 
 const pptJobStore = new Map<string, PptJob>();
+
+/**
+ * Convert a PPTX buffer to per-slide PNG preview images.
+ * Uses LibreOffice (PPTX → PDF) + pdftoppm (PDF → PNG).
+ * Returns an array of S3 URLs (one per slide), or [] on failure.
+ */
+async function convertPptxToPreviewImages(pptxBuffer: Buffer, jobId: string): Promise<string[]> {
+  const { execSync } = await import("child_process");
+  const fs = await import("fs");
+  const path = await import("path");
+  const os = await import("os");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pptx-preview-"));
+  try {
+    const pptxPath = path.join(tmpDir, "presentation.pptx");
+    const pdfDir = path.join(tmpDir, "pdf");
+    const imgDir = path.join(tmpDir, "imgs");
+    fs.writeFileSync(pptxPath, pptxBuffer);
+    fs.mkdirSync(pdfDir);
+    fs.mkdirSync(imgDir);
+    // Step 1: PPTX → PDF
+    execSync(`libreoffice --headless --convert-to pdf --outdir "${pdfDir}" "${pptxPath}"`, { timeout: 120000 });
+    const pdfFiles = fs.readdirSync(pdfDir).filter((f: string) => f.endsWith(".pdf"));
+    if (pdfFiles.length === 0) { console.warn("[PptxPreview] LibreOffice produced no PDF"); return []; }
+    const pdfPath = path.join(pdfDir, pdfFiles[0]);
+    // Step 2: PDF → PNG (150 dpi)
+    execSync(`pdftoppm -r 150 -png "${pdfPath}" "${path.join(imgDir, "slide")}"`, { timeout: 120000 });
+    const pngFiles = fs.readdirSync(imgDir)
+      .filter((f: string) => f.startsWith("slide") && f.endsWith(".png"))
+      .sort()
+      .map((f: string) => path.join(imgDir, f));
+    if (pngFiles.length === 0) { console.warn("[PptxPreview] pdftoppm produced no PNGs"); return []; }
+    // Step 3: Upload each PNG to S3
+    const urls: string[] = [];
+    for (let i = 0; i < pngFiles.length; i++) {
+      try {
+        const buf = fs.readFileSync(pngFiles[i]);
+        const key = `presentations/previews/${jobId}-slide${i + 1}.png`;
+        const { url } = await storagePut(key, buf, "image/png");
+        urls.push(url);
+      } catch (e) { console.error(`[PptxPreview] Failed to upload slide ${i + 1}:`, e); }
+    }
+    return urls;
+  } catch (e) {
+    console.error("[PptxPreview] Conversion failed:", e);
+    return [];
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
 
 async function generatePptInBackground(
   jobId: string,
@@ -3810,6 +3859,10 @@ async function generatePresentationInBackground(
     const fileKey = `pptx/pres_${nanoid()}-${input.title}.pptx`;
     const { url } = await storagePut(fileKey, pptxBuffer, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
 
+    // Stage 4.5: Generate slide preview images (PPTX → PDF → PNG)
+    presentationJobStore.set(jobId, { status: "processing", progress: 90, stage: "building_pptx" });
+    const previewImages = await convertPptxToPreviewImages(pptxBuffer, jobId);
+
     // Build slide preview data (title, subtitle, bullets, layout, imageUrl, styleGuide)
     const slidePreviews: PptSlidePreview[] = slideData.slides.map((s, i) => ({
       title: s.title,
@@ -3826,6 +3879,7 @@ async function generatePresentationInBackground(
       slideCount: slideData.slides.length,
       imageCount: imageBase64Map.size,
       slides: slidePreviews,
+      previewImages,
     });
     console.log(`[Presentation] Job ${jobId} completed: ${slideData.slides.length} slides, ${imageBase64Map.size} images`);
     if (userId) {
@@ -3932,7 +3986,7 @@ const presentationRouter = router({
       if (!job) return { status: "not_found" as const, progress: 0, stage: "" as const };
       if (job.status === "done") {
         setTimeout(() => presentationJobStore.delete(input.jobId), 5 * 60 * 1000);
-        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount, slides: job.slides };
+        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount, slides: job.slides, pageImages: job.pageImages, pageSummaries: job.pageSummaries, previewImages: job.previewImages };
       }
       if (job.status === "failed") {
         setTimeout(() => presentationJobStore.delete(input.jobId), 60 * 1000);
@@ -4346,24 +4400,24 @@ async function generatePresentationFromFileInBackground(
       }).catch((e: any) => { console.error("[PresentationConvert] History save failed:", e); });
     }
 
-     // ── Step 5: Upload page images for preview ──────────────────────────────
+    // ── Step 5: Generate PPTX preview images (PPTX → PDF → PNG) ──────────────
     presentationJobStore.set(jobId, { status: "processing", progress: 93, stage: "building_pptx" });
+    const previewImages = await convertPptxToPreviewImages(pptxBuffer, jobId);
+
+    // Also upload original page images for the "source vs result" comparison panel
     const pageImageUrls: string[] = [];
     const pageSummaries: Array<{ texts: string[]; imageCount: number }> = [];
     for (let i = 0; i < pageImageBase64s.length; i++) {
       const pg = pageImageBase64s[i];
       const analysis = slideAnalyses[i];
-      // Upload original page image for preview
       try {
         const imgBuf = Buffer.from(pg.data, "base64");
         const previewKey = `presentations/previews/${jobId}-page${i + 1}.${pg.ext}`;
         const { url: previewUrl } = await storagePut(previewKey, imgBuf, `image/${pg.ext}`);
         pageImageUrls.push(previewUrl);
       } catch (e) {
-        // If original URL available, use it directly
         pageImageUrls.push(pg.url || "");
       }
-      // Build page summary from analysis
       const texts = (analysis?.textElements || [])
         .map((el: any) => el.text?.trim())
         .filter((t: string) => t && t.length > 0)
@@ -4382,7 +4436,8 @@ async function generatePresentationFromFileInBackground(
       imageCount: pageImageBase64s.length,
       slides: [],
       pageImages: pageImageUrls,
-      pageSummaries
+      pageSummaries,
+      previewImages,
     });
   } catch (err: any) {
     console.error("[PresentationConvert] Failed:", err);

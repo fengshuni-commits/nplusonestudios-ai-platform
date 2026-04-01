@@ -107,6 +107,7 @@ export default function PresentationPage() {
   const [resultPageSummaries, setResultPageSummaries] = useState<Array<{ texts: string[]; imageCount: number }>>([]);
   const [isFileConvertResult, setIsFileConvertResult] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [resultPreviewImages, setResultPreviewImages] = useState<string[]>([]); // Real PPTX slide screenshots
 
   // History
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -164,7 +165,15 @@ export default function PresentationPage() {
       setResultSlideCount(jobStatus.slideCount || null);
       setResultSlides((jobStatus.slides as any) || []);
       setPreviewSlideIndex(0);
-      // Save page images and summaries for file convert preview
+      // Save real PPTX preview images (LibreOffice-rendered screenshots)
+      const previewImgs = (jobStatus as any).previewImages as string[] | undefined;
+      if (previewImgs && previewImgs.length > 0) {
+        setResultPreviewImages(previewImgs);
+        setPreviewSlideIndex(0);
+      } else {
+        setResultPreviewImages([]);
+      }
+      // Save page images and summaries for file convert comparison panel
       const pageImgs = (jobStatus as any).pageImages as string[] | undefined;
       const pageSums = (jobStatus as any).pageSummaries as Array<{ texts: string[]; imageCount: number }> | undefined;
       if (pageImgs && pageImgs.length > 0) {
@@ -829,83 +838,108 @@ export default function PresentationPage() {
                   </div>
                 </div>
                 <Separator />
-                {/* File Convert Preview Panel */}
-                {isFileConvertResult && resultPageImages.length > 0 && (
+                {/* ── Real PPTX Slide Preview (LibreOffice-rendered screenshots) ── */}
+                {resultPreviewImages.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">还原质量预览</p>
-                      <p className="text-xs text-muted-foreground">{previewPageIndex + 1} / {resultPageImages.length} 页</p>
+                      <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>
+                      <p className="text-xs text-muted-foreground">{previewSlideIndex + 1} / {resultPreviewImages.length} 页</p>
                     </div>
-                    {/* Page preview: original image + recognized content */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Left: original page image */}
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] text-muted-foreground font-medium">原始页面</p>
-                        <div className="rounded-lg overflow-hidden border border-border bg-muted/30" style={{ aspectRatio: '3/4', maxHeight: '280px' }}>
-                          <img
-                            src={resultPageImages[previewPageIndex]}
-                            alt={`第 ${previewPageIndex + 1} 页原图`}
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                      </div>
-                      {/* Right: recognized content */}
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] text-muted-foreground font-medium">识别内容</p>
-                        <div className="rounded-lg border border-border bg-card p-3 space-y-2" style={{ minHeight: '140px' }}>
-                          {resultPageSummaries[previewPageIndex]?.texts.length > 0 ? (
-                            <div className="space-y-1.5">
-                              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">文字元素</p>
-                              {resultPageSummaries[previewPageIndex].texts.map((t, ti) => (
-                                <div key={ti} className="flex items-start gap-1.5">
-                                  <span className="text-primary mt-0.5 flex-shrink-0">·</span>
-                                  <span className="text-xs text-foreground leading-snug">{t}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground italic">本页无独立文字元素</p>
-                          )}
-                          {resultPageSummaries[previewPageIndex]?.imageCount > 0 && (
-                            <div className="pt-1.5 border-t border-border/50">
-                              <p className="text-[10px] text-muted-foreground">
-                                识别到 {resultPageSummaries[previewPageIndex].imageCount} 个图片区域
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                    {/* Slide image */}
+                    <div className="relative w-full rounded-lg overflow-hidden border border-border bg-muted/20" style={{ aspectRatio: '16/9' }}>
+                      <img
+                        src={resultPreviewImages[previewSlideIndex]}
+                        alt={`幻灯片第 ${previewSlideIndex + 1} 页`}
+                        className="w-full h-full object-contain"
+                      />
                     </div>
-                    {/* Page navigation */}
+                    {/* Thumbnail strip */}
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {resultPreviewImages.map((imgUrl, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setPreviewSlideIndex(i)}
+                          className={`shrink-0 rounded overflow-hidden border-2 transition-all ${
+                            i === previewSlideIndex ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-80'
+                          }`}
+                          style={{ width: 72, height: 40.5 }}
+                        >
+                          <img src={imgUrl} alt={`第 ${i + 1} 页`} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                    {/* Navigation buttons */}
                     <div className="flex items-center justify-center gap-2">
                       <Button
                         variant="outline" size="sm"
-                        disabled={previewPageIndex === 0}
-                        onClick={() => setPreviewPageIndex(i => Math.max(0, i - 1))}
+                        disabled={previewSlideIndex === 0}
+                        onClick={() => setPreviewSlideIndex(i => Math.max(0, i - 1))}
                       >
                         上一页
                       </Button>
-                      <div className="flex gap-1">
-                        {resultPageImages.map((_, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setPreviewPageIndex(i)}
-                            className={`h-1.5 rounded-full transition-all ${i === previewPageIndex ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/40'}`}
-                          />
-                        ))}
-                      </div>
+                      <span className="text-xs text-muted-foreground">{previewSlideIndex + 1} / {resultPreviewImages.length}</span>
                       <Button
                         variant="outline" size="sm"
-                        disabled={previewPageIndex === resultPageImages.length - 1}
-                        onClick={() => setPreviewPageIndex(i => Math.min(resultPageImages.length - 1, i + 1))}
+                        disabled={previewSlideIndex === resultPreviewImages.length - 1}
+                        onClick={() => setPreviewSlideIndex(i => Math.min(resultPreviewImages.length - 1, i + 1))}
                       >
                         下一页
                       </Button>
                     </div>
                   </div>
                 )}
-                {/* PPT Slide Preview (for AI-generated mode) */}
-                {!isFileConvertResult && resultSlides.length > 0 && (
+                {/* File Convert: Original vs Recognized comparison (collapsible) */}
+                {isFileConvertResult && resultPageImages.length > 0 && resultPreviewImages.length > 0 && (
+                  <details className="group">
+                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors list-none flex items-center gap-1.5 py-1">
+                      <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                      查看原始页面与识别内容对比
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">原始页面 vs 识别内容</p>
+                        <p className="text-xs text-muted-foreground">{previewPageIndex + 1} / {resultPageImages.length} 页</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] text-muted-foreground font-medium">原始页面</p>
+                          <div className="rounded-lg overflow-hidden border border-border bg-muted/30" style={{ aspectRatio: '4/3', maxHeight: '240px' }}>
+                            <img src={resultPageImages[previewPageIndex]} alt={`第 ${previewPageIndex + 1} 页原图`} className="w-full h-full object-contain" />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] text-muted-foreground font-medium">识别内容</p>
+                          <div className="rounded-lg border border-border bg-card p-3 space-y-2" style={{ minHeight: '120px' }}>
+                            {resultPageSummaries[previewPageIndex]?.texts.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {resultPageSummaries[previewPageIndex].texts.map((t, ti) => (
+                                  <div key={ti} className="flex items-start gap-1.5">
+                                    <span className="text-primary mt-0.5 flex-shrink-0">·</span>
+                                    <span className="text-xs text-foreground leading-snug">{t}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground italic">本页无独立文字元素</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <Button variant="outline" size="sm" disabled={previewPageIndex === 0} onClick={() => setPreviewPageIndex(i => Math.max(0, i - 1))}>上一页</Button>
+                        <div className="flex gap-1">
+                          {resultPageImages.map((_, i) => (
+                            <button key={i} onClick={() => setPreviewPageIndex(i)}
+                              className={`h-1.5 rounded-full transition-all ${i === previewPageIndex ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/40'}`} />
+                          ))}
+                        </div>
+                        <Button variant="outline" size="sm" disabled={previewPageIndex === resultPageImages.length - 1} onClick={() => setPreviewPageIndex(i => Math.min(resultPageImages.length - 1, i + 1))}>下一页</Button>
+                      </div>
+                    </div>
+                  </details>
+                )}
+                {/* Fallback: AI-generated slide canvas (shown only if no real preview images yet) */}
+                {!isFileConvertResult && resultPreviewImages.length === 0 && resultSlides.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>
