@@ -272,6 +272,9 @@ export default function MediaLayout() {
   const retryPackMutation = trpc.graphicStylePacks.retry.useMutation({
     onSuccess: () => { refetchPacks(); toast.success("已重新提取"); },
   });
+  const createPackMutation = trpc.graphicStylePacks.create.useMutation({
+    onSuccess: () => { refetchPacks(); },
+  });
 
   useEffect(() => {
     const hasPending = (stylePacks as StylePack[]).some((p) => p.status === "pending" || p.status === "processing");
@@ -427,8 +430,7 @@ export default function MediaLayout() {
       const { url, key } = await uploadFile(file);
       const ext = file.name.split(".").pop()?.toLowerCase();
       const sourceType = ext === "pdf" ? "pdf" : "images";
-      const utils = trpc.useUtils();
-      await utils.client.graphicStylePacks.create.mutate({ name: packNameInput.trim(), sourceType, sourceFileUrl: url, sourceFileKey: key });
+      await createPackMutation.mutateAsync({ name: packNameInput.trim(), sourceType, sourceFileUrl: url, sourceFileKey: key });
       const extra = files.length > 1 ? `（已选 ${files.length} 个文件，使用第一个作为版式参考）` : "";
       toast.success(`版式包上传成功${extra}，AI 正在分析风格...`);
       setShowPackUpload(false);
