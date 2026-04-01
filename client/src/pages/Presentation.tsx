@@ -103,6 +103,10 @@ export default function PresentationPage() {
   const [resultSlides, setResultSlides] = useState<Array<{ title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any }>>([]); 
   const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [resultPageImages, setResultPageImages] = useState<string[]>([]);
+  const [resultPageSummaries, setResultPageSummaries] = useState<Array<{ texts: string[]; imageCount: number }>>([]);
+  const [isFileConvertResult, setIsFileConvertResult] = useState(false);
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
 
   // History
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -159,6 +163,19 @@ export default function PresentationPage() {
       setResultSlideCount(jobStatus.slideCount || null);
       setResultSlides((jobStatus.slides as any) || []);
       setPreviewSlideIndex(0);
+      // Save page images and summaries for file convert preview
+      const pageImgs = (jobStatus as any).pageImages as string[] | undefined;
+      const pageSums = (jobStatus as any).pageSummaries as Array<{ texts: string[]; imageCount: number }> | undefined;
+      if (pageImgs && pageImgs.length > 0) {
+        setResultPageImages(pageImgs);
+        setResultPageSummaries(pageSums || []);
+        setIsFileConvertResult(true);
+        setPreviewPageIndex(0);
+      } else {
+        setResultPageImages([]);
+        setResultPageSummaries([]);
+        setIsFileConvertResult(false);
+      }
       setJobId(null);
       refetchHistory();
       toast.success(`演示文稿生成完成，共 ${jobStatus.slideCount} 页幻灯片`);
@@ -794,8 +811,83 @@ export default function PresentationPage() {
                   </div>
                 </div>
                 <Separator />
-                {/* PPT Slide Preview */}
-                {resultSlides.length > 0 && (
+                {/* File Convert Preview Panel */}
+                {isFileConvertResult && resultPageImages.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">还原质量预览</p>
+                      <p className="text-xs text-muted-foreground">{previewPageIndex + 1} / {resultPageImages.length} 页</p>
+                    </div>
+                    {/* Page preview: original image + recognized content */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Left: original page image */}
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-muted-foreground font-medium">原始页面</p>
+                        <div className="rounded-lg overflow-hidden border border-border bg-muted/30" style={{ aspectRatio: '3/4', maxHeight: '280px' }}>
+                          <img
+                            src={resultPageImages[previewPageIndex]}
+                            alt={`第 ${previewPageIndex + 1} 页原图`}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      </div>
+                      {/* Right: recognized content */}
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-muted-foreground font-medium">识别内容</p>
+                        <div className="rounded-lg border border-border bg-card p-3 space-y-2" style={{ minHeight: '140px' }}>
+                          {resultPageSummaries[previewPageIndex]?.texts.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">文字元素</p>
+                              {resultPageSummaries[previewPageIndex].texts.map((t, ti) => (
+                                <div key={ti} className="flex items-start gap-1.5">
+                                  <span className="text-primary mt-0.5 flex-shrink-0">·</span>
+                                  <span className="text-xs text-foreground leading-snug">{t}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">本页无独立文字元素</p>
+                          )}
+                          {resultPageSummaries[previewPageIndex]?.imageCount > 0 && (
+                            <div className="pt-1.5 border-t border-border/50">
+                              <p className="text-[10px] text-muted-foreground">
+                                识别到 {resultPageSummaries[previewPageIndex].imageCount} 个图片区域
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Page navigation */}
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        variant="outline" size="sm"
+                        disabled={previewPageIndex === 0}
+                        onClick={() => setPreviewPageIndex(i => Math.max(0, i - 1))}
+                      >
+                        上一页
+                      </Button>
+                      <div className="flex gap-1">
+                        {resultPageImages.map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setPreviewPageIndex(i)}
+                            className={`h-1.5 rounded-full transition-all ${i === previewPageIndex ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/40'}`}
+                          />
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline" size="sm"
+                        disabled={previewPageIndex === resultPageImages.length - 1}
+                        onClick={() => setPreviewPageIndex(i => Math.min(resultPageImages.length - 1, i + 1))}
+                      >
+                        下一页
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {/* PPT Slide Preview (for AI-generated mode) */}
+                {!isFileConvertResult && resultSlides.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>

@@ -40,7 +40,7 @@ import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
 type PptJob =
   | { status: "processing"; progress: number; stage: string }
-  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[] }
+  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[]; pageImages?: string[]; pageSummaries?: Array<{ texts: string[]; imageCount: number }> }
   | { status: "failed"; error: string };
 
 const pptJobStore = new Map<string, PptJob>();
@@ -4247,15 +4247,43 @@ async function generatePresentationFromFileInBackground(
       }).catch((e: any) => { console.error("[PresentationConvert] History save failed:", e); });
     }
 
+     // ── Step 5: Upload page images for preview ──────────────────────────────
+    presentationJobStore.set(jobId, { status: "processing", progress: 93, stage: "building_pptx" });
+    const pageImageUrls: string[] = [];
+    const pageSummaries: Array<{ texts: string[]; imageCount: number }> = [];
+    for (let i = 0; i < pageImageBase64s.length; i++) {
+      const pg = pageImageBase64s[i];
+      const analysis = slideAnalyses[i];
+      // Upload original page image for preview
+      try {
+        const imgBuf = Buffer.from(pg.data, "base64");
+        const previewKey = `presentations/previews/${jobId}-page${i + 1}.${pg.ext}`;
+        const { url: previewUrl } = await storagePut(previewKey, imgBuf, `image/${pg.ext}`);
+        pageImageUrls.push(previewUrl);
+      } catch (e) {
+        // If original URL available, use it directly
+        pageImageUrls.push(pg.url || "");
+      }
+      // Build page summary from analysis
+      const texts = (analysis?.textElements || [])
+        .map((el: any) => el.text?.trim())
+        .filter((t: string) => t && t.length > 0)
+        .slice(0, 5);
+      pageSummaries.push({
+        texts,
+        imageCount: (analysis?.imageRegions || []).length
+      });
+    }
     // Cleanup temp dir
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-
     presentationJobStore.set(jobId, {
       status: "done", url: pptxUrl,
       title: input.title || `转换文稿 (${pageImageBase64s.length}页)`,
       slideCount: pageImageBase64s.length,
       imageCount: pageImageBase64s.length,
-      slides: []
+      slides: [],
+      pageImages: pageImageUrls,
+      pageSummaries
     });
   } catch (err: any) {
     console.error("[PresentationConvert] Failed:", err);
