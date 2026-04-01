@@ -1411,3 +1411,7 @@
 ## 待修复问题
 - [x] 图文排版版式包学习：上传图片失败（修复 hooks 规则违规，将 trpc.useUtils() 移到组件顶层）
 - [x] API 文档页面无法打开（已确认开发预览正常，生产域名需重新发布）
+
+## 图文排版版式学习修复
+- [x] 修复 extractGraphicStylePackAsync：用 fetch 替换 https.get（支持重定向）
+- [x] 修复 extractGraphicStylePackAsync：图片转换失败时直接报错（不再静默 fallback）

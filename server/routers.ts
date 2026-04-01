@@ -4757,15 +4757,12 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
     try {
       const fileExt = fileUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? "pdf";
       const localFile = join(tmpDir, `source.${fileExt}`);
-      await new Promise<void>((resolve, reject) => {
-        const isHttps = fileUrl.startsWith("https");
-        import(isHttps ? "https" : "http").then(protocol => {
-          import("fs").then(fsModule => {
-            const file = fsModule.createWriteStream(localFile);
-            (protocol as any).get(fileUrl, (res: any) => { res.pipe(file); file.on("finish", () => { file.close(); resolve(); }); }).on("error", reject);
-          });
-        });
-      });
+      // 使用 fetch 下载文件（自动跟随重定向，兼容 CloudFront CDN）
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) throw new Error(`下载文件失败: HTTP ${fileResp.status}`);
+      const fileBuffer = Buffer.from(await fileResp.arrayBuffer());
+      const { writeFileSync } = await import("fs");
+      writeFileSync(localFile, fileBuffer);
       const tmpImgDir = join(tmpDir, "imgs");
       execSync(`mkdir -p "${tmpImgDir}"`);
       if (sourceType === "pdf") {
@@ -4778,9 +4775,11 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
           try { execSync(`pdftoppm -r 150 -f ${i} -l ${i} -jpeg "${localFile}" "${outPrefix}"`); } catch {}
         }
       } else {
-        execSync(`cp "${localFile}" "${tmpImgDir}/page-1.jpg"`);
+        // 保留原始扩展名，避免 MIME 类型误判
+        const imgExt = ["jpg", "jpeg", "png", "webp"].includes(fileExt) ? fileExt : "jpg";
+        execSync(`cp "${localFile}" "${tmpImgDir}/page-1.${imgExt}"`);
       }
-      const imgFiles = readdirSync(tmpImgDir).filter(f => /\.(jpg|jpeg|png)$/i.test(f)).sort();
+      const imgFiles = readdirSync(tmpImgDir).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f)).sort();
       const maxImages = Math.min(10, imgFiles.length);
       const stepImg = Math.max(1, Math.floor(imgFiles.length / maxImages));
       const sampledFiles: string[] = [];
@@ -4788,20 +4787,21 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
       for (const imgFile of sampledFiles) {
         const imgPath = join(tmpImgDir, imgFile);
         const imgBase64 = readFileSync(imgPath).toString("base64");
-        const mime = imgFile.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+        const ext = imgFile.split(".").pop()?.toLowerCase();
+        const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
         imageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${imgBase64}`, detail: "high" } });
       }
       if (imageContent.length === 0) throw new Error("未能从文件中提取页面图片");
     } catch (convErr: any) {
-      console.warn(`[GraphicStylePack] Image conversion failed:`, convErr.message);
+      // 图片转换失败时直接抛出，不再静默降级为无参考的 fallback
+      try { execSync(`rm -rf "${tmpDir}"`); } catch {}
+      throw new Error(`图片处理失败：${convErr.message}`);
     } finally {
       try { execSync(`rm -rf "${tmpDir}"`); } catch {}
     }
     const userContent: any[] = [
       ...imageContent,
-      { type: "text" as const, text: imageContent.length > 0
-        ? `这是一份图文排版参考文件（${imageContent.length} 张均匀采样截图）。请仔细观察每张截图的视觉设计，分析整份文件的图文排版风格。`
-        : `请生成一个典型的建筑设计品牌手册排版风格包。` },
+      { type: "text" as const, text: `这是一份图文排版参考文件（${imageContent.length} 张均匀采样截图）。请仔细观察每张截图的视觉设计，分析整份文件的图文排版风格。` },
     ];
     const response = await invokeLLM({
       messages: [
