@@ -4822,28 +4822,21 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
     } finally {
       try { execSync(`rm -rf "${tmpDir}"`); } catch {}
     }
-    const userContent: any[] = [
-      ...imageContent,
-      { type: "text" as const, text: `这是一份图文排版参考文件（${imageContent.length} 张均匀采样截图）。请仔细观察每张截图的视觉设计，分析整份文件的图文排版风格。` },
-    ];
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: `你是一个专业的图文排版设计分析师。仔细分析提供的图文排版参考截图，提取其设计风格特征。
+        { role: "system", content: `You are a senior brand designer and creative director. Your job is to look at these design screenshots and capture their visual DNA — the essence that makes this design feel the way it does.
 
-分析要求：
-1. 配色（最重要）：从截图中直接读取实际使用的颜色，输出准确的 hex 色値（如 #1a2b3c）。不得猜测或使用近似色。
-   - primary：截图中出现频率最高的主要品牌色
-   - background：页面背景色（从截图背景区域取色）
-   - text：正文文字颜色
-   - accent：强调色或边框色
-   - secondary：次要配色
-2. 字体：判断标题和正文的字体风格（无衡线、衡线、手写体等）
-3. 排版模式：识别具体的图文排版模式（如：全幅大图+文字叠加、左文右图分栏、上图下文、网格布局等）
-4. 视觉风格：整体调性、风格关键词、内容密度、空间感
-5. spacingDensity：内容密度（sparse/balanced/dense）
+Approach this like a designer, not a data extractor. Look at the whole before the parts:
+- What is the emotional register? (austere, warm, bold, quiet, technical, editorial...)
+- How does space work? Is it dense and information-rich, or spacious and minimal?
+- What is the relationship between image and text? Who dominates?
+- What makes this design distinctive — what would you immediately copy if you were designing something in this style?
 
-重要：配色必须来自对截图的直接观察，不得使用默认黑白色或常见模板配色。` },
-        { role: "user", content: userContent },
+Then extract the specific color values you actually see in the screenshots (read hex values directly, not guesses). Write the description as a creative brief — vivid, specific, useful to a designer who hasn't seen the reference.` },
+        { role: "user", content: [
+          ...imageContent,
+          { type: "text" as const, text: `Analyze these ${imageContent.length} design screenshots. Write a creative brief capturing the visual DNA of this style. Be specific about what you see.` },
+        ] },
       ],
       response_format: {
         type: "json_schema",
@@ -4853,12 +4846,12 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
           schema: {
             type: "object",
             properties: {
-              packName: { type: "string" },
-              description: { type: "string" },
-              colorPalette: { type: "object", properties: { primary: { type: "string" }, secondary: { type: "string" }, background: { type: "string" }, text: { type: "string" }, accent: { type: "string" } }, required: ["primary", "secondary", "background", "text", "accent"], additionalProperties: false },
-              typography: { type: "object", properties: { titleFont: { type: "string" }, bodyFont: { type: "string" }, style: { type: "string" } }, required: ["titleFont", "bodyFont", "style"], additionalProperties: false },
-              layoutPatterns: { type: "array", items: { type: "object", properties: { patternName: { type: "string" }, visualDescription: { type: "string" }, contentSuggestion: { type: "string" } }, required: ["patternName", "visualDescription", "contentSuggestion"], additionalProperties: false } },
-              styleKeywords: { type: "array", items: { type: "string" } },
+              packName: { type: "string", description: "Short descriptive name for this style, e.g. 'Dark Minimalist Brand', 'Warm Editorial'" },
+              description: { type: "string", description: "Rich creative brief: mood, personality, spatial rhythm, image-text relationship, what makes it distinctive. 3-5 sentences. Write as if briefing a designer who hasn't seen the reference." },
+              colorPalette: { type: "object", properties: { primary: { type: "string", description: "Most prominent brand/accent color, exact hex read from image" }, secondary: { type: "string", description: "Secondary color, exact hex" }, background: { type: "string", description: "Page background color, exact hex" }, text: { type: "string", description: "Main text color, exact hex" }, accent: { type: "string", description: "Accent/highlight color, exact hex" } }, required: ["primary", "secondary", "background", "text", "accent"], additionalProperties: false },
+              typography: { type: "object", properties: { titleFont: { type: "string", description: "Title font character, e.g. 'bold condensed sans-serif', 'light elegant serif'" }, bodyFont: { type: "string", description: "Body font character" }, style: { type: "string", description: "Typography personality, e.g. 'high contrast scale, editorial', 'uniform weight, technical'" } }, required: ["titleFont", "bodyFont", "style"], additionalProperties: false },
+              layoutPatterns: { type: "array", items: { type: "object", properties: { patternName: { type: "string" }, visualDescription: { type: "string", description: "How this layout looks and feels" }, contentSuggestion: { type: "string", description: "What content works best here" } }, required: ["patternName", "visualDescription", "contentSuggestion"], additionalProperties: false } },
+              styleKeywords: { type: "array", items: { type: "string" }, description: "5-8 keywords capturing the visual personality" },
               tone: { type: "string", enum: ["dark", "light", "mixed"] },
               density: { type: "string", enum: ["sparse", "balanced", "dense"] },
             },
@@ -5095,11 +5088,16 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}${byT
             : `incorporate the provided reference images as visual elements`)
         : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
 
-      // 构建图像生成 prompt，包含版式包配色和自定义风格后缀
+      // 构建图像生成 prompt：将版式包的视觉 DNA 描述完整传入
       const styleHintEn = sg
-        ? `Style pack "${(drizzleDb.select().from(graphicStylePacks) as any).name || "custom"}": primary color ${sg.colorPalette?.primary}, background ${sg.colorPalette?.background}, text color ${sg.colorPalette?.text}, accent ${sg.colorPalette?.accent}. Keywords: ${sg.styleKeywords?.join(", ") ?? ""}.`
+        ? [
+            sg.description ? `STYLE REFERENCE: ${sg.description}` : "",
+            `Color palette: background ${sg.colorPalette?.background}, primary ${sg.colorPalette?.primary}, text ${sg.colorPalette?.text}, accent ${sg.colorPalette?.accent}.`,
+            sg.styleKeywords?.length ? `Visual keywords: ${sg.styleKeywords.join(", ")}.` : "",
+            sg.typography?.style ? `Typography: ${sg.typography.style}.` : "",
+          ].filter(Boolean).join(" ")
         : "";
-      const imagePrompt = `Professional ${docTypeName} page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Typography layout: ${textDescriptions}. ${styleHintEn} Color scheme: background ${bgColor}, use exact hex colors from style guide. ${imageGenStyleSuffix}`;
+      const imagePrompt = `${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
 
       // Step 3: 调用图像 API 生成整页图片
       const genResult = await generateImageWithTool({
