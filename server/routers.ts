@@ -4820,6 +4820,68 @@ const graphicLayoutRouter = router({
       }
       return { stylePrompt: stylePrompt.trim() };
     }),
+  // ─── Update Job (关联项目/修改标题) ─────────────────────────────────────────
+  updateJob: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.id), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "排版记录不存在" });
+      const updateData: Record<string, any> = {};
+      if (input.title !== undefined) updateData.title = input.title;
+      if (Object.keys(updateData).length > 0) {
+        await drizzleDb.update(graphicLayoutJobs).set(updateData).where(_eq(graphicLayoutJobs.id, input.id));
+      }
+      return { success: true };
+    }),
+  // ─── Save pages to Asset Library ─────────────────────────────────────────────
+  saveToAssets: protectedProcedure
+    .input(z.object({
+      jobId: z.number(),
+      pageIndices: z.array(z.number()).optional(), // 不传则保存所有页
+      projectId: z.number().optional(),
+      category: z.string().optional().default("graphic_layout"),
+      tags: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.jobId), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "排版记录不存在" });
+      if (job.status !== "done") throw new TRPCError({ code: "BAD_REQUEST", message: "排版尚未完成" });
+      const pages = (job.pages as any[]) ?? [];
+      const targetPages = input.pageIndices
+        ? pages.filter((p: any) => input.pageIndices!.includes(p.pageIndex))
+        : pages;
+      if (targetPages.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "没有可保存的页面" });
+      const savedAssets: any[] = [];
+      for (const page of targetPages) {
+        const imageUrl: string = page.imageUrl ?? "";
+        if (!imageUrl) continue;
+        const assetName = `${job.title || "排版"} - 第${page.pageIndex + 1}页`;
+        const asset = await db.createAsset({
+          name: assetName,
+          fileUrl: imageUrl,
+          fileKey: imageUrl,
+          fileType: "image/png",
+          category: input.category ?? "graphic_layout",
+          tags: input.tags,
+          thumbnailUrl: imageUrl,
+          uploadedBy: ctx.user.id,
+          projectId: input.projectId,
+        });
+        savedAssets.push(asset);
+      }
+      return { savedCount: savedAssets.length, assets: savedAssets };
+    }),
 });
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 

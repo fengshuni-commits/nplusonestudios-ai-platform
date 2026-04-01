@@ -12,8 +12,12 @@ import { AiToolSelector } from "@/components/AiToolSelector";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
-  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images, HelpCircle
+  BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images, HelpCircle,
+  Link2, Library, RotateCcw, Eye, ChevronDown, ChevronUp, Folder
 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +76,11 @@ interface LayoutJob {
   htmlPages?: string[];
   errorMessage?: string;
   createdAt: Date;
+  // 用于继续编辑的字段
+  contentText?: string;
+  packId?: number;
+  pageCount?: number;
+  assetUrls?: any;
 }
 
 const DOC_TYPES = [
@@ -323,6 +332,55 @@ export default function MediaLayout() {
   const [activeJobId, setActiveJobId] = useState<number | undefined>();
   const [currentPage, setCurrentPage] = useState(0);
   const [generating, setGenerating] = useState(false);
+
+  // 历史记录详情面板
+  const [selectedHistoryJobId, setSelectedHistoryJobId] = useState<number | undefined>(); // 当前展开详情的 job
+  const [renamingJobId, setRenamingJobId] = useState<number | undefined>();
+  const [renameInput, setRenameInput] = useState("");
+  const [savingToAssets, setSavingToAssets] = useState(false);
+
+  // 项目列表（用于关联项目）
+  const { data: projectsData = [] } = trpc.projects.list.useQuery({});
+
+  // 保存到素材库 mutation
+  const saveToAssetsMutation = trpc.graphicLayout.saveToAssets.useMutation({
+    onSuccess: (data) => {
+      toast.success(`已保存 ${data.savedCount} 张图片到素材库`);
+      setSavingToAssets(false);
+    },
+    onError: (err) => {
+      toast.error("保存失败：" + err.message);
+      setSavingToAssets(false);
+    },
+  });
+
+  // 重命名 mutation
+  const updateJobMutation = trpc.graphicLayout.updateJob.useMutation({
+    onSuccess: () => {
+      refetchJobs();
+      setRenamingJobId(undefined);
+      setRenameInput("");
+      toast.success("重命名成功");
+    },
+    onError: (err) => {
+      toast.error("重命名失败：" + err.message);
+    },
+  });
+
+  // 继续编辑：恢复参数到表单
+  const handleContinueEdit = (job: LayoutJob) => {
+    setDocType(job.docType);
+    setAspectRatio(job.aspectRatio || "3:4");
+    setPageCount(job.pageCount || 1);
+    setContentText(job.contentText || "");
+    setTitleInput(job.title || "");
+    // 如果有 packId，选中对应的版式包
+    if (job.packId) setSelectedPackId(job.packId);
+    // 切换到该 job 的预览
+    setActiveJobId(job.id);
+    setCurrentPage(0);
+    toast.success("已恢复参数，可修改后重新生成");
+  };
 
   // Inpainting state
   const [editingBlock, setEditingBlock] = useState<TextBlock | null>(null);
@@ -1170,7 +1228,7 @@ export default function MediaLayout() {
         </div>
 
         {/* Right Panel: History */}
-        <div className="w-52 border-l border-white/8 flex flex-col overflow-hidden shrink-0">
+        <div className="w-64 border-l border-white/8 flex flex-col overflow-hidden shrink-0">
           <div className="px-4 py-3 border-b border-white/8 shrink-0">
             <span className="text-xs font-medium text-white/50">历史记录</span>
           </div>
@@ -1178,37 +1236,202 @@ export default function MediaLayout() {
             {(jobs as LayoutJob[]).length === 0 ? (
               <p className="text-[11px] text-white/25 text-center py-4">暂无记录</p>
             ) : (
-              (jobs as LayoutJob[]).map((job) => (
-                <div key={job.id} onClick={() => { setActiveJobId(job.id); setCurrentPage(0); }}
-                  className={`group p-2.5 rounded-lg border cursor-pointer transition-all ${
-                    activeJobId === job.id ? "border-[#B87333]/50 bg-[#B87333]/5" : "border-white/8 hover:border-white/15"
+              (jobs as LayoutJob[]).map((job) => {
+                const isExpanded = selectedHistoryJobId === job.id;
+                const isActive = activeJobId === job.id;
+                const jobPages = (job.pages ?? []) as PageData[];
+                const firstPageThumb = jobPages[0]?.imageUrl;
+                return (
+                  <div key={job.id} className={`rounded-lg border transition-all ${
+                    isActive ? "border-[#B87333]/50" : "border-white/8"
                   }`}>
-                  <div className="flex items-start justify-between gap-1">
-                    <p className="text-xs text-white/70 truncate flex-1">
-                      {job.title || DOC_TYPES.find(d => d.value === job.docType)?.label || "排版"}
-                    </p>
-                    <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); deleteJobMutation.mutate({ id: job.id }); }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-white/30 hover:text-red-400 cursor-pointer">
-                      <Trash2 className="w-3 h-3" />
+                    {/* 卡片头部 */}
+                    <div
+                      onClick={() => {
+                        setActiveJobId(job.id);
+                        setCurrentPage(0);
+                        setSelectedHistoryJobId(isExpanded ? undefined : job.id);
+                      }}
+                      className={`group p-2.5 cursor-pointer transition-all ${
+                        isActive ? "bg-[#B87333]/5" : "hover:bg-white/3"
+                      } rounded-t-lg ${!isExpanded ? "rounded-b-lg" : ""}`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        {/* 缩略图 */}
+                        {firstPageThumb && (
+                          <div className="w-8 h-10 rounded overflow-hidden shrink-0 mr-1.5">
+                            <img src={firstPageThumb} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          {renamingJobId === job.id ? (
+                            <input
+                              autoFocus
+                              value={renameInput}
+                              onChange={(e) => setRenameInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") updateJobMutation.mutate({ id: job.id, title: renameInput.trim() || undefined });
+                                if (e.key === "Escape") { setRenamingJobId(undefined); setRenameInput(""); }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full text-xs bg-white/10 border border-white/20 rounded px-1.5 py-0.5 text-white outline-none"
+                            />
+                          ) : (
+                            <p className="text-xs text-white/70 truncate">
+                              {job.title || DOC_TYPES.find(d => d.value === job.docType)?.label || "排版"}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {job.status === "done" ? (
+                              <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500/20 text-emerald-400 border-0">完成</Badge>
+                            ) : job.status === "failed" ? (
+                              <Badge className="text-[9px] px-1.5 py-0 bg-red-500/20 text-red-400 border-0">失败</Badge>
+                            ) : (
+                              <Badge className="text-[9px] px-1.5 py-0 bg-[#B87333]/20 text-[#B87333] border-0">生成中</Badge>
+                            )}
+                            <span className="text-[9px] text-white/25">
+                              {new Date(job.createdAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          {isExpanded
+                            ? <ChevronUp className="w-3 h-3 text-white/30" />
+                            : <ChevronDown className="w-3 h-3 text-white/20 opacity-0 group-hover:opacity-100" />
+                          }
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    {job.status === "done" ? (
-                      <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500/20 text-emerald-400 border-0">完成</Badge>
-                    ) : job.status === "failed" ? (
-                      <Badge className="text-[9px] px-1.5 py-0 bg-red-500/20 text-red-400 border-0">失败</Badge>
-                    ) : (
-                      <Badge className="text-[9px] px-1.5 py-0 bg-[#B87333]/20 text-[#B87333] border-0">生成中</Badge>
+
+                    {/* 展开的详情面板 */}
+                    {isExpanded && (
+                      <div className="border-t border-white/8 p-2.5 flex flex-col gap-2">
+                        {/* 页面缩略图列表 */}
+                        {jobPages.length > 0 && (
+                          <div className="flex gap-1 flex-wrap">
+                            {jobPages.map((page) => (
+                              <div key={page.pageIndex} className="relative w-10 rounded overflow-hidden" style={{ aspectRatio: RATIO_CSS[job.aspectRatio || "3:4"] || "3/4" }}>
+                                {page.imageUrl ? (
+                                  <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full bg-white/5" />
+                                )}
+                                <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-0.5 rounded">{page.pageIndex + 1}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 参数信息 */}
+                        <div className="text-[10px] text-white/35 space-y-0.5">
+                          {job.aspectRatio && <div>图幅：{job.aspectRatio}</div>}
+                          {job.pageCount && <div>页数：{job.pageCount} 页</div>}
+                          {job.docType && <div>类型：{DOC_TYPES.find(d => d.value === job.docType)?.label}</div>}
+                        </div>
+
+                        {/* 关联项目 */}
+                        <div>
+                          <div className="text-[10px] text-white/35 mb-1 flex items-center gap-1">
+                            <Folder className="w-2.5 h-2.5" />关联项目
+                          </div>
+                          <Select
+                            value={""}
+                            onValueChange={(val) => {
+                              if (val && val !== "__none__") {
+                                saveToAssetsMutation.mutate({ jobId: job.id, category: "graphic_layout", projectId: Number(val) });
+                                toast.success("已保存到素材库并关联项目");
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-[10px] border-white/15 bg-transparent text-white/50 hover:text-white">
+                              <SelectValue placeholder="选择项目并保存..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#1a1a1a] border-white/15 text-white">
+                              {(projectsData as any[]).length === 0 ? (
+                                <div className="px-2 py-3 text-xs text-white/40 text-center">暂无项目</div>
+                              ) : (
+                                (projectsData as any[]).map((p: any) => (
+                                  <SelectItem key={p.id} value={p.id.toString()} className="text-xs">{p.name}</SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* 操作按钮 */}
+                        <div className="flex flex-col gap-1.5">
+                          {/* 查看按钮 */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setActiveJobId(job.id); setCurrentPage(0); }}
+                            className="h-7 text-[10px] w-full border-white/15 text-white/60 bg-transparent hover:bg-white/8 hover:text-white justify-start gap-1.5"
+                          >
+                            <Eye className="w-3 h-3" />查看排版
+                          </Button>
+
+                          {/* 继续编辑按钮 */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleContinueEdit(job)}
+                            className="h-7 text-[10px] w-full border-[#B87333]/30 text-[#B87333] bg-transparent hover:bg-[#B87333]/10 justify-start gap-1.5"
+                          >
+                            <RotateCcw className="w-3 h-3" />继续编辑
+                          </Button>
+
+                          {/* 重命名按钮 */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingJobId(job.id);
+                              setRenameInput(job.title || "");
+                            }}
+                            className="h-7 text-[10px] w-full border-white/15 text-white/50 bg-transparent hover:bg-white/8 hover:text-white justify-start gap-1.5"
+                          >
+                            <Pencil className="w-3 h-3" />重命名
+                          </Button>
+
+                          {/* 保存到素材库按钮 */}
+                          {job.status === "done" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={savingToAssets}
+                              onClick={() => {
+                                setSavingToAssets(true);
+                                saveToAssetsMutation.mutate({ jobId: job.id, category: "graphic_layout" });
+                              }}
+                              className="h-7 text-[10px] w-full border-white/15 text-white/50 bg-transparent hover:bg-white/8 hover:text-white justify-start gap-1.5"
+                            >
+                              {savingToAssets ? <Loader2 className="w-3 h-3 animate-spin" /> : <Library className="w-3 h-3" />}
+                              保存到素材库
+                            </Button>
+                          )}
+
+                          {/* 删除按钮 */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("确定删除这条排版记录？")) {
+                                deleteJobMutation.mutate({ id: job.id });
+                                if (selectedHistoryJobId === job.id) setSelectedHistoryJobId(undefined);
+                              }
+                            }}
+                            className="h-7 text-[10px] w-full border-red-500/20 text-red-400/60 bg-transparent hover:bg-red-500/10 hover:text-red-400 justify-start gap-1.5"
+                          >
+                            <Trash2 className="w-3 h-3" />删除记录
+                          </Button>
+                        </div>
+                      </div>
                     )}
-                    {job.aspectRatio && (
-                      <span className="text-[9px] text-white/25">{job.aspectRatio}</span>
-                    )}
-                    <span className="text-[9px] text-white/25">
-                      {new Date(job.createdAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
-                    </span>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
