@@ -13,6 +13,7 @@ import { openclawRouter } from "../openclawApi";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
 import { sdk } from "./sdk";
+import { getOpenApiSpec } from "../openApiSpec";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -80,6 +81,15 @@ async function startServer() {
       console.error("[Upload] Layout pack upload failed:", err);
       return res.status(500).json({ error: err?.message || "Upload failed" });
     }
+  });
+
+  // ─── OpenAPI spec endpoint (no auth required) ───
+  app.get("/api/openapi.json", (req: any, res: any) => {
+    const protocol = req.protocol || "https";
+    const host = req.get("host") || "localhost:3000";
+    const baseUrl = `${protocol}://${host}`;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json(getOpenApiSpec(baseUrl));
   });
 
   // tRPC API

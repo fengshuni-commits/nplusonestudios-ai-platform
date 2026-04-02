@@ -1509,3 +1509,10 @@
 - [x] 排查时区问题：根本原因是 applyAutoStatus 只在首页加载时触发一次，没有服务器端定时任务
 - [x] 修复：在 server/_core/index.ts 中添加 node-cron 定时任务，每天北京时间 00:01（UTC 16:01）自动扫描并更新任务状态
 - [x] 验证修复并保存 checkpoint
+
+## API 文档改为 OpenAPI 3.0 规范（OpenClaw 可读格式）
+- [x] 查看当前 API 文档页面和所有已实现的 REST 接口
+- [x] 实现 /api/openapi.json 接口（OpenAPI 3.0 规范，20 个接口）
+- [x] API 文档页面顶部添加 OpenAPI 机器可读入口卡片（复制 URL / 查看 JSON）
+- [x] 修复示例代码中的 tRPC URL 为 REST API 格式，BASE_URL 改为 window.location.origin
+- [x] 验证并保存 checkpoint

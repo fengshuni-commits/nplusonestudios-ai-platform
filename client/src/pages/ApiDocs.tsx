@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Copy, Check, ExternalLink, Shield, Terminal, Clock, ArrowRight } from "lucide-react";
+import { Copy, Check, ExternalLink, Shield, Terminal, Clock, ArrowRight, FileJson, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 
-const BASE_URL = "https://platform.nplusonestudios.com";
+const BASE_URL = window.location.origin;
 
 // ── 完整调用示例代码 ──────────────────────────────────────
 const NODE_EXAMPLE = `/**
@@ -21,26 +21,18 @@ const headers = {
   'Content-Type': 'application/json',
 };
 
-// ── 1. 获取项目列表 ──────────────────────────────────────
+// ── 1. 获取项目列表 ────────────────────────────
 async function getProjects() {
-  const res = await fetch(
-    BASE_URL + '/api/trpc/projects.list?input=' +
-    encodeURIComponent(JSON.stringify({ json: {} })),
-    { headers }
-  );
+  const res = await fetch(BASE_URL + '/api/v1/projects', { headers });
   const data = await res.json();
-  return data.result.data.json; // Array of projects
+  return data.data; // Array of projects
 }
 
-// ── 2. 获取项目任务列表 ──────────────────────────────────
+// ── 2. 获取项目任务列表 ──────────────────────
 async function getProjectTasks(projectId) {
-  const res = await fetch(
-    BASE_URL + '/api/trpc/tasks.listByProject?input=' +
-    encodeURIComponent(JSON.stringify({ json: { projectId } })),
-    { headers }
-  );
+  const res = await fetch(BASE_URL + '/api/v1/projects/' + projectId + '/tasks', { headers });
   const data = await res.json();
-  return data.result.data.json; // Array of tasks
+  return data.data; // Array of tasks
 }
 
 // ── 3. AI 效果图生成（异步轮询）──────────────────────────
@@ -73,38 +65,15 @@ async function generateRendering(prompt, style) {
   }
 }
 
-// ── 4. 案例调研报告生成（异步轮询）──────────────────────
+// ── 4. 案例调研报告生成（同步）───────────────────
 async function generateBenchmarkReport(projectName, requirements) {
-  // Step 1: 提交任务
-  const submitRes = await fetch(BASE_URL + '/api/trpc/benchmark.generate', {
+  const res = await fetch(BASE_URL + '/api/v1/ai/benchmark', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ json: { projectName, requirements, referenceCount: 5 } }),
+    body: JSON.stringify({ projectName, requirements, referenceCount: 5 }),
   });
-  const submitData = await submitRes.json();
-  const { jobId } = submitData.result.data.json;
-  console.log('调研任务已提交，jobId:', jobId);
-
-  // Step 2: 轮询结果（每 3 秒）
-  while (true) {
-    await new Promise(r => setTimeout(r, 3000));
-    const pollRes = await fetch(
-      BASE_URL + '/api/trpc/benchmark.pollStatus?input=' +
-      encodeURIComponent(JSON.stringify({ json: { jobId } })),
-      { headers }
-    );
-    const pollData = await pollRes.json();
-    const { status, content, historyId, error } = pollData.result.data.json;
-
-    if (status === 'done') {
-      console.log('报告生成完成，historyId:', historyId);
-      return content; // Markdown 格式报告
-    }
-    if (status === 'failed') {
-      throw new Error('生成失败: ' + error);
-    }
-    console.log('生成中，继续等待...');
-  }
+  const data = await res.json();
+  return data.data.content; // Markdown 格式报告
 }
 
 // ── 主函数示例 ───────────────────────────────────────────
@@ -153,22 +122,18 @@ HEADERS = {
 }
 
 
-# ── 1. 获取项目列表 ──────────────────────────────────────
+# ── 1. 获取项目列表 ────────────────────────────────────────
 def get_projects():
-    import json, urllib.parse
-    params = urllib.parse.urlencode({'input': json.dumps({'json': {}})})
-    res = requests.get(f'{BASE_URL}/api/trpc/projects.list?{params}', headers=HEADERS)
+    res = requests.get(f'{BASE_URL}/api/v1/projects', headers=HEADERS)
     res.raise_for_status()
-    return res.json()['result']['data']['json']
+    return res.json()['data']
 
 
-# ── 2. 获取项目任务列表 ──────────────────────────────────
+# ── 2. 获取项目任务列表 ──────────────────────
 def get_project_tasks(project_id):
-    import json, urllib.parse
-    params = urllib.parse.urlencode({'input': json.dumps({'json': {'projectId': project_id}})})
-    res = requests.get(f'{BASE_URL}/api/trpc/tasks.listByProject?{params}', headers=HEADERS)
+    res = requests.get(f'{BASE_URL}/api/v1/projects/{project_id}/tasks', headers=HEADERS)
     res.raise_for_status()
-    return res.json()['result']['data']['json']
+    return res.json()['data']
 
 
 # ── 3. AI 效果图生成（异步轮询）──────────────────────────
@@ -197,34 +162,12 @@ def generate_rendering(prompt, style=None):
         print('生成中，继续等待...')
 
 
-# ── 4. 案例调研报告生成（异步轮询）──────────────────────
+# ── 4. 案例调研报告生成（同步）───────────────────
 def generate_benchmark_report(project_name, requirements):
-    import json, urllib.parse
-
-    # Step 1: 提交任务
-    payload = {'json': {'projectName': project_name, 'requirements': requirements, 'referenceCount': 5}}
-    res = requests.post(f'{BASE_URL}/api/trpc/benchmark.generate', json=payload, headers=HEADERS)
+    payload = {'projectName': project_name, 'requirements': requirements, 'referenceCount': 5}
+    res = requests.post(f'{BASE_URL}/api/v1/ai/benchmark', json=payload, headers=HEADERS)
     res.raise_for_status()
-    job_id = res.json()['result']['data']['json']['jobId']
-    print(f'调研任务已提交，jobId: {job_id}')
-
-    # Step 2: 轮询结果（每 3 秒）
-    while True:
-        time.sleep(3)
-        params = urllib.parse.urlencode({'input': json.dumps({'json': {'jobId': job_id}})})
-        poll_res = requests.get(
-            f'{BASE_URL}/api/trpc/benchmark.pollStatus?{params}',
-            headers=HEADERS
-        )
-        poll_res.raise_for_status()
-        result = poll_res.json()['result']['data']['json']
-
-        if result['status'] == 'done':
-            print(f'报告生成完成，historyId: {result["historyId"]}')
-            return result['content']  # Markdown 格式报告
-        if result['status'] == 'failed':
-            raise RuntimeError(f'生成失败: {result.get("error")}')
-        print('生成中，继续等待...')
+    return res.json()['data']['content']  # Markdown 格式报告
 
 
 # ── 主函数示例 ───────────────────────────────────────────
@@ -826,7 +769,7 @@ export default function ApiDocs() {
       <div className="max-w-5xl mx-auto">
 
         {/* Header */}
-        <div className="mb-10">
+        <div className="mb-8">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">API</span>
@@ -855,6 +798,45 @@ export default function ApiDocs() {
             </a>
           </div>
         </div>
+
+        {/* OpenAPI Machine-Readable Banner */}
+        <Card className="mb-6 p-4 bg-emerald-50 border-emerald-200">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-9 h-9 bg-emerald-600 rounded-lg flex items-center justify-center shrink-0">
+                <FileJson className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">OpenAPI 3.0 规范（机器可读）</p>
+                <p className="text-xs text-emerald-700 mt-0.5">
+                  可直接导入 OpenClaw、Swagger UI、Postman 等工具。将以下 URL 配置为 OpenClaw 的 API Schema 地址：
+                </p>
+                <code className="text-xs font-mono bg-emerald-100 px-2 py-0.5 rounded mt-1 inline-block text-emerald-800">
+                  {BASE_URL}/api/openapi.json
+                </code>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                onClick={() => copyToClipboard(`${BASE_URL}/api/openapi.json`, "openapi-url")}
+              >
+                {copiedKey === "openapi-url" ? <><Check className="w-3 h-3" /> 已复制</> : <><Copy className="w-3 h-3" /> 复制 URL</>}
+              </Button>
+              <a
+                href={`${BASE_URL}/api/openapi.json`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-100">
+                  <BookOpen className="w-3 h-3" /> 查看 JSON
+                </Button>
+              </a>
+            </div>
+          </div>
+        </Card>
 
         {/* API Base Endpoint */}
         <Card className="mb-6 p-5 bg-white border-slate-200">
