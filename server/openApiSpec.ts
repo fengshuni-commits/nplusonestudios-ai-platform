@@ -66,27 +66,42 @@ export function getOpenApiSpec(baseUrl: string) {
         },
         Task: {
           type: "object",
+          description: "项目任务",
           properties: {
-            id: { type: "integer" },
-            projectId: { type: "integer" },
-            title: { type: "string" },
-            description: { type: "string" },
+            id: { type: "integer", description: "任务 ID" },
+            projectId: { type: "integer", description: "所属项目 ID" },
+            title: { type: "string", description: "任务标题" },
+            description: { type: "string", nullable: true, description: "任务详细描述" },
             status: {
               type: "string",
               enum: ["backlog", "todo", "in_progress", "review", "done"],
+              description: "任务状态：backlog=待办、todo=计划中、in_progress=进行中、review=审核中、done=已完成",
+              example: "in_progress",
             },
             priority: {
               type: "string",
               enum: ["low", "medium", "high", "urgent"],
+              description: "优先级：low=低、medium=中、high=高、urgent=紧急",
+              example: "high",
             },
             category: {
               type: "string",
               enum: ["design", "construction", "management", "other"],
+              description: "任务类别：design=设计、construction=施工、management=管理、other=其他",
+              example: "design",
             },
-            assigneeId: { type: "integer", nullable: true },
-            startDate: { type: "string", format: "date-time", nullable: true },
-            dueDate: { type: "string", format: "date-time", nullable: true },
-            createdAt: { type: "string", format: "date-time" },
+            assigneeId: { type: "integer", nullable: true, description: "指派给的用户 ID" },
+            startDate: { type: "string", format: "date-time", nullable: true, description: "开始日期（ISO 8601 格式）", example: "2026-04-02T00:00:00.000Z" },
+            dueDate: { type: "string", format: "date-time", nullable: true, description: "截止日期（ISO 8601 格式）", example: "2026-04-10T00:00:00.000Z" },
+            progress: { type: "integer", minimum: 0, maximum: 100, description: "任务进度百分比（0-100）", example: 60 },
+            progressNote: { type: "string", nullable: true, description: "进度备注" },
+            parentId: { type: "integer", nullable: true, description: "父任务 ID（用于子任务）" },
+            reviewerId: { type: "integer", nullable: true, description: "审核人用户 ID" },
+            sortOrder: { type: "integer", description: "排序顺序（数字越小越靠前）", example: 0 },
+            approval: { type: "boolean", description: "是否需要审批", example: false },
+            createdBy: { type: "integer", nullable: true, description: "创建人用户 ID" },
+            createdAt: { type: "string", format: "date-time", description: "创建时间" },
+            updatedAt: { type: "string", format: "date-time", description: "最后更新时间" },
           },
         },
         Document: {
@@ -403,7 +418,7 @@ export function getOpenApiSpec(baseUrl: string) {
           summary: "创建任务",
           operationId: "createTask",
           tags: ["任务管理"],
-          parameters: [{ name: "projectId", in: "path", required: true, schema: { type: "integer" } }],
+          parameters: [{ name: "projectId", in: "path", required: true, schema: { type: "integer" }, description: "项目 ID" }],
           requestBody: {
             required: true,
             content: {
@@ -412,11 +427,33 @@ export function getOpenApiSpec(baseUrl: string) {
                   type: "object",
                   required: ["title"],
                   properties: {
-                    title: { type: "string" },
-                    description: { type: "string" },
-                    priority: { type: "string", enum: ["low", "medium", "high", "urgent"], default: "medium" },
-                    category: { type: "string", enum: ["design", "construction", "management", "other"], default: "design" },
-                    assigneeId: { type: "integer", description: "指派给的用户 ID" },
+                    title: { type: "string", description: "任务标题", example: "完成深化设计图纸" },
+                    description: { type: "string", description: "任务详细描述", example: "完成展厅 A 区的深化设计图纸，包括平面图、立面图和节点详图" },
+                    status: {
+                      type: "string",
+                      enum: ["backlog", "todo", "in_progress", "review", "done"],
+                      default: "todo",
+                      description: "初始状态，默认为 todo",
+                    },
+                    priority: {
+                      type: "string",
+                      enum: ["low", "medium", "high", "urgent"],
+                      default: "medium",
+                      description: "优先级：low=低、medium=中（默认）、high=高、urgent=紧急",
+                    },
+                    category: {
+                      type: "string",
+                      enum: ["design", "construction", "management", "other"],
+                      default: "design",
+                      description: "任务类别：design=设计（默认）、construction=施工、management=管理、other=其他",
+                    },
+                    assigneeId: { type: "integer", nullable: true, description: "指派给的用户 ID" },
+                    startDate: { type: "string", format: "date", nullable: true, description: "开始日期（YYYY-MM-DD 格式）", example: "2026-04-02" },
+                    dueDate: { type: "string", format: "date", nullable: true, description: "截止日期（YYYY-MM-DD 格式）", example: "2026-04-10" },
+                    progress: { type: "integer", minimum: 0, maximum: 100, default: 0, description: "初始进度百分比（0-100）" },
+                    parentId: { type: "integer", nullable: true, description: "父任务 ID（创建子任务时使用）" },
+                    reviewerId: { type: "integer", nullable: true, description: "审核人用户 ID" },
+                    approval: { type: "boolean", default: false, description: "是否需要审批" },
                   },
                 },
               },
@@ -425,7 +462,43 @@ export function getOpenApiSpec(baseUrl: string) {
           responses: {
             "201": {
               description: "创建成功",
-              content: { "application/json": { schema: { type: "object", properties: { data: { $ref: "#/components/schemas/Task" } } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "object", properties: { data: { $ref: "#/components/schemas/Task" } } },
+                  example: {
+                    data: {
+                      id: 42,
+                      projectId: 5,
+                      title: "完成深化设计图纸",
+                      description: "完成展厅 A 区的深化设计图纸，包括平面图、立面图和节点详图",
+                      status: "todo",
+                      priority: "high",
+                      category: "design",
+                      assigneeId: 3,
+                      startDate: "2026-04-02T00:00:00.000Z",
+                      dueDate: "2026-04-10T00:00:00.000Z",
+                      progress: 0,
+                      progressNote: null,
+                      parentId: null,
+                      reviewerId: null,
+                      sortOrder: 0,
+                      approval: false,
+                      createdBy: 1,
+                      createdAt: "2026-04-02T06:30:00.000Z",
+                      updatedAt: "2026-04-02T06:30:00.000Z",
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "参数错误",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Error" },
+                  example: { error: "Task title is required", code: "VALIDATION_ERROR" },
+                },
+              },
             },
           },
         },
@@ -433,28 +506,95 @@ export function getOpenApiSpec(baseUrl: string) {
       "/tasks/{id}": {
         patch: {
           summary: "更新任务",
+          description: "更新任务的任意字段。所有字段均为可选，只更新提供的字段。",
           operationId: "updateTask",
           tags: ["任务管理"],
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" }, description: "任务 ID" }],
           requestBody: {
             content: {
               "application/json": {
                 schema: {
                   type: "object",
                   properties: {
-                    title: { type: "string" },
-                    description: { type: "string" },
-                    status: { type: "string", enum: ["backlog", "todo", "in_progress", "review", "done"] },
-                    priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-                    category: { type: "string", enum: ["design", "construction", "management", "other"] },
-                    assigneeId: { type: "integer", nullable: true },
+                    title: { type: "string", description: "任务标题" },
+                    description: { type: "string", nullable: true, description: "任务描述" },
+                    status: {
+                      type: "string",
+                      enum: ["backlog", "todo", "in_progress", "review", "done"],
+                      description: "任务状态",
+                    },
+                    priority: {
+                      type: "string",
+                      enum: ["low", "medium", "high", "urgent"],
+                      description: "优先级",
+                    },
+                    category: {
+                      type: "string",
+                      enum: ["design", "construction", "management", "other"],
+                      description: "任务类别",
+                    },
+                    assigneeId: { type: "integer", nullable: true, description: "指派给的用户 ID" },
+                    startDate: { type: "string", format: "date", nullable: true, description: "开始日期（YYYY-MM-DD 格式）" },
+                    dueDate: { type: "string", format: "date", nullable: true, description: "截止日期（YYYY-MM-DD 格式）" },
+                    progress: { type: "integer", minimum: 0, maximum: 100, description: "任务进度百分比（0-100）" },
+                    progressNote: { type: "string", nullable: true, description: "进度备注" },
+                    parentId: { type: "integer", nullable: true, description: "父任务 ID" },
+                    reviewerId: { type: "integer", nullable: true, description: "审核人用户 ID" },
+                    sortOrder: { type: "integer", description: "排序顺序" },
+                    approval: { type: "boolean", description: "是否需要审批" },
+                  },
+                },
+                examples: {
+                  updateStatus: {
+                    summary: "更新任务状态",
+                    value: { status: "in_progress" },
+                  },
+                  updateProgress: {
+                    summary: "更新任务进度",
+                    value: { progress: 75, progressNote: "已完成平面图和立面图，节点详图进行中" },
+                  },
+                  updateAssignee: {
+                    summary: "重新指派任务",
+                    value: { assigneeId: 7, status: "todo" },
+                  },
+                  updateDates: {
+                    summary: "调整任务时间",
+                    value: { startDate: "2026-04-05", dueDate: "2026-04-15" },
                   },
                 },
               },
             },
           },
           responses: {
-            "200": { description: "更新成功" },
+            "200": {
+              description: "更新成功",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          id: { type: "integer" },
+                          success: { type: "boolean" },
+                        },
+                      },
+                    },
+                  },
+                  example: { data: { id: 42, success: true } },
+                },
+              },
+            },
+            "404": {
+              description: "任务不存在",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Error" },
+                  example: { error: "Task not found", code: "NOT_FOUND" },
+                },
+              },
+            },
           },
         },
       },

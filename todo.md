@@ -1524,3 +1524,10 @@
 - [x] status 接口：添加 4 个响应示例（pending/processing/done/failed），done 状态包含完整 pages 数据
 - [x] export-pdf 接口：补充响应示例和错误说明
 - [x] 验证 /api/openapi.json 输出正确并保存 checkpoint
+
+## OpenAPI 规范补充：项目看板任务接口详细参数说明
+- [x] 查看任务数据库 schema 和接口实现，确认所有字段
+- [x] Task Schema 字段扩充至 19 个（新增 progress/progressNote/parentId/reviewerId/sortOrder/approval/createdBy/updatedAt）
+- [x] 创建任务接口：参数扩充至 12 个（新增 startDate/dueDate/progress/parentId/reviewerId/approval），添加响应示例
+- [x] 更新任务接口：参数扩充至 14 个，添加 4 个使用场景示例（更新状态/进度/指派/时间）
+- [x] 验证并保存 checkpoint
