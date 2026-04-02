@@ -534,7 +534,7 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
   {
     step: 1,
     name: "提交图文排版生成任务",
-    endpoint: "graphicLayout.generate",
+    endpoint: "graphic-layout/generate",
     method: "POST",
     description: "提交图文排版生成任务，支持品牌手册、商品详情页、项目图板等类型，可生成 1-10 页，后台异步生成（每页约 30-60 秒）",
     params: [
@@ -567,24 +567,20 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
       title: "百悦科技园项目图板",
     },
     responseExample: {
-      result: {
-        data: {
-          json: {
-            id: 1001,
-            status: "pending",
-          }
-        }
+      data: {
+        id: 1001,
+        status: "pending",
       }
     },
-    curlExample: `curl -X POST '${BASE_URL}/api/trpc/graphicLayout.generate' \\
+    curlExample: `curl -X POST '${BASE_URL}/api/v1/graphic-layout/generate' \\
   -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
   -H 'Content-Type: application/json' \\
-  -d '{"json":{"docType":"project_board","contentText":"N+1 STUDIOS 办公空间设计项目","pageCount":3,"aspectRatio":"3:4","title":"百悦科技园项目图板"}}'`,
+  -d '{"docType":"project_board","contentText":"N+1 STUDIOS 办公空间设计项目","pageCount":3,"aspectRatio":"3:4","title":"百悦科技园项目图板"}'`,
   },
   {
     step: 2,
     name: "查询排版任务状态",
-    endpoint: "graphicLayout.status",
+    endpoint: "graphic-layout/status/:id",
     method: "GET",
     description: "查询图文排版任务的当前状态，建议每 5 秒轮询一次。完成后返回完整的页面数据（含图片 URL 和文字层信息）",
     params: [
@@ -618,9 +614,8 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
         }
       }
     },
-    curlExample: `curl -G '${BASE_URL}/api/trpc/graphicLayout.status' \\
-  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
-  --data-urlencode 'input={"json":{"id":1001}}'`,
+    curlExample: `curl -G '${BASE_URL}/api/v1/graphic-layout/status/1001' \\
+  -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx'`,
   },
   {
     step: 3,
@@ -655,15 +650,15 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
         }
       }
     },
-    curlExample: `curl -X POST '${BASE_URL}/api/trpc/graphicLayout.inpaintTextBlock' \\
+    curlExample: `curl -X POST '${BASE_URL}/api/v1/graphic-layout/inpaint' \\
   -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
   -H 'Content-Type: application/json' \\
-  -d '{"json":{"jobId":1001,"pageIndex":0,"blockId":"tb_1","newText":"百悦科技园·创新中心"}}'`,
+  -d '{"jobId":1001,"pageIndex":0,"blockId":"tb_1","newText":"百悦科技园·创新中心"}'`,
   },
   {
     step: 4,
     name: "导出 PDF",
-    endpoint: "graphicLayout.exportPdf",
+    endpoint: "graphic-layout/export-pdf/:id",
     method: "POST",
     description: "将已完成的图文排版任务导出为 PDF 文件，上传至 S3 并返回下载 URL",
     params: [
@@ -682,10 +677,10 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
         }
       }
     },
-    curlExample: `curl -X POST '${BASE_URL}/api/trpc/graphicLayout.exportPdf' \\
+    curlExample: `curl -X POST '${BASE_URL}/api/v1/graphic-layout/export-pdf/1001' \\
   -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
   -H 'Content-Type: application/json' \\
-  -d '{"json":{"jobId":1001}}'`,
+  # 无需请求体，jobId 已在路径中`,
   },
 ];
 

@@ -1497,3 +1497,10 @@
 - [x] 排查闪退原因（done/failed 后持续轮询 + list 接口返回全量 pages 数据 + stylePacks useEffect 循环）
 - [x] 修复闪退问题（停止终态轮询、list 接口只返回第一页缩略图、stylePacks 改为 refetchInterval、jobs staleTime 30s）
 - [x] 验证修复并保存 checkpoint
+
+## Bug 修复：图文排版 API 无法按文档调用
+- [x] 查阅 API 文档和当前图文排版 API 实现，找出差异（原接口为 tRPC 格式，不支持 Bearer Token）
+- [x] 新增 REST API：/api/v1/graphic-layout/generate、/api/v1/graphic-layout/status/:id、/api/v1/graphic-layout/export-pdf/:id
+- [x] 将 generateGraphicLayoutAsync 提取到 graphicLayoutService.ts 共享
+- [x] 更新 API 文档页面中的接口 URL 和示例
+- [x] 测试并保存 checkpoint

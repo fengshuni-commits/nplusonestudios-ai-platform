@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
+import { generateGraphicLayoutAsync } from "./graphicLayoutService";
 
 const router = Router();
 
@@ -429,6 +430,152 @@ router.get("/standards", async (req: Request, res: Response) => {
     res.json({ data: standards, total: standards.length });
   } catch (error) {
     res.status(500).json({ error: "Failed to list standards", code: "INTERNAL_ERROR" });
+  }
+});
+
+// ─── Graphic Layout REST API ────────────────────────────────
+
+// POST /api/v1/graphic-layout/generate
+router.post("/graphic-layout/generate", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { docType, contentText, pageCount, aspectRatio, title, assetUrls, stylePrompt, imageToolId } = req.body;
+    if (!docType || !contentText) {
+      return res.status(400).json({ error: "docType and contentText are required", code: "VALIDATION_ERROR" });
+    }
+    const validDocTypes = ["brand_manual", "product_detail", "project_board", "custom"];
+    if (!validDocTypes.includes(docType)) {
+      return res.status(400).json({ error: `docType must be one of: ${validDocTypes.join(", ")}`, code: "VALIDATION_ERROR" });
+    }
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
+    const { graphicLayoutJobs } = await import("../drizzle/schema");
+    const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+    const storedAssets = assetUrls ? { mode: "legacy", urls: assetUrls } : { mode: "legacy", urls: [] };
+    await drizzleDb.insert(graphicLayoutJobs).values({
+      userId: user.id,
+      packId: null,
+      docType,
+      pageCount: Math.min(Math.max(parseInt(pageCount) || 1, 1), 10),
+      aspectRatio: aspectRatio ?? "3:4",
+      contentText,
+      assetUrls: storedAssets,
+      title: title ?? null,
+      status: "pending",
+    });
+    const [newJob] = await drizzleDb.select().from(graphicLayoutJobs)
+      .where(_eq(graphicLayoutJobs.userId, user.id))
+      .orderBy(_desc(graphicLayoutJobs.createdAt))
+      .limit(1);
+    if (!newJob) return res.status(500).json({ error: "Failed to create job", code: "INTERNAL_ERROR" });
+    generateGraphicLayoutAsync(newJob.id, user.id, imageToolId ?? undefined, stylePrompt ?? undefined).catch(console.error);
+    res.json({ data: { id: newJob.id, status: "pending" } });
+  } catch (error) {
+    console.error("[API] graphic-layout/generate error:", error);
+    res.status(500).json({ error: "Failed to create graphic layout job", code: "INTERNAL_ERROR" });
+  }
+});
+
+// GET /api/v1/graphic-layout/status/:id
+router.get("/graphic-layout/status/:id", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const jobId = parseInt(req.params.id);
+    if (isNaN(jobId)) return res.status(400).json({ error: "Invalid job id", code: "VALIDATION_ERROR" });
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
+    const { graphicLayoutJobs } = await import("../drizzle/schema");
+    const { eq: _eq, and: _and } = await import("drizzle-orm");
+    const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+      .where(_and(_eq(graphicLayoutJobs.id, jobId), _eq(graphicLayoutJobs.userId, user.id)))
+      .limit(1);
+    if (!job) return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
+    const pages = (job.pages as any[] | null) ?? [];
+    res.json({
+      data: {
+        id: job.id,
+        status: job.status,
+        docType: job.docType,
+        pageCount: job.pageCount,
+        aspectRatio: job.aspectRatio,
+        title: job.title,
+        errorMessage: job.errorMessage,
+        createdAt: job.createdAt,
+        pages: job.status === "done" ? pages.map((p: any) => ({
+          pageIndex: p.pageIndex,
+          imageUrl: p.imageUrl,
+          backgroundColor: p.backgroundColor,
+          textBlocks: p.textBlocks ?? [],
+          imageSize: p.imageSize,
+        })) : [],
+      }
+    });
+  } catch (error) {
+    console.error("[API] graphic-layout/status error:", error);
+    res.status(500).json({ error: "Failed to get job status", code: "INTERNAL_ERROR" });
+  }
+});
+
+// POST /api/v1/graphic-layout/export-pdf/:id
+router.post("/graphic-layout/export-pdf/:id", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const jobId = parseInt(req.params.id);
+    if (isNaN(jobId)) return res.status(400).json({ error: "Invalid job id", code: "VALIDATION_ERROR" });
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
+    const { graphicLayoutJobs } = await import("../drizzle/schema");
+    const { eq: _eq, and: _and } = await import("drizzle-orm");
+    const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+      .where(_and(_eq(graphicLayoutJobs.id, jobId), _eq(graphicLayoutJobs.userId, user.id)))
+      .limit(1);
+    if (!job) return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
+    if (job.status !== "done") return res.status(400).json({ error: "Job not completed yet", code: "BAD_REQUEST" });
+    const pages = (job.pages as any[]) ?? [];
+    if (pages.length === 0) return res.status(400).json({ error: "No pages available", code: "BAD_REQUEST" });
+    const aspectRatio = job.aspectRatio ?? "3:4";
+    const PAGE_SIZES: Record<string, [number, number]> = {
+      "3:4": [595, 793], "4:3": [793, 595], "1:1": [595, 595],
+      "16:9": [842, 474], "9:16": [474, 842], "A4": [595, 842], "A3": [1191, 842],
+    };
+    const [pageW, pageH] = PAGE_SIZES[aspectRatio] ?? [595, 793];
+    const imageBuffers: Array<{ buf: Buffer; idx: number }> = [];
+    const sortedPages = [...pages].sort((a: any, b: any) => a.pageIndex - b.pageIndex);
+    for (const page of sortedPages) {
+      if (!page.imageUrl) continue;
+      try {
+        const fetchRes = await fetch(page.imageUrl);
+        if (!fetchRes.ok) throw new Error(`HTTP ${fetchRes.status}`);
+        imageBuffers.push({ buf: Buffer.from(await fetchRes.arrayBuffer()), idx: page.pageIndex });
+      } catch (err) {
+        console.error(`[API] export-pdf page ${page.pageIndex} fetch failed:`, err);
+      }
+    }
+    if (imageBuffers.length === 0) return res.status(500).json({ error: "Failed to fetch page images", code: "INTERNAL_ERROR" });
+    const PDFDocument = (await import("pdfkit")).default;
+    const { storagePut } = await import("./storage");
+    const pdfChunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+      doc.on("data", (chunk: Buffer) => pdfChunks.push(chunk));
+      doc.on("end", resolve);
+      doc.on("error", reject);
+      for (const { buf } of imageBuffers) {
+        doc.addPage({ size: [pageW, pageH], margin: 0 });
+        try { doc.image(buf, 0, 0, { width: pageW, height: pageH }); } catch (e) { console.error(e); }
+      }
+      doc.end();
+    });
+    const pdfBuffer = Buffer.concat(pdfChunks);
+    const fileKey = `graphic-layout-pdf/${user.id}/${jobId}-${Date.now()}.pdf`;
+    const { url } = await storagePut(fileKey, pdfBuffer, "application/pdf");
+    res.json({ data: { url, filename: `${job.title || "排版"}.pdf` } });
+  } catch (error) {
+    console.error("[API] graphic-layout/export-pdf error:", error);
+    res.status(500).json({ error: "Failed to export PDF", code: "INTERNAL_ERROR" });
   }
 });
 
