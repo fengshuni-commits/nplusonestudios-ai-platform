@@ -14,7 +14,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import DocumentPreviewModal from "@/components/DocumentPreviewModal";
 
 // ─── Module labels for generation history ───────────────
 const moduleLabels: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -585,6 +586,9 @@ function ProjectDocumentsTab({
   const [uploadProgress, setUploadProgress] = useState<Record<string, "pending" | "uploading" | "done" | "error">>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ─── Document preview state ──────────────────────────────
+  const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string; fileName: string; title: string } | null>(null);
+
   const uploadFileMutation = trpc.documents.uploadFile.useMutation({
     onSuccess: () => {
       utils.documents.listByProject.invalidate({ projectId });
@@ -1068,6 +1072,15 @@ function ProjectDocumentsTab({
                             <Mic className="h-3.5 w-3.5" />
                           </Button>
                         )}
+                        {doc.fileUrl && !isUrlLink && (() => {
+                          const ext = (doc.fileUrl.split("?")[0].split(".").pop() || "").toLowerCase();
+                          const previewable = ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+                          return previewable ? (
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-primary" title="预览" onClick={() => setPreviewDoc({ fileUrl: doc.fileUrl, fileName: doc.fileUrl.split("/").pop() || "", title: doc.title })}>
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null;
+                        })()}
                         {doc.fileUrl && (
                           <Button size="icon" variant="ghost" className="h-7 w-7" title={isUrlLink ? "打开链接" : "下载"} onClick={() => {
                             if (isUrlLink) {
@@ -1468,6 +1481,17 @@ function ProjectDocumentsTab({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ─── Document Preview Modal ─── */}
+      {previewDoc && (
+        <DocumentPreviewModal
+          open={!!previewDoc}
+          onClose={() => setPreviewDoc(null)}
+          fileUrl={previewDoc.fileUrl}
+          fileName={previewDoc.fileName}
+          title={previewDoc.title}
+        />
+      )}
     </div>
   );
 }

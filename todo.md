@@ -1549,3 +1549,10 @@
 - [x] 排查文档下载流程（前端下载按鈕逻辑、URL 有效性）
 - [x] 修复并验证：根本原因是文件名包含中文字符导致 CloudFront 403；修复上传接口对文件名 encodeURIComponent，修复前端下载按鈕对 URL 进行正确编码，同时修复数据库中已存在的错误 URL
 - [x] 保存 checkpoint
+
+## 文档在线预览功能
+- [x] 分析现有文档列表结构，确定预览方案（PDF 原生 + Word Office Online）
+- [x] 实现 DocumentPreviewModal 组件（全屏弹窗，PDF 用 iframe 原生渲染，Word/PPT 用 Office Online Viewer）
+- [x] 在文档列表中添加预览按鈕（眼睛图标），点击打开预览弹窗
+- [x] 处理边界情况（非预览格式提示、加载状态、错误处理）
+- [x] 保存 checkpoint
