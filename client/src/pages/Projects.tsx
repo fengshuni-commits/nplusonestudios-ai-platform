@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Search, FolderKanban, Calendar, Users, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Search, FolderKanban, Calendar, Users, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp, LayoutGrid, GanttChart } from "lucide-react";
+import GanttView from "@/components/GanttView";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
@@ -22,8 +23,10 @@ export default function Projects() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"grid" | "gantt">("grid");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: projects, isLoading } = trpc.projects.list.useQuery({ search, status: statusFilter === "all" ? undefined : statusFilter });
+  const { data: ganttData, isLoading: ganttLoading } = trpc.projects.ganttData.useQuery({ search, status: statusFilter === "all" ? undefined : statusFilter });
   const { data: fieldTemplates } = trpc.fieldTemplates.list.useQuery();
   const utils = trpc.useUtils();
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
@@ -348,65 +351,92 @@ export default function Projects() {
             <SelectItem value="archived">已归档</SelectItem>
           </SelectContent>
         </Select>
+        <div className="flex border rounded-md overflow-hidden">
+          <Button
+            variant={viewMode === "grid" ? "default" : "ghost"}
+            size="sm"
+            className="rounded-none h-9 px-3"
+            onClick={() => setViewMode("grid")}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === "gantt" ? "default" : "ghost"}
+            size="sm"
+            className="rounded-none h-9 px-3"
+            onClick={() => setViewMode("gantt")}
+          >
+            <GanttChart className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse"><CardContent className="p-6"><div className="h-20 bg-muted rounded" /></CardContent></Card>
-          ))}
-        </div>
-      ) : projects && projects.length > 0 ? (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((project: any) => (
-            <Card
-              key={project.id}
-              className="hover:shadow-md transition-shadow cursor-pointer group relative"
-              onClick={() => setLocation(`/projects/${project.id}`)}
-            >
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <FolderKanban className="h-5 w-5 text-primary" />
+      {viewMode === "grid" ? (
+        isLoading ? (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse"><CardContent className="p-6"><div className="h-20 bg-muted rounded" /></CardContent></Card>
+            ))}
+          </div>
+        ) : projects && projects.length > 0 ? (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map((project: any) => (
+              <Card
+                key={project.id}
+                className="hover:shadow-md transition-shadow cursor-pointer group relative"
+                onClick={() => setLocation(`/projects/${project.id}`)}
+              >
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <FolderKanban className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className={`text-xs ${statusBadgeProps(project.status).className}`}>{statusBadgeProps(project.status).label}</Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({ id: project.id, name: project.name });
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className={`text-xs ${statusBadgeProps(project.status).className}`}>{statusBadgeProps(project.status).label}</Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteTarget({ id: project.id, name: project.name });
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                  <h3 className="font-medium text-sm group-hover:text-primary transition-colors">{project.name}</h3>
+                  {project.code && <p className="text-xs text-muted-foreground mt-0.5">{project.code}</p>}
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{(project as any).summaryDisplay || "暂无描述"}</p>
+                  <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+                    {(project as any).clientNameDisplay && (
+                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(project as any).clientNameDisplay}</span>
+                    )}
+                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(project.createdAt).toLocaleDateString("zh-CN")}</span>
                   </div>
-                </div>
-                <h3 className="font-medium text-sm group-hover:text-primary transition-colors">{project.name}</h3>
-                {project.code && <p className="text-xs text-muted-foreground mt-0.5">{project.code}</p>}
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{(project as any).summaryDisplay || "暂无描述"}</p>
-                <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
-                  {(project as any).clientNameDisplay && (
-                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(project as any).clientNameDisplay}</span>
-                  )}
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(project.createdAt).toLocaleDateString("zh-CN")}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <FolderKanban className="h-12 w-12 text-muted-foreground/30 mb-3" />
+              <p className="text-muted-foreground text-sm">暂无项目</p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />创建第一个项目
+              </Button>
+            </CardContent>
+          </Card>
+        )
       ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <FolderKanban className="h-12 w-12 text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground text-sm">暂无项目</p>
-            <Button variant="outline" size="sm" className="mt-4" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />创建第一个项目
-            </Button>
-          </CardContent>
-        </Card>
+        /* 甘特图视图 */
+        <GanttView
+          data={ganttData ?? []}
+          isLoading={ganttLoading}
+          onProjectClick={(id: number) => setLocation(`/projects/${id}`)}
+        />
       )}
 
       {/* Delete confirmation dialog */}

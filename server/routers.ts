@@ -842,6 +842,38 @@ const projectsRouter = router({
       return { success: true };
     }),
 
+  // ─── Gantt Chart Data ────────────────────────────
+  ganttData: protectedProcedure
+    .input(z.object({ search: z.string().optional(), status: z.string().optional() }).optional())
+    .query(async ({ input }) => {
+      const projects = await db.listProjects(input);
+      const result = [];
+      for (const project of projects) {
+        const tasks = await db.listTasksByProject(project.id);
+        let startDate: number | null = null;
+        let endDate: number | null = null;
+        if (tasks.length > 0) {
+          const validTasks = tasks.filter((t: any) => t.startDate || t.dueDate);
+          if (validTasks.length > 0) {
+            const startDates = validTasks.map((t: any) => t.startDate).filter(Boolean);
+            const dueDates = validTasks.map((t: any) => t.dueDate).filter(Boolean);
+            if (startDates.length > 0) startDate = Math.min(...startDates);
+            if (dueDates.length > 0) endDate = Math.max(...dueDates);
+          }
+        }
+        result.push({
+          id: project.id,
+          name: project.name,
+          code: project.code,
+          status: project.status,
+          startDate,
+          endDate,
+          taskCount: tasks.length,
+        });
+      }
+      return result;
+    }),
+
   // ─── AI Extract Project Info from free text ────
   extractInfo: protectedProcedure
     .input(z.object({

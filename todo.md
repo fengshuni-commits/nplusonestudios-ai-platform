@@ -1537,3 +1537,9 @@
 - [x] 修复 POST /projects 和 PATCH /projects/:id：验证 status/phase 枚举值、记录详细错误、返回完整项目对象
 - [x] 更新 OpenAPI 规范：Project Schema 字段扩充至 15 个，修复 status/phase 枚举值，添加 3 个请求示例和验证错误示例
 - [x] 验证并保存 checkpoint
+
+## 项目看板甘特图视图
+- [x] 查看当前项目看板代码结构和数据库 schema
+- [x] 后端：实现甘特图数据接口（汇总项目下所有任务的时间范围）
+- [x] 前端：在项目看板添加甘特图视图切换按钮和甘特图组件
+- [x] 验证并保存 checkpoint
