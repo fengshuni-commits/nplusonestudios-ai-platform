@@ -96,31 +96,88 @@ router.get("/projects/:id", async (req: Request, res: Response) => {
 
 router.post("/projects", async (req: Request, res: Response) => {
   try {
-    const { name, code, description, clientName, status } = req.body;
+    const { name, code, description, clientName, status, phase, startDate, endDate } = req.body;
     if (!name) {
       return res.status(400).json({ error: "Project name is required", code: "VALIDATION_ERROR" });
     }
-    const result = await db.createProject({ name, code, description, clientName, status });
+
+    // Validate enum values
+    const validStatuses = ["planning", "design", "construction", "completed", "archived"];
+    const validPhases = ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status "${status}". Must be one of: ${validStatuses.join(", ")}.`,
+        code: "VALIDATION_ERROR",
+      });
+    }
+    if (phase && !validPhases.includes(phase)) {
+      return res.status(400).json({
+        error: `Invalid phase "${phase}". Must be one of: ${validPhases.join(", ")}.`,
+        code: "VALIDATION_ERROR",
+      });
+    }
+
+    const insertData: any = { name, code, description, clientName };
+    if (status) insertData.status = status;
+    if (phase) insertData.phase = phase;
+    if (startDate) insertData.startDate = new Date(startDate);
+    if (endDate) insertData.endDate = new Date(endDate);
+
+    const result = await db.createProject(insertData);
+
+    // Fetch the created project to return full data
+    const created = await db.getProjectById(result.id);
 
     // Trigger webhook
     await triggerWebhook("project.created", { projectId: result.id, name });
 
-    res.status(201).json({ data: result });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create project", code: "INTERNAL_ERROR" });
+    res.status(201).json({ data: created });
+  } catch (error: any) {
+    console.error("[API] Failed to create project:", error?.message || error);
+    res.status(500).json({ error: "Failed to create project", code: "INTERNAL_ERROR", detail: error?.message });
   }
 });
 
 router.patch("/projects/:id", async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid project ID", code: "VALIDATION_ERROR" });
+    }
     const project = await db.getProjectById(id);
     if (!project) {
       return res.status(404).json({ error: "Project not found", code: "NOT_FOUND" });
     }
 
-    const { name, code, description, clientName, status, phase } = req.body;
-    await db.updateProject(id, { name, code, description, clientName, status, phase });
+    const { name, code, description, clientName, status, phase, startDate, endDate } = req.body;
+
+    // Validate enum values
+    const validStatuses = ["planning", "design", "construction", "completed", "archived"];
+    const validPhases = ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status "${status}". Must be one of: ${validStatuses.join(", ")}.`,
+        code: "VALIDATION_ERROR",
+      });
+    }
+    if (phase && !validPhases.includes(phase)) {
+      return res.status(400).json({
+        error: `Invalid phase "${phase}". Must be one of: ${validPhases.join(", ")}.`,
+        code: "VALIDATION_ERROR",
+      });
+    }
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (code !== undefined) updateData.code = code;
+    if (description !== undefined) updateData.description = description;
+    if (clientName !== undefined) updateData.clientName = clientName;
+    if (status) updateData.status = status;
+    if (phase) updateData.phase = phase;
+    if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
+    if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
+
+    await db.updateProject(id, updateData);
 
     // Trigger webhook on status change
     if (status && status !== project.status) {
@@ -131,9 +188,12 @@ router.patch("/projects/:id", async (req: Request, res: Response) => {
       });
     }
 
-    res.json({ data: { id, success: true } });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update project", code: "INTERNAL_ERROR" });
+    // Return updated project
+    const updated = await db.getProjectById(id);
+    res.json({ data: updated });
+  } catch (error: any) {
+    console.error("[API] Failed to update project:", error?.message || error);
+    res.status(500).json({ error: "Failed to update project", code: "INTERNAL_ERROR", detail: error?.message });
   }
 });
 

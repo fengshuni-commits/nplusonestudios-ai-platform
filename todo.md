@@ -1531,3 +1531,9 @@
 - [x] 创建任务接口：参数扩充至 12 个（新增 startDate/dueDate/progress/parentId/reviewerId/approval），添加响应示例
 - [x] 更新任务接口：参数扩充至 14 个，添加 4 个使用场景示例（更新状态/进度/指派/时间）
 - [x] 验证并保存 checkpoint
+
+## Bug 修复：项目创建接口调用有问题
+- [x] 排查项目创建接口的问题：根本原因是 OpenClaw 传入了不在枚举范围内的 status/phase 值，导致数据库插入失败
+- [x] 修复 POST /projects 和 PATCH /projects/:id：验证 status/phase 枚举值、记录详细错误、返回完整项目对象
+- [x] 更新 OpenAPI 规范：Project Schema 字段扩充至 15 个，修复 status/phase 枚举值，添加 3 个请求示例和验证错误示例
+- [x] 验证并保存 checkpoint

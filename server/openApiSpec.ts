@@ -48,20 +48,35 @@ export function getOpenApiSpec(baseUrl: string) {
         },
         Project: {
           type: "object",
+          description: "项目",
           properties: {
-            id: { type: "integer" },
+            id: { type: "integer", description: "项目 ID" },
             name: { type: "string", description: "项目名称" },
-            code: { type: "string", description: "项目编号" },
-            description: { type: "string" },
-            clientName: { type: "string", description: "客户名称" },
+            code: { type: "string", nullable: true, description: "项目编号" },
+            description: { type: "string", nullable: true, description: "项目描述" },
+            clientName: { type: "string", nullable: true, description: "客户名称" },
             status: {
               type: "string",
-              enum: ["active", "completed", "on_hold", "cancelled"],
-              description: "项目状态",
+              enum: ["planning", "design", "construction", "completed", "archived"],
+              description: "项目状态：planning=策划中、design=设计中、construction=施工中、completed=已完成、archived=已归档",
+              example: "design",
             },
-            phase: { type: "string", description: "当前阶段" },
-            createdAt: { type: "string", format: "date-time" },
-            updatedAt: { type: "string", format: "date-time" },
+            phase: {
+              type: "string",
+              enum: ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"],
+              description: "当前阶段：concept=概念设计、schematic=方案设计、development=深化设计、documentation=施工图、bidding=招标、construction=施工、closeout=结算",
+              example: "schematic",
+            },
+            companyProfile: { type: "string", nullable: true, description: "企业简介" },
+            businessGoal: { type: "string", nullable: true, description: "业务目标" },
+            clientProfile: { type: "string", nullable: true, description: "客户画像" },
+            projectOverview: { type: "string", nullable: true, description: "项目概述" },
+            coverImage: { type: "string", nullable: true, description: "封面图片 URL" },
+            startDate: { type: "string", format: "date-time", nullable: true, description: "项目开始日期" },
+            endDate: { type: "string", format: "date-time", nullable: true, description: "项目结束日期" },
+            createdBy: { type: "integer", nullable: true, description: "创建人用户 ID" },
+            createdAt: { type: "string", format: "date-time", description: "创建时间" },
+            updatedAt: { type: "string", format: "date-time", description: "最后更新时间" },
           },
         },
         Task: {
@@ -286,7 +301,7 @@ export function getOpenApiSpec(baseUrl: string) {
             {
               name: "status",
               in: "query",
-              schema: { type: "string", enum: ["active", "completed", "on_hold", "cancelled"] },
+              schema: { type: "string", enum: ["planning", "design", "construction", "completed", "archived"] },
               description: "按状态筛选",
             },
           ],
@@ -319,16 +334,35 @@ export function getOpenApiSpec(baseUrl: string) {
                   type: "object",
                   required: ["name"],
                   properties: {
-                    name: { type: "string", description: "项目名称" },
-                    code: { type: "string", description: "项目编号" },
-                    description: { type: "string" },
-                    clientName: { type: "string", description: "客户名称" },
+                    name: { type: "string", description: "项目名称", example: "某科技公司展厅设计" },
+                    code: { type: "string", description: "项目编号", example: "N25-001" },
+                    description: { type: "string", description: "项目描述", example: "某科技公司展厅空间设计项目，包含展示区和接待区" },
+                    clientName: { type: "string", description: "客户名称", example: "某科技有限公司" },
                     status: {
                       type: "string",
-                      enum: ["active", "completed", "on_hold", "cancelled"],
-                      default: "active",
+                      enum: ["planning", "design", "construction", "completed", "archived"],
+                      default: "planning",
+                      description: "项目状态：planning=策划中（默认）、design=设计中、construction=施工中、completed=已完成、archived=已归档",
                     },
+                    phase: {
+                      type: "string",
+                      enum: ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"],
+                      default: "concept",
+                      description: "当前阶段：concept=概念设计（默认）、schematic=方案设计、development=深化设计、documentation=施工图、bidding=招标、construction=施工、closeout=结算",
+                    },
+                    startDate: { type: "string", format: "date", nullable: true, description: "项目开始日期（YYYY-MM-DD）", example: "2026-04-01" },
+                    endDate: { type: "string", format: "date", nullable: true, description: "项目结束日期（YYYY-MM-DD）", example: "2026-10-31" },
                   },
+                },
+                example: {
+                  name: "某科技公司展厅设计",
+                  code: "N26-003",
+                  description: "某科技公司展厅空间设计项目",
+                  clientName: "某科技有限公司",
+                  status: "design",
+                  phase: "schematic",
+                  startDate: "2026-04-01",
+                  endDate: "2026-10-31",
                 },
               },
             },
@@ -338,14 +372,34 @@ export function getOpenApiSpec(baseUrl: string) {
               description: "创建成功",
               content: {
                 "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: { data: { $ref: "#/components/schemas/Project" } },
+                  schema: { type: "object", properties: { data: { $ref: "#/components/schemas/Project" } } },
+                  example: {
+                    data: {
+                      id: 12,
+                      name: "某科技公司展厅设计",
+                      code: "N26-003",
+                      description: "某科技公司展厅空间设计项目",
+                      clientName: "某科技有限公司",
+                      status: "design",
+                      phase: "schematic",
+                      startDate: "2026-04-01T00:00:00.000Z",
+                      endDate: "2026-10-31T00:00:00.000Z",
+                      createdAt: "2026-04-02T08:00:00.000Z",
+                      updatedAt: "2026-04-02T08:00:00.000Z",
+                    },
                   },
                 },
               },
             },
-            "400": { description: "参数错误", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "400": {
+              description: "参数错误（如果传入了不在枚举范围内的 status 或 phase，会返回详细错误说明）",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Error" },
+                  example: { error: "Invalid status \"active\". Must be one of: planning, design, construction, completed, archived.", code: "VALIDATION_ERROR" },
+                },
+              },
+            },
           },
         },
       },
@@ -365,28 +419,69 @@ export function getOpenApiSpec(baseUrl: string) {
         },
         patch: {
           summary: "更新项目",
+          description: "更新项目的任意字段。所有字段均为可选，只更新提供的字段。",
           operationId: "updateProject",
           tags: ["项目管理"],
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" }, description: "项目 ID" }],
           requestBody: {
             content: {
               "application/json": {
                 schema: {
                   type: "object",
                   properties: {
-                    name: { type: "string" },
-                    code: { type: "string" },
-                    description: { type: "string" },
-                    clientName: { type: "string" },
-                    status: { type: "string", enum: ["active", "completed", "on_hold", "cancelled"] },
-                    phase: { type: "string" },
+                    name: { type: "string", description: "项目名称" },
+                    code: { type: "string", description: "项目编号" },
+                    description: { type: "string", description: "项目描述" },
+                    clientName: { type: "string", description: "客户名称" },
+                    status: {
+                      type: "string",
+                      enum: ["planning", "design", "construction", "completed", "archived"],
+                      description: "项目状态：planning=策划中、design=设计中、construction=施工中、completed=已完成、archived=已归档",
+                    },
+                    phase: {
+                      type: "string",
+                      enum: ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"],
+                      description: "当前阶段：concept=概念设计、schematic=方案设计、development=深化设计、documentation=施工图、bidding=招标、construction=施工、closeout=结算",
+                    },
+                    startDate: { type: "string", format: "date", nullable: true, description: "项目开始日期（YYYY-MM-DD）" },
+                    endDate: { type: "string", format: "date", nullable: true, description: "项目结束日期（YYYY-MM-DD）" },
+                  },
+                },
+                examples: {
+                  updateStatus: {
+                    summary: "推进项目状态",
+                    value: { status: "construction", phase: "construction" },
+                  },
+                  updatePhase: {
+                    summary: "更新设计阶段",
+                    value: { phase: "development" },
+                  },
+                  updateDates: {
+                    summary: "调整项目时间",
+                    value: { startDate: "2026-05-01", endDate: "2026-12-31" },
                   },
                 },
               },
             },
           },
           responses: {
-            "200": { description: "更新成功" },
+            "200": {
+              description: "更新成功，返回更新后的完整项目对象",
+              content: {
+                "application/json": {
+                  schema: { type: "object", properties: { data: { $ref: "#/components/schemas/Project" } } },
+                },
+              },
+            },
+            "400": {
+              description: "参数错误（枚举值不合法）",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Error" },
+                  example: { error: "Invalid status \"active\". Must be one of: planning, design, construction, completed, archived.", code: "VALIDATION_ERROR" },
+                },
+              },
+            },
             "404": { description: "项目不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
