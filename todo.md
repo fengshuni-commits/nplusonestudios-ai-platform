@@ -1516,3 +1516,11 @@
 - [x] API 文档页面顶部添加 OpenAPI 机器可读入口卡片（复制 URL / 查看 JSON）
 - [x] 修复示例代码中的 tRPC URL 为 REST API 格式，BASE_URL 改为 window.location.origin
 - [x] 验证并保存 checkpoint
+
+## OpenAPI 规范补充：图文排版接口详细参数和响应示例
+- [x] 查看 openclawApi.ts 图文排版接口的实际参数结构
+- [x] 补充 GraphicLayoutPage Schema：textBlocks 字段增至 13 个（新增 fontFamily/fontWeight/align/lineHeight/role）
+- [x] generate 接口：新增 stylePackId 参数，添加 3 个请求示例（品牌手册/项目图板/商品详情页）
+- [x] status 接口：添加 4 个响应示例（pending/processing/done/failed），done 状态包含完整 pages 数据
+- [x] export-pdf 接口：补充响应示例和错误说明
+- [x] 验证 /api/openapi.json 输出正确并保存 checkpoint

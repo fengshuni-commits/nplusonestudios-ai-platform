@@ -106,33 +106,123 @@ export function getOpenApiSpec(baseUrl: string) {
         },
         GraphicLayoutPage: {
           type: "object",
+          description: "图文排版的单页内容，包含整页图片和可编辑文字块数据",
           properties: {
             pageIndex: { type: "integer", description: "页面索引，从 0 开始" },
-            imageUrl: { type: "string", description: "页面图片 URL" },
-            backgroundColor: { type: "string", description: "背景颜色" },
+            imageUrl: {
+              type: "string",
+              format: "uri",
+              description: "页面整体图片 URL（S3 公开链接，包含背景、图形、文字的完整渲染图）",
+              example: "https://cdn.example.com/graphic-layout/page-0.png",
+            },
+            backgroundColor: {
+              type: "string",
+              description: "页面背景颜色（CSS 颜色值）",
+              example: "#F5F0EB",
+            },
             imageSize: {
               type: "object",
+              description: "页面图片实际像素尺寸",
               properties: {
-                width: { type: "integer" },
-                height: { type: "integer" },
+                width: { type: "integer", example: 1080 },
+                height: { type: "integer", example: 1440 },
               },
             },
             textBlocks: {
               type: "array",
-              description: "页面中的文字块（可编辑区域）",
+              description: "页面中的可编辑文字块列表。每个文字块对应图片中的一段文字，可通过 inpainting 接口修改文案后重绘该区域。",
               items: {
                 type: "object",
+                required: ["id", "text", "x", "y", "width", "height"],
                 properties: {
-                  id: { type: "string" },
-                  text: { type: "string" },
-                  x: { type: "number", description: "X 坐标（像素）" },
-                  y: { type: "number", description: "Y 坐标（像素）" },
-                  width: { type: "number" },
-                  height: { type: "number" },
-                  fontSize: { type: "number" },
-                  color: { type: "string" },
+                  id: {
+                    type: "string",
+                    description: "文字块唯一标识符",
+                    example: "tb_0_title",
+                  },
+                  text: {
+                    type: "string",
+                    description: "文字内容",
+                    example: "N+1 STUDIOS",
+                  },
+                  x: {
+                    type: "number",
+                    description: "文字块左上角 X 坐标（相对于页面图片，单位：像素）",
+                    example: 80,
+                  },
+                  y: {
+                    type: "number",
+                    description: "文字块左上角 Y 坐标（相对于页面图片，单位：像素）",
+                    example: 120,
+                  },
+                  width: {
+                    type: "number",
+                    description: "文字块宽度（像素）",
+                    example: 920,
+                  },
+                  height: {
+                    type: "number",
+                    description: "文字块高度（像素）",
+                    example: 80,
+                  },
+                  fontSize: {
+                    type: "number",
+                    description: "字体大小（像素）",
+                    example: 48,
+                  },
+                  color: {
+                    type: "string",
+                    description: "文字颜色（CSS 颜色值）",
+                    example: "#1A1A1A",
+                  },
+                  fontFamily: {
+                    type: "string",
+                    description: "字体族名称",
+                    example: "Noto Sans SC",
+                  },
+                  fontWeight: {
+                    type: "string",
+                    description: "字重",
+                    enum: ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"],
+                    example: "700",
+                  },
+                  align: {
+                    type: "string",
+                    description: "文字对齐方式",
+                    enum: ["left", "center", "right"],
+                    example: "left",
+                  },
+                  lineHeight: {
+                    type: "number",
+                    description: "行高倍数",
+                    example: 1.4,
+                  },
+                  role: {
+                    type: "string",
+                    description: "文字块语义角色（辅助理解内容结构）",
+                    enum: ["title", "subtitle", "body", "caption", "label", "other"],
+                    example: "title",
+                  },
                 },
               },
+              example: [
+                {
+                  id: "tb_0_title",
+                  text: "N+1 STUDIOS",
+                  x: 80, y: 120, width: 920, height: 80,
+                  fontSize: 48, color: "#1A1A1A",
+                  fontFamily: "Noto Sans SC", fontWeight: "700",
+                  align: "left", lineHeight: 1.2, role: "title",
+                },
+                {
+                  id: "tb_0_body",
+                  text: "专注于科技制造业办公空间设计的建筑事务所",
+                  x: 80, y: 240, width: 920, height: 120,
+                  fontSize: 24, color: "#4A4A4A",
+                  fontFamily: "Noto Sans SC", fontWeight: "400",
+                  align: "left", lineHeight: 1.6, role: "body",
+                },
+              ],
             },
           },
         },
@@ -817,23 +907,57 @@ export function getOpenApiSpec(baseUrl: string) {
                     },
                     imageToolId: {
                       type: "integer",
-                      description: "指定使用的图像生成 AI 工具 ID（可选）",
+                      description: "指定使用的图像生成 AI 工具 ID（可选，不传则使用平台默认工具）",
+                      example: 2,
+                    },
+                    stylePackId: {
+                      type: "integer",
+                      description: "指定版式包 ID（可选，版式包包含预设的排版风格和色彩方案）",
+                      example: 5,
                     },
                   },
                 },
-                example: {
-                  docType: "brand_manual",
-                  contentText: "N+1 STUDIOS 品牌介绍，专注建筑设计，团队6人",
-                  pageCount: 3,
-                  aspectRatio: "A4",
-                  stylePrompt: "专业、简洁、现代感",
+                examples: {
+                  brand_manual: {
+                    summary: "品牌手册（3页 A4）",
+                    value: {
+                      docType: "brand_manual",
+                      contentText: "N+1 STUDIOS 是一家专注于科技制造业办公空间设计的建筑事务所，团队6人，主要服务于中国科技制造业企业。核心价值观：专业、创新、以人为本。",
+                      title: "N+1 STUDIOS 品牌手册 2024",
+                      pageCount: 3,
+                      aspectRatio: "A4",
+                      stylePrompt: "极简主义，黑白灰配色，大量留白，衬线字体",
+                    },
+                  },
+                  project_board: {
+                    summary: "项目图板（1页 3:4）",
+                    value: {
+                      docType: "project_board",
+                      contentText: "某科技园区办公楼室内设计项目，建筑面积 2000㎡，设计主题：工业风与自然融合。",
+                      title: "科技园区办公楼室内设计",
+                      pageCount: 1,
+                      aspectRatio: "3:4",
+                      assetUrls: ["https://cdn.example.com/ref-image.jpg"],
+                    },
+                  },
+                  product_detail: {
+                    summary: "商品详情页（5页 9:16）",
+                    value: {
+                      docType: "product_detail",
+                      contentText: "N+1 LAB 铝型材模块化书架，采用 6063 铝合金型材，表面阳极氧化处理，支持自由组合。尺寸：W1200×D300×H1800mm。",
+                      title: "铝型材模块化书架",
+                      pageCount: 5,
+                      aspectRatio: "9:16",
+                      stylePrompt: "工业感，金属质感，深色背景",
+                    },
+                  },
                 },
               },
             },
           },
           responses: {
             "200": {
-              description: "任务已提交",
+              description: "任务已提交，异步处理中",
               content: {
                 "application/json": {
                   schema: {
@@ -842,16 +966,24 @@ export function getOpenApiSpec(baseUrl: string) {
                       data: {
                         type: "object",
                         properties: {
-                          id: { type: "integer", description: "任务 ID" },
-                          status: { type: "string", example: "pending" },
+                          id: { type: "integer", description: "任务 ID，用于轮询状态" },
+                          status: {
+                            type: "string",
+                            enum: ["pending"],
+                            description: "初始状态始终为 pending",
+                          },
                         },
                       },
                     },
                   },
+                  example: {
+                    data: { id: 42, status: "pending" },
+                  },
                 },
               },
             },
-            "400": { description: "参数错误", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "400": { description: "参数错误（docType 或 contentText 缺失）", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "401": { description: "API Key 无效或未提供", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
       },
@@ -881,24 +1013,124 @@ export function getOpenApiSpec(baseUrl: string) {
                     properties: {
                       data: {
                         type: "object",
+                        required: ["id", "status"],
                         properties: {
-                          id: { type: "integer" },
+                          id: { type: "integer", example: 42 },
                           status: {
                             type: "string",
                             enum: ["pending", "processing", "done", "failed"],
                             description: "pending=等待中，processing=生成中，done=已完成，failed=失败",
                           },
-                          docType: { type: "string" },
-                          pageCount: { type: "integer" },
-                          aspectRatio: { type: "string" },
-                          title: { type: "string" },
-                          errorMessage: { type: "string", description: "失败原因（status=failed 时）" },
+                          docType: {
+                            type: "string",
+                            enum: ["brand_manual", "product_detail", "project_board", "custom"],
+                          },
+                          pageCount: { type: "integer", example: 3 },
+                          aspectRatio: { type: "string", example: "A4" },
+                          title: { type: "string", nullable: true, example: "N+1 STUDIOS 品牌手册 2024" },
+                          errorMessage: {
+                            type: "string",
+                            nullable: true,
+                            description: "失败原因（status=failed 时返回）",
+                          },
                           createdAt: { type: "string", format: "date-time" },
                           pages: {
                             type: "array",
-                            description: "各页内容（status=done 时返回）",
+                            description: "各页内容（status=done 时返回，其他状态返回空数组）",
                             items: { $ref: "#/components/schemas/GraphicLayoutPage" },
                           },
+                        },
+                      },
+                    },
+                  },
+                  examples: {
+                    pending: {
+                      summary: "等待中",
+                      value: {
+                        data: {
+                          id: 42, status: "pending",
+                          docType: "brand_manual", pageCount: 3, aspectRatio: "A4",
+                          title: "N+1 STUDIOS 品牌手册 2024",
+                          errorMessage: null, createdAt: "2026-04-02T08:00:00.000Z",
+                          pages: [],
+                        },
+                      },
+                    },
+                    processing: {
+                      summary: "生成中",
+                      value: {
+                        data: {
+                          id: 42, status: "processing",
+                          docType: "brand_manual", pageCount: 3, aspectRatio: "A4",
+                          title: "N+1 STUDIOS 品牌手册 2024",
+                          errorMessage: null, createdAt: "2026-04-02T08:00:00.000Z",
+                          pages: [],
+                        },
+                      },
+                    },
+                    done: {
+                      summary: "已完成（包含页面数据）",
+                      value: {
+                        data: {
+                          id: 42, status: "done",
+                          docType: "brand_manual", pageCount: 3, aspectRatio: "A4",
+                          title: "N+1 STUDIOS 品牌手册 2024",
+                          errorMessage: null, createdAt: "2026-04-02T08:00:00.000Z",
+                          pages: [
+                            {
+                              pageIndex: 0,
+                              imageUrl: "https://cdn.example.com/graphic-layout/job42-page0.png",
+                              backgroundColor: "#F5F0EB",
+                              imageSize: { width: 1080, height: 1440 },
+                              textBlocks: [
+                                {
+                                  id: "tb_0_title",
+                                  text: "N+1 STUDIOS",
+                                  x: 80, y: 120, width: 920, height: 80,
+                                  fontSize: 48, color: "#1A1A1A",
+                                  fontFamily: "Noto Sans SC", fontWeight: "700",
+                                  align: "left", lineHeight: 1.2, role: "title",
+                                },
+                                {
+                                  id: "tb_0_body",
+                                  text: "专注于科技制造业办公空间设计的建筑事务所",
+                                  x: 80, y: 240, width: 920, height: 120,
+                                  fontSize: 24, color: "#4A4A4A",
+                                  fontFamily: "Noto Sans SC", fontWeight: "400",
+                                  align: "left", lineHeight: 1.6, role: "body",
+                                },
+                              ],
+                            },
+                            {
+                              pageIndex: 1,
+                              imageUrl: "https://cdn.example.com/graphic-layout/job42-page1.png",
+                              backgroundColor: "#1A1A1A",
+                              imageSize: { width: 1080, height: 1440 },
+                              textBlocks: [
+                                {
+                                  id: "tb_1_title",
+                                  text: "我们的服务",
+                                  x: 80, y: 200, width: 920, height: 80,
+                                  fontSize: 40, color: "#FFFFFF",
+                                  fontFamily: "Noto Sans SC", fontWeight: "600",
+                                  align: "center", lineHeight: 1.3, role: "title",
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      },
+                    },
+                    failed: {
+                      summary: "失败",
+                      value: {
+                        data: {
+                          id: 42, status: "failed",
+                          docType: "brand_manual", pageCount: 3, aspectRatio: "A4",
+                          title: "N+1 STUDIOS 品牌手册 2024",
+                          errorMessage: "图像生成服务超时，请重试",
+                          createdAt: "2026-04-02T08:00:00.000Z",
+                          pages: [],
                         },
                       },
                     },
@@ -906,7 +1138,8 @@ export function getOpenApiSpec(baseUrl: string) {
                 },
               },
             },
-            "404": { description: "任务不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "任务不存在或无权访问", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
       },
@@ -927,7 +1160,7 @@ export function getOpenApiSpec(baseUrl: string) {
           ],
           responses: {
             "200": {
-              description: "导出成功",
+              description: "导出成功，返回 PDF 下载 URL",
               content: {
                 "application/json": {
                   schema: {
@@ -935,18 +1168,39 @@ export function getOpenApiSpec(baseUrl: string) {
                     properties: {
                       data: {
                         type: "object",
+                        required: ["url", "filename"],
                         properties: {
-                          url: { type: "string", description: "PDF 下载 URL" },
-                          filename: { type: "string", description: "建议文件名" },
+                          url: {
+                            type: "string",
+                            format: "uri",
+                            description: "PDF 文件下载 URL（S3 公开链接，有效期 24 小时）",
+                            example: "https://cdn.example.com/graphic-layout-pdf/user123/42-1743580800000.pdf",
+                          },
+                          filename: {
+                            type: "string",
+                            description: "建议保存的文件名",
+                            example: "N+1 STUDIOS 品牌手册 2024.pdf",
+                          },
                         },
                       },
+                    },
+                  },
+                  example: {
+                    data: {
+                      url: "https://cdn.example.com/graphic-layout-pdf/user123/42-1743580800000.pdf",
+                      filename: "N+1 STUDIOS 品牌手册 2024.pdf",
                     },
                   },
                 },
               },
             },
-            "400": { description: "任务未完成或无页面数据", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-            "404": { description: "任务不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "400": {
+              description: "任务未完成（status 不为 done）或无页面数据",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "任务不存在或无权访问", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "500": { description: "页面图片获取失败", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
       },
