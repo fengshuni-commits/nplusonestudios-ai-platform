@@ -1,4 +1,5 @@
 import "dotenv/config";
+import cron from "node-cron";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -109,3 +110,53 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
+
+// ─── Daily cron: auto-update task statuses at 00:01 Beijing time (UTC+8 = 16:01 UTC prev day) ───
+// Cron runs at 16:01 UTC every day, which is 00:01 CST (Asia/Shanghai / Beijing time)
+cron.schedule("1 16 * * *", async () => {
+  try {
+    console.log("[Cron] Running daily task status auto-update (Beijing 00:01)...");
+    const { getDb } = await import("../db");
+    const drizzleDb = await getDb();
+    if (!drizzleDb) return;
+    const { eq, ne } = await import("drizzle-orm");
+    const { tasks } = await import("../../drizzle/schema");
+
+    // Today's date string in Beijing time (UTC+8)
+    const now = new Date();
+    const todayStr = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const allTasks = await drizzleDb.select().from(tasks).where(ne(tasks.status as any, "done"));
+    let updated = 0;
+
+    for (const task of allTasks) {
+      let newStatus: string = task.status;
+
+      // Rule 1: startDate is today or earlier and status is 'todo' → mark as 'in_progress'
+      if (task.startDate && task.status === "todo") {
+        const startStr = new Date(new Date(task.startDate).getTime() + 8 * 60 * 60 * 1000)
+          .toISOString().slice(0, 10);
+        if (startStr <= todayStr) {
+          newStatus = "in_progress";
+        }
+      }
+
+      // Rule 2: approval is true → mark as 'done'
+      if ((task as any).approval === true && task.status !== "done") {
+        newStatus = "done";
+      }
+
+      if (newStatus !== task.status) {
+        await drizzleDb
+          .update(tasks)
+          .set({ status: newStatus as any, updatedAt: new Date() })
+          .where(eq(tasks.id, task.id));
+        updated++;
+      }
+    }
+
+    console.log(`[Cron] Task status auto-update complete: ${updated} task(s) updated.`);
+  } catch (err) {
+    console.error("[Cron] Task status auto-update failed:", err);
+  }
+}, { timezone: "UTC" });

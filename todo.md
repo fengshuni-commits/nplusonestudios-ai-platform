@@ -1504,3 +1504,8 @@
 - [x] 将 generateGraphicLayoutAsync 提取到 graphicLayoutService.ts 共享
 - [x] 更新 API 文档页面中的接口 URL 和示例
 - [x] 测试并保存 checkpoint
+
+## Bug 修复：系统时区为加州时间，任务状态未按北京时间更新
+- [x] 排查时区问题：根本原因是 applyAutoStatus 只在首页加载时触发一次，没有服务器端定时任务
+- [x] 修复：在 server/_core/index.ts 中添加 node-cron 定时任务，每天北京时间 00:01（UTC 16:01）自动扫描并更新任务状态
+- [x] 验证修复并保存 checkpoint
