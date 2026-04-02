@@ -1244,7 +1244,10 @@ const documentsRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const buffer = Buffer.from(input.fileData, "base64");
-      const key = `project-docs/${input.projectId}/${nanoid()}-${input.fileName}`;
+      // Sanitize filename: encodeURIComponent ensures Chinese chars & special symbols
+      // are URL-safe in the S3 key, preventing CloudFront 403 errors
+      const safeFileName = encodeURIComponent(input.fileName);
+      const key = `project-docs/${input.projectId}/${nanoid()}-${safeFileName}`;
       const { url } = await storagePut(key, buffer, input.contentType);
 
       // Create document record

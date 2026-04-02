@@ -1069,7 +1069,23 @@ function ProjectDocumentsTab({
                           </Button>
                         )}
                         {doc.fileUrl && (
-                          <Button size="icon" variant="ghost" className="h-7 w-7" title={isUrlLink ? "打开链接" : "下载"} onClick={() => window.open(doc.fileUrl, "_blank")}>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title={isUrlLink ? "打开链接" : "下载"} onClick={() => {
+                            if (isUrlLink) {
+                              window.open(doc.fileUrl, "_blank");
+                            } else {
+                              // Ensure URL is properly encoded for Chinese filenames
+                              const encodedUrl = doc.fileUrl.split("/").map((seg: string, i: number) =>
+                                i < 3 ? seg : encodeURIComponent(decodeURIComponent(seg))
+                              ).join("/");
+                              const a = document.createElement("a");
+                              a.href = encodedUrl;
+                              a.download = doc.title || "document";
+                              a.target = "_blank";
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                            }
+                          }}>
                             {isUrlLink ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
                           </Button>
                         )}
