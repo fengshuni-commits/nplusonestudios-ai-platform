@@ -5003,7 +5003,32 @@ const graphicLayoutRouter = router({
     if (!drizzleDb) return [];
     const { graphicLayoutJobs } = await import("../drizzle/schema");
     const { eq: _eq, desc: _desc } = await import("drizzle-orm");
-    return drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(50);
+    // Return summary only (no full pages/htmlPages) to reduce payload size
+    const rows = await drizzleDb.select({
+      id: graphicLayoutJobs.id,
+      userId: graphicLayoutJobs.userId,
+      packId: graphicLayoutJobs.packId,
+      docType: graphicLayoutJobs.docType,
+      pageCount: graphicLayoutJobs.pageCount,
+      aspectRatio: graphicLayoutJobs.aspectRatio,
+      contentText: graphicLayoutJobs.contentText,
+      assetUrls: graphicLayoutJobs.assetUrls,
+      title: graphicLayoutJobs.title,
+      status: graphicLayoutJobs.status,
+      errorMessage: graphicLayoutJobs.errorMessage,
+      createdAt: graphicLayoutJobs.createdAt,
+      updatedAt: graphicLayoutJobs.updatedAt,
+      pages: graphicLayoutJobs.pages,
+    }).from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(30);
+    // Only include the first page thumbnail to avoid sending all page images
+    return rows.map(row => {
+      const pages = (row.pages as any[] | null) ?? [];
+      const firstPage = pages[0];
+      return {
+        ...row,
+        pages: firstPage ? [{ pageIndex: 0, imageUrl: firstPage.imageUrl ?? null, backgroundColor: firstPage.backgroundColor ?? "#1a1a1a" }] : []
+      };
+    });
   }),
 
   delete: protectedProcedure

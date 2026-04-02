@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo, memo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -269,7 +269,14 @@ export default function MediaLayout() {
   const byTypeFileRef = useRef<HTMLInputElement>(null); // by_type 单文件模式用
 
   // Style Packs
-  const { data: stylePacks = [], refetch: refetchPacks } = trpc.graphicStylePacks.list.useQuery();
+  const { data: stylePacks = [], refetch: refetchPacks } = trpc.graphicStylePacks.list.useQuery(undefined, {
+    staleTime: 10_000,
+    refetchInterval: (query) => {
+      const packs = (query.state.data as StylePack[] | undefined) ?? [];
+      const hasPending = packs.some(p => p.status === "pending" || p.status === "processing");
+      return hasPending ? 4000 : false;
+    },
+  });
   const [selectedPackId, setSelectedPackId] = useState<number | undefined>();
   const [uploadingPack, setUploadingPack] = useState(false);
   const [showPackUpload, setShowPackUpload] = useState(false);
@@ -299,13 +306,6 @@ export default function MediaLayout() {
     onSuccess: () => { refetchPacks(); },
   });
 
-  useEffect(() => {
-    const hasPending = (stylePacks as StylePack[]).some((p) => p.status === "pending" || p.status === "processing");
-    if (!hasPending) return;
-    const timer = setInterval(() => refetchPacks(), 4000);
-    return () => clearInterval(timer);
-  }, [stylePacks, refetchPacks]);
-
   // Generate Form
   const [docType, setDocType] = useState("brand_manual");
   const [pageCount, setPageCount] = useState(1);
@@ -328,7 +328,7 @@ export default function MediaLayout() {
   const [uploadingTypeName, setUploadingTypeName] = useState<string | null>(null);
 
   // Jobs
-  const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery();
+  const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery(undefined, { staleTime: 30_000 });
   const [activeJobId, setActiveJobId] = useState<number | undefined>();
   const [currentPage, setCurrentPage] = useState(0);
   const [generating, setGenerating] = useState(false);
@@ -472,16 +472,34 @@ export default function MediaLayout() {
   });
 
   const activeJobQueryInput = useMemo(() => ({ id: activeJobId! }), [activeJobId]);
+  const activeJobIsTerminal = useMemo(() => {
+    const found = (jobs as LayoutJob[]).find(j => j.id === activeJobId);
+    return found?.status === "done" || found?.status === "failed";
+  }, [jobs, activeJobId]);
   const { data: activeJobData, refetch: refetchActiveJob } = trpc.graphicLayout.status.useQuery(
     activeJobQueryInput,
-    { enabled: !!activeJobId, refetchInterval: activeJobId ? 3000 : false }
+    {
+      enabled: !!activeJobId,
+      // Stop polling once the job is done or failed
+      refetchInterval: (query) => {
+        const status = (query.state.data as LayoutJob | undefined)?.status;
+        if (status === "done" || status === "failed") return false;
+        return activeJobId ? 3000 : false;
+      },
+      staleTime: 0,
+    }
   );
 
   const activeJob = activeJobData as LayoutJob | undefined;
 
+  const prevActiveStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (activeJob?.status === "done" || activeJob?.status === "failed") {
+    const status = activeJob?.status;
+    if ((status === "done" || status === "failed") && prevActiveStatusRef.current !== status) {
+      prevActiveStatusRef.current = status;
       refetchJobs();
+    } else {
+      prevActiveStatusRef.current = status;
     }
   }, [activeJob?.status]);
 

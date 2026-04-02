@@ -1492,3 +1492,8 @@
 - [x] 前端：jobStatus done 时保存 previewImages 到 resultPreviewImages state
 - [x] 前端：用真实 PPTX 截图替代 React 模拟渲染（两种模式统一）
 - [x] 前端：文件转换模式保留原始页面对比面板（可折叠）
+
+## Bug 修复：图文排版页面下滑闪退
+- [x] 排查闪退原因（done/failed 后持续轮询 + list 接口返回全量 pages 数据 + stylePacks useEffect 循环）
+- [x] 修复闪退问题（停止终态轮询、list 接口只返回第一页缩略图、stylePacks 改为 refetchInterval、jobs staleTime 30s）
+- [x] 验证修复并保存 checkpoint
