@@ -1571,3 +1571,8 @@
 - [x] 前端：出品标准 AI 平面图提示词 Tab 改为按风格分组展示，每种风格下有基础提示词和参考图前缀提示词
 - [x] 插入三种风格的默认提示词数据
 - [x] 保存 checkpoint
+
+## 删除出品标准中 AI 版式学习功能
+- [x] 找到 Standards.tsx 中 AI 版式学习相关的 Tab、组件和代码
+- [x] 删除 AI 版式学习 TabsTrigger 和 TabsContent（AILayoutLearning 组件保留但不再展示）
+- [x] 保存 checkpoint

@@ -1477,9 +1477,6 @@ export default function Standards() {
           <TabsTrigger value="ppt-layouts" className="gap-1.5">
             <Layout className="h-4 w-4" />演示文稿版式标准
           </TabsTrigger>
-          <TabsTrigger value="ai-layout-learning" className="gap-1.5">
-            <Sparkles className="h-4 w-4" />Â AI 版式学习
-          </TabsTrigger>
           <TabsTrigger value="analysis-prompts" className="gap-1.5">
             <Layers className="h-4 w-4" />分析图提示词
           </TabsTrigger>
@@ -1649,11 +1646,6 @@ export default function Standards() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-        </TabsContent>
-
-        {/* ─── AI 版式学习 Tab ─── */}
-        <TabsContent value="ai-layout-learning">
-          <AILayoutLearning />
         </TabsContent>
 
         {/* ─── 分析图提示词 Tab ─── */}
