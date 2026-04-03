@@ -267,6 +267,13 @@
       "when": 1775228277684,
       "tag": "0037_rainy_bloodstorm",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1775230751163,
+      "tag": "0038_worthless_serpent_society",
+      "breakpoints": true
     }
   ]
 }

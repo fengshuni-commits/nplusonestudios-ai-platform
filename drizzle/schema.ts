@@ -719,3 +719,24 @@ export const colorPlanPrompts = mysqlTable("color_plan_prompts", {
 }));
 export type ColorPlanPrompt = typeof colorPlanPrompts.$inferSelect;
 export type InsertColorPlanPrompt = typeof colorPlanPrompts.$inferInsert;
+
+// ─── Case Study Prompts ─────────────────────────────────────────────────────
+// 案例调研报告生成的各阶段提示词，可在出品标准中管理
+export const caseStudyPrompts = mysqlTable("case_study_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  // 提示词阶段：keyword_extraction（关键词提取）| case_selection（案例筛选）| report_generation（报告生成）
+  phase: mysqlEnum("phase", ["keyword_extraction", "case_selection", "report_generation"]).notNull(),
+  // 显示名称
+  label: varchar("label", { length: 128 }).notNull(),
+  // 提示词内容（系统提示词，支持 {projectName} {projectType} {requirements} {referenceCount} {caseRefs} 占位符）
+  prompt: text("prompt").notNull(),
+  // 提示词说明（给编辑者的备注）
+  description: text("description"),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  phaseUnique: uniqueIndex("case_study_phase_unique").on(t.phase),
+}));
+export type CaseStudyPrompt = typeof caseStudyPrompts.$inferSelect;
+export type InsertCaseStudyPrompt = typeof caseStudyPrompts.$inferInsert;

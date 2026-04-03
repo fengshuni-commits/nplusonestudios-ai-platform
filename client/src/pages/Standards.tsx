@@ -443,6 +443,153 @@ const ANALYSIS_PROMPT_TYPES = [
 ];
 
 // ─── Color Plan Prompt Types ──────────────────────────────────────────────────
+// ─── Case Study Prompt Types ─────────────────────────────────────────────────
+const CASE_STUDY_PHASES = [
+  {
+    id: "keyword_extraction" as const,
+    label: "关键词提取",
+    icon: Sparkles,
+    desc: "从项目需求中提取 4-6 个设计维度关键词，用于引导后续案例搜索。",
+  },
+  {
+    id: "case_selection" as const,
+    label: "案例筛选",
+    icon: Layers,
+    desc: "根据项目需求选出最匹配的对标案例名称列表。支持占位符 {referenceCount}、{excludeSection}。",
+  },
+  {
+    id: "report_generation" as const,
+    label: "报告生成",
+    icon: FileText,
+    desc: "根据案例列表生成完整的对标调研报告。支持占位符 {currentDate}、{caseRefs}、{referenceCount}。",
+  },
+];
+
+function CaseStudyPromptsTab() {
+  const utils = trpc.useUtils();
+  const { data: prompts = [], isLoading } = trpc.caseStudyPrompts.listPrompts.useQuery();
+  const updateMutation = trpc.caseStudyPrompts.updatePrompt.useMutation({
+    onSuccess: () => {
+      utils.caseStudyPrompts.listPrompts.invalidate();
+      toast.success("提示词已保存");
+    },
+    onError: (e) => toast.error("保存失败：" + e.message),
+  });
+
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [editingPhase, setEditingPhase] = React.useState<string | null>(null);
+
+  const promptMap = Object.fromEntries(
+    (prompts as Array<{ phase: string; prompt: string; label: string; description?: string | null }>).map(p => [p.phase, p])
+  );
+
+  const handleEdit = (phase: string) => {
+    const current = promptMap[phase]?.prompt ?? "";
+    setDrafts(d => ({ ...d, [phase]: current }));
+    setEditingPhase(phase);
+  };
+
+  const handleSave = (phase: "keyword_extraction" | "case_selection" | "report_generation") => {
+    const draft = drafts[phase];
+    if (!draft?.trim()) { toast.error("提示词不能为空"); return; }
+    updateMutation.mutate({ phase, prompt: draft.trim() });
+    setEditingPhase(null);
+  };
+
+  const handleCancel = (phase: string) => {
+    setEditingPhase(null);
+    setDrafts(d => { const n = { ...d }; delete n[phase]; return n; });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">案例调研提示词</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                配置案例调研报告生成的三个阶段提示词。修改后将立即影响所有新的调研任务。
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">加载中…</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              {CASE_STUDY_PHASES.map(({ id, label, icon: Icon, desc }) => {
+                const current = promptMap[id];
+                const isEditing = editingPhase === id;
+                const draftValue = drafts[id] ?? current?.prompt ?? "";
+                return (
+                  <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                      </div>
+                      {!isEditing && (
+                        <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5">
+                          <Pencil className="h-3.5 w-3.5" />编辑
+                        </Button>
+                      )}
+                    </div>
+
+                    {isEditing ? (
+                      <div className="flex flex-col gap-2">
+                        <Textarea
+                          value={draftValue}
+                          onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))}
+                          rows={10}
+                          className="text-sm font-mono resize-y"
+                          placeholder="输入提示词…"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          支持占位符：<code className="bg-muted px-1 rounded">{'{referenceCount}'}</code>、
+                          <code className="bg-muted px-1 rounded">{'{excludeSection}'}</code>、
+                          <code className="bg-muted px-1 rounded">{'{caseRefs}'}</code>、
+                          <code className="bg-muted px-1 rounded">{'{currentDate}'}</code>
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleSave(id as "keyword_extraction" | "case_selection" | "report_generation")}
+                            disabled={updateMutation.isPending}
+                            className="gap-1.5"
+                          >
+                            {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                            保存
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-muted/50 rounded-md p-3 border border-border">
+                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                          {current?.prompt || <span className="italic">暂无提示词（将使用内置默认値）</span>}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const COLOR_PLAN_STYLES = [
   { id: "colored" as const, label: "彩色平面", icon: Palette },
   { id: "hand_drawn" as const, label: "手绘平面", icon: PenLine },
@@ -1486,6 +1633,9 @@ export default function Standards() {
           <TabsTrigger value="color-plan-prompts" className="gap-1.5">
             <Palette className="h-4 w-4" />AI 平面图
           </TabsTrigger>
+          <TabsTrigger value="case-study-prompts" className="gap-1.5">
+            <Sparkles className="h-4 w-4" />案例调研
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── 演示文稿版式标准 Tab ─── */}
@@ -1661,6 +1811,11 @@ export default function Standards() {
         {/* ─── AI 彩平提示词 Tab ─── */}
         <TabsContent value="color-plan-prompts">
           <ColorPlanPromptsTab />
+        </TabsContent>
+
+        {/* ─── 案例调研提示词 Tab ─── */}
+        <TabsContent value="case-study-prompts">
+          <CaseStudyPromptsTab />
         </TabsContent>
       </Tabs>
     </div>

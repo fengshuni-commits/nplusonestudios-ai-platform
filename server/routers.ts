@@ -2181,8 +2181,34 @@ const benchmarkRouter = router({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PPT 生成失败" });
     }),
 });
+// ─── Case Study Prompts Router ────────────────────────
+const caseStudyPromptsRouter = router({
+  /** List all case study prompts */
+  listPrompts: protectedProcedure
+    .query(async () => {
+      return db.listCaseStudyPrompts();
+    }),
 
-// ─── AI Module: Rendering / Sketch ───────────────────────
+  /** Update a case study prompt */
+  updatePrompt: protectedProcedure
+    .input(z.object({
+      phase: z.enum(["keyword_extraction", "case_selection", "report_generation"]),
+      prompt: z.string().min(1),
+      label: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.upsertCaseStudyPrompt(input.phase, {
+        prompt: input.prompt,
+        label: input.label,
+        description: input.description,
+        updatedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
+});
+
+// ─── AI Module: Rendering / Sketch ────────────────────────
 
 async function generateRenderingInBackground(
   jobId: string,
@@ -5818,6 +5844,7 @@ export const appRouter = router({system: systemRouter,
   renderStyles: renderStylesRouter,
   aiTools: aiToolsRouter,
   benchmark: benchmarkRouter,
+  caseStudyPrompts: caseStudyPromptsRouter,
   rendering: renderingRouter,
   colorPlan: colorPlanRouter,
   meeting: meetingRouter,

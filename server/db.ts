@@ -2348,3 +2348,47 @@ export async function upsertColorPlanPrompt(
     return { id: Number((result as any).insertId), style, type, label: data.label ?? defaultLabel, prompt: data.prompt };
   }
 }
+
+// ─── Case Study Prompts ──────────────────────────────────────────────────────
+export async function listCaseStudyPrompts() {
+  const db = await getDb();
+  if (!db) return [];
+  const { caseStudyPrompts } = await import("../drizzle/schema");
+  return db.select().from(caseStudyPrompts).orderBy(caseStudyPrompts.phase);
+}
+
+export async function getCaseStudyPrompt(phase: "keyword_extraction" | "case_selection" | "report_generation") {
+  const db = await getDb();
+  if (!db) return null;
+  const { caseStudyPrompts } = await import("../drizzle/schema");
+  const rows = await db.select().from(caseStudyPrompts)
+    .where(eq(caseStudyPrompts.phase, phase))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertCaseStudyPrompt(
+  phase: "keyword_extraction" | "case_selection" | "report_generation",
+  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { caseStudyPrompts } = await import("../drizzle/schema");
+  const existing = await getCaseStudyPrompt(phase);
+  const defaultLabels: Record<string, string> = {
+    keyword_extraction: "关键词提取",
+    case_selection: "案例筛选",
+    report_generation: "报告生成",
+  };
+  if (existing) {
+    await db.update(caseStudyPrompts)
+      .set({ prompt: data.prompt, label: data.label ?? existing.label, description: data.description, updatedBy: data.updatedBy, updatedAt: new Date() })
+      .where(eq(caseStudyPrompts.phase, phase));
+    return { ...existing, ...data };
+  } else {
+    const result = await db.insert(caseStudyPrompts).values({
+      phase, label: data.label ?? defaultLabels[phase], prompt: data.prompt, description: data.description, updatedBy: data.updatedBy
+    });
+    return { id: Number((result as any).insertId), phase, label: data.label ?? defaultLabels[phase], prompt: data.prompt };
+  }
+}

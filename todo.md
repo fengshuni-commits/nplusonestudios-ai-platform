@@ -1576,3 +1576,10 @@
 - [x] 找到 Standards.tsx 中 AI 版式学习相关的 Tab、组件和代码
 - [x] 删除 AI 版式学习 TabsTrigger 和 TabsContent（AILayoutLearning 组件保留但不再展示）
 - [x] 保存 checkpoint
+
+## 案例调研提示词加入出品标准
+- [x] 分析案例调研模块的提示词结构（三个阶段：关键词提取/案例筛选/报告生成）
+- [x] 数据库迁移：新建 case_study_prompts 表，插入三条默认提示词
+- [x] 后端：listPrompts / updatePrompt 接口，注册 caseStudyPromptsRouter
+- [x] 出品标准新增《案例调研》 Tab，支持三个阶段提示词的在线编辑
+- [x] 保存 checkpoint
