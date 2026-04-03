@@ -1562,3 +1562,12 @@
 - [x] 找到出品标准展示区域的代码
 - [x] 将内置提示词内容集成到出品标准中展示：新建 color_plan_prompts 表、后端提供 listPrompts/updatePrompt API、出品标准新增《AI 彩平提示词》 Tab
 - [x] 保存 checkpoint
+
+## AI 平面图多风格提示词系统
+- [x] 分析现有 color_plan_prompts 表结构，规划多风格数据模型
+- [x] 数据库迁移：color_plan_prompts 表增加 style 字段（colored/hand_drawn/line_drawing），type 字段保留 base/reference_prefix，联合唯一索引
+- [x] 后端：listPrompts 支持按 style 过滤；updatePrompt 支持 style 参数；generate 接口根据 planStyle 读取对应提示词
+- [x] 前端：AI 平面图页面上传底图前显示风格选择卡片（彩色平面/手绘平面/平面线稿），默认彩色平面
+- [x] 前端：出品标准 AI 平面图提示词 Tab 改为按风格分组展示，每种风格下有基础提示词和参考图前缀提示词
+- [x] 插入三种风格的默认提示词数据
+- [x] 保存 checkpoint

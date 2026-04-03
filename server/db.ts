@@ -2302,36 +2302,49 @@ export async function getGraphicStylePackById(id: number) {
   return rows[0] ?? null;
 }
 
-// ─── Color Plan Prompts (AI 彩平内置提示词) ──────────────────────────────────
-export async function listColorPlanPrompts() {
+// ─── Color Plan Prompts (AI 平面图内置提示词) ──────────────────────────────────────────────────
+export async function listColorPlanPrompts(style?: "colored" | "hand_drawn" | "line_drawing") {
   const db = await getDb();
   if (!db) return [];
   const { colorPlanPrompts } = await import("../drizzle/schema");
-  return db.select().from(colorPlanPrompts).orderBy(colorPlanPrompts.type);
+  if (style) {
+    return db.select().from(colorPlanPrompts).where(eq(colorPlanPrompts.style, style)).orderBy(colorPlanPrompts.type);
+  }
+  return db.select().from(colorPlanPrompts).orderBy(colorPlanPrompts.style, colorPlanPrompts.type);
 }
 
-export async function getColorPlanPrompt(type: "base" | "reference_prefix") {
+export async function getColorPlanPrompt(
+  type: "base" | "reference_prefix",
+  style: "colored" | "hand_drawn" | "line_drawing" = "colored"
+) {
   const db = await getDb();
   if (!db) return null;
   const { colorPlanPrompts } = await import("../drizzle/schema");
-  const rows = await db.select().from(colorPlanPrompts).where(eq(colorPlanPrompts.type, type)).limit(1);
+  const { and: _and } = await import("drizzle-orm");
+  const rows = await db.select().from(colorPlanPrompts)
+    .where(_and(eq(colorPlanPrompts.style, style), eq(colorPlanPrompts.type, type)))
+    .limit(1);
   return rows[0] ?? null;
 }
 
 export async function upsertColorPlanPrompt(
   type: "base" | "reference_prefix",
-  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+  data: { style?: "colored" | "hand_drawn" | "line_drawing"; label?: string; prompt: string; description?: string; updatedBy?: number }
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   const { colorPlanPrompts } = await import("../drizzle/schema");
-  const existing = await getColorPlanPrompt(type);
+  const { and: _and } = await import("drizzle-orm");
+  const style = data.style ?? "colored";
+  const existing = await getColorPlanPrompt(type, style);
   const defaultLabel = type === "base" ? "基础提示词" : "参考图前缀提示词";
   if (existing) {
-    await db.update(colorPlanPrompts).set({ ...data, updatedAt: new Date() }).where(eq(colorPlanPrompts.type, type));
+    await db.update(colorPlanPrompts)
+      .set({ prompt: data.prompt, label: data.label ?? existing.label, description: data.description, updatedBy: data.updatedBy, updatedAt: new Date() })
+      .where(_and(eq(colorPlanPrompts.style, style), eq(colorPlanPrompts.type, type)));
     return { ...existing, ...data };
   } else {
-    const result = await db.insert(colorPlanPrompts).values({ type, label: data.label ?? defaultLabel, prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
-    return { id: Number((result as any).insertId), type, label: data.label ?? defaultLabel, prompt: data.prompt };
+    const result = await db.insert(colorPlanPrompts).values({ style, type, label: data.label ?? defaultLabel, prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
+    return { id: Number((result as any).insertId), style, type, label: data.label ?? defaultLabel, prompt: data.prompt };
   }
 }

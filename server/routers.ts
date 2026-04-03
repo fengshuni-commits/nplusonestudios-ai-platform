@@ -2465,14 +2465,17 @@ const renderingRouter = router({
 
 //// ─── AI Module: Color Floor Plan (彩平) ──────────────────
 const colorPlanRouter = router({
-  /** List all built-in color plan prompts */
-  listPrompts: protectedProcedure.query(async () => {
-    return db.listColorPlanPrompts();
-  }),
+  /** List all built-in color plan prompts, optionally filtered by style */
+  listPrompts: protectedProcedure
+    .input(z.object({ style: z.enum(["colored", "hand_drawn", "line_drawing"]).optional() }).optional())
+    .query(async ({ input }) => {
+      return db.listColorPlanPrompts(input?.style);
+    }),
 
   /** Update a built-in color plan prompt */
   updatePrompt: protectedProcedure
     .input(z.object({
+      style: z.enum(["colored", "hand_drawn", "line_drawing"]).default("colored"),
       type: z.enum(["base", "reference_prefix"]),
       prompt: z.string().min(1),
       label: z.string().optional(),
@@ -2480,6 +2483,7 @@ const colorPlanRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       await db.upsertColorPlanPrompt(input.type, {
+        style: input.style,
         prompt: input.prompt,
         label: input.label,
         description: input.description,
@@ -2502,11 +2506,12 @@ const colorPlanRouter = router({
       return { url, key };
     }),
 
-  /** Generate a colorized floor plan from a base floor plan + optional reference image */
+  /** Generate a floor plan from a base floor plan + optional reference image */
   generate: protectedProcedure
     .input(z.object({
       floorPlanUrl: z.string().url(),
       referenceUrl: z.string().url().optional(),
+      planStyle: z.enum(["colored", "hand_drawn", "line_drawing"]).default("colored"),
       style: z.string().optional(),
       extraPrompt: z.string().optional(),
       projectId: z.number().optional(),
@@ -2536,24 +2541,29 @@ const colorPlanRouter = router({
         } catch { /* ignore */ }
       }
 
-      // Load prompts from DB (fallback to hardcoded defaults if not set)
-      const basePromptRow = await db.getColorPlanPrompt("base");
-      const refPrefixRow = await db.getColorPlanPrompt("reference_prefix");
+      // Load prompts from DB based on planStyle (fallback to hardcoded defaults if not set)
+      const planStyle = input.planStyle ?? "colored";
+      const basePromptRow = await db.getColorPlanPrompt("base", planStyle);
+      const refPrefixRow = await db.getColorPlanPrompt("reference_prefix", planStyle);
 
-      const defaultBasePrompt =
-        `Architectural colored floor plan. ` +
-        `Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. ` +
-        `Apply realistic material textures and colors: warm wood flooring for living and dining areas, ` +
-        `light tile or stone for bathrooms and kitchens, soft carpet or parquet for bedrooms, ` +
-        `green indoor plants, furniture with drop shadows for depth. ` +
-        `Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. ` +
-        `Clean top-down orthographic view. High quality architectural presentation style.`;
+      // Default prompts per style
+      const defaultPrompts: Record<string, { base: string; refPrefix: string }> = {
+        colored: {
+          base: `Architectural colored floor plan. Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. Apply realistic material textures and colors: warm wood flooring for living and dining areas, light tile or stone for bathrooms and kitchens, soft carpet or parquet for bedrooms, green indoor plants, furniture with drop shadows for depth. Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. Clean top-down orthographic view. High quality architectural presentation style.`,
+          refPrefix: `[STYLE REFERENCE: The second image shows the target color style and material palette. Apply the same color scheme and material textures to the floor plan.]`,
+        },
+        hand_drawn: {
+          base: `Architectural hand-drawn floor plan. Transform the provided floor plan into a hand-drawn style architectural plan. Apply watercolor washes for room fills with soft, organic color bleeding at edges. Use pencil-sketch line work for walls, doors, and windows with slight imperfections for a human touch. Add light watercolor textures: warm beige/cream for living areas, soft blue-grey for bathrooms, light green for plants. Maintain exact spatial layout. Top-down orthographic view with artistic, sketch-like quality.`,
+          refPrefix: `[STYLE REFERENCE: The second image shows the target hand-drawn style, color palette and sketch technique. Apply the same watercolor wash style, line weight, and color tones to the floor plan.]`,
+        },
+        line_drawing: {
+          base: `Architectural floor plan line drawing. Transform the provided floor plan into a clean, precise architectural line drawing. Use crisp black lines on white background for all walls, doors, windows, and furniture outlines. Apply minimal grey fills or hatching to differentiate spaces. No color fills, no textures. Clean, technical drafting style with consistent line weights. Top-down orthographic view. Professional architectural presentation quality.`,
+          refPrefix: `[STYLE REFERENCE: The second image shows the target line drawing style and line weight convention. Apply the same drafting technique, line weights, and symbol conventions to the floor plan.]`,
+        },
+      };
 
-      const defaultRefPrefix =
-        `[STYLE REFERENCE: The second image shows the target color style and material palette. ` +
-        `Apply the same color scheme and material textures to the floor plan.]`;
-
-      let prompt = basePromptRow?.prompt || defaultBasePrompt;
+      const defaults = defaultPrompts[planStyle] || defaultPrompts.colored;
+      let prompt = basePromptRow?.prompt || defaults.base;
 
       if (input.style) prompt += ` Style: ${input.style}.`;
       if (input.extraPrompt) prompt += ` ${input.extraPrompt}`;
@@ -2563,7 +2573,7 @@ const colorPlanRouter = router({
       ];
       if (input.referenceUrl) {
         originalImages.push({ url: input.referenceUrl, mimeType: "image/png" });
-        const refPrefix = refPrefixRow?.prompt || defaultRefPrefix;
+        const refPrefix = refPrefixRow?.prompt || defaults.refPrefix;
         prompt = `${refPrefix} ` + prompt;
       }
 
@@ -2578,6 +2588,7 @@ const colorPlanRouter = router({
           inputParams: {
             floorPlanUrl: input.floorPlanUrl,
             referenceUrl: input.referenceUrl || null,
+            planStyle: input.planStyle || "colored",
             style: input.style || null,
             extraPrompt: input.extraPrompt || null,
           },

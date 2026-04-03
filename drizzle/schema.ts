@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, longtext } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, longtext, uniqueIndex } from "drizzle-orm/mysql-core";
 
 // ─── Users ───────────────────────────────────────────────
 export const users = mysqlTable("users", {
@@ -701,8 +701,10 @@ export type InsertGraphicLayoutPrompt = typeof graphicLayoutPrompts.$inferInsert
 // ─── Color Plan Prompts (AI 彩平内置提示词) ───────────────────────────────────
 export const colorPlanPrompts = mysqlTable("color_plan_prompts", {
   id: int("id").autoincrement().primaryKey(),
+  // 平面图风格：colored（彩色平面）| hand_drawn（手绘平面）| line_drawing（平面线稿）
+  style: mysqlEnum("style", ["colored", "hand_drawn", "line_drawing"]).notNull().default("colored"),
   // 提示词类型：base（基础提示词）| reference_prefix（有参考图时的前缀）
-  type: mysqlEnum("type", ["base", "reference_prefix"]).notNull().unique(),
+  type: mysqlEnum("type", ["base", "reference_prefix"]).notNull(),
   // 显示名称
   label: varchar("label", { length: 128 }).notNull(),
   // 提示词内容
@@ -712,6 +714,8 @@ export const colorPlanPrompts = mysqlTable("color_plan_prompts", {
   updatedBy: int("updatedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => ({
+  styleTypeUnique: uniqueIndex("style_type_unique").on(t.style, t.type),
+}));
 export type ColorPlanPrompt = typeof colorPlanPrompts.$inferSelect;
 export type InsertColorPlanPrompt = typeof colorPlanPrompts.$inferInsert;

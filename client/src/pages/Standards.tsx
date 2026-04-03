@@ -13,8 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Pencil, Trash2, GripVertical, ImagePlus, X, Loader2, Eye, EyeOff, Palette, Layout,
   Upload, Sparkles, CheckCircle2, AlertCircle, Clock, FileText, Image, FileUp, Trash, RefreshCw,
-  ChevronRight, Package, Cpu, Layers, Sofa, Save
+  ChevronRight, Package, Cpu, Layers, Sofa, Save, PenLine, ScanLine
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ─── PPT Layout Standards ─────────────────────────────────────────────────────
 
@@ -442,12 +443,17 @@ const ANALYSIS_PROMPT_TYPES = [
 ];
 
 // ─── Color Plan Prompt Types ──────────────────────────────────────────────────
+const COLOR_PLAN_STYLES = [
+  { id: "colored" as const, label: "彩色平面", icon: Palette },
+  { id: "hand_drawn" as const, label: "手绘平面", icon: PenLine },
+  { id: "line_drawing" as const, label: "平面线稿", icon: ScanLine },
+];
 const COLOR_PLAN_PROMPT_TYPES = [
   {
     id: "base" as const,
     label: "基础提示词",
     icon: Layers,
-    desc: "彩平生成的核心提示词，控制材质、色彩和整体风格。用户的风格选项和附加说明会追加到此提示词之后。",
+    desc: "平面图生成的核心提示词，控制整体风格。用户的附加说明会追加到此提示词之后。",
   },
   {
     id: "reference_prefix" as const,
@@ -459,7 +465,8 @@ const COLOR_PLAN_PROMPT_TYPES = [
 
 function ColorPlanPromptsTab() {
   const utils = trpc.useUtils();
-  const { data: prompts = [], isLoading } = trpc.colorPlan.listPrompts.useQuery();
+  const [activeStyle, setActiveStyle] = React.useState<"colored" | "hand_drawn" | "line_drawing">("colored");
+  const { data: prompts = [], isLoading } = trpc.colorPlan.listPrompts.useQuery({ style: activeStyle });
   const updateMutation = trpc.colorPlan.updatePrompt.useMutation({
     onSuccess: () => {
       utils.colorPlan.listPrompts.invalidate();
@@ -470,6 +477,13 @@ function ColorPlanPromptsTab() {
 
   const [drafts, setDrafts] = React.useState<Record<string, string>>({});
   const [editingType, setEditingType] = React.useState<string | null>(null);
+
+  // Reset editing state when switching style
+  const handleStyleChange = (style: typeof activeStyle) => {
+    setActiveStyle(style);
+    setEditingType(null);
+    setDrafts({});
+  };
 
   const promptMap = Object.fromEntries(
     (prompts as Array<{ type: string; prompt: string; label: string; description?: string | null }>).map(p => [p.type, p])
@@ -484,7 +498,7 @@ function ColorPlanPromptsTab() {
   const handleSave = (type: "base" | "reference_prefix") => {
     const draft = drafts[type];
     if (!draft?.trim()) { toast.error("提示词不能为空"); return; }
-    updateMutation.mutate({ type, prompt: draft.trim() });
+    updateMutation.mutate({ style: activeStyle, type, prompt: draft.trim() });
     setEditingType(null);
   };
 
@@ -500,78 +514,99 @@ function ColorPlanPromptsTab() {
           <div className="flex items-center gap-2">
             <Palette className="h-5 w-5 text-primary" />
             <div>
-              <CardTitle className="text-base">AI 彩平内置提示词</CardTitle>
+              <CardTitle className="text-base">AI 平面图内置提示词</CardTitle>
               <CardDescription className="text-xs mt-0.5">
-                配置 AI 彩色平面图生成时使用的内置提示词。修改后将立即影响所有新的彩平生成任务，建议使用英文以获得更好效果。
+                为每种平面风格配置独立的内置提示词。修改后将立即影响所有新的平面图生成任务，建议使用英文以获得更好效果。
               </CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-6">
+        <CardContent className="flex flex-col gap-4">
+          {/* Style Tabs */}
+          <div className="flex gap-1 rounded-lg bg-muted/40 p-1">
+            {COLOR_PLAN_STYLES.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => handleStyleChange(id)}
+                className={cn(
+                  "flex items-center gap-1.5 flex-1 justify-center rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                  activeStyle === id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+
           {isLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm">加载中…</span>
             </div>
           ) : (
-            COLOR_PLAN_PROMPT_TYPES.map(({ id, label, icon: Icon, desc }) => {
-              const current = promptMap[id];
-              const isEditing = editingType === id;
-              const draftValue = drafts[id] ?? current?.prompt ?? "";
-              return (
-                <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-primary" />
-                      <div>
-                        <p className="text-sm font-medium">{label}</p>
-                        <p className="text-xs text-muted-foreground">{desc}</p>
+            <div className="flex flex-col gap-6">
+              {COLOR_PLAN_PROMPT_TYPES.map(({ id, label, icon: Icon, desc }) => {
+                const current = promptMap[id];
+                const isEditing = editingType === id;
+                const draftValue = drafts[id] ?? current?.prompt ?? "";
+                return (
+                  <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
                       </div>
+                      {!isEditing && (
+                        <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5">
+                          <Pencil className="h-3.5 w-3.5" />编辑
+                        </Button>
+                      )}
                     </div>
-                    {!isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5">
-                        <Pencil className="h-3.5 w-3.5" />编辑
-                      </Button>
+
+                    {isEditing ? (
+                      <div className="flex flex-col gap-2">
+                        <Textarea
+                          value={draftValue}
+                          onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))}
+                          rows={8}
+                          className="text-sm font-mono resize-y"
+                          placeholder="输入提示词（建议英文）…"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {id === "base"
+                            ? "此提示词为平面图生成的核心指令。用户的附加说明将追加到此提示词之后。"
+                            : "当用户上传参考图时，此前缀会插入到基础提示词之前，告知 AI 参考第二张图的风格。"}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleSave(id as "base" | "reference_prefix")}
+                            disabled={updateMutation.isPending}
+                            className="gap-1.5"
+                          >
+                            {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                            保存
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-muted/50 rounded-md p-3 border border-border">
+                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
+                          {current?.prompt || <span className="italic">暂无提示词（将使用内置默认値）</span>}
+                        </pre>
+                      </div>
                     )}
                   </div>
-
-                  {isEditing ? (
-                    <div className="flex flex-col gap-2">
-                      <Textarea
-                        value={draftValue}
-                        onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))}
-                        rows={8}
-                        className="text-sm font-mono resize-y"
-                        placeholder="输入提示词（建议英文）…"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {id === "base"
-                          ? "此提示词为彩平生成的核心指令。用户选择的风格（Style）和附加说明将追加到此提示词之后。"
-                          : "当用户上传参考图时，此前缀会插入到基础提示词之前，告知 AI 参考第二张图的配色风格。"}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleSave(id as "base" | "reference_prefix")}
-                          disabled={updateMutation.isPending}
-                          className="gap-1.5"
-                        >
-                          {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                          保存
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-muted/50 rounded-md p-3 border border-border">
-                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
-                        {current?.prompt || <span className="italic">暂无提示词（将使用内置默认值）</span>}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>

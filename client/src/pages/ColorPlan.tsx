@@ -22,8 +22,20 @@ import {
   Check,
   FolderOpen,
   RefreshCw,
+  Palette,
+  PenLine,
+  ScanLine,
 } from "lucide-react";
 import { AiToolSelector } from "@/components/AiToolSelector";
+import { cn } from "@/lib/utils";
+
+// ─── Plan Style Config ─────────────────────────────────────
+type PlanStyle = "colored" | "hand_drawn" | "line_drawing";
+const PLAN_STYLES: Array<{ id: PlanStyle; label: string; desc: string; icon: React.ElementType }> = [
+  { id: "colored", label: "彩色平面", desc: "写实材质色彩", icon: Palette },
+  { id: "hand_drawn", label: "手绘平面", desc: "水彩笔绘风格", icon: PenLine },
+  { id: "line_drawing", label: "平面线稿", desc: "黑白线条图纸", icon: ScanLine },
+];
 
 // ─── Types ────────────────────────────────────────────────
 type AssetItem = {
@@ -273,6 +285,9 @@ export default function ColorPlan() {
   // AI tool selection
   const [toolId, setToolId] = useState<number | undefined>(undefined);
 
+  // Plan style selection
+  const [planStyle, setPlanStyle] = useState<PlanStyle>("colored");
+
   // Style & extra prompt
   const [extraPrompt, setExtraPrompt] = useState("");
 
@@ -362,6 +377,7 @@ export default function ColorPlan() {
       const result = await generateMutation.mutateAsync({
         floorPlanUrl,
         referenceUrl: referenceUrl || undefined,
+        planStyle,
         extraPrompt: extraPrompt.trim() || undefined,
         toolId,
       });
@@ -423,7 +439,30 @@ export default function ColorPlan() {
           {/* ── Left: Input Panel ─────────────────────── */}
           <div className="border-r border-border/40 px-6 py-5 space-y-6">
 
-            {/* Floor plan upload */}
+            {/* Plan style selector */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">平面风格</label>
+              <div className="grid grid-cols-3 gap-2">
+                {PLAN_STYLES.map(({ id, label, desc, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => { setPlanStyle(id); setResultUrl(null); setResultHistoryId(undefined); }}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all",
+                      planStyle === id
+                        ? "border-primary bg-primary/8 text-primary"
+                        : "border-border/50 bg-muted/20 text-muted-foreground hover:border-border hover:bg-muted/40"
+                    )}
+                  >
+                    <Icon className={cn("h-5 w-5", planStyle === id ? "text-primary" : "text-muted-foreground")} />
+                    <span className="text-xs font-medium leading-tight">{label}</span>
+                    <span className="text-[10px] leading-tight opacity-70">{desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+          {/* Floor plan upload */}
             <ImageUploadZone
               label="平面底图"
               hint="拖拽或点击上传平面底图（线稿或黑白平面图）"
@@ -481,7 +520,7 @@ export default function ColorPlan() {
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  生成彩平图
+                  {planStyle === "colored" ? "生成彩平图" : planStyle === "hand_drawn" ? "生成手绘平面" : "生成平面线稿"}
                 </>
               )}
             </Button>
@@ -557,7 +596,7 @@ export default function ColorPlan() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
                     <Sparkles className="h-3 w-3 mr-1" />
-                    AI 生成
+                    {PLAN_STYLES.find(s => s.id === planStyle)?.label ?? "AI 生成"}
                   </Badge>
                   {referenceUrl && (
                     <Badge variant="outline" className="text-xs">
