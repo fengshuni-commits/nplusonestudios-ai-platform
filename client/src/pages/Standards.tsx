@@ -1472,19 +1472,19 @@ export default function Standards() {
       <Tabs defaultValue="render-styles">
         <TabsList className="mb-4">
           <TabsTrigger value="render-styles" className="gap-1.5">
-            <Palette className="h-4 w-4" />渲染风格库
+            <Palette className="h-4 w-4" />AI效果图
           </TabsTrigger>
           <TabsTrigger value="ppt-layouts" className="gap-1.5">
-            <Layout className="h-4 w-4" />演示文稿版式标准
+            <Layout className="h-4 w-4" />演示文稿
           </TabsTrigger>
           <TabsTrigger value="analysis-prompts" className="gap-1.5">
-            <Layers className="h-4 w-4" />分析图提示词
+            <Layers className="h-4 w-4" />AI分析图
           </TabsTrigger>
           <TabsTrigger value="graphic-layout-prompts" className="gap-1.5">
-            <Layout className="h-4 w-4" />图文排版提示词
+            <Layout className="h-4 w-4" />图文排版
           </TabsTrigger>
           <TabsTrigger value="color-plan-prompts" className="gap-1.5">
-            <Palette className="h-4 w-4" />AI 彩平提示词
+            <Palette className="h-4 w-4" />AI 平面图
           </TabsTrigger>
         </TabsList>
 
