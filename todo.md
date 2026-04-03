@@ -1583,3 +1583,9 @@
 - [x] 后端：listPrompts / updatePrompt 接口，注册 caseStudyPromptsRouter
 - [x] 出品标准新增《案例调研》 Tab，支持三个阶段提示词的在线编辑
 - [x] 保存 checkpoint
+
+## 案例调研提示词从数据库动态读取
+- [x] 找到 generateBenchmarkInBackground 函数中三个阶段的硬编码提示词
+- [x] 修改函数在生成前从数据库读取提示词，替换硬编码内容；占位符 {referenceCount}/{excludeSection}/{currentDate}/{caseRefs} 在运行时动态替换
+- [x] TypeScript 编译验证：0 errors
+- [x] 保存 checkpoint
