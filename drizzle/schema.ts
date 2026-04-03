@@ -697,3 +697,21 @@ export const graphicLayoutPrompts = mysqlTable("graphic_layout_prompts", {
 });
 export type GraphicLayoutPrompt = typeof graphicLayoutPrompts.$inferSelect;
 export type InsertGraphicLayoutPrompt = typeof graphicLayoutPrompts.$inferInsert;
+
+// ─── Color Plan Prompts (AI 彩平内置提示词) ───────────────────────────────────
+export const colorPlanPrompts = mysqlTable("color_plan_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  // 提示词类型：base（基础提示词）| reference_prefix（有参考图时的前缀）
+  type: mysqlEnum("type", ["base", "reference_prefix"]).notNull().unique(),
+  // 显示名称
+  label: varchar("label", { length: 128 }).notNull(),
+  // 提示词内容
+  prompt: text("prompt").notNull(),
+  // 提示词说明（给编辑者的备注）
+  description: text("description"),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ColorPlanPrompt = typeof colorPlanPrompts.$inferSelect;
+export type InsertColorPlanPrompt = typeof colorPlanPrompts.$inferInsert;

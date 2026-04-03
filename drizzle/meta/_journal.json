@@ -253,6 +253,13 @@
       "when": 1775027482646,
       "tag": "0035_useful_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1775219215650,
+      "tag": "0036_moaning_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

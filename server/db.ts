@@ -2301,3 +2301,37 @@ export async function getGraphicStylePackById(id: number) {
   const rows = await db.select().from(graphicStylePacks).where(eq(graphicStylePacks.id, id)).limit(1);
   return rows[0] ?? null;
 }
+
+// ─── Color Plan Prompts (AI 彩平内置提示词) ──────────────────────────────────
+export async function listColorPlanPrompts() {
+  const db = await getDb();
+  if (!db) return [];
+  const { colorPlanPrompts } = await import("../drizzle/schema");
+  return db.select().from(colorPlanPrompts).orderBy(colorPlanPrompts.type);
+}
+
+export async function getColorPlanPrompt(type: "base" | "reference_prefix") {
+  const db = await getDb();
+  if (!db) return null;
+  const { colorPlanPrompts } = await import("../drizzle/schema");
+  const rows = await db.select().from(colorPlanPrompts).where(eq(colorPlanPrompts.type, type)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertColorPlanPrompt(
+  type: "base" | "reference_prefix",
+  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { colorPlanPrompts } = await import("../drizzle/schema");
+  const existing = await getColorPlanPrompt(type);
+  const defaultLabel = type === "base" ? "基础提示词" : "参考图前缀提示词";
+  if (existing) {
+    await db.update(colorPlanPrompts).set({ ...data, updatedAt: new Date() }).where(eq(colorPlanPrompts.type, type));
+    return { ...existing, ...data };
+  } else {
+    const result = await db.insert(colorPlanPrompts).values({ type, label: data.label ?? defaultLabel, prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
+    return { id: Number((result as any).insertId), type, label: data.label ?? defaultLabel, prompt: data.prompt };
+  }
+}

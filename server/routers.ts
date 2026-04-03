@@ -2465,6 +2465,29 @@ const renderingRouter = router({
 
 //// ─── AI Module: Color Floor Plan (彩平) ──────────────────
 const colorPlanRouter = router({
+  /** List all built-in color plan prompts */
+  listPrompts: protectedProcedure.query(async () => {
+    return db.listColorPlanPrompts();
+  }),
+
+  /** Update a built-in color plan prompt */
+  updatePrompt: protectedProcedure
+    .input(z.object({
+      type: z.enum(["base", "reference_prefix"]),
+      prompt: z.string().min(1),
+      label: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.upsertColorPlanPrompt(input.type, {
+        prompt: input.prompt,
+        label: input.label,
+        description: input.description,
+        updatedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
+
   /** Upload a floor plan image (base64) and return the S3 URL */
   uploadFloorPlan: protectedProcedure
     .input(z.object({
@@ -2513,7 +2536,11 @@ const colorPlanRouter = router({
         } catch { /* ignore */ }
       }
 
-      let prompt =
+      // Load prompts from DB (fallback to hardcoded defaults if not set)
+      const basePromptRow = await db.getColorPlanPrompt("base");
+      const refPrefixRow = await db.getColorPlanPrompt("reference_prefix");
+
+      const defaultBasePrompt =
         `Architectural colored floor plan. ` +
         `Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. ` +
         `Apply realistic material textures and colors: warm wood flooring for living and dining areas, ` +
@@ -2521,6 +2548,12 @@ const colorPlanRouter = router({
         `green indoor plants, furniture with drop shadows for depth. ` +
         `Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. ` +
         `Clean top-down orthographic view. High quality architectural presentation style.`;
+
+      const defaultRefPrefix =
+        `[STYLE REFERENCE: The second image shows the target color style and material palette. ` +
+        `Apply the same color scheme and material textures to the floor plan.]`;
+
+      let prompt = basePromptRow?.prompt || defaultBasePrompt;
 
       if (input.style) prompt += ` Style: ${input.style}.`;
       if (input.extraPrompt) prompt += ` ${input.extraPrompt}`;
@@ -2530,9 +2563,8 @@ const colorPlanRouter = router({
       ];
       if (input.referenceUrl) {
         originalImages.push({ url: input.referenceUrl, mimeType: "image/png" });
-        prompt =
-          `[STYLE REFERENCE: The second image shows the target color style and material palette. ` +
-          `Apply the same color scheme and material textures to the floor plan.] ` + prompt;
+        const refPrefix = refPrefixRow?.prompt || defaultRefPrefix;
+        prompt = `${refPrefix} ` + prompt;
       }
 
       try {
