@@ -172,7 +172,7 @@ async function callGeminiImageApi(opts: {
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180000), // 3 min timeout for Pro model
+    signal: AbortSignal.timeout(300000), // 5 min timeout for image generation
   });
 
   if (!response.ok) {

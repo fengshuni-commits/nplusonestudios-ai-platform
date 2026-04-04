@@ -2621,8 +2621,22 @@ const colorPlanRouter = router({
         prompt = `${refPrefix} ` + prompt;
       }
 
+      // Helper: attempt generation with retry on timeout
+      const attemptGenerate = async (retryCount = 0): Promise<{ url: string; modelName?: string }> => {
+        try {
+          return await generateImageWithTool({ prompt, originalImages, toolId: input.toolId });
+        } catch (err: any) {
+          const isTimeout = err?.name === "TimeoutError" || err?.message?.includes("timeout") || err?.message?.includes("aborted");
+          if (isTimeout && retryCount < 1) {
+            console.log(`[colorPlan] Generation timed out, retrying (attempt ${retryCount + 2})...`);
+            return attemptGenerate(retryCount + 1);
+          }
+          throw err;
+        }
+      };
+
       try {
-        const result = await generateImageWithTool({ prompt, originalImages, toolId: input.toolId });
+        const result = await attemptGenerate();
 
         const historyResult = await db.createGenerationHistory({
           userId: ctx.user.id,

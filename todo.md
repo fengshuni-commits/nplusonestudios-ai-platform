@@ -1608,3 +1608,9 @@
 - [x] 修复后端：将完整提示词（不截断）写入 summary 字段
 - [x] 在 TileCard 上为 color_plan 添加复制提示词按鈕（right-14 位置，关联项目按鈕左侧）
 - [x] 保存 checkpoint
+
+## Bug 修复：AI 平面图生成失败（彩平生成失败，请稍后重试）
+- [x] 查看服务器日志定位具体错误：Gemini API 响应超过 3 分钟超时限制
+- [x] 修复：将 Gemini 超时时间从 180s 延长到 300s，并在彩平生成接口中增加超时自动重试逻辑（最多重试 1 次）
+- [x] TypeScript 0 errors
+- [x] 保存 checkpoint
