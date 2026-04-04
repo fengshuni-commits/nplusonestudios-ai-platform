@@ -1589,3 +1589,10 @@
 - [x] 修改函数在生成前从数据库读取提示词，替换硬编码内容；占位符 {referenceCount}/{excludeSection}/{currentDate}/{caseRefs} 在运行时动态替换
 - [x] TypeScript 编译验证：0 errors
 - [x] 保存 checkpoint
+
+## Bug 修复：AI 平面图历史记录无法打开
+- [x] 查看历史记录读取接口和前端加载逻辑
+- [x] 查看数据库中历史记录的实际数据结构
+- [x] 定位“记录不完整”的根本原因：color_plan 未加入 MODULE_MAP/isRender，导致走文字内容弹窗而非图片灯箱
+- [x] 修复：将 color_plan 加入 MODULE_MAP、MODULE_ORDER、isRender 判断和筛选器
+- [x] 保存 checkpoint

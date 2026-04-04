@@ -144,11 +144,19 @@ const MODULE_MAP: Record<string, {
     iconColor: "text-amber-300",
     accentColor: "bg-amber-500/20 text-amber-300",
   },
+  color_plan: {
+    label: "AI 平面图",
+    icon: Image,
+    gradient: "from-cyan-900 to-cyan-700",
+    iconColor: "text-cyan-300",
+    accentColor: "bg-cyan-500/20 text-cyan-300",
+  },
 };
 
 // Module display order
 const MODULE_ORDER = [
   "ai_render",
+  "color_plan",
   "analysis_image",
   "ai_video",
   "layout_design",
@@ -427,7 +435,7 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
     accentColor: "bg-zinc-500/20 text-zinc-300",
   };
   const ModuleIcon = cfg.icon;
-  const isRender = item.module === "ai_render" || item.module === "layout_design" || item.module === "analysis_image";
+  const isRender = item.module === "ai_render" || item.module === "layout_design" || item.module === "analysis_image" || item.module === "color_plan";
   const isMedia = item.module === "media_xiaohongshu" || item.module === "media_wechat" || item.module === "media_instagram";
   const displayUrl = item.latestOutputUrl || item.outputUrl;
   const chainLen = item.chainLength || 1;
@@ -439,8 +447,8 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
       if (onNavigate) onNavigate("/media/layout");
       return;
     }
-    if (item.module === "analysis_image") {
-      // AI 分析图：灯箱查看大图
+    if (item.module === "analysis_image" || item.module === "color_plan") {
+      // AI 分析图 / AI 平面图：灯箱查看大图
       if (displayUrl && onLightbox) onLightbox(displayUrl, title);
       return;
     }
@@ -876,6 +884,7 @@ export default function HistoryPage() {
             <SelectContent>
               <SelectItem value="all">全部模块</SelectItem>
               <SelectItem value="ai_render">AI 效果图</SelectItem>
+              <SelectItem value="color_plan">AI 平面图</SelectItem>
               <SelectItem value="analysis_image">AI 分析图</SelectItem>
               <SelectItem value="ai_video">AI 视频</SelectItem>
               <SelectItem value="layout_design">图文排版</SelectItem>
