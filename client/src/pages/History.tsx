@@ -58,6 +58,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -401,6 +406,8 @@ interface TileCardProps {
   onLightbox?: (src: string, label: string) => void;
   onNavigate?: (path: string) => void;
   onImport?: (id: number) => void;
+  onAssociateProject?: (historyId: number, projectId: number | null) => void;
+  allProjects?: any[];
 }
 
 /** Expandable content preview for benchmark report chain items */
@@ -426,7 +433,7 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
   );
 }
 
-function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImport }: TileCardProps) {
+function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects = [] }: TileCardProps) {
   const cfg = MODULE_MAP[item.module] || {
     label: item.module,
     icon: FileText,
@@ -553,6 +560,52 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
           <div className="h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-colors">
             <Download className="h-3 w-3" />
           </div>
+        </div>
+      )}
+
+      {/* Associate project button for color_plan and analysis_image */}
+      {(item.module === "color_plan" || item.module === "analysis_image") && onAssociateProject && (
+        <div className="absolute bottom-1.5 right-8 opacity-0 group-hover:opacity-100 transition-opacity z-20"
+          onClick={(e) => e.stopPropagation()}>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${
+                  item.projectId
+                    ? "bg-primary/70 text-white hover:bg-primary"
+                    : "bg-black/50 text-white/70 hover:bg-primary/80 hover:text-white"
+                }`}
+                title={item.projectId ? "已关联项目" : "关联项目"}>
+                <Link2 className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-2" side="top" align="end">
+              <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">关联到项目</p>
+              <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                {item.projectId && (
+                  <button
+                    className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors text-destructive/80 hover:text-destructive"
+                    onClick={() => onAssociateProject(item.id, null)}>
+                    <Link2Off className="h-3 w-3 inline mr-1.5" />
+                    解除关联
+                  </button>
+                )}
+                {allProjects.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-2 py-1.5">暂无项目</p>
+                )}
+                {allProjects.map((p: any) => (
+                  <button
+                    key={p.id}
+                    className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors ${
+                      item.projectId === p.id ? "bg-primary/10 text-primary font-medium" : ""
+                    }`}
+                    onClick={() => onAssociateProject(item.id, p.id)}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
@@ -936,6 +989,8 @@ export default function HistoryPage() {
                       onLightbox={(src, label) => setLightbox({ src, label })}
                       onNavigate={(path) => navigate(path)}
                       onImport={handleImport}
+                      onAssociateProject={handleAssociateProject}
+                      allProjects={allProjects}
                     />
                   ))}
                 </div>

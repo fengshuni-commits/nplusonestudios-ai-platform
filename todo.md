@@ -1596,3 +1596,9 @@
 - [x] 定位“记录不完整”的根本原因：color_plan 未加入 MODULE_MAP/isRender，导致走文字内容弹窗而非图片灯箱
 - [x] 修复：将 color_plan 加入 MODULE_MAP、MODULE_ORDER、isRender 判断和筛选器
 - [x] 保存 checkpoint
+
+## AI 平面图历史记录关联项目功能
+- [x] 分析现有关联项目实现（ai_render 等模块如何支持）
+- [x] 确认 color_plan 缺少关联项目 UI 入口：图片类模块走灯箱路径，无内容弹窗
+- [x] 修复：在 TileCard 上新增 Popover 关联项目按鈕，支持 color_plan 和 analysis_image
+- [x] 保存 checkpoint
