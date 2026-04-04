@@ -1614,3 +1614,10 @@
 - [x] 修复：将 Gemini 超时时间从 180s 延长到 300s，并在彩平生成接口中增加超时自动重试逻辑（最多重试 1 次）
 - [x] TypeScript 0 errors
 - [x] 保存 checkpoint
+
+## AI 平面图局部修改（Inpainting）功能
+- [x] 分析 AI 效果图局部修改的实现（CanvasMaskEditor、inpaint 接口）
+- [x] 后端：colorPlanRouter 添加 inpaint 接口，支持 mask + prompt 局部修改
+- [x] 前端：ColorPlan.tsx 生成结果区域添加「局部修改」按钮，集成画笔圈选弹窗
+- [x] 生成记录中保留修改记录（parentId 关联原始记录）
+- [x] 保存 checkpoint

@@ -25,9 +25,11 @@ import {
   Palette,
   PenLine,
   ScanLine,
+  Paintbrush,
 } from "lucide-react";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { cn } from "@/lib/utils";
+import ImageMaskEditor from "@/components/ImageMaskEditor";
 
 // ─── Plan Style Config ─────────────────────────────────────
 type PlanStyle = "colored" | "hand_drawn" | "line_drawing";
@@ -269,6 +271,210 @@ function ImageUploadZone({
   );
 }
 
+// ─── Inpaint Dialog ────────────────────────────────────────
+function InpaintDialog({
+  open,
+  onClose,
+  imageUrl,
+  parentHistoryId,
+  toolId,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  imageUrl: string;
+  parentHistoryId?: number;
+  toolId?: number;
+  onSuccess: (url: string, historyId: number) => void;
+}) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [imgDims, setImgDims] = useState<{ dw: number; dh: number; nw: number; nh: number } | null>(null);
+  const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [inpaintPrompt, setInpaintPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const inpaintMutation = trpc.colorPlan.inpaint.useMutation();
+
+  const handleImgLoad = useCallback(() => {
+    const el = imgRef.current;
+    if (!el) return;
+    setImgDims({
+      dw: el.clientWidth,
+      dh: el.clientHeight,
+      nw: el.naturalWidth || el.clientWidth,
+      nh: el.naturalHeight || el.clientHeight,
+    });
+  }, []);
+
+  const handleStartEdit = () => {
+    const el = imgRef.current;
+    if (el && el.clientWidth > 0) {
+      setImgDims({
+        dw: el.clientWidth,
+        dh: el.clientHeight,
+        nw: el.naturalWidth || el.clientWidth,
+        nh: el.naturalHeight || el.clientHeight,
+      });
+    }
+    setIsEditing(true);
+    setMaskDataUrl(null);
+  };
+
+  const handleMaskSave = useCallback((dataUrl: string) => {
+    setMaskDataUrl(dataUrl);
+    setIsEditing(false);
+    toast.success("标注区域已保存，请填写修改说明后点击「局部修改」");
+  }, []);
+
+  const handleMaskCancel = useCallback(() => {
+    setIsEditing(false);
+  }, []);
+
+  const handleInpaint = async () => {
+    if (!maskDataUrl) {
+      toast.error("请先标注需要修改的区域");
+      return;
+    }
+    if (!inpaintPrompt.trim()) {
+      toast.error("请填写修改说明");
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const result = await inpaintMutation.mutateAsync({
+        imageUrl,
+        maskImageData: maskDataUrl,
+        prompt: inpaintPrompt.trim(),
+        toolId,
+        parentHistoryId,
+      });
+      toast.success("局部修改完成");
+      onSuccess(result.url, result.historyId);
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message || "局部修改失败，请稍后重试");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (isGenerating) return;
+    setIsEditing(false);
+    setMaskDataUrl(null);
+    setInpaintPrompt("");
+    setImgDims(null);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Paintbrush className="h-4 w-4 text-primary" />
+            局部修改
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Image + mask editor */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {isEditing
+                  ? "用画笔涂抹需要修改的区域，完成后点击「保存标注」"
+                  : maskDataUrl
+                  ? "已标注修改区域，可重新标注或填写修改说明"
+                  : "点击「开始标注」，用画笔圈选需要修改的区域"}
+              </p>
+              {!isEditing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStartEdit}
+                  disabled={isGenerating}
+                >
+                  <Paintbrush className="h-3.5 w-3.5 mr-1.5" />
+                  {maskDataUrl ? "重新标注" : "开始标注"}
+                </Button>
+              )}
+            </div>
+
+            <div className="relative rounded-xl overflow-hidden border border-border/40 bg-muted/10">
+              <img
+                ref={imgRef}
+                src={imageUrl}
+                alt="待修改的平面图"
+                className="w-full h-auto max-h-[400px] object-contain"
+                onLoad={handleImgLoad}
+              />
+              {/* Mask editor overlay */}
+              {isEditing && imgDims && (
+                <ImageMaskEditor
+                  displayWidth={imgDims.dw}
+                  displayHeight={imgDims.dh}
+                  naturalWidth={imgDims.nw}
+                  naturalHeight={imgDims.nh}
+                  onSave={handleMaskSave}
+                  onCancel={handleMaskCancel}
+                />
+              )}
+              {/* Mask saved indicator */}
+              {maskDataUrl && !isEditing && (
+                <div className="absolute top-2 left-2">
+                  <Badge variant="secondary" className="text-xs bg-green-500/20 text-green-600 border-green-500/30">
+                    <Check className="h-3 w-3 mr-1" />
+                    已标注
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Prompt */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">
+              修改说明 <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              placeholder="描述需要修改的内容，例如：将客厅区域改为深色木地板，沙发换成L形布艺沙发…"
+              value={inpaintPrompt}
+              onChange={(e) => setInpaintPrompt(e.target.value)}
+              className="resize-none text-sm min-h-[80px]"
+              disabled={isGenerating}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={handleClose} disabled={isGenerating}>
+              取消
+            </Button>
+            <Button
+              onClick={handleInpaint}
+              disabled={!maskDataUrl || !inpaintPrompt.trim() || isGenerating}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  修改中…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  局部修改
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────
 export default function ColorPlan() {
   // Floor plan (base image)
@@ -299,7 +505,8 @@ export default function ColorPlan() {
   // Asset picker
   const [assetPickerTarget, setAssetPickerTarget] = useState<"floor" | "reference" | null>(null);
 
-  const utils = trpc.useUtils();
+  // Inpaint dialog
+  const [inpaintOpen, setInpaintOpen] = useState(false);
 
   const uploadFloorPlan = trpc.colorPlan.uploadFloorPlan.useMutation();
   const generateMutation = trpc.colorPlan.generate.useMutation();
@@ -395,7 +602,7 @@ export default function ColorPlan() {
     if (!resultUrl) return;
     const a = document.createElement("a");
     a.href = resultUrl;
-      a.download = `平面图-${Date.now()}.png`;
+    a.download = `平面图-${Date.now()}.png`;
     a.click();
   };
 
@@ -408,6 +615,12 @@ export default function ColorPlan() {
     setResultUrl(null);
     setResultHistoryId(undefined);
     handleGenerate();
+  };
+
+  // ── Inpaint success ────────────────────────────────────
+  const handleInpaintSuccess = (url: string, historyId: number) => {
+    setResultUrl(url);
+    setResultHistoryId(historyId);
   };
 
   const canGenerate = !!floorPlanUrl && !isUploadingFloor && !isUploadingRef && !isGenerating;
@@ -532,6 +745,7 @@ export default function ColorPlan() {
                 <li>· 底图建议使用清晰的线稿或黑白平面图，墙线清晰效果更佳</li>
                 <li>· 提供参考风格图可显著提升配色准确度</li>
                 <li>· 在补充说明中描述空间风格、主色调，可进一步引导生成效果</li>
+                <li>· 生成后可使用「局部修改」对特定区域进行迭代调整</li>
               </ul>
             </div>
           </div>
@@ -541,7 +755,16 @@ export default function ColorPlan() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-medium text-foreground">生成结果</h2>
               {resultUrl && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setInpaintOpen(true)}
+                    disabled={isGenerating}
+                  >
+                    <Paintbrush className="h-3.5 w-3.5 mr-1.5" />
+                    局部修改
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -627,7 +850,7 @@ export default function ColorPlan() {
         open={assetPickerTarget !== null}
         onClose={() => setAssetPickerTarget(null)}
         title={assetPickerTarget === "floor" ? "从素材库选择底图" : "从素材库选择参考图"}
-        onSelect={(url, name) => {
+        onSelect={(url, _name) => {
           if (assetPickerTarget === "floor") {
             setFloorPlanPreview(url);
             setFloorPlanUrl(url);
@@ -637,6 +860,18 @@ export default function ColorPlan() {
           }
         }}
       />
+
+      {/* Inpaint Dialog */}
+      {resultUrl && (
+        <InpaintDialog
+          open={inpaintOpen}
+          onClose={() => setInpaintOpen(false)}
+          imageUrl={resultUrl}
+          parentHistoryId={resultHistoryId}
+          toolId={toolId}
+          onSuccess={handleInpaintSuccess}
+        />
+      )}
     </div>
   );
 }

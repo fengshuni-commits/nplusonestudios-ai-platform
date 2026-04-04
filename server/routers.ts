@@ -2686,6 +2686,100 @@ const colorPlanRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "彩平生成失败，请稍后重试" });
       }
     }),
+
+  // 局部修改（Inpainting）
+  inpaint: protectedProcedure
+    .input(z.object({
+      imageUrl: z.string(),           // 原始彩平图 URL
+      maskImageData: z.string(),      // base64 mask PNG
+      prompt: z.string(),             // 修改说明
+      toolId: z.number().optional(),
+      parentHistoryId: z.number().optional(),
+      projectId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const startTime = Date.now();
+
+      // Resolve model name
+      let resolvedModelName = "内置图像生成";
+      if (input.toolId) {
+        try { const tool = await db.getAiToolById(input.toolId); if (tool?.name) resolvedModelName = tool.name; } catch { /* ignore */ }
+      }
+
+      // Composite mask on image (red overlay on painted area)
+      let originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
+      let fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${input.prompt}`;
+
+      try {
+        const composite = await compositeMaskOnImage(input.imageUrl, input.maskImageData);
+        originalImages = [{ b64Json: composite.b64, mimeType: composite.mimeType }];
+      } catch {
+        originalImages = [{ url: input.imageUrl, mimeType: "image/png" }];
+      }
+
+      const attemptInpaint = async (retryCount = 0): Promise<{ url: string; modelName?: string }> => {
+        try {
+          return await generateImageWithTool({ prompt: fullPrompt, originalImages, toolId: input.toolId });
+        } catch (err: any) {
+          const isTimeout = err?.name === "TimeoutError" || err?.message?.includes("timeout") || err?.message?.includes("aborted");
+          if (isTimeout && retryCount < 1) {
+            console.log(`[colorPlan.inpaint] Timed out, retrying...`);
+            return attemptInpaint(retryCount + 1);
+          }
+          throw err;
+        }
+      };
+
+      try {
+        const result = await attemptInpaint();
+
+        const historyResult = await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "color_plan",
+          title: `彩平局部修改 - ${input.prompt.substring(0, 30)}`,
+          summary: fullPrompt,
+          inputParams: {
+            imageUrl: input.imageUrl,
+            prompt: input.prompt,
+            hasMask: true,
+            isInpaint: true,
+          },
+          outputUrl: result.url,
+          status: "success",
+          durationMs: Date.now() - startTime,
+          parentId: input.parentHistoryId || null,
+          projectId: input.projectId || null,
+          createdByName: ctx.user.name || null,
+          modelName: resolvedModelName,
+        }).catch(() => ({ id: 0 }));
+
+        await db.createAiToolLog({
+          toolId: input.toolId || 0,
+          userId: ctx.user.id,
+          action: "color_plan_inpaint",
+          inputSummary: input.prompt.substring(0, 200),
+          outputSummary: result.url || "",
+          status: "success",
+          durationMs: Date.now() - startTime,
+        }).catch(() => {});
+
+        return { url: result.url, historyId: historyResult.id };
+      } catch (error) {
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "color_plan",
+          title: `彩平局部修改 - 失败`,
+          summary: input.prompt.substring(0, 200),
+          inputParams: { imageUrl: input.imageUrl, hasMask: true, isInpaint: true },
+          status: "failed",
+          durationMs: Date.now() - startTime,
+          parentId: input.parentHistoryId || null,
+          createdByName: ctx.user.name || null,
+          modelName: resolvedModelName,
+        }).catch(() => {});
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "局部修改失败，请稍后重试" });
+      }
+    }),
 });
 
 // ─── AI Module: Meeting Minutes ──────────────────────
