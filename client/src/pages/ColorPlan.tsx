@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -295,6 +295,32 @@ function InpaintDialog({
   const [isGenerating, setIsGenerating] = useState(false);
 
   const inpaintMutation = trpc.colorPlan.inpaint.useMutation();
+  const [inpaintJobId, setInpaintJobId] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+
+  const { data: inpaintJobStatus } = trpc.colorPlan.jobStatus.useQuery(
+    { jobId: inpaintJobId! },
+    {
+      enabled: !!inpaintJobId && isGenerating,
+      refetchInterval: 2000,
+      refetchIntervalInBackground: true,
+    }
+  );
+
+  useEffect(() => {
+    if (!inpaintJobStatus) return;
+    if (inpaintJobStatus.status === "done") {
+      toast.success("局部修改完成");
+      onSuccess(inpaintJobStatus.url, inpaintJobStatus.historyId);
+      setIsGenerating(false);
+      setInpaintJobId(null);
+      onClose();
+    } else if (inpaintJobStatus.status === "failed") {
+      toast.error(inpaintJobStatus.error || "局部修改失败，请稍后重试");
+      setIsGenerating(false);
+      setInpaintJobId(null);
+    }
+  }, [inpaintJobStatus]);
 
   const handleImgLoad = useCallback(() => {
     const el = imgRef.current;
@@ -349,12 +375,10 @@ function InpaintDialog({
         toolId,
         parentHistoryId,
       });
-      toast.success("局部修改完成");
-      onSuccess(result.url, result.historyId);
-      onClose();
+      // Backend returns jobId immediately; polling via useEffect handles result
+      setInpaintJobId(result.jobId);
     } catch (e: any) {
       toast.error(e.message || "局部修改失败，请稍后重试");
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -510,10 +534,38 @@ export default function ColorPlan() {
 
   const uploadFloorPlan = trpc.colorPlan.uploadFloorPlan.useMutation();
   const generateMutation = trpc.colorPlan.generate.useMutation();
+  const [generateJobId, setGenerateJobId] = useState<string | null>(null);
+  const utils = trpc.useUtils();
   const importAssetMutation = trpc.assets.importFromHistory.useMutation({
     onSuccess: () => toast.success("已导入素材库"),
     onError: (e) => toast.error(e.message || "导入失败"),
   });
+
+  // Poll job status
+  const { data: jobStatusData } = trpc.colorPlan.jobStatus.useQuery(
+    { jobId: generateJobId! },
+    {
+      enabled: !!generateJobId && isGenerating,
+      refetchInterval: 2000,
+      refetchIntervalInBackground: true,
+    }
+  );
+
+  // Handle job status updates
+  useEffect(() => {
+    if (!jobStatusData) return;
+    if (jobStatusData.status === "done") {
+      setResultUrl(jobStatusData.url);
+      setResultHistoryId(jobStatusData.historyId);
+      setIsGenerating(false);
+      setGenerateJobId(null);
+      toast.success("彩平图生成成功");
+    } else if (jobStatusData.status === "failed") {
+      setIsGenerating(false);
+      setGenerateJobId(null);
+      toast.error(jobStatusData.error || "生成失败，请稍后重试");
+    }
+  }, [jobStatusData]);
 
   // ── Upload helpers ─────────────────────────────────────
   const readFileAsBase64 = (file: File): Promise<string> =>
@@ -588,12 +640,10 @@ export default function ColorPlan() {
         extraPrompt: extraPrompt.trim() || undefined,
         toolId,
       });
-      setResultUrl(result.url || null);
-      setResultHistoryId(result.historyId);
-      toast.success("彩平图生成成功");
+      // Backend now returns jobId immediately; polling handles result
+      setGenerateJobId(result.jobId);
     } catch (e: any) {
       toast.error(e.message || "生成失败，请稍后重试");
-    } finally {
       setIsGenerating(false);
     }
   };

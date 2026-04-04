@@ -46,6 +46,14 @@ type PptJob =
 
 const pptJobStore = new Map<string, PptJob>();
 
+// ─── Color Plan Job Store (in-memory async queue) ────────
+type ColorPlanJob =
+  | { status: "processing" }
+  | { status: "done"; url: string; historyId: number }
+  | { status: "failed"; error: string };
+
+const colorPlanJobStore = new Map<string, ColorPlanJob>();
+
 /**
  * Convert a PPTX buffer to per-slide PNG preview images.
  * Uses LibreOffice (PPTX → PDF) + pdftoppm (PDF → PNG).
@@ -2550,7 +2558,7 @@ const colorPlanRouter = router({
       return { url, key };
     }),
 
-  /** Generate a floor plan from a base floor plan + optional reference image */
+  /** Generate a floor plan from a base floor plan + optional reference image (async job) */
   generate: protectedProcedure
     .input(z.object({
       floorPlanUrl: z.string().url(),
@@ -2563,131 +2571,133 @@ const colorPlanRouter = router({
       toolId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const startTime = Date.now();
+      const jobId = nanoid();
+      colorPlanJobStore.set(jobId, { status: "processing" });
 
-      // Resolve tool name for modelName annotation
-      let resolvedModelName = "内置图像生成";
-      if (input.toolId) {
-        try {
-          const tool = await db.getAiToolById(input.toolId);
-          if (tool?.name) resolvedModelName = tool.name;
-        } catch { /* ignore */ }
-      } else {
-        try {
-          const { getDb: _getDb } = await import("./db");
-          const { aiTools: _aiTools } = await import("../drizzle/schema");
-          const { eq: _eq, and: _and } = await import("drizzle-orm");
-          const _db = await _getDb();
-          if (_db) {
-            const defaults = await _db.select().from(_aiTools).where(_and(_eq(_aiTools.isDefault, true), _eq(_aiTools.isActive, true))).limit(1);
-            if (defaults[0]?.name) resolvedModelName = defaults[0].name;
-          }
-        } catch { /* ignore */ }
-      }
-
-      // Load prompts from DB based on planStyle (fallback to hardcoded defaults if not set)
-      const planStyle = input.planStyle ?? "colored";
-      const basePromptRow = await db.getColorPlanPrompt("base", planStyle);
-      const refPrefixRow = await db.getColorPlanPrompt("reference_prefix", planStyle);
-
-      // Default prompts per style
-      const defaultPrompts: Record<string, { base: string; refPrefix: string }> = {
-        colored: {
-          base: `Architectural colored floor plan. Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. Apply realistic material textures and colors: warm wood flooring for living and dining areas, light tile or stone for bathrooms and kitchens, soft carpet or parquet for bedrooms, green indoor plants, furniture with drop shadows for depth. Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. Clean top-down orthographic view. High quality architectural presentation style.`,
-          refPrefix: `[STYLE REFERENCE: The second image shows the target color style and material palette. Apply the same color scheme and material textures to the floor plan.]`,
-        },
-        hand_drawn: {
-          base: `Architectural hand-drawn floor plan. Transform the provided floor plan into a hand-drawn style architectural plan. Apply watercolor washes for room fills with soft, organic color bleeding at edges. Use pencil-sketch line work for walls, doors, and windows with slight imperfections for a human touch. Add light watercolor textures: warm beige/cream for living areas, soft blue-grey for bathrooms, light green for plants. Maintain exact spatial layout. Top-down orthographic view with artistic, sketch-like quality.`,
-          refPrefix: `[STYLE REFERENCE: The second image shows the target hand-drawn style, color palette and sketch technique. Apply the same watercolor wash style, line weight, and color tones to the floor plan.]`,
-        },
-        line_drawing: {
-          base: `Architectural floor plan line drawing. Transform the provided floor plan into a clean, precise architectural line drawing. Use crisp black lines on white background for all walls, doors, windows, and furniture outlines. Apply minimal grey fills or hatching to differentiate spaces. No color fills, no textures. Clean, technical drafting style with consistent line weights. Top-down orthographic view. Professional architectural presentation quality.`,
-          refPrefix: `[STYLE REFERENCE: The second image shows the target line drawing style and line weight convention. Apply the same drafting technique, line weights, and symbol conventions to the floor plan.]`,
-        },
-      };
-
-      const defaults = defaultPrompts[planStyle] || defaultPrompts.colored;
-      let prompt = basePromptRow?.prompt || defaults.base;
-
-      if (input.style) prompt += ` Style: ${input.style}.`;
-      if (input.extraPrompt) prompt += ` ${input.extraPrompt}`;
-
-      const originalImages: Array<{ url?: string; mimeType?: string }> = [
-        { url: input.floorPlanUrl, mimeType: "image/png" },
-      ];
-      if (input.referenceUrl) {
-        originalImages.push({ url: input.referenceUrl, mimeType: "image/png" });
-        const refPrefix = refPrefixRow?.prompt || defaults.refPrefix;
-        prompt = `${refPrefix} ` + prompt;
-      }
-
-      // Helper: attempt generation with retry on timeout
-      const attemptGenerate = async (retryCount = 0): Promise<{ url: string; modelName?: string }> => {
-        try {
-          return await generateImageWithTool({ prompt, originalImages, toolId: input.toolId });
-        } catch (err: any) {
-          const isTimeout = err?.name === "TimeoutError" || err?.message?.includes("timeout") || err?.message?.includes("aborted");
-          if (isTimeout && retryCount < 1) {
-            console.log(`[colorPlan] Generation timed out, retrying (attempt ${retryCount + 2})...`);
-            return attemptGenerate(retryCount + 1);
-          }
-          throw err;
+      // Fire-and-forget background generation
+      (async () => {
+        const startTime = Date.now();
+        let resolvedModelName = "内置图像生成";
+        if (input.toolId) {
+          try { const tool = await db.getAiToolById(input.toolId); if (tool?.name) resolvedModelName = tool.name; } catch { /* ignore */ }
+        } else {
+          try {
+            const { getDb: _getDb } = await import("./db");
+            const { aiTools: _aiTools } = await import("../drizzle/schema");
+            const { eq: _eq, and: _and } = await import("drizzle-orm");
+            const _db = await _getDb();
+            if (_db) {
+              const defaults = await _db.select().from(_aiTools).where(_and(_eq(_aiTools.isDefault, true), _eq(_aiTools.isActive, true))).limit(1);
+              if (defaults[0]?.name) resolvedModelName = defaults[0].name;
+            }
+          } catch { /* ignore */ }
         }
-      };
 
-      try {
-        const result = await attemptGenerate();
+        const planStyle = input.planStyle ?? "colored";
+        const basePromptRow = await db.getColorPlanPrompt("base", planStyle);
+        const refPrefixRow = await db.getColorPlanPrompt("reference_prefix", planStyle);
 
-        const historyResult = await db.createGenerationHistory({
-          userId: ctx.user.id,
-          module: "color_plan",
-          title: `AI 彩平 - ${new Date().toLocaleDateString("zh-CN")}`,
-          summary: prompt,
-          inputParams: {
-            floorPlanUrl: input.floorPlanUrl,
-            referenceUrl: input.referenceUrl || null,
-            planStyle: input.planStyle || "colored",
-            style: input.style || null,
-            extraPrompt: input.extraPrompt || null,
+        const defaultPrompts: Record<string, { base: string; refPrefix: string }> = {
+          colored: {
+            base: `Architectural colored floor plan. Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. Apply realistic material textures and colors: warm wood flooring for living and dining areas, light tile or stone for bathrooms and kitchens, soft carpet or parquet for bedrooms, green indoor plants, furniture with drop shadows for depth. Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. Clean top-down orthographic view. High quality architectural presentation style.`,
+            refPrefix: `[STYLE REFERENCE: The second image shows the target color style and material palette. Apply the same color scheme and material textures to the floor plan.]`,
           },
-          outputUrl: result.url,
-          status: "success",
-          durationMs: Date.now() - startTime,
-          parentId: input.parentHistoryId || null,
-          projectId: input.projectId || null,
-          createdByName: ctx.user.name || null,
-          modelName: resolvedModelName,
-        }).catch(() => ({ id: 0 }));
+          hand_drawn: {
+            base: `Architectural hand-drawn floor plan. Transform the provided floor plan into a hand-drawn style architectural plan. Apply watercolor washes for room fills with soft, organic color bleeding at edges. Use pencil-sketch line work for walls, doors, and windows with slight imperfections for a human touch. Add light watercolor textures: warm beige/cream for living areas, soft blue-grey for bathrooms, light green for plants. Maintain exact spatial layout. Top-down orthographic view with artistic, sketch-like quality.`,
+            refPrefix: `[STYLE REFERENCE: The second image shows the target hand-drawn style, color palette and sketch technique. Apply the same watercolor wash style, line weight, and color tones to the floor plan.]`,
+          },
+          line_drawing: {
+            base: `Architectural floor plan line drawing. Transform the provided floor plan into a clean, precise architectural line drawing. Use crisp black lines on white background for all walls, doors, windows, and furniture outlines. Apply minimal grey fills or hatching to differentiate spaces. No color fills, no textures. Clean, technical drafting style with consistent line weights. Top-down orthographic view. Professional architectural presentation quality.`,
+            refPrefix: `[STYLE REFERENCE: The second image shows the target line drawing style and line weight convention. Apply the same drafting technique, line weights, and symbol conventions to the floor plan.]`,
+          },
+        };
 
-        // Log tool usage
-        await db.createAiToolLog({
-          toolId: input.toolId || 0,
-          userId: ctx.user.id,
-          action: "color_plan_generate",
-          inputSummary: prompt.substring(0, 200),
-          outputSummary: result.url || "",
-          status: "success",
-          durationMs: Date.now() - startTime,
-        }).catch(() => {});
+        const defaults = defaultPrompts[planStyle] || defaultPrompts.colored;
+        let prompt = basePromptRow?.prompt || defaults.base;
+        if (input.style) prompt += ` Style: ${input.style}.`;
+        if (input.extraPrompt) prompt += ` ${input.extraPrompt}`;
 
-        return { url: result.url, historyId: historyResult.id };
-      } catch (error) {
-        await db.createGenerationHistory({
-          userId: ctx.user.id,
-          module: "color_plan",
-          title: `AI 彩平 - 失败`,
-          summary: prompt.substring(0, 200),
-          inputParams: { floorPlanUrl: input.floorPlanUrl },
-          status: "failed",
-          durationMs: Date.now() - startTime,
-          createdByName: ctx.user.name || null,
-          modelName: resolvedModelName,
-        }).catch(() => {});
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "彩平生成失败，请稍后重试" });
-      }
+        const originalImages: Array<{ url?: string; mimeType?: string }> = [
+          { url: input.floorPlanUrl, mimeType: "image/png" },
+        ];
+        if (input.referenceUrl) {
+          originalImages.push({ url: input.referenceUrl, mimeType: "image/png" });
+          const refPrefix = refPrefixRow?.prompt || defaults.refPrefix;
+          prompt = `${refPrefix} ` + prompt;
+        }
+
+        try {
+          const result = await generateImageWithTool({ prompt, originalImages, toolId: input.toolId });
+
+          const historyResult = await db.createGenerationHistory({
+            userId: ctx.user.id,
+            module: "color_plan",
+            title: `AI 彩平 - ${new Date().toLocaleDateString("zh-CN")}`,
+            summary: prompt,
+            inputParams: {
+              floorPlanUrl: input.floorPlanUrl,
+              referenceUrl: input.referenceUrl || null,
+              planStyle: input.planStyle || "colored",
+              style: input.style || null,
+              extraPrompt: input.extraPrompt || null,
+            },
+            outputUrl: result.url,
+            status: "success",
+            durationMs: Date.now() - startTime,
+            parentId: input.parentHistoryId || null,
+            projectId: input.projectId || null,
+            createdByName: ctx.user.name || null,
+            modelName: resolvedModelName,
+          }).catch(() => ({ id: 0 }));
+
+          await db.createAiToolLog({
+            toolId: input.toolId || 0,
+            userId: ctx.user.id,
+            action: "color_plan_generate",
+            inputSummary: prompt.substring(0, 200),
+            outputSummary: result.url || "",
+            status: "success",
+            durationMs: Date.now() - startTime,
+          }).catch(() => {});
+
+          colorPlanJobStore.set(jobId, { status: "done", url: result.url, historyId: historyResult.id });
+          // Auto-clean after 10 min
+          setTimeout(() => colorPlanJobStore.delete(jobId), 10 * 60 * 1000);
+        } catch (error: any) {
+          await db.createGenerationHistory({
+            userId: ctx.user.id,
+            module: "color_plan",
+            title: `AI 彩平 - 失败`,
+            summary: prompt.substring(0, 200),
+            inputParams: { floorPlanUrl: input.floorPlanUrl },
+            status: "failed",
+            durationMs: Date.now() - startTime,
+            createdByName: ctx.user.name || null,
+            modelName: resolvedModelName,
+          }).catch(() => {});
+          colorPlanJobStore.set(jobId, { status: "failed", error: error?.message || "彩平生成失败" });
+          setTimeout(() => colorPlanJobStore.delete(jobId), 5 * 60 * 1000);
+        }
+      })().catch(err => {
+        console.error("[colorPlan.generate] Unhandled error:", err);
+        colorPlanJobStore.set(jobId, { status: "failed", error: err?.message || "未知错误" });
+      });
+
+      return { jobId };
     }),
 
-  // 局部修改（Inpainting）
+  /** Poll the status of an async color plan generation job */
+  jobStatus: protectedProcedure
+    .input(z.object({ jobId: z.string() }))
+    .query(({ input }) => {
+      const job = colorPlanJobStore.get(input.jobId);
+      if (!job) return { status: "not_found" as const };
+      if (job.status === "done") return { status: "done" as const, url: job.url, historyId: job.historyId };
+      if (job.status === "failed") return { status: "failed" as const, error: job.error };
+      return { status: "processing" as const };
+    }),
+
+  // 局部修改（Inpainting）- async job to avoid 60s gateway timeout
   inpaint: protectedProcedure
     .input(z.object({
       imageUrl: z.string(),           // 原始彩平图 URL
@@ -2698,87 +2708,83 @@ const colorPlanRouter = router({
       projectId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const startTime = Date.now();
+      const jobId = nanoid();
+      colorPlanJobStore.set(jobId, { status: "processing" });
 
-      // Resolve model name
-      let resolvedModelName = "内置图像生成";
-      if (input.toolId) {
-        try { const tool = await db.getAiToolById(input.toolId); if (tool?.name) resolvedModelName = tool.name; } catch { /* ignore */ }
-      }
-
-      // Composite mask on image (red overlay on painted area)
-      let originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
-      let fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${input.prompt}`;
-
-      try {
-        const composite = await compositeMaskOnImage(input.imageUrl, input.maskImageData);
-        originalImages = [{ b64Json: composite.b64, mimeType: composite.mimeType }];
-      } catch {
-        originalImages = [{ url: input.imageUrl, mimeType: "image/png" }];
-      }
-
-      const attemptInpaint = async (retryCount = 0): Promise<{ url: string; modelName?: string }> => {
-        try {
-          return await generateImageWithTool({ prompt: fullPrompt, originalImages, toolId: input.toolId });
-        } catch (err: any) {
-          const isTimeout = err?.name === "TimeoutError" || err?.message?.includes("timeout") || err?.message?.includes("aborted");
-          if (isTimeout && retryCount < 1) {
-            console.log(`[colorPlan.inpaint] Timed out, retrying...`);
-            return attemptInpaint(retryCount + 1);
-          }
-          throw err;
+      (async () => {
+        const startTime = Date.now();
+        let resolvedModelName = "内置图像生成";
+        if (input.toolId) {
+          try { const tool = await db.getAiToolById(input.toolId); if (tool?.name) resolvedModelName = tool.name; } catch { /* ignore */ }
         }
-      };
 
-      try {
-        const result = await attemptInpaint();
+        let originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
+        const fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${input.prompt}`;
 
-        const historyResult = await db.createGenerationHistory({
-          userId: ctx.user.id,
-          module: "color_plan",
-          title: `彩平局部修改 - ${input.prompt.substring(0, 30)}`,
-          summary: fullPrompt,
-          inputParams: {
-            imageUrl: input.imageUrl,
-            prompt: input.prompt,
-            hasMask: true,
-            isInpaint: true,
-          },
-          outputUrl: result.url,
-          status: "success",
-          durationMs: Date.now() - startTime,
-          parentId: input.parentHistoryId || null,
-          projectId: input.projectId || null,
-          createdByName: ctx.user.name || null,
-          modelName: resolvedModelName,
-        }).catch(() => ({ id: 0 }));
+        try {
+          const composite = await compositeMaskOnImage(input.imageUrl, input.maskImageData);
+          originalImages = [{ b64Json: composite.b64, mimeType: composite.mimeType }];
+        } catch {
+          originalImages = [{ url: input.imageUrl, mimeType: "image/png" }];
+        }
 
-        await db.createAiToolLog({
-          toolId: input.toolId || 0,
-          userId: ctx.user.id,
-          action: "color_plan_inpaint",
-          inputSummary: input.prompt.substring(0, 200),
-          outputSummary: result.url || "",
-          status: "success",
-          durationMs: Date.now() - startTime,
-        }).catch(() => {});
+        try {
+          const result = await generateImageWithTool({ prompt: fullPrompt, originalImages, toolId: input.toolId });
 
-        return { url: result.url, historyId: historyResult.id };
-      } catch (error) {
-        await db.createGenerationHistory({
-          userId: ctx.user.id,
-          module: "color_plan",
-          title: `彩平局部修改 - 失败`,
-          summary: input.prompt.substring(0, 200),
-          inputParams: { imageUrl: input.imageUrl, hasMask: true, isInpaint: true },
-          status: "failed",
-          durationMs: Date.now() - startTime,
-          parentId: input.parentHistoryId || null,
-          createdByName: ctx.user.name || null,
-          modelName: resolvedModelName,
-        }).catch(() => {});
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "局部修改失败，请稍后重试" });
-      }
+          const historyResult = await db.createGenerationHistory({
+            userId: ctx.user.id,
+            module: "color_plan",
+            title: `彩平局部修改 - ${input.prompt.substring(0, 30)}`,
+            summary: fullPrompt,
+            inputParams: {
+              imageUrl: input.imageUrl,
+              prompt: input.prompt,
+              hasMask: true,
+              isInpaint: true,
+            },
+            outputUrl: result.url,
+            status: "success",
+            durationMs: Date.now() - startTime,
+            parentId: input.parentHistoryId || null,
+            projectId: input.projectId || null,
+            createdByName: ctx.user.name || null,
+            modelName: resolvedModelName,
+          }).catch(() => ({ id: 0 }));
+
+          await db.createAiToolLog({
+            toolId: input.toolId || 0,
+            userId: ctx.user.id,
+            action: "color_plan_inpaint",
+            inputSummary: input.prompt.substring(0, 200),
+            outputSummary: result.url || "",
+            status: "success",
+            durationMs: Date.now() - startTime,
+          }).catch(() => {});
+
+          colorPlanJobStore.set(jobId, { status: "done", url: result.url, historyId: historyResult.id });
+          setTimeout(() => colorPlanJobStore.delete(jobId), 10 * 60 * 1000);
+        } catch (error: any) {
+          await db.createGenerationHistory({
+            userId: ctx.user.id,
+            module: "color_plan",
+            title: `彩平局部修改 - 失败`,
+            summary: input.prompt.substring(0, 200),
+            inputParams: { imageUrl: input.imageUrl, hasMask: true, isInpaint: true },
+            status: "failed",
+            durationMs: Date.now() - startTime,
+            parentId: input.parentHistoryId || null,
+            createdByName: ctx.user.name || null,
+            modelName: resolvedModelName,
+          }).catch(() => {});
+          colorPlanJobStore.set(jobId, { status: "failed", error: error?.message || "局部修改失败" });
+          setTimeout(() => colorPlanJobStore.delete(jobId), 5 * 60 * 1000);
+        }
+      })().catch(err => {
+        console.error("[colorPlan.inpaint] Unhandled error:", err);
+        colorPlanJobStore.set(jobId, { status: "failed", error: err?.message || "未知错误" });
+      });
+
+      return { jobId };
     }),
 });
 

@@ -1621,3 +1621,11 @@
 - [x] 前端：ColorPlan.tsx 生成结果区域添加「局部修改」按钮，集成画笔圈选弹窗
 - [x] 生成记录中保留修改记录（parentId 关联原始记录）
 - [x] 保存 checkpoint
+
+## Bug 修复：AI 平面图 504 Gateway Timeout（API Mutation 返回 HTML 非 JSON）
+- [x] 定位根本原因：AWS ELB 网关 60s 超时，Gemini API 耗时超过 5 分钟，网关返回 HTML 504 页面
+- [x] 修复：将 colorPlan.generate 和 colorPlan.inpaint 均改为异步后台任务模式（立即返回 jobId）
+- [x] 新增 colorPlan.jobStatus 轮询接口（每 2 秒查询一次）
+- [x] 前端 ColorPlan.tsx 使用 useEffect + jobStatus 轮询替代直接等待结果
+- [x] TypeScript 0 errors
+- [x] 保存 checkpoint
