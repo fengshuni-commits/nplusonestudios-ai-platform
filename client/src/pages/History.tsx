@@ -609,6 +609,21 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
         </div>
       )}
 
+      {/* Copy prompt button for color_plan */}
+      {item.module === "color_plan" && item.summary && (
+        <div className="absolute bottom-1.5 right-14 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(item.summary || "")
+              .then(() => { const el = e.currentTarget as HTMLElement; el.setAttribute("data-copied", "1"); setTimeout(() => el.removeAttribute("data-copied"), 1500); })
+              .catch(() => {});
+          }}>
+          <div className="h-6 w-6 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors" title="复制生成提示词">
+            <Copy className="h-3 w-3" />
+          </div>
+        </div>
+      )}
+
       {/* Import to asset library button for ai_render and analysis_image */}
       {(item.module === "ai_render" || item.module === "analysis_image") && (item.latestOutputUrl || item.outputUrl) && onImport && (
         <div className="absolute bottom-1.5 right-14 opacity-0 group-hover:opacity-100 transition-opacity z-10"

@@ -2628,7 +2628,7 @@ const colorPlanRouter = router({
           userId: ctx.user.id,
           module: "color_plan",
           title: `AI 彩平 - ${new Date().toLocaleDateString("zh-CN")}`,
-          summary: prompt.substring(0, 200),
+          summary: prompt,
           inputParams: {
             floorPlanUrl: input.floorPlanUrl,
             referenceUrl: input.referenceUrl || null,
