@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -501,25 +502,34 @@ function InpaintDialog({
 
 // ─── Main Page ────────────────────────────────────────────
 export default function ColorPlan() {
+  const [location] = useLocation();
+
+  // Parse URL query params for "re-edit" from history
+  const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const initFloorPlanUrl = urlParams.get('floorPlanUrl') || null;
+  const initReferenceUrl = urlParams.get('referenceUrl') || null;
+  const initPlanStyle = (urlParams.get('planStyle') as PlanStyle) || 'colored';
+  const initExtraPrompt = urlParams.get('extraPrompt') || '';
+
   // Floor plan (base image)
   const [floorPlanFile, setFloorPlanFile] = useState<File | null>(null);
-  const [floorPlanPreview, setFloorPlanPreview] = useState<string | null>(null);
-  const [floorPlanUrl, setFloorPlanUrl] = useState<string | null>(null);
+  const [floorPlanPreview, setFloorPlanPreview] = useState<string | null>(initFloorPlanUrl);
+  const [floorPlanUrl, setFloorPlanUrl] = useState<string | null>(initFloorPlanUrl);
   const [isUploadingFloor, setIsUploadingFloor] = useState(false);
 
   // Reference image
-  const [referencePreview, setReferencePreview] = useState<string | null>(null);
-  const [referenceUrl, setReferenceUrl] = useState<string | null>(null);
+  const [referencePreview, setReferencePreview] = useState<string | null>(initReferenceUrl);
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(initReferenceUrl);
   const [isUploadingRef, setIsUploadingRef] = useState(false);
 
   // AI tool selection
   const [toolId, setToolId] = useState<number | undefined>(undefined);
 
   // Plan style selection
-  const [planStyle, setPlanStyle] = useState<PlanStyle>("colored");
+  const [planStyle, setPlanStyle] = useState<PlanStyle>(initPlanStyle);
 
   // Style & extra prompt
-  const [extraPrompt, setExtraPrompt] = useState("");
+  const [extraPrompt, setExtraPrompt] = useState(initExtraPrompt);
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);

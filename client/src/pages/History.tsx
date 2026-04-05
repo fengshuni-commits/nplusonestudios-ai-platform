@@ -454,9 +454,14 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
       if (onNavigate) onNavigate("/media/layout");
       return;
     }
-    if (item.module === "analysis_image" || item.module === "color_plan") {
-      // AI 分析图 / AI 平面图：灯箱查看大图
+    if (item.module === "analysis_image") {
+      // AI 分析图：灯笱查看大图
       if (displayUrl && onLightbox) onLightbox(displayUrl, title);
+      return;
+    }
+    if (item.module === "color_plan") {
+      // AI 平面图：打开详情弹窗（与 AI 效果图一致）
+      if (onOpenDetail) onOpenDetail(item);
       return;
     }
     if (isRender && onOpenDetail) {
@@ -788,7 +793,7 @@ export default function HistoryPage() {
   );
 
   const handleOpenDetail = useCallback((item: any) => {
-    if (item.module === "ai_render" || item.module === "benchmark_report") {
+    if (item.module === "ai_render" || item.module === "benchmark_report" || item.module === "color_plan") {
       setSelectedRootId(item.id);
       setSelectedItem(item);
       setDetailOpen(true);
@@ -1068,8 +1073,11 @@ export default function HistoryPage() {
                   const isLast = idx === chainQuery.data!.length - 1;
                   const inputParams = chainItem.inputParams as any;
                   const isBenchmark = selectedItem?.module === 'benchmark_report';
+                  const isColorPlan = selectedItem?.module === 'color_plan';
                   const promptText = isBenchmark
                     ? chainItem.summary || ""
+                    : isColorPlan
+                    ? (inputParams?.extraPrompt || chainItem.summary || "")
                     : (inputParams?.prompt || chainItem.summary || "");
                   const itemTitle = chainItem.title || `第 ${idx + 1} 次生成`;
 
@@ -1108,8 +1116,34 @@ export default function HistoryPage() {
                                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
                                 )}
                               </div>
-                              <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
-                              {!isBenchmark && inputParams?.style && (
+                              {isColorPlan ? (
+                                <div className="space-y-1.5">
+                                  {/* Color plan params */}
+                                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                                    {inputParams?.planStyle && (
+                                      <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                        风格: {inputParams.planStyle === 'colored' ? '彩色平面' : inputParams.planStyle === 'hand_drawn' ? '手绘风格' : '线稿风格'}
+                                      </span>
+                                    )}
+                                    {inputParams?.referenceUrl && (
+                                      <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                        含参考图
+                                      </span>
+                                    )}
+                                    {inputParams?.isInpaint && (
+                                      <span className="inline-flex items-center text-[10px] text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded">
+                                        局部修改
+                                      </span>
+                                    )}
+                                  </div>
+                                  {promptText && (
+                                    <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
+                              )}
+                              {!isBenchmark && !isColorPlan && inputParams?.style && (
                                 <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-1">
                                   风格: {inputParams.style}
                                 </span>
@@ -1146,7 +1180,46 @@ export default function HistoryPage() {
                                   </SelectContent>
                                 </Select>
                               </div>
-                              {isBenchmark ? (
+                              {isColorPlan ? (
+                                <>
+                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                    onClick={() => handleCopyPrompt(promptText || chainItem.summary || "")} title="复制提示词">
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                  {chainItem.outputUrl && (
+                                    <>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })} title="放大查看">
+                                        <Maximize2 className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => downloadImage(chainItem.outputUrl!, itemTitle)} title="下载原图">
+                                        <Download className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-emerald-500"
+                                        onClick={() => handleImport(chainItem.id)} title="导入到素材库">
+                                        <FolderPlus className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {/* 重新编辑：将参数回填到生成表单 */}
+                                  {inputParams?.floorPlanUrl && (
+                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary/80"
+                                      onClick={() => {
+                                        const params = new URLSearchParams();
+                                        if (inputParams.floorPlanUrl) params.set('floorPlanUrl', inputParams.floorPlanUrl);
+                                        if (inputParams.referenceUrl) params.set('referenceUrl', inputParams.referenceUrl);
+                                        if (inputParams.planStyle) params.set('planStyle', inputParams.planStyle);
+                                        if (inputParams.extraPrompt) params.set('extraPrompt', inputParams.extraPrompt);
+                                        setDetailOpen(false);
+                                        setTimeout(() => navigate(`/design/color-plan?${params.toString()}`), 150);
+                                      }} title="回填参数并重新生成">
+                                      <RefreshCw className="h-3 w-3 mr-1" />
+                                      重新编辑
+                                    </Button>
+                                  )}
+                                </>
+                              ) : isBenchmark ? (
                                 <>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                     onClick={() => {
@@ -1210,8 +1283,24 @@ export default function HistoryPage() {
                             <BenchmarkChainItem content={chainItem.outputContent} isLast={isLast} />
                           )}
 
+                          {/* Color plan: image preview */}
+                          {isColorPlan && chainItem.outputUrl && (
+                            <div className="mt-2">
+                              <div className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
+                                onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}>
+                                <img src={chainItem.outputUrl} alt={chainItem.title} className="w-full h-auto max-h-[320px] object-contain" />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/20">
+                                  <div className="bg-black/60 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                                    <Maximize2 className="h-3 w-3" />
+                                    点击放大
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* AI render: image preview */}
-                          {!isBenchmark && chainItem.outputUrl && (
+                          {!isBenchmark && !isColorPlan && chainItem.outputUrl && (
                             <div className="mt-2 space-y-2">
                               <div className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
                                 onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}>

@@ -1629,3 +1629,10 @@
 - [x] 前端 ColorPlan.tsx 使用 useEffect + jobStatus 轮询替代直接等待结果
 - [x] TypeScript 0 errors
 - [x] 保存 checkpoint
+
+## AI 平面图历史记录：展示提示词 + 重新编辑功能
+- [x] 历史卡片点击打开详情弹窗（与 AI 效果图一致）
+- [x] 展示 inputParams（风格、含参考图、局部修改标签、提示词）
+- [x] 添加「重新编辑」按钮，将历史参数回填到生成表单（URL query params）
+- [x] ColorPlan.tsx 读取 URL 参数并自动回填表单
+- [x] 保存 checkpoint
