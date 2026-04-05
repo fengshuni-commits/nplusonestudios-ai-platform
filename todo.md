@@ -1675,3 +1675,9 @@
 - [x] 局部修改完成后结果图自动更新，mask 状态自动重置
 - [x] TypeScript 0 errors，Vite HMR 正常
 - [x] 保存 checkpoint
+
+## Bug 修复：ColorPlan.tsx trpc hooks 重复定义导致 Failed to fetch
+- [x] 删除废弃的 InpaintDialog 组件（第 275-501 行），该组件内部重复定义了 inpaintMutation 和 inpaintJobStatus hooks
+- [x] 确认所有 import 均有实际使用，无废弃引用
+- [x] TypeScript 0 errors，Vite HMR 正常
+- [x] 保存 checkpoint
