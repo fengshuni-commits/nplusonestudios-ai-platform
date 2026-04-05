@@ -1654,3 +1654,10 @@
 - [ ] 读取 DesignTools.tsx 局部标注完整实现
 - [ ] 复制到 ColorPlan.tsx，替换现有实现
 - [ ] 保存 checkpoint
+
+## Bug 修复：局部修改 Tab 上传图片后未直接进入标注工作区
+- [x] 上传图片成功后自动触发 readDims + setEditingMask(true)，直接进入 ImageMaskEditor
+- [x] 「使用当前生成结果」按钮同样自动进入标注模式
+- [x] AI 生成结果下方「局部修改」按钮同样自动进入标注模式
+- [x] TypeScript 0 errors
+- [x] 保存 checkpoint

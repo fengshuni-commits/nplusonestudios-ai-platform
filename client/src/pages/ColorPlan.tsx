@@ -754,7 +754,22 @@ export default function ColorPlan() {
         contentType: file.type,
       });
       setInpaintSourceUrl(url);
-      toast.success("图片上传成功，可开始局部修改");
+      // Auto-enter mask editing mode after upload (same as DesignTools)
+      setEditingMask(false);
+      setMaskDataUrl(null);
+      setMaskPreviewUrl(null);
+      setEditImgDims(null);
+      const autoStartMask = () => {
+        const el = editImgRef.current;
+        if (el && el.clientWidth > 0) {
+          setEditImgDims({ dw: el.clientWidth, dh: el.clientHeight, nw: el.naturalWidth || el.clientWidth, nh: el.naturalHeight || el.clientHeight });
+          setEditingMask(true);
+        } else {
+          // Image not yet rendered, retry after a short delay
+          setTimeout(autoStartMask, 150);
+        }
+      };
+      requestAnimationFrame(() => requestAnimationFrame(autoStartMask));
     } catch (e: any) {
       toast.error(e.message || "上传失败");
       setInpaintSourcePreview(null);
@@ -974,9 +989,24 @@ export default function ColorPlan() {
                       size="sm"
                       className="ml-auto text-xs"
                       onClick={() => {
-                        setInpaintSourceUrl(resultUrl);
-                        setInpaintSourcePreview(resultUrl);
+                        setInpaintSourceUrl(resultUrl!);
+                        setInpaintSourcePreview(resultUrl!);
+                        setEditingMask(false);
+                        setMaskDataUrl(null);
+                        setMaskPreviewUrl(null);
+                        setEditImgDims(null);
                         setRightTab("inpaint");
+                        // Auto-start mask after tab switch renders the image
+                        const autoStart = () => {
+                          const el = editImgRef.current;
+                          if (el && el.clientWidth > 0) {
+                            setEditImgDims({ dw: el.clientWidth, dh: el.clientHeight, nw: el.naturalWidth || el.clientWidth, nh: el.naturalHeight || el.clientHeight });
+                            setEditingMask(true);
+                          } else {
+                            setTimeout(autoStart, 150);
+                          }
+                        };
+                        requestAnimationFrame(() => requestAnimationFrame(autoStart));
                       }}
                     >
                       <Paintbrush className="h-3 w-3 mr-1.5" />
@@ -1035,8 +1065,22 @@ export default function ColorPlan() {
                         size="sm"
                         className="text-xs text-muted-foreground"
                         onClick={() => {
-                          setInpaintSourceUrl(resultUrl);
-                          setInpaintSourcePreview(resultUrl);
+                          setInpaintSourceUrl(resultUrl!);
+                          setInpaintSourcePreview(resultUrl!);
+                          setEditingMask(false);
+                          setMaskDataUrl(null);
+                          setMaskPreviewUrl(null);
+                          setEditImgDims(null);
+                          const autoStart = () => {
+                            const el = editImgRef.current;
+                            if (el && el.clientWidth > 0) {
+                              setEditImgDims({ dw: el.clientWidth, dh: el.clientHeight, nw: el.naturalWidth || el.clientWidth, nh: el.naturalHeight || el.clientHeight });
+                              setEditingMask(true);
+                            } else {
+                              setTimeout(autoStart, 150);
+                            }
+                          };
+                          requestAnimationFrame(() => requestAnimationFrame(autoStart));
                         }}
                       >
                         <Wand2 className="h-3.5 w-3.5 mr-1.5" />
