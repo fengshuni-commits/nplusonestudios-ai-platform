@@ -543,14 +543,55 @@ export default function ColorPlan() {
   // Right panel tab: "generate" | "inpaint"
   const [rightTab, setRightTab] = useState<"generate" | "inpaint">("generate");
 
-  // Inpaint dialog
-  const [inpaintOpen, setInpaintOpen] = useState(false);
-
   // Standalone inpaint (upload existing image)
   const [inpaintSourceUrl, setInpaintSourceUrl] = useState<string | null>(null);
   const [inpaintSourcePreview, setInpaintSourcePreview] = useState<string | null>(null);
   const [isUploadingInpaintSource, setIsUploadingInpaintSource] = useState(false);
   const uploadInpaintSource = trpc.colorPlan.uploadFloorPlan.useMutation();
+
+  // Mask editor state — directly on the inpaint source image (same as DesignTools)
+  const [editingMask, setEditingMask] = useState(false);
+  const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
+  const [maskPreviewUrl, setMaskPreviewUrl] = useState<string | null>(null);
+  const [editImgDims, setEditImgDims] = useState<{ dw: number; dh: number; nw: number; nh: number } | null>(null);
+  const editImgRef = useRef<HTMLImageElement>(null);
+  const [inpaintPrompt, setInpaintPrompt] = useState("");
+  const [isInpainting, setIsInpainting] = useState(false);
+  const inpaintMutation = trpc.colorPlan.inpaint.useMutation();
+  const [inpaintJobId, setInpaintJobId] = useState<string | null>(null);
+
+  // Poll inpaint job status
+  const { data: inpaintJobStatus } = trpc.colorPlan.jobStatus.useQuery(
+    { jobId: inpaintJobId! },
+    {
+      enabled: !!inpaintJobId && isInpainting,
+      refetchInterval: 2000,
+      refetchIntervalInBackground: true,
+    }
+  );
+
+  useEffect(() => {
+    if (!inpaintJobStatus) return;
+    if (inpaintJobStatus.status === "done") {
+      toast.success("局部修改完成");
+      setResultUrl(inpaintJobStatus.url);
+      setResultHistoryId(inpaintJobStatus.historyId);
+      setIsInpainting(false);
+      setInpaintJobId(null);
+      // Reset mask state
+      setEditingMask(false);
+      setMaskDataUrl(null);
+      setMaskPreviewUrl(null);
+      setEditImgDims(null);
+      setInpaintPrompt("");
+      // Switch to result tab
+      setRightTab("generate");
+    } else if (inpaintJobStatus.status === "failed") {
+      toast.error(inpaintJobStatus.error || "局部修改失败，请稍后重试");
+      setIsInpainting(false);
+      setInpaintJobId(null);
+    }
+  }, [inpaintJobStatus]);
 
   const uploadFloorPlan = trpc.colorPlan.uploadFloorPlan.useMutation();
   const generateMutation = trpc.colorPlan.generate.useMutation();
@@ -1005,29 +1046,147 @@ export default function ColorPlan() {
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col gap-3">
-                    <div className="relative rounded-xl overflow-hidden border border-border/40 bg-muted/10">
+                    {/* Image + mask editor overlay (same pattern as DesignTools) */}
+                    <div className="relative group rounded-xl overflow-hidden border border-border/40 bg-muted/10">
                       <img
-                        src={inpaintSourcePreview}
+                        ref={editImgRef}
+                        src={inpaintSourcePreview!}
                         alt="待修改的彩平图"
-                        className="w-full h-auto max-h-[400px] object-contain"
+                        className="w-full h-auto"
+                        onLoad={(e) => {
+                          const img = e.currentTarget;
+                          if (editingMask) {
+                            setEditImgDims({
+                              dw: img.clientWidth,
+                              dh: img.clientHeight,
+                              nw: img.naturalWidth || img.clientWidth,
+                              nh: img.naturalHeight || img.clientHeight,
+                            });
+                          }
+                        }}
                       />
-                      <button
-                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
-                        onClick={() => { setInpaintSourcePreview(null); setInpaintSourceUrl(null); }}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+
+                      {/* Mask editor overlay */}
+                      {editingMask && editImgDims && (
+                        <ImageMaskEditor
+                          displayWidth={editImgDims.dw}
+                          displayHeight={editImgDims.dh}
+                          naturalWidth={editImgDims.nw}
+                          naturalHeight={editImgDims.nh}
+                          onSave={(dataUrl, displayDataUrl) => {
+                            setMaskDataUrl(dataUrl);
+                            if (displayDataUrl) setMaskPreviewUrl(displayDataUrl);
+                            setEditingMask(false);
+                            toast.success("标注区域已保存，请填写修改说明后点击「局部修改」");
+                          }}
+                          onCancel={() => {
+                            setEditingMask(false);
+                          }}
+                        />
+                      )}
+
+                      {/* Mask preview overlay */}
+                      {maskPreviewUrl && !editingMask && (
+                        <img
+                          src={maskPreviewUrl}
+                          alt="标注范围"
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
+                        />
+                      )}
+
+                      {/* Hover actions (hidden during mask editing) */}
+                      {!editingMask && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
+                          <div className="flex gap-2 pointer-events-auto">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setEditingMask(false);
+                                setMaskDataUrl(null);
+                                setMaskPreviewUrl(null);
+                                setEditImgDims(null);
+                                const readDims = () => {
+                                  const el = editImgRef.current;
+                                  if (el && el.clientWidth > 0) {
+                                    setEditImgDims({ dw: el.clientWidth, dh: el.clientHeight, nw: el.naturalWidth || el.clientWidth, nh: el.naturalHeight || el.clientHeight });
+                                    setEditingMask(true);
+                                  }
+                                };
+                                requestAnimationFrame(() => requestAnimationFrame(readDims));
+                                setTimeout(readDims, 100);
+                              }}
+                            >
+                              <Paintbrush className="h-3.5 w-3.5 mr-1.5" />
+                              {maskDataUrl ? "重新标注" : "局部标注"}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => { setInpaintSourcePreview(null); setInpaintSourceUrl(null); setEditingMask(false); setMaskDataUrl(null); setMaskPreviewUrl(null); setEditImgDims(null); }}
+                            >
+                              <X className="h-3.5 w-3.5 mr-1.5" />
+                              更换图片
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mask saved indicator */}
+                      {maskDataUrl && !editingMask && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500/90 text-white text-[10px] px-2 py-0.5 rounded-full z-30">
+                          <Paintbrush className="h-2.5 w-2.5" />
+                          已标注 · 填写修改说明后点击局部修改
+                        </div>
+                      )}
                     </div>
-                    <Button
-                      className="w-full"
-                      disabled={!inpaintSourceUrl || isUploadingInpaintSource}
-                      onClick={() => {
-                        if (inpaintSourceUrl) setInpaintOpen(true);
-                      }}
-                    >
-                      <Paintbrush className="h-4 w-4 mr-2" />
-                      开始局部修改
-                    </Button>
+
+                    {/* Prompt + submit (shown after mask is saved) */}
+                    {maskDataUrl && !editingMask && (
+                      <div className="space-y-2">
+                        <Textarea
+                          placeholder="描述需要修改的内容，例如：将客厅区域改为深色木地板，沙发换成L形布艺沙发…"
+                          value={inpaintPrompt}
+                          onChange={(e) => setInpaintPrompt(e.target.value)}
+                          className="resize-none text-sm min-h-[72px]"
+                          disabled={isInpainting}
+                        />
+                        <Button
+                          className="w-full"
+                          disabled={!inpaintPrompt.trim() || isInpainting || !inpaintSourceUrl}
+                          onClick={async () => {
+                            if (!maskDataUrl || !inpaintPrompt.trim() || !inpaintSourceUrl) return;
+                            setIsInpainting(true);
+                            try {
+                              const result = await inpaintMutation.mutateAsync({
+                                imageUrl: inpaintSourceUrl,
+                                maskImageData: maskDataUrl,
+                                prompt: inpaintPrompt.trim(),
+                                toolId,
+                                parentHistoryId: resultHistoryId,
+                              });
+                              setInpaintJobId(result.jobId);
+                            } catch (e: any) {
+                              toast.error(e.message || "局部修改失败，请稍后重试");
+                              setIsInpainting(false);
+                            }
+                          }}
+                        >
+                          {isInpainting ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />修改中…</>
+                          ) : (
+                            <><Sparkles className="h-4 w-4 mr-2" />局部修改</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Hint when no mask yet */}
+                    {!maskDataUrl && !editingMask && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        悬停图片可使用「局部标注」工具圈出需要修改的区域
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1052,17 +1211,7 @@ export default function ColorPlan() {
         }}
       />
 
-      {/* Inpaint Dialog */}
-      {(inpaintSourceUrl || resultUrl) && (
-        <InpaintDialog
-          open={inpaintOpen}
-          onClose={() => setInpaintOpen(false)}
-          imageUrl={(inpaintSourceUrl || resultUrl)!}
-          parentHistoryId={resultHistoryId}
-          toolId={toolId}
-          onSuccess={handleInpaintSuccess}
-        />
-      )}
+
     </div>
   );
 }

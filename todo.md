@@ -1638,13 +1638,19 @@
 - [x] 保存 checkpoint
 
 ## Bug 修复：AI 平面图局部修改功能未实现
-- [ ] 检查 ColorPlan.tsx 中 InpaintDialog 和 ImageMaskEditor 的实现
-- [ ] 检查后端 colorPlan.inpaint 接口的实现
-- [ ] 修复前后端全链路，确保局部修改功能可用
-- [ ] 保存 checkpoint
+- [x] 移除 InpaintDialog 弹窗，改为直接在图片上叠加 ImageMaskEditor（完全复刻 DesignTools.tsx 模式）
+- [x] 添加 editImgRef + requestAnimationFrame 双帧读取尺寸
+- [x] 标注完成后显示 amber 提示条 + 修改说明输入框 + 提交按钮
+- [x] TypeScript 0 errors
+- [x] 保存 checkpoint
 
 ## Bug 修复：AI 平面图局部修改入口不可见
 - [x] 重构右侧结果面板：拆分为「AI 生成」和「局部修改」两个 Tab
 - [x] AI 生成结果下方添加「局部修改」快捷按钮，点击自动切换到局部修改 Tab
 - [x] 局部修改 Tab：允许直接上传已有彩平图，或使用当前生成结果
 - [x] 保存 checkpoint
+
+## Bug 修复：将 AI 效果图局部标注功能完整复制到 AI 平面图
+- [ ] 读取 DesignTools.tsx 局部标注完整实现
+- [ ] 复制到 ColorPlan.tsx，替换现有实现
+- [ ] 保存 checkpoint
