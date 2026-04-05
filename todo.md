@@ -1636,3 +1636,15 @@
 - [x] 添加「重新编辑」按钮，将历史参数回填到生成表单（URL query params）
 - [x] ColorPlan.tsx 读取 URL 参数并自动回填表单
 - [x] 保存 checkpoint
+
+## Bug 修复：AI 平面图局部修改功能未实现
+- [ ] 检查 ColorPlan.tsx 中 InpaintDialog 和 ImageMaskEditor 的实现
+- [ ] 检查后端 colorPlan.inpaint 接口的实现
+- [ ] 修复前后端全链路，确保局部修改功能可用
+- [ ] 保存 checkpoint
+
+## Bug 修复：AI 平面图局部修改入口不可见
+- [x] 重构右侧结果面板：拆分为「AI 生成」和「局部修改」两个 Tab
+- [x] AI 生成结果下方添加「局部修改」快捷按钮，点击自动切换到局部修改 Tab
+- [x] 局部修改 Tab：允许直接上传已有彩平图，或使用当前生成结果
+- [x] 保存 checkpoint

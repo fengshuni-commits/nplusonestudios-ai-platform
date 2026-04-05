@@ -27,6 +27,7 @@ import {
   PenLine,
   ScanLine,
   Paintbrush,
+  Wand2,
 } from "lucide-react";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { cn } from "@/lib/utils";
@@ -539,8 +540,17 @@ export default function ColorPlan() {
   // Asset picker
   const [assetPickerTarget, setAssetPickerTarget] = useState<"floor" | "reference" | null>(null);
 
+  // Right panel tab: "generate" | "inpaint"
+  const [rightTab, setRightTab] = useState<"generate" | "inpaint">("generate");
+
   // Inpaint dialog
   const [inpaintOpen, setInpaintOpen] = useState(false);
+
+  // Standalone inpaint (upload existing image)
+  const [inpaintSourceUrl, setInpaintSourceUrl] = useState<string | null>(null);
+  const [inpaintSourcePreview, setInpaintSourcePreview] = useState<string | null>(null);
+  const [isUploadingInpaintSource, setIsUploadingInpaintSource] = useState(false);
+  const uploadInpaintSource = trpc.colorPlan.uploadFloorPlan.useMutation();
 
   const uploadFloorPlan = trpc.colorPlan.uploadFloorPlan.useMutation();
   const generateMutation = trpc.colorPlan.generate.useMutation();
@@ -681,6 +691,35 @@ export default function ColorPlan() {
   const handleInpaintSuccess = (url: string, historyId: number) => {
     setResultUrl(url);
     setResultHistoryId(historyId);
+    setRightTab("generate"); // switch to result tab after inpaint
+  };
+
+  // ── Upload handler for standalone inpaint source ──────
+  const handleInpaintSourceFile = async (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    setInpaintSourcePreview(objectUrl);
+    setInpaintSourceUrl(null);
+    setIsUploadingInpaintSource(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const { url } = await uploadInpaintSource.mutateAsync({
+        fileName: file.name,
+        fileData: base64,
+        contentType: file.type,
+      });
+      setInpaintSourceUrl(url);
+      toast.success("图片上传成功，可开始局部修改");
+    } catch (e: any) {
+      toast.error(e.message || "上传失败");
+      setInpaintSourcePreview(null);
+    } finally {
+      setIsUploadingInpaintSource(false);
+    }
   };
 
   const canGenerate = !!floorPlanUrl && !isUploadingFloor && !isUploadingRef && !isGenerating;
@@ -812,39 +851,44 @@ export default function ColorPlan() {
 
           {/* ── Right: Result Panel ───────────────────── */}
           <div className="px-6 py-5 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-foreground">生成结果</h2>
-              {resultUrl && (
-                <div className="flex gap-2 flex-wrap justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setInpaintOpen(true)}
-                    disabled={isGenerating}
-                  >
-                    <Paintbrush className="h-3.5 w-3.5 mr-1.5" />
-                    局部修改
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRegenerate}
-                    disabled={isGenerating || !canGenerate}
-                  >
+            {/* Tab switcher */}
+            <div className="flex items-center gap-1 mb-4 border-b border-border/40 pb-3">
+              <button
+                onClick={() => setRightTab("generate")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                  rightTab === "generate"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                )}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                AI 生成
+                {resultUrl && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 ml-0.5" />
+                )}
+              </button>
+              <button
+                onClick={() => setRightTab("inpaint")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                  rightTab === "inpaint"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                )}
+              >
+                <Paintbrush className="h-3.5 w-3.5" />
+                局部修改
+              </button>
+              {/* Actions for generate tab */}
+              {rightTab === "generate" && resultUrl && (
+                <div className="ml-auto flex gap-1.5 flex-wrap justify-end">
+                  <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isGenerating || !canGenerate}>
                     <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                     重新生成
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleImportToAssets}
-                    disabled={importAssetMutation.isPending}
-                  >
-                    {importAssetMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
-                    )}
+                  <Button variant="outline" size="sm" onClick={handleImportToAssets} disabled={importAssetMutation.isPending}>
+                    {importAssetMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5 mr-1.5" />}
                     导入素材库
                   </Button>
                   <Button size="sm" onClick={handleDownload}>
@@ -855,50 +899,137 @@ export default function ColorPlan() {
               )}
             </div>
 
-            {isGenerating ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
-                <div className="relative">
+            {/* ── AI 生成 Tab ── */}
+            {rightTab === "generate" && (
+              isGenerating ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
                   <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <Sparkles className="h-7 w-7 text-primary animate-pulse" />
                   </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground/70">AI 正在生成彩平图</p>
+                    <p className="text-xs text-muted-foreground mt-1">通常需要 15–30 秒，请耐心等待</p>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-foreground/70">AI 正在生成彩平图</p>
-                  <p className="text-xs text-muted-foreground mt-1">通常需要 15–30 秒，请耐心等待</p>
-                </div>
-              </div>
-            ) : resultUrl ? (
-              <div className="flex-1 flex flex-col gap-3">
-                <div className="rounded-xl overflow-hidden border border-border/40 bg-muted/10 flex-1 flex items-center justify-center">
-                  <img
-                    src={resultUrl}
-                    alt="彩平图生成结果"
-                    className="w-full h-full object-contain max-h-[600px]"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    {PLAN_STYLES.find(s => s.id === planStyle)?.label ?? "AI 生成"}
-                  </Badge>
-                  {referenceUrl && (
-                    <Badge variant="outline" className="text-xs">
-                      参考风格图已应用
+              ) : resultUrl ? (
+                <div className="flex-1 flex flex-col gap-3">
+                  <div className="rounded-xl overflow-hidden border border-border/40 bg-muted/10 flex-1 flex items-center justify-center">
+                    <img
+                      src={resultUrl}
+                      alt="彩平图生成结果"
+                      className="w-full h-full object-contain max-h-[600px]"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-xs">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      {PLAN_STYLES.find(s => s.id === planStyle)?.label ?? "AI 生成"}
                     </Badge>
-                  )}
+                    {referenceUrl && (
+                      <Badge variant="outline" className="text-xs">参考风格图已应用</Badge>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto text-xs"
+                      onClick={() => {
+                        setInpaintSourceUrl(resultUrl);
+                        setInpaintSourcePreview(resultUrl);
+                        setRightTab("inpaint");
+                      }}
+                    >
+                      <Paintbrush className="h-3 w-3 mr-1.5" />
+                      局部修改
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                <div className="h-20 w-20 rounded-2xl bg-muted/40 flex items-center justify-center">
-                  <ImageIcon className="h-9 w-9 text-muted-foreground/30" />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                  <div className="h-20 w-20 rounded-2xl bg-muted/40 flex items-center justify-center">
+                    <ImageIcon className="h-9 w-9 text-muted-foreground/30" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground/50">彩平图将在此显示</p>
+                    <p className="text-xs text-muted-foreground/50 mt-1">上传底图后点击「生成彩平图」</p>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-foreground/50">彩平图将在此显示</p>
-                  <p className="text-xs text-muted-foreground/50 mt-1">
-                    上传底图后点击「生成彩平图」
-                  </p>
-                </div>
+              )
+            )}
+
+            {/* ── 局部修改 Tab ── */}
+            {rightTab === "inpaint" && (
+              <div className="flex-1 flex flex-col gap-4">
+                {/* Source image upload */}
+                {!inpaintSourcePreview ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-4">
+                    <div className="h-20 w-20 rounded-2xl bg-muted/40 flex items-center justify-center">
+                      <Paintbrush className="h-9 w-9 text-muted-foreground/30" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-foreground/70">局部修改已有彩平图</p>
+                      <p className="text-xs text-muted-foreground mt-1">上传一张已有彩平图，用画笔圈选需要修改的区域</p>
+                    </div>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleInpaintSourceFile(f);
+                        }}
+                      />
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-sm text-muted-foreground hover:text-primary">
+                        {isUploadingInpaintSource ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        {isUploadingInpaintSource ? "上传中…" : "上传彩平图"}
+                      </div>
+                    </label>
+                    {resultUrl && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground"
+                        onClick={() => {
+                          setInpaintSourceUrl(resultUrl);
+                          setInpaintSourcePreview(resultUrl);
+                        }}
+                      >
+                        <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                        使用当前生成结果
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col gap-3">
+                    <div className="relative rounded-xl overflow-hidden border border-border/40 bg-muted/10">
+                      <img
+                        src={inpaintSourcePreview}
+                        alt="待修改的彩平图"
+                        className="w-full h-auto max-h-[400px] object-contain"
+                      />
+                      <button
+                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                        onClick={() => { setInpaintSourcePreview(null); setInpaintSourceUrl(null); }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <Button
+                      className="w-full"
+                      disabled={!inpaintSourceUrl || isUploadingInpaintSource}
+                      onClick={() => {
+                        if (inpaintSourceUrl) setInpaintOpen(true);
+                      }}
+                    >
+                      <Paintbrush className="h-4 w-4 mr-2" />
+                      开始局部修改
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -922,11 +1053,11 @@ export default function ColorPlan() {
       />
 
       {/* Inpaint Dialog */}
-      {resultUrl && (
+      {(inpaintSourceUrl || resultUrl) && (
         <InpaintDialog
           open={inpaintOpen}
           onClose={() => setInpaintOpen(false)}
-          imageUrl={resultUrl}
+          imageUrl={(inpaintSourceUrl || resultUrl)!}
           parentHistoryId={resultHistoryId}
           toolId={toolId}
           onSuccess={handleInpaintSuccess}
