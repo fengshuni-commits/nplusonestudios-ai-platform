@@ -1661,3 +1661,17 @@
 - [x] AI 生成结果下方「局部修改」按钮同样自动进入标注模式
 - [x] TypeScript 0 errors
 - [x] 保存 checkpoint
+
+## 重构：AI 平面图局部修改交互完全对齐 AI 效果图
+- [ ] 去掉「局部修改」独立 Tab 和上传入口
+- [ ] 在生成结果图上直接叠加 ImageMaskEditor（悬停显示「局部标注」按钮）
+- [ ] 标注完成后显示修改说明输入框，提交调用 inpaint 接口
+- [ ] 保存 checkpoint
+
+## 重构完成：AI 平面图局部修改交互完全对齐 AI 效果图（最终版）
+- [x] 彻底移除 Tab 切换、独立上传入口、inpaintSourceUrl 等旧逻辑
+- [x] 在 AI 生成结果图上直接叠加 ImageMaskEditor（悬停显示「局部标注」按钮）
+- [x] 标注完成后显示 amber 提示条 + 修改说明输入框 + 提交按钮
+- [x] 局部修改完成后结果图自动更新，mask 状态自动重置
+- [x] TypeScript 0 errors，Vite HMR 正常
+- [x] 保存 checkpoint
