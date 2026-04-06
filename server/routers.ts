@@ -36,6 +36,7 @@ async function getPptxGenJS() {
   return _PptxGenJS;
 }
 import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
+import { pdfToImages } from "./pdfToImages";
 
 // ─── PPT Job Store (in-memory async queue) ──────────────
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
@@ -56,7 +57,7 @@ const colorPlanJobStore = new Map<string, ColorPlanJob>();
 
 /**
  * Convert a PPTX buffer to per-slide PNG preview images.
- * Uses LibreOffice (PPTX → PDF) + pdftoppm (PDF → PNG).
+ * Uses LibreOffice (PPTX → PDF) + pdfjs-dist (PDF → PNG, no system dependency).
  * Returns an array of S3 URLs (one per slide), or [] on failure.
  */
 async function convertPptxToPreviewImages(pptxBuffer: Buffer, jobId: string): Promise<string[]> {
@@ -77,13 +78,9 @@ async function convertPptxToPreviewImages(pptxBuffer: Buffer, jobId: string): Pr
     const pdfFiles = fs.readdirSync(pdfDir).filter((f: string) => f.endsWith(".pdf"));
     if (pdfFiles.length === 0) { console.warn("[PptxPreview] LibreOffice produced no PDF"); return []; }
     const pdfPath = path.join(pdfDir, pdfFiles[0]);
-    // Step 2: PDF → PNG (150 dpi)
-    execSync(`pdftoppm -r 150 -png "${pdfPath}" "${path.join(imgDir, "slide")}"`, { timeout: 120000 });
-    const pngFiles = fs.readdirSync(imgDir)
-      .filter((f: string) => f.startsWith("slide") && f.endsWith(".png"))
-      .sort()
-      .map((f: string) => path.join(imgDir, f));
-    if (pngFiles.length === 0) { console.warn("[PptxPreview] pdftoppm produced no PNGs"); return []; }
+    // Step 2: PDF → PNG (150 dpi) using pdfjs-dist (no system dependency)
+    const pngFiles = await pdfToImages(pdfPath, imgDir, "slide", { dpi: 150, format: "png" });
+    if (pngFiles.length === 0) { console.warn("[PptxPreview] pdfToImages produced no PNGs"); return []; }
     // Step 3: Upload each PNG to S3
     const urls: string[] = [];
     for (let i = 0; i < pngFiles.length; i++) {
@@ -4283,15 +4280,12 @@ async function generatePresentationFromFileInBackground(
     };
 
     if (input.fileType === "pdf") {
-      // Download PDF and convert each page to PNG via pdftoppm
+      // Download PDF and convert each page to PNG using pdfjs-dist (no system dependency)
       const pdfPath = path.join(tmpDir, "input.pdf");
       await downloadToFile(input.fileUrls[0], pdfPath);
-      const outPrefix = path.join(tmpDir, "page");
-      execSync(`pdftoppm -r 150 -png "${pdfPath}" "${outPrefix}"`, { timeout: 120000 });
-      const pngFiles = fs.readdirSync(tmpDir)
-        .filter((f: string) => f.startsWith("page") && f.endsWith(".png"))
-        .sort()
-        .map((f: string) => path.join(tmpDir, f));
+      const imgOutDir = path.join(tmpDir, "pages");
+      fs.mkdirSync(imgOutDir, { recursive: true });
+      const pngFiles = await pdfToImages(pdfPath, imgOutDir, "page", { dpi: 150, format: "png" });
       for (const pngPath of pngFiles.slice(0, 30)) {
         const buf = fs.readFileSync(pngPath);
         pageImageBase64s.push({ data: buf.toString("base64"), ext: "png", url: "" });
@@ -4921,16 +4915,8 @@ async function extractLayoutPackAsync(
         tmpFiles.push(tmpImgDir);
 
         // Step 1: Convert ALL pages to JPEG at moderate resolution for uniform sampling
-        try {
-          execSync(`pdftoppm -r 72 -jpeg "${tmpFile}" "${tmpImgDir}/page"`, { timeout: 120000 });
-        } catch (e1) {
-          // Fallback: try ImageMagick
-          try {
-            execSync(`convert -density 72 "${tmpFile}" "${tmpImgDir}/page-%d.jpg"`, { timeout: 120000 });
-          } catch (e2) {
-            throw new Error(`文件转图失败: ${(e1 as any).message}`);
-          }
-        }
+        // Using pdfjs-dist (no system dependency)
+        await pdfToImages(tmpFile, tmpImgDir, "page", { dpi: 72, format: "jpeg" });
 
         const allImgFiles = readdirSync(tmpImgDir)
           .filter(f => /\.(jpg|jpeg|png)$/i.test(f))
@@ -5686,14 +5672,12 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
       const tmpImgDir = join(tmpDir, "imgs");
       execSync(`mkdir -p "${tmpImgDir}"`);
       if (sourceType === "pdf") {
-        const pageCountResult = execSync(`pdfinfo "${localFile}" 2>/dev/null | grep Pages | awk '{print $2}'`).toString().trim();
-        const totalPages = parseInt(pageCountResult) || 1;
+        // Convert PDF pages to JPEG using pdfjs-dist (no system dependency)
+        const allPdfPages = await pdfToImages(localFile, tmpImgDir, "page", { dpi: 150, format: "jpeg" });
+        const totalPages = allPdfPages.length;
         const maxSamples = Math.min(10, totalPages);
         const step = Math.max(1, Math.floor(totalPages / maxSamples));
-        for (let i = 1; i <= totalPages && imageContent.length < maxSamples; i += step) {
-          const outPrefix = join(tmpImgDir, `page-${i}`);
-          try { execSync(`pdftoppm -r 150 -f ${i} -l ${i} -jpeg "${localFile}" "${outPrefix}"`); } catch {}
-        }
+        // Sampling is handled below via imgFiles loop
       } else {
         // 保留原始扩展名，避免 MIME 类型误判
         const imgExt = ["jpg", "jpeg", "png", "webp"].includes(fileExt) ? fileExt : "jpg";

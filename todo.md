@@ -1681,3 +1681,11 @@
 - [x] 确认所有 import 均有实际使用，无废弃引用
 - [x] TypeScript 0 errors，Vite HMR 正常
 - [x] 保存 checkpoint
+
+## Bug 修复：演示文稿功能 pdftoppm 命令未找到
+- [x] 找到所有 4 处 pdftoppm 调用（第 81、4290、4925、5695 行）
+- [x] 创建 server/pdfToImages.ts，用 pdfjs-dist + canvas 替代 pdftoppm
+- [x] 安装 pdfjs-dist + canvas npm 包
+- [x] 替换所有 4 处 pdftoppm 调用，包括 pdfinfo 命令
+- [x] TypeScript 0 errors
+- [x] 保存 checkpoint
