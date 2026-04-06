@@ -1702,3 +1702,9 @@
 - [x] 本地测试通过：pdfjs-dist + @napi-rs/canvas 正常渲染 PDF 页面
 - [x] TypeScript 0 errors
 - [x] 保存 checkpoint
+
+## PDF 上传逐页进度显示
+- [ ] 后端 pdfToImages 增加 onProgress 回调（每渲染一页触发）
+- [ ] convertFromFile 路由：PDF 转换阶段实时更新 job store（stage: pdf_converting, currentPage, totalPages）
+- [ ] 前端 Presentation.tsx：新增 pdf_converting 阶段显示「正在解析第 X/Y 页…」进度条
+

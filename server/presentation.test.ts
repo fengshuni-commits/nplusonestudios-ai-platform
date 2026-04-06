@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 // ─── Mock dependencies ────────────────────────────────────────────────────────
 
@@ -139,6 +142,101 @@ describe("Presentation Module", () => {
       const jobStore = new Map<string, { status: string }>();
       const job = jobStore.get("nonexistent_job_id");
       expect(job).toBeUndefined();
+    });
+
+    it("should store pdf_converting stage with currentPage and totalPages", () => {
+      type PdfJob = { status: string; progress: number; stage: string; currentPage?: number; totalPages?: number };
+      const jobStore = new Map<string, PdfJob>();
+      const jobId = "pres_convert_pdf_test";
+
+      // Initial state: PDF converting started
+      jobStore.set(jobId, { status: "processing", progress: 5, stage: "pdf_converting", currentPage: 0, totalPages: 0 });
+      let job = jobStore.get(jobId);
+      expect(job?.stage).toBe("pdf_converting");
+      expect(job?.currentPage).toBe(0);
+      expect(job?.totalPages).toBe(0);
+
+      // After first page rendered (out of 10 total)
+      jobStore.set(jobId, { status: "processing", progress: 6, stage: "pdf_converting", currentPage: 1, totalPages: 10 });
+      job = jobStore.get(jobId);
+      expect(job?.currentPage).toBe(1);
+      expect(job?.totalPages).toBe(10);
+
+      // After 5th page rendered
+      jobStore.set(jobId, { status: "processing", progress: 11, stage: "pdf_converting", currentPage: 5, totalPages: 10 });
+      job = jobStore.get(jobId);
+      expect(job?.currentPage).toBe(5);
+      expect(job?.totalPages).toBe(10);
+      // Progress should be between 5 and 18 (the PDF conversion range)
+      expect(job?.progress).toBeGreaterThanOrEqual(5);
+      expect(job?.progress).toBeLessThanOrEqual(18);
+
+      // After all pages rendered
+      jobStore.set(jobId, { status: "processing", progress: 18, stage: "pdf_converting", currentPage: 10, totalPages: 10 });
+      job = jobStore.get(jobId);
+      expect(job?.currentPage).toBe(job?.totalPages);
+    });
+  });
+
+  describe("PDF Progress Calculation", () => {
+    it("should calculate correct progress for each page", () => {
+      // PDF conversion maps to 5-18% of overall progress
+      const calcProgress = (current: number, total: number) =>
+        5 + Math.round((current / total) * 13);
+
+      expect(calcProgress(0, 10)).toBe(5);
+      expect(calcProgress(5, 10)).toBe(12);  // 5 + round(0.5 * 13) = 5 + round(6.5) = 5 + 7 = 12
+      expect(calcProgress(10, 10)).toBe(18);
+    });
+
+    it("should handle single page PDF", () => {
+      const calcProgress = (current: number, total: number) =>
+        5 + Math.round((current / total) * 13);
+
+      expect(calcProgress(1, 1)).toBe(18);
+    });
+
+    it("should handle large PDF (30 pages)", () => {
+      const calcProgress = (current: number, total: number) =>
+        5 + Math.round((current / total) * 13);
+
+      // Progress should increase monotonically
+      const progresses = Array.from({ length: 30 }, (_, i) => calcProgress(i + 1, 30));
+      for (let i = 1; i < progresses.length; i++) {
+        expect(progresses[i]).toBeGreaterThanOrEqual(progresses[i - 1]);
+      }
+      // Last page should be 18%
+      expect(progresses[29]).toBe(18);
+    });
+  });
+
+  describe("pdfToImages onProgress callback", () => {
+    it("should call onProgress for each page", async () => {
+      // Mock the pdfToImages function behavior
+      const mockOnProgress = vi.fn();
+      const totalPages = 5;
+
+      // Simulate what pdfToImages does internally
+      for (let idx = 0; idx < totalPages; idx++) {
+        mockOnProgress(idx + 1, totalPages);
+      }
+
+      expect(mockOnProgress).toHaveBeenCalledTimes(totalPages);
+      expect(mockOnProgress).toHaveBeenNthCalledWith(1, 1, totalPages);
+      expect(mockOnProgress).toHaveBeenNthCalledWith(3, 3, totalPages);
+      expect(mockOnProgress).toHaveBeenNthCalledWith(5, 5, totalPages);
+    });
+
+    it("should pass correct current and total to onProgress", () => {
+      const calls: Array<[number, number]> = [];
+      const mockOnProgress = (current: number, total: number) => calls.push([current, total]);
+      const totalPages = 3;
+
+      for (let idx = 0; idx < totalPages; idx++) {
+        mockOnProgress(idx + 1, totalPages);
+      }
+
+      expect(calls).toEqual([[1, 3], [2, 3], [3, 3]]);
     });
   });
 

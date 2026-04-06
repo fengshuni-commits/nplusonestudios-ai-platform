@@ -41,7 +41,7 @@ import { pdfToImages } from "./pdfToImages";
 // ─── PPT Job Store (in-memory async queue) ──────────────
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
 type PptJob =
-  | { status: "processing"; progress: number; stage: string }
+  | { status: "processing"; progress: number; stage: string; currentPage?: number; totalPages?: number }
   | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[]; pageImages?: string[]; pageSummaries?: Array<{ texts: string[]; imageCount: number }>; previewImages?: string[] }
   | { status: "failed"; error: string };
 
@@ -4226,7 +4226,7 @@ const presentationRouter = router({
         setTimeout(() => presentationJobStore.delete(input.jobId), 60 * 1000);
         return { status: "failed" as const, progress: 0, stage: "" as const, error: job.error };
       }
-      return { status: "processing" as const, progress: job.progress || 0, stage: job.stage || "structuring" };
+      return { status: "processing" as const, progress: job.progress || 0, stage: job.stage || "structuring", currentPage: job.currentPage, totalPages: job.totalPages };
     }),
   convertFromFile: protectedProcedure
     .input(z.object({
@@ -4285,7 +4285,23 @@ async function generatePresentationFromFileInBackground(
       await downloadToFile(input.fileUrls[0], pdfPath);
       const imgOutDir = path.join(tmpDir, "pages");
       fs.mkdirSync(imgOutDir, { recursive: true });
-      const pngFiles = await pdfToImages(pdfPath, imgOutDir, "page", { dpi: 150, format: "png" });
+      // Update job store with pdf_converting stage and per-page progress
+      presentationJobStore.set(jobId, { status: "processing", progress: 5, stage: "pdf_converting", currentPage: 0, totalPages: 0 });
+      const pngFiles = await pdfToImages(pdfPath, imgOutDir, "page", {
+        dpi: 150,
+        format: "png",
+        onProgress: (current, total) => {
+          // Map page conversion to 5-18% of overall progress
+          const pdfProgress = 5 + Math.round((current / total) * 13);
+          presentationJobStore.set(jobId, {
+            status: "processing",
+            progress: pdfProgress,
+            stage: "pdf_converting",
+            currentPage: current,
+            totalPages: total,
+          });
+        },
+      });
       for (const pngPath of pngFiles.slice(0, 30)) {
         const buf = fs.readFileSync(pngPath);
         pageImageBase64s.push({ data: buf.toString("base64"), ext: "png", url: "" });

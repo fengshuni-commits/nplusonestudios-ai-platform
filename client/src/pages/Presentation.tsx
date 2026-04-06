@@ -41,13 +41,15 @@ import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type GenerationStage = "structuring" | "generating_images" | "building_pptx" | "done" | "";
+type GenerationStage = "structuring" | "generating_images" | "building_pptx" | "done" | "pdf_converting" | "inpainting" | "";
 
 const STAGE_LABELS: Record<GenerationStage, string> = {
   structuring: "AI 正在规划幻灯片结构…",
   generating_images: "正在获取配图…",
   building_pptx: "正在构建 PPT 文件…",
   done: "生成完成",
+  pdf_converting: "正在解析 PDF 页面…",
+  inpainting: "AI 正在处理图片…",
   "": "正在初始化…",
 };
 
@@ -97,6 +99,8 @@ export default function PresentationPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationStage, setGenerationStage] = useState<GenerationStage>("");
+  const [pdfCurrentPage, setPdfCurrentPage] = useState<number | null>(null);
+  const [pdfTotalPages, setPdfTotalPages] = useState<number | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultTitle, setResultTitle] = useState<string | null>(null);
   const [resultSlideCount, setResultSlideCount] = useState<number | null>(null);
@@ -156,6 +160,14 @@ export default function PresentationPage() {
     if (jobStatus.status === "processing") {
       setGenerationProgress(jobStatus.progress || 0);
       setGenerationStage((jobStatus.stage as GenerationStage) || "");
+      // Update PDF page progress if available
+      if (jobStatus.stage === "pdf_converting" && (jobStatus as any).totalPages) {
+        setPdfCurrentPage((jobStatus as any).currentPage ?? null);
+        setPdfTotalPages((jobStatus as any).totalPages ?? null);
+      } else {
+        setPdfCurrentPage(null);
+        setPdfTotalPages(null);
+      }
     } else if (jobStatus.status === "done") {
       setIsGenerating(false);
       setGenerationProgress(100);
@@ -792,12 +804,41 @@ export default function PresentationPage() {
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   <span className="text-sm font-medium">
-                    {STAGE_LABELS[generationStage]}
+                    {generationStage === "pdf_converting" && pdfTotalPages && pdfTotalPages > 0
+                      ? pdfCurrentPage && pdfCurrentPage > 0
+                        ? `正在解析第 ${pdfCurrentPage} / ${pdfTotalPages} 页…`
+                        : `正在读取 PDF（共 ${pdfTotalPages} 页）…`
+                      : STAGE_LABELS[generationStage]}
                   </span>
                 </div>
                 <Progress value={generationProgress} className="h-2" />
+                {/* Per-page mini progress bar for PDF conversion */}
+                {generationStage === "pdf_converting" && pdfTotalPages && pdfTotalPages > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-0.5 flex-wrap">
+                      {Array.from({ length: Math.min(pdfTotalPages, 40) }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1.5 rounded-sm transition-colors ${
+                            pdfCurrentPage !== null && i < pdfCurrentPage
+                              ? "bg-primary"
+                              : "bg-muted-foreground/20"
+                          }`}
+                          style={{ width: `calc((100% - ${Math.min(pdfTotalPages, 40) - 1} * 2px) / ${Math.min(pdfTotalPages, 40)})` }}
+                        />
+                      ))}
+                    </div>
+                    {pdfTotalPages > 40 && (
+                      <p className="text-[10px] text-muted-foreground">
+                        仅显示前 40 页进度块，共 {pdfTotalPages} 页
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  生成通常需要 1–3 分钟，请耐心等待
+                  {generationStage === "pdf_converting"
+                    ? "正在将 PDF 逐页转换为图片，大文件可能需要较长时间"
+                    : "生成通常需要 1–3 分钟，请耐心等待"}
                 </p>
               </CardContent>
             </Card>

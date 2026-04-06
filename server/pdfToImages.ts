@@ -43,6 +43,12 @@ export interface PdfToImagesOptions {
   format?: "png" | "jpeg";
   /** Only convert specific pages (1-indexed). If omitted, converts all pages. */
   pages?: number[];
+  /**
+   * Progress callback invoked after each page is rendered.
+   * @param current  1-indexed page number just completed
+   * @param total    total number of pages to convert
+   */
+  onProgress?: (current: number, total: number) => void;
 }
 
 /**
@@ -60,7 +66,7 @@ export async function pdfToImages(
   prefix: string,
   options: PdfToImagesOptions = {}
 ): Promise<string[]> {
-  const { dpi = 150, format = "png", pages } = options;
+  const { dpi = 150, format = "png", pages, onProgress } = options;
 
   // pdfjs uses 72dpi as base; scale accordingly
   const scale = dpi / 72;
@@ -88,7 +94,8 @@ export async function pdfToImages(
 
   const outputPaths: string[] = [];
 
-  for (const pageNum of pageNums) {
+  for (let idx = 0; idx < pageNums.length; idx++) {
+    const pageNum = pageNums[idx];
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
 
@@ -116,6 +123,11 @@ export async function pdfToImages(
 
     outputPaths.push(outFile);
     page.cleanup();
+
+    // Notify caller after each page is done
+    if (onProgress) {
+      onProgress(idx + 1, pageNums.length);
+    }
   }
 
   return outputPaths;
