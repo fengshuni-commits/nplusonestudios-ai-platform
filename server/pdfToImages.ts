@@ -1,18 +1,38 @@
 /**
  * PDF → Image conversion using pdfjs-dist + canvas
  * Replaces the pdftoppm system command which is not available in the deployment environment.
+ *
+ * Key: must set GlobalWorkerOptions.workerSrc to the absolute path of pdf.worker.mjs
+ * BEFORE calling getDocument(). Setting it to "" or a non-existent path causes
+ * "No GlobalWorkerOptions.workerSrc specified" error in pdfjs-dist v4+.
  */
 
 import * as fs from "fs";
 import * as path from "path";
+import { createRequire } from "module";
+
+// Resolve the worker path at module load time (works in both dev and production)
+const _require = createRequire(import.meta.url);
+const WORKER_PATH = _require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+
+// Resolve standard fonts path to suppress font warnings
+let STANDARD_FONT_DATA_URL: string | undefined;
+try {
+  const fontsDir = path.dirname(_require.resolve("pdfjs-dist/package.json"));
+  STANDARD_FONT_DATA_URL = `file://${path.join(fontsDir, "standard_fonts")}/`;
+} catch {
+  // Optional - not critical
+}
 
 // Lazy-load pdfjs-dist to avoid startup overhead
+let _pdfjsLib: any = null;
 async function getPdfjs() {
-  // pdfjs-dist v4+ uses ES modules; use the legacy build for Node.js
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any);
-  // Disable worker in Node.js environment
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-  return pdfjsLib;
+  if (_pdfjsLib) return _pdfjsLib;
+  _pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any);
+  // Must set workerSrc to the absolute path of the worker file
+  // This must be done ONCE before any getDocument() call
+  _pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_PATH;
+  return _pdfjsLib;
 }
 
 export interface PdfToImagesOptions {
@@ -46,7 +66,12 @@ export async function pdfToImages(
 
   const pdfjsLib = await getPdfjs();
   const data = new Uint8Array(fs.readFileSync(pdfPath));
-  const loadingTask = pdfjsLib.getDocument({ data, disableFontFace: true });
+
+  const loadingTask = pdfjsLib.getDocument({
+    data,
+    disableFontFace: true,
+    ...(STANDARD_FONT_DATA_URL ? { standardFontDataUrl: STANDARD_FONT_DATA_URL } : {}),
+  });
   const pdfDoc = await loadingTask.promise;
 
   const totalPages = pdfDoc.numPages;
@@ -56,6 +81,9 @@ export async function pdfToImages(
 
   // Dynamically import canvas (native Node.js canvas)
   const { createCanvas } = await import("canvas");
+
+  // Ensure output directory exists
+  fs.mkdirSync(outDir, { recursive: true });
 
   const outputPaths: string[] = [];
 

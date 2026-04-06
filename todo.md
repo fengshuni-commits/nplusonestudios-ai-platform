@@ -1689,3 +1689,9 @@
 - [x] 替换所有 4 处 pdftoppm 调用，包括 pdfinfo 命令
 - [x] TypeScript 0 errors
 - [x] 保存 checkpoint
+
+## Bug 修复：pdfjs-dist GlobalWorkerOptions.workerSrc 未设置
+- [x] 重写 server/pdfToImages.ts，将 workerSrc 设置为 pdf.worker.mjs 的绝对路径
+- [x] 添加 standardFontDataUrl 消除字体警告
+- [x] 单元测试通过：2 页 PDF 正常渲染为 PNG，TypeScript 0 errors
+- [x] 保存 checkpoint
