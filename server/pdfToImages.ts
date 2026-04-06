@@ -1,10 +1,12 @@
 /**
- * PDF → Image conversion using pdfjs-dist + canvas
- * Replaces the pdftoppm system command which is not available in the deployment environment.
+ * PDF → Image conversion using pdfjs-dist + @napi-rs/canvas
+ *
+ * Uses @napi-rs/canvas instead of the `canvas` npm package because:
+ * - `canvas` requires system libraries (libcairo, libpango, etc.) not available in the deployment container
+ * - `@napi-rs/canvas` ships pre-compiled binaries with no system dependencies
  *
  * Key: must set GlobalWorkerOptions.workerSrc to the absolute path of pdf.worker.mjs
- * BEFORE calling getDocument(). Setting it to "" or a non-existent path causes
- * "No GlobalWorkerOptions.workerSrc specified" error in pdfjs-dist v4+.
+ * BEFORE calling getDocument().
  */
 
 import * as fs from "fs";
@@ -30,7 +32,6 @@ async function getPdfjs() {
   if (_pdfjsLib) return _pdfjsLib;
   _pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any);
   // Must set workerSrc to the absolute path of the worker file
-  // This must be done ONCE before any getDocument() call
   _pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_PATH;
   return _pdfjsLib;
 }
@@ -76,11 +77,11 @@ export async function pdfToImages(
 
   const totalPages = pdfDoc.numPages;
   const pageNums = pages
-    ? pages.filter((p) => p >= 1 && p <= totalPages)
+    ? pages.filter((p: number) => p >= 1 && p <= totalPages)
     : Array.from({ length: totalPages }, (_, i) => i + 1);
 
-  // Dynamically import canvas (native Node.js canvas)
-  const { createCanvas } = await import("canvas");
+  // Use @napi-rs/canvas - pre-compiled binaries, no system dependencies required
+  const { createCanvas } = await import("@napi-rs/canvas");
 
   // Ensure output directory exists
   fs.mkdirSync(outDir, { recursive: true });
@@ -97,7 +98,6 @@ export async function pdfToImages(
     );
     const ctx = canvas.getContext("2d");
 
-    // pdfjs-dist expects a canvas context compatible with the browser Canvas API
     await page.render({
       canvasContext: ctx as any,
       viewport,
@@ -107,9 +107,11 @@ export async function pdfToImages(
     const outFile = path.join(outDir, `${prefix}-${pageNum}.${ext}`);
 
     if (format === "jpeg") {
-      fs.writeFileSync(outFile, canvas.toBuffer("image/jpeg", { quality: 0.9 }));
+      const buf = await canvas.encode("jpeg");
+      fs.writeFileSync(outFile, buf);
     } else {
-      fs.writeFileSync(outFile, canvas.toBuffer("image/png"));
+      const buf = await canvas.encode("png");
+      fs.writeFileSync(outFile, buf);
     }
 
     outputPaths.push(outFile);

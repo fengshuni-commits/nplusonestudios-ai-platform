@@ -1695,3 +1695,10 @@
 - [x] 添加 standardFontDataUrl 消除字体警告
 - [x] 单元测试通过：2 页 PDF 正常渲染为 PNG，TypeScript 0 errors
 - [x] 保存 checkpoint
+
+## Bug 修复：pdfToImages "image or canvas expected" 错误
+- [x] 确认错误原因：部署容器缺少 libcairo 等系统依赖，导致 canvas npm 包无法加载
+- [x] 改用 @napi-rs/canvas（预编译二进制，无系统依赖）替代 canvas npm 包
+- [x] 本地测试通过：pdfjs-dist + @napi-rs/canvas 正常渲染 PDF 页面
+- [x] TypeScript 0 errors
+- [x] 保存 checkpoint
