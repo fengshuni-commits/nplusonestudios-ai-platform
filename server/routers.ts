@@ -2566,6 +2566,15 @@ const colorPlanRouter = router({
       projectId: z.number().optional(),
       parentHistoryId: z.number().optional(),
       toolId: z.number().optional(),
+      // 功能分区数组：每个分区包含名称、位置（相对比例 0-1）和颜色
+      zones: z.array(z.object({
+        name: z.string(),
+        x: z.number(),
+        y: z.number(),
+        w: z.number(),
+        h: z.number(),
+        color: z.string().optional(),
+      })).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const jobId = nanoid();
@@ -2612,6 +2621,17 @@ const colorPlanRouter = router({
         const defaults = defaultPrompts[planStyle] || defaultPrompts.colored;
         let prompt = basePromptRow?.prompt || defaults.base;
         if (input.style) prompt += ` Style: ${input.style}.`;
+        // Inject functional zone information into prompt
+        if (input.zones && input.zones.length > 0) {
+          const zoneDescriptions = input.zones.map((z, i) => {
+            const xPct = Math.round(z.x * 100);
+            const yPct = Math.round(z.y * 100);
+            const wPct = Math.round(z.w * 100);
+            const hPct = Math.round(z.h * 100);
+            return `Zone ${i + 1}: "${z.name}" — located at approximately ${xPct}% from left, ${yPct}% from top, spanning ${wPct}% wide and ${hPct}% tall. Furnish and decorate this area as a ${z.name} with appropriate furniture, fixtures, and materials.`;
+          }).join(" ");
+          prompt += ` FUNCTIONAL ZONES (MUST follow exactly): The floor plan has been divided into ${input.zones.length} labeled functional zones. ${zoneDescriptions} Each zone must be clearly identifiable by its function through appropriate furniture placement, material selection, and spatial treatment. Label each zone with its function name in the rendered output.`;
+        }
         if (input.extraPrompt) prompt += ` ${input.extraPrompt}`;
 
         const originalImages: Array<{ url?: string; mimeType?: string }> = [

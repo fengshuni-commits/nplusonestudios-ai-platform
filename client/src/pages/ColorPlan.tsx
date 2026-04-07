@@ -1,4 +1,3 @@
-import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -27,10 +26,17 @@ import {
   PenLine,
   ScanLine,
   Paintbrush,
+  LayoutGrid,
+  Plus,
+  Trash2,
+  Edit3,
+  MousePointer,
+  Square,
 } from "lucide-react";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { cn } from "@/lib/utils";
 import ImageMaskEditor from "@/components/ImageMaskEditor";
+import { useRef, useState, useCallback, useEffect } from "react";
 
 // ─── Plan Style Config ─────────────────────────────────────
 type PlanStyle = "colored" | "hand_drawn" | "line_drawing";
@@ -39,6 +45,27 @@ const PLAN_STYLES: Array<{ id: PlanStyle; label: string; desc: string; icon: Rea
   { id: "hand_drawn", label: "手绘平面", desc: "水彩笔绘风格", icon: PenLine },
   { id: "line_drawing", label: "平面线稿", desc: "黑白线条图纸", icon: ScanLine },
 ];
+
+// ─── Zone Types ────────────────────────────────────────────
+type Zone = {
+  id: string;
+  name: string;
+  x: number; // 0-1 relative to image
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+};
+
+// Preset zone colors
+const ZONE_COLORS = [
+  "#4A90D9", "#7ED321", "#F5A623", "#D0021B", "#9B59B6",
+  "#1ABC9C", "#E67E22", "#3498DB", "#E74C3C", "#2ECC71",
+];
+
+function getZoneColor(idx: number) {
+  return ZONE_COLORS[idx % ZONE_COLORS.length];
+}
 
 // ─── Types ────────────────────────────────────────────────
 type AssetItem = {
@@ -272,6 +299,198 @@ function ImageUploadZone({
   );
 }
 
+// ─── Zone Canvas Overlay ───────────────────────────────────
+// Renders zone rectangles on top of the floor plan image.
+// In "draw" mode, user drags to create a new zone.
+type ZoneCanvasMode = "view" | "draw";
+
+function ZoneCanvas({
+  zones,
+  mode,
+  onAddZone,
+  onSelectZone,
+  selectedZoneId,
+  nextColor,
+}: {
+  zones: Zone[];
+  mode: ZoneCanvasMode;
+  onAddZone: (zone: Omit<Zone, "id" | "name" | "color">) => void;
+  onSelectZone: (id: string | null) => void;
+  selectedZoneId: string | null;
+  nextColor: string;
+}) {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
+
+  const getRelativePos = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+    };
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (mode !== "draw") return;
+    e.preventDefault();
+    const pos = getRelativePos(e);
+    setDragging(true);
+    setDragStart(pos);
+    setDragCurrent(pos);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragging || !dragStart) return;
+    setDragCurrent(getRelativePos(e));
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!dragging || !dragStart || !dragCurrent) {
+      setDragging(false);
+      return;
+    }
+    setDragging(false);
+    const x = Math.min(dragStart.x, dragCurrent.x);
+    const y = Math.min(dragStart.y, dragCurrent.y);
+    const w = Math.abs(dragCurrent.x - dragStart.x);
+    const h = Math.abs(dragCurrent.y - dragStart.y);
+    if (w > 0.02 && h > 0.02) {
+      onAddZone({ x, y, w, h });
+    }
+    setDragStart(null);
+    setDragCurrent(null);
+  };
+
+  // Preview rect while dragging
+  const previewRect = dragging && dragStart && dragCurrent
+    ? {
+        x: Math.min(dragStart.x, dragCurrent.x),
+        y: Math.min(dragStart.y, dragCurrent.y),
+        w: Math.abs(dragCurrent.x - dragStart.x),
+        h: Math.abs(dragCurrent.y - dragStart.y),
+      }
+    : null;
+
+  return (
+    <div
+      ref={canvasRef}
+      className={cn(
+        "absolute inset-0",
+        mode === "draw" ? "cursor-crosshair" : "cursor-default"
+      )}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={() => {
+        if (dragging) {
+          setDragging(false);
+          setDragStart(null);
+          setDragCurrent(null);
+        }
+      }}
+    >
+      {/* Existing zones */}
+      {zones.map((zone) => (
+        <div
+          key={zone.id}
+          className={cn(
+            "absolute border-2 transition-all",
+            selectedZoneId === zone.id ? "border-white ring-2 ring-offset-0" : "border-white/70",
+            mode === "view" ? "cursor-pointer hover:border-white" : "pointer-events-none"
+          )}
+          style={{
+            left: `${zone.x * 100}%`,
+            top: `${zone.y * 100}%`,
+            width: `${zone.w * 100}%`,
+            height: `${zone.h * 100}%`,
+            backgroundColor: zone.color + "40",
+            borderColor: zone.color,
+            boxShadow: selectedZoneId === zone.id ? `0 0 0 2px ${zone.color}` : undefined,
+          }}
+          onClick={(e) => {
+            if (mode !== "view") return;
+            e.stopPropagation();
+            onSelectZone(selectedZoneId === zone.id ? null : zone.id);
+          }}
+        >
+          {/* Zone label */}
+          <div
+            className="absolute top-1 left-1 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded leading-tight max-w-[90%] truncate"
+            style={{ backgroundColor: zone.color + "CC" }}
+          >
+            {zone.name || "未命名"}
+          </div>
+        </div>
+      ))}
+
+      {/* Preview rect while drawing */}
+      {previewRect && (
+        <div
+          className="absolute border-2 border-dashed pointer-events-none"
+          style={{
+            left: `${previewRect.x * 100}%`,
+            top: `${previewRect.y * 100}%`,
+            width: `${previewRect.w * 100}%`,
+            height: `${previewRect.h * 100}%`,
+            backgroundColor: nextColor + "30",
+            borderColor: nextColor,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Zone Name Dialog ──────────────────────────────────────
+function ZoneNameDialog({
+  open,
+  initialName,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  initialName: string;
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initialName);
+
+  useEffect(() => {
+    if (open) setName(initialName);
+  }, [open, initialName]);
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent className="max-w-xs">
+        <DialogHeader>
+          <DialogTitle className="text-sm">命名功能分区</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input
+            placeholder="例如：客厅、主卧、厨房、卫生间…"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) onConfirm(name.trim());
+              if (e.key === "Escape") onCancel();
+            }}
+            autoFocus
+            className="text-sm"
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" size="sm" onClick={onCancel}>取消</Button>
+            <Button size="sm" onClick={() => name.trim() && onConfirm(name.trim())} disabled={!name.trim()}>
+              确认
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ─── Main Page ────────────────────────────────────────────
 export default function ColorPlan() {
@@ -322,6 +541,16 @@ export default function ColorPlan() {
   const [isInpainting, setIsInpainting] = useState(false);
   const inpaintMutation = trpc.colorPlan.inpaint.useMutation();
   const [inpaintJobId, setInpaintJobId] = useState<string | null>(null);
+
+  // ─── Zone state ────────────────────────────────────────
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [zoneMode, setZoneMode] = useState<"view" | "draw">("view");
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  // Pending zone: drawn but not yet named
+  const [pendingZone, setPendingZone] = useState<Omit<Zone, "id" | "name" | "color"> | null>(null);
+  const [showZoneNameDialog, setShowZoneNameDialog] = useState(false);
+
+  const nextZoneColor = getZoneColor(zones.length);
 
   // Poll inpaint job status
   const { data: inpaintJobStatus } = trpc.colorPlan.jobStatus.useQuery(
@@ -404,6 +633,10 @@ export default function ColorPlan() {
     setFloorPlanPreview(objectUrl);
     setFloorPlanUrl(null);
     setIsUploadingFloor(true);
+    // Clear zones when new floor plan is uploaded
+    setZones([]);
+    setResultUrl(null);
+    setResultHistoryId(undefined);
     try {
       const base64 = await readFileAsBase64(file);
       const { url } = await uploadFloorPlan.mutateAsync({
@@ -442,6 +675,40 @@ export default function ColorPlan() {
     }
   };
 
+  // ── Zone handlers ──────────────────────────────────────
+  const handleAddZoneDraw = (partial: Omit<Zone, "id" | "name" | "color">) => {
+    setPendingZone(partial);
+    setShowZoneNameDialog(true);
+    setZoneMode("view"); // exit draw mode after drawing
+  };
+
+  const handleZoneNameConfirm = (name: string) => {
+    if (!pendingZone) return;
+    const newZone: Zone = {
+      id: Math.random().toString(36).slice(2),
+      name,
+      color: nextZoneColor,
+      ...pendingZone,
+    };
+    setZones((prev) => [...prev, newZone]);
+    setPendingZone(null);
+    setShowZoneNameDialog(false);
+  };
+
+  const handleZoneNameCancel = () => {
+    setPendingZone(null);
+    setShowZoneNameDialog(false);
+  };
+
+  const handleDeleteZone = (id: string) => {
+    setZones((prev) => prev.filter((z) => z.id !== id));
+    if (selectedZoneId === id) setSelectedZoneId(null);
+  };
+
+  const handleRenameZone = (id: string, name: string) => {
+    setZones((prev) => prev.map((z) => z.id === id ? { ...z, name } : z));
+  };
+
   // ── Generate ───────────────────────────────────────────
   const handleGenerate = async () => {
     if (!floorPlanUrl) {
@@ -461,6 +728,7 @@ export default function ColorPlan() {
         planStyle,
         extraPrompt: extraPrompt.trim() || undefined,
         toolId,
+        zones: zones.length > 0 ? zones.map(({ name, x, y, w, h, color }) => ({ name, x, y, w, h, color })) : undefined,
       });
       // Backend now returns jobId immediately; polling handles result
       setGenerateJobId(result.jobId);
@@ -487,8 +755,13 @@ export default function ColorPlan() {
     setResultUrl(null);
     setResultHistoryId(undefined);
     handleGenerate();
-  }
+  };
+
   const canGenerate = !!floorPlanUrl && !isUploadingFloor && !isUploadingRef && !isGenerating;
+
+  // ── Right panel state ──────────────────────────────────
+  // Show floor plan in workspace as soon as it's uploaded
+  const showFloorPlanInWorkspace = !!floorPlanPreview && !resultUrl && !isGenerating && !isInpainting;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -498,7 +771,7 @@ export default function ColorPlan() {
           <div>
             <h1 className="text-lg font-semibold text-foreground">AI 平面图</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              上传平面底图，参考风格图，一键生成彩色平面图
+              上传平面底图，标注功能分区，一键生成彩色平面图
             </p>
           </div>
           <AiToolSelector
@@ -515,7 +788,7 @@ export default function ColorPlan() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
 
           {/* ── Left: Input Panel ─────────────────────── */}
-          <div className="border-r border-border/40 px-6 py-5 space-y-6">
+          <div className="border-r border-border/40 px-6 py-5 space-y-6 overflow-y-auto">
 
             {/* Plan style selector */}
             <div className="space-y-2">
@@ -550,6 +823,8 @@ export default function ColorPlan() {
                 setFloorPlanFile(null);
                 setFloorPlanPreview(null);
                 setFloorPlanUrl(null);
+                setZones([]);
+                setResultUrl(null);
               }}
               onPickFromAssets={() => setAssetPickerTarget("floor")}
               isUploading={isUploadingFloor}
@@ -599,6 +874,7 @@ export default function ColorPlan() {
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
                   {planStyle === "colored" ? "生成彩平图" : planStyle === "hand_drawn" ? "生成手绘平面" : "生成平面线稿"}
+                  {zones.length > 0 && <span className="ml-1 text-xs opacity-80">（含 {zones.length} 个功能区）</span>}
                 </>
               )}
             </Button>
@@ -608,20 +884,54 @@ export default function ColorPlan() {
               <p className="text-xs font-medium text-foreground/70">使用建议</p>
               <ul className="text-xs text-muted-foreground space-y-1">
                 <li>· 底图建议使用清晰的线稿或黑白平面图，墙线清晰效果更佳</li>
+                <li>· 上传底图后，在右侧工作区使用「功能分区」工具标注各房间功能</li>
+                <li>· AI 将根据功能区名称（客厅、主卧等）自动布置对应家具和材质</li>
                 <li>· 提供参考风格图可显著提升配色准确度</li>
-                <li>· 在补充说明中描述空间风格、主色调，可进一步引导生成效果</li>
                 <li>· 生成后可使用「局部修改」对特定区域进行迭代调整</li>
               </ul>
             </div>
           </div>
 
-          {/* ── Right: Result Panel ── */}
+          {/* ── Right: Workspace Panel ── */}
           <div className="px-6 py-5 flex flex-col">
             {/* Header with actions */}
             <div className="flex items-center gap-2 mb-4 border-b border-border/40 pb-3">
               <span className="text-sm font-medium text-foreground/70">
-                {resultUrl ? "生成结果" : "工作区"}
+                {resultUrl ? "生成结果" : showFloorPlanInWorkspace ? "工作区" : "工作区"}
               </span>
+
+              {/* Zone toolbar — shown when floor plan is loaded and no result yet */}
+              {showFloorPlanInWorkspace && !editingMask && (
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="text-xs text-muted-foreground mr-1">功能分区</span>
+                  <Button
+                    variant={zoneMode === "view" ? "outline" : "default"}
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setZoneMode(zoneMode === "draw" ? "view" : "draw")}
+                    title={zoneMode === "draw" ? "退出绘制模式" : "绘制功能分区"}
+                  >
+                    {zoneMode === "draw" ? (
+                      <><MousePointer className="h-3 w-3" />退出绘制</>
+                    ) : (
+                      <><Square className="h-3 w-3" />框选分区</>
+                    )}
+                  </Button>
+                  {zones.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-destructive hover:text-destructive gap-1"
+                      onClick={() => { setZones([]); setSelectedZoneId(null); }}
+                      title="清除所有分区"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      清除全部
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {resultUrl && !editingMask && !isInpainting && (
                 <div className="ml-auto flex gap-1.5 flex-wrap justify-end">
                   <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isGenerating || !canGenerate}>
@@ -649,6 +959,9 @@ export default function ColorPlan() {
                 <div className="text-center">
                   <p className="text-sm font-medium text-foreground/70">AI 正在生成彩平图</p>
                   <p className="text-xs text-muted-foreground mt-1">通常需要 15–30 秒，请耐心等待</p>
+                  {zones.length > 0 && (
+                    <p className="text-xs text-primary/70 mt-1">已传入 {zones.length} 个功能分区信息</p>
+                  )}
                 </div>
               </div>
             ) : isInpainting ? (
@@ -771,6 +1084,12 @@ export default function ColorPlan() {
                     {referenceUrl && (
                       <Badge variant="outline" className="text-xs">参考风格图已应用</Badge>
                     )}
+                    {zones.length > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        <LayoutGrid className="h-3 w-3 mr-1" />
+                        {zones.length} 个功能分区
+                      </Badge>
+                    )}
                   </div>
                 )}
 
@@ -817,14 +1136,86 @@ export default function ColorPlan() {
                   </p>
                 )}
               </div>
+
+            ) : showFloorPlanInWorkspace ? (
+              /* ── Floor plan with zone drawing overlay ── */
+              <div className="flex-1 flex flex-col gap-3">
+                {/* Zone mode hint */}
+                {zoneMode === "draw" && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/8 border border-primary/20 text-xs text-primary">
+                    <Square className="h-3.5 w-3.5 flex-shrink-0" />
+                    在底图上拖拽框选区域，松开后填写功能名称（如：客厅、主卧、厨房）
+                  </div>
+                )}
+
+                {/* Image with zone overlay */}
+                <div className="relative rounded-xl overflow-hidden border border-border/40 bg-muted/10 select-none">
+                  <img
+                    src={floorPlanPreview}
+                    alt="平面底图"
+                    className="w-full h-auto"
+                    draggable={false}
+                  />
+                  {isUploadingFloor && (
+                    <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    </div>
+                  )}
+                  <ZoneCanvas
+                    zones={zones}
+                    mode={zoneMode}
+                    onAddZone={handleAddZoneDraw}
+                    onSelectZone={setSelectedZoneId}
+                    selectedZoneId={selectedZoneId}
+                    nextColor={nextZoneColor}
+                  />
+                </div>
+
+                {/* Zone list */}
+                {zones.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-foreground/70 flex items-center gap-1">
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                        功能分区（{zones.length} 个）
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      {zones.map((zone, idx) => (
+                        <ZoneListItem
+                          key={zone.id}
+                          zone={zone}
+                          isSelected={selectedZoneId === zone.id}
+                          onSelect={() => setSelectedZoneId(selectedZoneId === zone.id ? null : zone.id)}
+                          onDelete={() => handleDeleteZone(zone.id)}
+                          onRename={(name) => handleRenameZone(zone.id, name)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {zones.length === 0 && zoneMode === "view" && (
+                  <div className="text-center py-3">
+                    <p className="text-xs text-muted-foreground">
+                      点击「框选分区」工具，在底图上划定功能区域
+                    </p>
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">
+                      也可直接生成，AI 将根据平面形状自动判断功能布局
+                    </p>
+                  </div>
+                )}
+              </div>
+
             ) : (
+              /* Empty state */
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
                 <div className="h-20 w-20 rounded-2xl bg-muted/40 flex items-center justify-center">
                   <ImageIcon className="h-9 w-9 text-muted-foreground/30" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-foreground/50">彩平图将在此显示</p>
-                  <p className="text-xs text-muted-foreground/50 mt-1">上传底图后点击「生成彩平图」</p>
+                  <p className="text-sm font-medium text-foreground/50">上传底图后在此标注功能分区</p>
+                  <p className="text-xs text-muted-foreground/50 mt-1">支持框选区域并填写功能名称（客厅、主卧等）</p>
                 </div>
               </div>
             )}
@@ -841,6 +1232,7 @@ export default function ColorPlan() {
           if (assetPickerTarget === "floor") {
             setFloorPlanPreview(url);
             setFloorPlanUrl(url);
+            setZones([]);
           } else {
             setReferencePreview(url);
             setReferenceUrl(url);
@@ -848,7 +1240,111 @@ export default function ColorPlan() {
         }}
       />
 
-
+      {/* Zone name dialog */}
+      <ZoneNameDialog
+        open={showZoneNameDialog}
+        initialName=""
+        onConfirm={handleZoneNameConfirm}
+        onCancel={handleZoneNameCancel}
+      />
     </div>
   );
+}
+
+// ─── Zone List Item ────────────────────────────────────────
+function ZoneListItem({
+  zone,
+  isSelected,
+  onSelect,
+  onDelete,
+  onRename,
+}: {
+  zone: Zone;
+  isSelected: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(zone.name);
+
+  const handleSave = () => {
+    if (editName.trim()) {
+      onRename(editName.trim());
+    } else {
+      setEditName(zone.name);
+    }
+    setEditing(false);
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs transition-all cursor-pointer",
+        isSelected
+          ? "border-primary/40 bg-primary/5"
+          : "border-border/40 hover:border-border/70 bg-muted/10"
+      )}
+      onClick={onSelect}
+    >
+      {/* Color dot */}
+      <div
+        className="h-3 w-3 rounded-sm flex-shrink-0"
+        style={{ backgroundColor: zone.color }}
+      />
+
+      {/* Name (editable) */}
+      {editing ? (
+        <input
+          className="flex-1 bg-transparent outline-none text-foreground text-xs min-w-0"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSave();
+            if (e.key === "Escape") { setEditName(zone.name); setEditing(false); }
+            e.stopPropagation();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          autoFocus
+        />
+      ) : (
+        <span className="flex-1 text-foreground/80 truncate">{zone.name}</span>
+      )}
+
+      {/* Position hint */}
+      <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">
+        {Math.round(zone.w * 100)}×{Math.round(zone.h * 100)}%
+      </span>
+
+      {/* Actions */}
+      <button
+        className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground flex-shrink-0"
+        onClick={(e) => { e.stopPropagation(); setEditing(true); setEditName(zone.name); }}
+        title="重命名"
+      >
+        <Edit3 className="h-3 w-3" />
+      </button>
+      <button
+        className="h-5 w-5 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex-shrink-0"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        title="删除分区"
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

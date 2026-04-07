@@ -1708,3 +1708,11 @@
 - [ ] convertFromFile 路由：PDF 转换阶段实时更新 job store（stage: pdf_converting, currentPage, totalPages）
 - [ ] 前端 Presentation.tsx：新增 pdf_converting 阶段显示「正在解析第 X/Y 页…」进度条
 
+
+## AI 平面图功能分区工具
+- [x] 后端：colorPlan.generate 接口增加 zones 参数（功能分区数组：name, x, y, w, h, color）
+- [x] 后端：generateColorPlanInBackground 将 zones 信息注入 prompt，按功能区名称指导布置
+- [x] 前端 ColorPlan.tsx：底图上传后立即在右侧工作区显示底图（而非空白工作区）
+- [x] 前端 ColorPlan.tsx：右侧工作区增加功能分区绘制工具（矩形框选+填写区域名称+颜色标注）
+- [x] 前端 ColorPlan.tsx：分区列表管理（添加/删除/编辑分区名称）
+- [x] 前端 ColorPlan.tsx：生成时将 zones 数据传给后端
