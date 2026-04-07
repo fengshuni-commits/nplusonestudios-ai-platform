@@ -1724,3 +1724,6 @@
 ## AI 平面图保留底图比例
 - [x] 后端：colorPlan.generate 接口增加 floorPlanWidth/floorPlanHeight 参数，计算 size 字符串传给 generateImageWithTool
 - [x] 前端：上传底图后读取图片自然尺寸，生成时传入 floorPlanWidth/floorPlanHeight
+
+## AI 平面图工作区底图显示修复
+- [x] 修复上传底图后工作区图片被截断、无法完整显示的问题

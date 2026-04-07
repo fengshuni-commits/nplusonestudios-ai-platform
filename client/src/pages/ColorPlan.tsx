@@ -905,7 +905,7 @@ export default function ColorPlan() {
           </div>
 
           {/* ── Right: Workspace Panel ── */}
-          <div className="flex-1 min-w-0 px-5 py-5 flex flex-col overflow-hidden">
+          <div className="flex-1 min-w-0 px-5 py-5 flex flex-col min-h-0 overflow-y-auto">
             {/* Header with actions */}
             <div className="flex items-center gap-2 mb-4 border-b border-border/40 pb-3">
               <span className="text-sm font-medium text-foreground/70">
@@ -1151,21 +1151,21 @@ export default function ColorPlan() {
 
             ) : showFloorPlanInWorkspace ? (
               /* ── Floor plan with zone drawing overlay ── */
-              <div className="flex-1 flex flex-col gap-3 overflow-y-auto min-h-0">
+              <div className="flex flex-col gap-3">
                 {/* Zone mode hint */}
                 {zoneMode === "draw" && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/8 border border-primary/20 text-xs text-primary">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/8 border border-primary/20 text-xs text-primary shrink-0">
                     <Square className="h-3.5 w-3.5 flex-shrink-0" />
                     在底图上拖拽框选区域，松开后填写功能名称（如：客厅、主卧、厨房）
                   </div>
                 )}
 
                 {/* Image with zone overlay */}
-                <div className="relative rounded-xl overflow-hidden border border-border/40 bg-muted/10 select-none">
+                <div className="relative rounded-xl overflow-hidden border border-border/40 bg-muted/10 select-none shrink-0">
                   <img
                     src={floorPlanPreview}
                     alt="平面底图"
-                    className="w-full h-auto"
+                    className="w-full h-auto block"
                     draggable={false}
                   />
                   {isUploadingFloor && (
