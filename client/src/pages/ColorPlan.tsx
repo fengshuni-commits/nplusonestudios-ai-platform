@@ -784,11 +784,11 @@ export default function ColorPlan() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
+      <div className="flex-1 overflow-hidden flex">
+        <div className="flex flex-col lg:flex-row w-full h-full">
 
           {/* ── Left: Input Panel ─────────────────────── */}
-          <div className="border-r border-border/40 px-6 py-5 space-y-6 overflow-y-auto">
+          <div className="w-full lg:w-[340px] xl:w-[380px] shrink-0 border-r border-border/40 px-5 py-5 space-y-5 overflow-y-auto">
 
             {/* Plan style selector */}
             <div className="space-y-2">
@@ -893,7 +893,7 @@ export default function ColorPlan() {
           </div>
 
           {/* ── Right: Workspace Panel ── */}
-          <div className="px-6 py-5 flex flex-col">
+          <div className="flex-1 min-w-0 px-5 py-5 flex flex-col overflow-hidden">
             {/* Header with actions */}
             <div className="flex items-center gap-2 mb-4 border-b border-border/40 pb-3">
               <span className="text-sm font-medium text-foreground/70">
@@ -976,7 +976,7 @@ export default function ColorPlan() {
               </div>
             ) : resultUrl ? (
               /* Result with inline mask editor — same pattern as DesignTools */
-              <div className="flex-1 flex flex-col gap-3">
+              <div className="flex-1 flex flex-col gap-3 overflow-y-auto min-h-0">
                 <div className="relative group rounded-xl overflow-hidden border border-border/40 bg-muted/10">
                   <img
                     ref={editImgRef}
@@ -1139,7 +1139,7 @@ export default function ColorPlan() {
 
             ) : showFloorPlanInWorkspace ? (
               /* ── Floor plan with zone drawing overlay ── */
-              <div className="flex-1 flex flex-col gap-3">
+              <div className="flex-1 flex flex-col gap-3 overflow-y-auto min-h-0">
                 {/* Zone mode hint */}
                 {zoneMode === "draw" && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/8 border border-primary/20 text-xs text-primary">
