@@ -542,7 +542,10 @@ export default function ColorPlan() {
   const inpaintMutation = trpc.colorPlan.inpaint.useMutation();
   const [inpaintJobId, setInpaintJobId] = useState<string | null>(null);
 
-  // ─── Zone state ────────────────────────────────────────
+  // 底图原始尺寸（用于保留比例）
+  const [floorPlanDims, setFloorPlanDims] = useState<{ w: number; h: number } | null>(null);
+
+  // ─── Zone state ────────────────────────────────────────────────
   const [zones, setZones] = useState<Zone[]>([]);
   const [zoneMode, setZoneMode] = useState<"view" | "draw">("view");
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
@@ -637,6 +640,13 @@ export default function ColorPlan() {
     setZones([]);
     setResultUrl(null);
     setResultHistoryId(undefined);
+    // Read natural dimensions to preserve aspect ratio during generation
+    const img = new Image();
+    img.onload = () => {
+      setFloorPlanDims({ w: img.naturalWidth, h: img.naturalHeight });
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = objectUrl;
     try {
       const base64 = await readFileAsBase64(file);
       const { url } = await uploadFloorPlan.mutateAsync({
@@ -729,6 +739,8 @@ export default function ColorPlan() {
         extraPrompt: extraPrompt.trim() || undefined,
         toolId,
         zones: zones.length > 0 ? zones.map(({ name, x, y, w, h, color }) => ({ name, x, y, w, h, color })) : undefined,
+        floorPlanWidth: floorPlanDims?.w,
+        floorPlanHeight: floorPlanDims?.h,
       });
       // Backend now returns jobId immediately; polling handles result
       setGenerateJobId(result.jobId);
@@ -1233,6 +1245,10 @@ export default function ColorPlan() {
             setFloorPlanPreview(url);
             setFloorPlanUrl(url);
             setZones([]);
+            // Read dimensions from asset URL
+            const assetImg = new Image();
+            assetImg.onload = () => setFloorPlanDims({ w: assetImg.naturalWidth, h: assetImg.naturalHeight });
+            assetImg.src = url;
           } else {
             setReferencePreview(url);
             setReferenceUrl(url);

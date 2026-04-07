@@ -2575,6 +2575,9 @@ const colorPlanRouter = router({
         h: z.number(),
         color: z.string().optional(),
       })).optional(),
+      // 底图原始尺寸，用于保留画面比例
+      floorPlanWidth: z.number().positive().optional(),
+      floorPlanHeight: z.number().positive().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const jobId = nanoid();
@@ -2643,8 +2646,29 @@ const colorPlanRouter = router({
           prompt = `${refPrefix} ` + prompt;
         }
 
+        // 计算输出尺寸：保留底图原始比例
+        let colorPlanSize: string | undefined;
+        if (input.floorPlanWidth && input.floorPlanHeight) {
+          const BASE = 1024; // 基准边长
+          const ratio = input.floorPlanWidth / input.floorPlanHeight;
+          let outW: number, outH: number;
+          if (ratio >= 1) {
+            // 横图或正方
+            outW = BASE;
+            outH = Math.round(BASE / ratio);
+          } else {
+            // 竖图
+            outH = BASE;
+            outW = Math.round(BASE * ratio);
+          }
+          // 将宽高对齐到 64 的倍数（大多数图像生成 API 要求）
+          outW = Math.max(64, Math.round(outW / 64) * 64);
+          outH = Math.max(64, Math.round(outH / 64) * 64);
+          colorPlanSize = `${outW}x${outH}`;
+        }
+
         try {
-          const result = await generateImageWithTool({ prompt, originalImages, toolId: input.toolId });
+          const result = await generateImageWithTool({ prompt, originalImages, toolId: input.toolId, size: colorPlanSize });
 
           const historyResult = await db.createGenerationHistory({
             userId: ctx.user.id,

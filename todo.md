@@ -1720,3 +1720,7 @@
 ## AI 平面图布局修复
 - [x] 缩窄左侧输入面板（改为固定宽度或更小比例）
 - [x] 扩大右侧工作区，确保生成图片可完整显示（overflow 和 max-h 修复）
+
+## AI 平面图保留底图比例
+- [x] 后端：colorPlan.generate 接口增加 floorPlanWidth/floorPlanHeight 参数，计算 size 字符串传给 generateImageWithTool
+- [x] 前端：上传底图后读取图片自然尺寸，生成时传入 floorPlanWidth/floorPlanHeight
