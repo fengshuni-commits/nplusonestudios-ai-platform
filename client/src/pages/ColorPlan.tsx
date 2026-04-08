@@ -776,9 +776,9 @@ export default function ColorPlan() {
   const showFloorPlanInWorkspace = !!floorPlanPreview && !resultUrl && !isGenerating && !isInpainting;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border/40">
+      <div className="px-6 pt-5 pb-4 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-foreground">AI 平面图</h1>
@@ -796,12 +796,11 @@ export default function ColorPlan() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-hidden flex">
-        <div className="flex flex-col lg:flex-row w-full h-full">
+      <div className="flex">
+        <div className="flex flex-col lg:flex-row w-full">
 
-          {/* ── Left: Input Panel ─────────────────────── */}
-          <div className="w-full lg:w-[340px] xl:w-[380px] shrink-0 border-r border-border/40 px-5 py-5 space-y-5 overflow-y-auto">
-
+          {/* ── Left: Input Panel ───────────────────────────── */}
+          <div className="w-full lg:w-[340px] xl:w-[380px] shrink-0 border-r border-border/40 px-5 py-5 space-y-5">
             {/* Plan style selector */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">平面风格</label>
@@ -905,7 +904,7 @@ export default function ColorPlan() {
           </div>
 
           {/* ── Right: Workspace Panel ── */}
-          <div className="flex-1 min-w-0 px-5 py-5 flex flex-col min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 px-5 py-5 flex flex-col">
             {/* Header with actions */}
             <div className="flex items-center gap-2 mb-4 border-b border-border/40 pb-3">
               <span className="text-sm font-medium text-foreground/70">
@@ -964,7 +963,7 @@ export default function ColorPlan() {
 
             {/* Loading state */}
             {isGenerating ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+              <div className="min-h-[400px] flex flex-col items-center justify-center gap-4 text-muted-foreground">
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                   <Sparkles className="h-7 w-7 text-primary animate-pulse" />
                 </div>
@@ -977,7 +976,7 @@ export default function ColorPlan() {
                 </div>
               </div>
             ) : isInpainting ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+              <div className="min-h-[400px] flex flex-col items-center justify-center gap-4 text-muted-foreground">
                 <div className="h-16 w-16 rounded-2xl bg-amber-500/10 flex items-center justify-center">
                   <Paintbrush className="h-7 w-7 text-amber-500 animate-pulse" />
                 </div>
@@ -988,7 +987,7 @@ export default function ColorPlan() {
               </div>
             ) : resultUrl ? (
               /* Result with inline mask editor — same pattern as DesignTools */
-              <div className="flex-1 flex flex-col gap-3 overflow-y-auto min-h-0">
+              <div className="flex flex-col gap-3">
                 <div className="relative group rounded-xl overflow-hidden border border-border/40 bg-muted/10">
                   <img
                     ref={editImgRef}
@@ -1221,7 +1220,7 @@ export default function ColorPlan() {
 
             ) : (
               /* Empty state */
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <div className="min-h-[400px] flex flex-col items-center justify-center gap-3 text-muted-foreground">
                 <div className="h-20 w-20 rounded-2xl bg-muted/40 flex items-center justify-center">
                   <ImageIcon className="h-9 w-9 text-muted-foreground/30" />
                 </div>
