@@ -13,7 +13,8 @@ import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
   BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images, HelpCircle,
-  Link2, Library, RotateCcw, Eye, ChevronDown, ChevronUp, Folder
+  Link2, Library, RotateCcw, Eye, ChevronDown, ChevronUp, Folder,
+  Search, ImageIcon
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -105,6 +106,122 @@ const RATIO_CSS: Record<string, string> = {
   "16:9": "16/9", "9:16": "9/16",
   "A4": "210/297", "A3": "297/420",
 };
+
+// ─── Asset Picker Dialog ────────────────────────────────────────────────────────
+
+type AssetItem = {
+  id: number;
+  name: string;
+  fileUrl: string;
+  thumbnailUrl: string | null;
+  isFolder?: boolean;
+};
+
+function AssetPickerDialog({
+  open,
+  onClose,
+  onSelect,
+  title = "从素材库选择",
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (url: string, name: string) => void;
+  title?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [folderId, setFolderId] = useState<number | undefined>(undefined);
+  const [folderPath, setFolderPath] = useState<Array<{ id: number | undefined; name: string }>>([]);
+
+  const { data: assetsData } = trpc.assets.listByParent.useQuery(
+    { parentId: folderId },
+    { enabled: open }
+  );
+
+  const assets = (assetsData || []) as AssetItem[];
+  const filtered = assets.filter((a) =>
+    a.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleOpenFolder = (id: number, name: string) => {
+    setFolderPath((p) => [...p, { id: folderId, name: folderPath.length === 0 ? "素材库" : p[p.length - 1].name }]);
+    setFolderId(id);
+  };
+
+  const handleBreadcrumb = (idx: number) => {
+    const target = folderPath[idx];
+    setFolderPath(folderPath.slice(0, idx));
+    setFolderId(target.id);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {folderPath.length > 0 && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
+            <button className="hover:text-foreground" onClick={() => { setFolderPath([]); setFolderId(undefined); }}>素材库</button>
+            {folderPath.map((p, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <span>/</span>
+                <button className="hover:text-foreground" onClick={() => handleBreadcrumb(i + 1)}>{p.name}</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="搜索素材…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
+        </div>
+        <div className="grid grid-cols-4 gap-2 max-h-80 overflow-y-auto">
+          {filtered.map((asset) => (
+            <button
+              key={asset.id}
+              className="group relative aspect-square rounded-lg overflow-hidden border border-border/40 hover:border-primary/60 transition-colors bg-muted/30"
+              onClick={() => {
+                if (asset.isFolder) {
+                  handleOpenFolder(asset.id, asset.name);
+                } else {
+                  onSelect(asset.fileUrl, asset.name);
+                  onClose();
+                }
+              }}
+            >
+              {asset.isFolder ? (
+                <div className="flex flex-col items-center justify-center h-full gap-1">
+                  <FolderOpen className="h-8 w-8 text-amber-500" />
+                  <span className="text-xs text-muted-foreground truncate px-1 w-full text-center">{asset.name}</span>
+                </div>
+              ) : (
+                <>
+                  <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                    <Check className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-white text-xs truncate">{asset.name}</p>
+                  </div>
+                </>
+              )}
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-span-4 flex flex-col items-center justify-center h-32 text-muted-foreground">
+              <ImageIcon className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">暂无素材</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ─── Style Pack Card ──────────────────────────────────────────────────────────
 
@@ -326,6 +443,14 @@ export default function MediaLayout() {
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingTypeName, setUploadingTypeName] = useState<string | null>(null);
+  // 素材库选择器
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [assetPickerMode, setAssetPickerMode] = useState<"per_page" | "by_type">("per_page");
+  // 按类型模式从素材库选择时的待确认 URL
+  const [pendingAssetUrl, setPendingAssetUrl] = useState<string | null>(null);
+  const [pendingAssetName, setPendingAssetName] = useState<string | null>(null);
+  const [byTypeNameDialogOpen, setByTypeNameDialogOpen] = useState(false);
+  const [byTypeNameInput, setByTypeNameInput] = useState("");
 
   // Jobs
   const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery(undefined, { staleTime: 30_000 });
@@ -1019,6 +1144,13 @@ export default function MediaLayout() {
                     )}
                   </div>
                   <p className="text-[10px] text-white/25 mt-1.5">每页最多 5 张，AI 会将该页素材融入排版</p>
+                  <button
+                    type="button"
+                    onClick={() => { setAssetPickerMode("per_page"); setAssetPickerOpen(true); }}
+                    className="mt-1.5 w-full py-1.5 rounded-md border border-dashed border-white/15 text-[10px] text-white/40 hover:text-white/60 hover:border-white/25 transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Library className="w-3 h-3" />从素材库选择
+                  </button>
                   <input ref={assetInputRef} type="file" accept="image/*" multiple className="hidden"
                     onChange={(e) => { if (e.target.files?.length) handlePerPageFiles(e.target.files, assetPageTab); e.target.value = ""; }} />
                 </div>
@@ -1087,6 +1219,14 @@ export default function MediaLayout() {
                       className="px-2 py-1 bg-white/8 rounded-md text-xs text-white/50 hover:text-white/70 disabled:opacity-30 transition-colors"
                     ><Upload className="w-3 h-3" /></button>
                   </div>
+                  {/* 从素材库选择（按类型） */}
+                  <button
+                    type="button"
+                    onClick={() => { setAssetPickerMode("by_type"); setAssetPickerOpen(true); }}
+                    className="w-full py-2 rounded-lg border border-dashed border-white/15 text-xs text-white/40 hover:text-white/60 hover:border-white/25 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Library className="w-3 h-3" />从素材库选择图片
+                  </button>
                   <p className="text-[10px] text-white/25">上传文件夹时自动按文件夹名分组，AI 会根据每页主题选择合适的素材</p>
                   <input ref={assetFolderRef} type="file" accept="image/*" multiple className="hidden"
                     // @ts-ignore
@@ -1546,6 +1686,76 @@ export default function MediaLayout() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 素材库选择器 */}
+      <AssetPickerDialog
+        open={assetPickerOpen}
+        onClose={() => setAssetPickerOpen(false)}
+        title={assetPickerMode === "per_page" ? `从素材库选择（第 ${assetPageTab + 1} 页）` : "从素材库选择图片"}
+        onSelect={(url, name) => {
+          if (assetPickerMode === "per_page") {
+            const existing = perPageAssets[assetPageTab] ?? [];
+            if (existing.length >= 5) { toast.error(`第 ${assetPageTab + 1} 页已达上限（5 张）`); return; }
+            if (existing.includes(url)) { toast.error("该素材已添加"); return; }
+            setPerPageAssets((prev) => ({ ...prev, [assetPageTab]: [...(prev[assetPageTab] ?? []), url] }));
+            toast.success(`已添加素材到第 ${assetPageTab + 1} 页`);
+          } else {
+            // 按类型模式：先记录 URL，弹出命名对话框
+            setPendingAssetUrl(url);
+            setPendingAssetName(name);
+            setByTypeNameInput(newTypeName.trim() || "");
+            setByTypeNameDialogOpen(true);
+          }
+        }}
+      />
+
+      {/* 按类型模式：命名对话框 */}
+      <Dialog open={byTypeNameDialogOpen} onOpenChange={(v) => !v && setByTypeNameDialogOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>指定素材类型</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">请为此素材指定类型名称（如：室内实景、产品图），AI 会根据每页主题选择合适的素材。</p>
+          <Input
+            value={byTypeNameInput}
+            onChange={(e) => setByTypeNameInput(e.target.value)}
+            placeholder="类型名称（如：室内实景）"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && byTypeNameInput.trim()) {
+                const tName = byTypeNameInput.trim();
+                if (pendingAssetUrl) {
+                  setByTypeGroups((prev) => ({
+                    ...prev,
+                    [tName]: [...(prev[tName] ?? []), pendingAssetUrl],
+                  }));
+                  toast.success(`已添加到「${tName}」`);
+                }
+                setPendingAssetUrl(null); setPendingAssetName(null);
+                setByTypeNameDialogOpen(false);
+              }
+            }}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => { setPendingAssetUrl(null); setPendingAssetName(null); setByTypeNameDialogOpen(false); }}>取消</Button>
+            <Button
+              disabled={!byTypeNameInput.trim()}
+              onClick={() => {
+                const tName = byTypeNameInput.trim();
+                if (pendingAssetUrl) {
+                  setByTypeGroups((prev) => ({
+                    ...prev,
+                    [tName]: [...(prev[tName] ?? []), pendingAssetUrl],
+                  }));
+                  toast.success(`已添加到「${tName}」`);
+                }
+                setPendingAssetUrl(null); setPendingAssetName(null);
+                setByTypeNameDialogOpen(false);
+              }}
+            >确定</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
