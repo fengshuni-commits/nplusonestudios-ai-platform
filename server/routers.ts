@@ -2844,7 +2844,9 @@ const meetingRouter = router({
         prompt: "会议录音转写",
       });
       if ('error' in result) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: result.error });
+        console.error("[meeting.transcribe] error:", result.code, result.error, result.details);
+        const detail = result.details ? ` (${result.details})` : "";
+        throw new TRPCError({ code: "BAD_REQUEST", message: `${result.error}${detail}` });
       }
       return result;
     }),

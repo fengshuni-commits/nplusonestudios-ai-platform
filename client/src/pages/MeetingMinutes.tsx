@@ -290,28 +290,51 @@ export default function MeetingMinutes() {
     setAudioFileName(file.name);
     setIsTranscribing(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const uploadResult = await uploadAudio.mutateAsync({
-          fileName: file.name,
-          fileData: base64,
-          contentType: file.type,
-        });
-        const transcribeResult = await transcribeMutation.mutateAsync({
-          audioUrl: uploadResult.url,
-          language: "zh",
-        });
-        if (transcribeResult.text) {
-          setTranscript(transcribeResult.text);
-          toast.success("音频转写完成");
-        }
-        setIsTranscribing(false);
-      };
-      reader.readAsDataURL(file);
-    } catch {
+      // Read file as base64 using Promise to properly propagate errors
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const b64 = result.split(",")[1];
+          if (b64) resolve(b64);
+          else reject(new Error("Failed to read file as base64"));
+        };
+        reader.onerror = () => reject(reader.error || new Error("FileReader error"));
+        reader.readAsDataURL(file);
+      });
+
+      // Infer content type from file extension if browser doesn't provide it
+      let contentType = file.type;
+      if (!contentType) {
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+        const extMap: Record<string, string> = {
+          webm: "audio/webm", ogg: "audio/ogg", mp3: "audio/mpeg",
+          mp4: "audio/mp4", m4a: "audio/mp4", wav: "audio/wav",
+        };
+        contentType = extMap[ext] || "audio/webm";
+      }
+
+      const uploadResult = await uploadAudio.mutateAsync({
+        fileName: file.name,
+        fileData: base64,
+        contentType,
+      });
+      const transcribeResult = await transcribeMutation.mutateAsync({
+        audioUrl: uploadResult.url,
+        language: "zh",
+      });
+      if (transcribeResult.text) {
+        setTranscript(transcribeResult.text);
+        toast.success("音频转写完成");
+      } else {
+        toast.warning("转写完成，但未识别到有效内容");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      toast.error(`音频处理失败：${msg}`);
+      console.error("[handleFileUpload] error:", err);
+    } finally {
       setIsTranscribing(false);
-      toast.error("音频处理失败");
     }
   };
 
