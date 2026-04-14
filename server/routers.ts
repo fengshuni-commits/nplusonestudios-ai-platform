@@ -11,6 +11,8 @@ import { generateImageWithTool } from "./_core/generateImageWithTool";
 import { generateGraphicLayoutAsync } from "./graphicLayoutService";
 import { generateVideoWithTool, queryVideoTaskStatus } from "./_core/generateVideoWithTool";
 import { transcribeAudio } from "./_core/voiceTranscription";
+import { xfyunTranscribe } from "./_core/xfyunTranscription";
+import { decryptApiKey } from "./_core/crypto";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
 import { submitEnhanceTask, getEnhanceTaskStatus, downloadAndStoreEnhancedImage } from "./magnific";
@@ -2836,8 +2838,34 @@ const meetingRouter = router({
     .input(z.object({
       audioUrl: z.string(),
       language: z.string().optional(),
+      toolId: z.number().optional(), // 指定讯飞工具 ID
     }))
     .mutation(async ({ input }) => {
+      // 如果传入了 toolId，尝试从 AI 工具管理读取讯飞凭证
+      if (input.toolId) {
+        try {
+          const tool = await db.getAiToolById(input.toolId);
+          if (tool && tool.provider === "xfyun" && tool.apiKeyEncrypted && tool.configJson) {
+            const config = tool.configJson as { appId?: string; apiSecret?: string };
+            const apiKey = decryptApiKey(tool.apiKeyEncrypted);
+            if (config.appId && config.apiSecret && apiKey) {
+              console.log("[meeting.transcribe] using xfyun tool:", tool.name);
+              const xfResult = await xfyunTranscribe(input.audioUrl, {
+                appId: config.appId,
+                apiKey,
+                apiSecret: config.apiSecret,
+              }, "zh_cn");
+              if (!('error' in xfResult)) {
+                return xfResult;
+              }
+              console.warn("[meeting.transcribe] xfyun failed, falling back to whisper:", xfResult);
+            }
+          }
+        } catch (e) {
+          console.warn("[meeting.transcribe] xfyun error, falling back to whisper:", e);
+        }
+      }
+      // 回退到 Whisper
       const result = await transcribeAudio({
         audioUrl: input.audioUrl,
         language: input.language || "zh",

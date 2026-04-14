@@ -17,6 +17,7 @@ type RecordingState = "idle" | "recording" | "paused" | "processing";
 
 export default function MeetingMinutes() {
   const [toolId, setToolId] = useState<number | undefined>(undefined);
+  const [speechToolId, setSpeechToolId] = useState<number | undefined>(undefined);
   const [transcript, setTranscript] = useState("");
   const [projectName, setProjectName] = useState("");
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split("T")[0]);
@@ -128,6 +129,7 @@ export default function MeetingMinutes() {
       const transcribeResult = await transcribeMutation.mutateAsync({
         audioUrl: uploadResult.url,
         language: "zh",
+        toolId: speechToolId,
       });
       if (transcribeResult.text?.trim()) {
         const newText = transcribeResult.text.trim();
@@ -322,6 +324,7 @@ export default function MeetingMinutes() {
       const transcribeResult = await transcribeMutation.mutateAsync({
         audioUrl: uploadResult.url,
         language: "zh",
+        toolId: speechToolId,
       });
       if (transcribeResult.text) {
         setTranscript(transcribeResult.text);
@@ -400,7 +403,10 @@ export default function MeetingMinutes() {
           <h1 className="text-2xl font-semibold tracking-tight">会议纪要</h1>
           <p className="text-sm text-muted-foreground mt-1">实时录音转录，或上传录音文件，AI 自动生成结构化会议纪要</p>
         </div>
-        <AiToolSelector category="document" value={toolId} onChange={setToolId} label="AI 工具" />
+        <div className="flex items-center gap-3">
+          <AiToolSelector capability="speech_to_text" value={speechToolId} onChange={setSpeechToolId} label="语音转写" showBuiltIn={false} />
+          <AiToolSelector category="document" value={toolId} onChange={setToolId} label="AI 工具" />
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">

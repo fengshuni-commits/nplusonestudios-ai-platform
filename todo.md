@@ -1737,3 +1737,9 @@
 ## Bug 修复：会议纪要转录失败
 - [x] 排查转录失败原因（日志、API 调用、文件上传流程）
 - [x] 修复转录失败问题
+
+## 接入讯飞语音转文字
+- [x] 了解讯飞语音听写 API 协议（WebSocket），查看 AI 工具管理凭证存储结构
+- [x] 后端实现讯飞语音听写（将音频转为 PCM/WAV 后通过 WebSocket 发送）
+- [x] 凭证（APPID/APIKey/APISecret）存入 AI 工具管理，后端动态读取
+- [x] 替换 meeting.transcribe 接口，优先使用讯飞，失败时回退 Whisper
