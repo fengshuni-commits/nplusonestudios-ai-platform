@@ -14,6 +14,7 @@ import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
 import { sdk } from "./sdk";
 import { getOpenApiSpec } from "../openApiSpec";
+import { registerStreamTranscribeWS } from "../streamTranscribe";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -113,6 +114,9 @@ async function startServer() {
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
+
+  // Register WebSocket streaming transcription endpoint
+  registerStreamTranscribeWS(server);
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);

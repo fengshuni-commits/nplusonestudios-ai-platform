@@ -7,6 +7,7 @@ import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText, Download } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useStreamTranscribe } from "@/hooks/useStreamTranscribe";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
@@ -42,6 +43,42 @@ export default function MeetingMinutes() {
   const [downloadMime, setDownloadMime] = useState<string>("audio/webm");
   const [isArchiving, setIsArchiving] = useState(false);
   const [archivedDocId, setArchivedDocId] = useState<number | undefined>(undefined);
+
+  // Streaming transcription state
+  const [streamingPartial, setStreamingPartial] = useState(""); // current partial text being recognized
+  const confirmedTranscriptRef = useRef(""); // confirmed transcript text
+  const sentenceMapRef = useRef<Map<number, string>>(new Map()); // sentence accumulator for wpgs
+
+  const streamTranscribe = useStreamTranscribe({
+    toolId: speechToolId,
+    onPartial: (text, sn, pgs, rg) => {
+      if (pgs === "rpl" && rg) {
+        const [from, to] = rg;
+        for (let i = from; i <= to; i++) sentenceMapRef.current.delete(i);
+      }
+      sentenceMapRef.current.set(sn, text);
+      setStreamingPartial(text);
+    },
+    onFinal: (text) => {
+      if (text.trim()) {
+        const newConfirmed = confirmedTranscriptRef.current
+          ? `${confirmedTranscriptRef.current} ${text.trim()}`
+          : text.trim();
+        confirmedTranscriptRef.current = newConfirmed;
+        setTranscript(newConfirmed);
+        setLiveSegmentCount(c => c + 1);
+      }
+      sentenceMapRef.current.clear();
+      setStreamingPartial("");
+    },
+    onError: (msg) => {
+      console.warn("[streamTranscribe] error:", msg);
+      // Fall back silently - the old 15s segment method continues in parallel
+    },
+    onReady: () => {
+      console.log("[streamTranscribe] ready");
+    },
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -206,21 +243,30 @@ export default function MeetingMinutes() {
       setRecordingState("recording");
       setRecordingDuration(0);
       setLiveSegmentCount(0);
+      confirmedTranscriptRef.current = "";
+      sentenceMapRef.current.clear();
+      setStreamingPartial("");
       startDurationTimer();
       startSegmentTimer(recorder, mimeType);
+      // Start streaming transcription via WebSocket
+      streamTranscribe.start().catch(err => {
+        console.warn("[streamTranscribe] start failed:", err);
+        // Non-fatal: fall back to 15s segment method
+      });
       toast.success("开始录音");
     } catch {
       toast.error("无法访问麦克风，请检查浏览器权限");
     }
-  }, [processAudioChunk, startDurationTimer, startSegmentTimer]);
+  }, [processAudioChunk, startDurationTimer, startSegmentTimer, streamTranscribe]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.pause();
       clearTimers();
+      streamTranscribe.pause();
       setRecordingState("paused");
     }
-  }, [clearTimers]);
+  }, [clearTimers, streamTranscribe]);
 
   const resumeRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "paused") {
@@ -228,9 +274,10 @@ export default function MeetingMinutes() {
       startDurationTimer();
       const mimeType = mediaRecorderRef.current.mimeType;
       startSegmentTimer(mediaRecorderRef.current, mimeType);
+      streamTranscribe.resume();
       setRecordingState("recording");
     }
-  }, [startDurationTimer, startSegmentTimer]);
+  }, [startDurationTimer, startSegmentTimer, streamTranscribe]);
 
   const stopRecording = useCallback(() => {
     clearTimers();
@@ -257,6 +304,9 @@ export default function MeetingMinutes() {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+    // Stop streaming transcription
+    streamTranscribe.stop();
+    setStreamingPartial("");
     setRecordingState("idle");
     toast.success("录音已停止，正在转录最后一段音频…");
   }, [clearTimers]);
@@ -531,12 +581,13 @@ export default function MeetingMinutes() {
                           </div>
                           <div className="text-xs text-muted-foreground mt-1">
                             {recordingState === "recording" ? "录音中" : "已暂停"}
-                            {liveSegmentCount > 0 && ` · 已转录 ${liveSegmentCount} 段`}
-                            {isProcessingSegment && " · 转录中…"}
+                            {streamTranscribe.isConnecting && " · 连接中…"}
+                            {streamTranscribe.isReady && " · 实时转写"}
+                            {!streamTranscribe.isReady && !streamTranscribe.isConnecting && liveSegmentCount > 0 && ` · 已转录 ${liveSegmentCount} 段`}
                           </div>
                         </>
                       ) : (
-                        <p className="text-sm text-muted-foreground">点击开始录音，每 15 秒自动转录一次</p>
+                        <p className="text-sm text-muted-foreground">点击开始录音，文字实时出现</p>
                       )}
                     </div>
 
@@ -572,11 +623,21 @@ export default function MeetingMinutes() {
 
                   {/* Live transcript preview */}
                   {isRecordingActive && (
-                    <div className="text-xs text-muted-foreground bg-muted/40 rounded-md p-3 max-h-24 overflow-y-auto">
-                      {transcript
-                        ? <span className="text-foreground/70">{transcript.slice(-200)}{transcript.length > 200 ? "…" : ""}</span>
-                        : <span className="italic">转录文字将实时显示在这里…</span>
-                      }
+                    <div className="text-xs bg-muted/40 rounded-md p-3 max-h-28 overflow-y-auto">
+                      {transcript || streamingPartial ? (
+                        <>
+                          {transcript && (
+                            <span className="text-foreground/70">
+                              {transcript.slice(-300)}{transcript.length > 300 ? "…" : ""}
+                            </span>
+                          )}
+                          {streamingPartial && (
+                            <span className="text-muted-foreground/60 italic ml-1">{streamingPartial}…</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground italic">转录文字将实时显示在这里…</span>
+                      )}
                     </div>
                   )}
 
