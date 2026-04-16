@@ -569,8 +569,14 @@ export default function ColorPlan() {
     if (!inpaintJobStatus) return;
     if (inpaintJobStatus.status === "done") {
       toast.success("局部修改完成");
-      setResultUrl(inpaintJobStatus.url);
+      const newUrl = inpaintJobStatus.url;
+      setResultUrl(newUrl);
       setResultHistoryId(inpaintJobStatus.historyId);
+      // Update floor plan preview/url so the left-side thumbnail reflects the latest result
+      if (newUrl) {
+        setFloorPlanPreview(newUrl);
+        setFloorPlanUrl(newUrl);
+      }
       setIsInpainting(false);
       setInpaintJobId(null);
       // Reset mask state

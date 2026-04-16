@@ -1748,3 +1748,6 @@
 - [x] 后端：Express WebSocket 端点 /api/transcribe-stream，接收前端音频帧，实时转发给讯飞并返回识别结果
 - [x] 前端：录音时用 AudioWorklet/ScriptProcessor 实时采集 PCM 帧，通过 WebSocket 发送
 - [x] 前端：转写文字实时追加显示，区分“已确认”和“识别中”两种状态
+
+## AI 平面图局部修改缩略图更新
+- [x] inpaint 完成后将结果图 URL 更新到左侧基础图缩略图（resultUrl → floorPlanPreview + floorPlanUrl）
