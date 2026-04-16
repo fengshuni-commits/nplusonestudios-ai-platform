@@ -1755,3 +1755,9 @@
 ## 演示文稿文件转换去除原始文字
 - [x] 排查 convertFromFile 流程中图片内文字未被去除的原因
 - [x] 修复：在 Step 2.5 默认用 sharp 将文字区域填充为背景色色块，无需 AI 工具即可自动去除文字
+
+## 演示文稿文字去除接入 Gemini/即梦 inpainting
+- [x] 演示文稿文字去除：配置了 inpaintToolId 时，用红色高亮标注文字区域（复用 compositeMaskOnImage），调用 generateImageWithTool（支持 Gemini 图生图 inpainting 和即梦专用 inpainting）
+- [x] 即梦路径：生成白/黑 mask 图上传 S3，调用 jimengMode="inpaint"
+- [x] Gemini 路径：叠加红色高亮 mask 后作为参考图，加 INPAINTING INSTRUCTION prompt
+- [x] 无 inpaintToolId 时保留现有 sharp 色块遮盖作为默认兜底

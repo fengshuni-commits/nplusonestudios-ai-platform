@@ -4623,14 +4623,44 @@ async function generatePresentationFromFileInBackground(
               }
             }
           } else {
-            // ── Gemini / other: use image editing prompt ──
-            // Upload original image to S3 for URL-based access
+            // ── Gemini / other: composite red-highlight mask onto image, then call generateImageWithTool ──
+            // This mirrors the colorPlan.inpaint approach: red overlay marks edit areas,
+            // INPAINTING INSTRUCTION prompt tells the model to only modify marked regions.
+
+            // Step 1: Build a white/black mask buffer (white = text area, black = keep)
+            const maskBuf = await sharpMod({
+              create: { width: imgW, height: imgH, channels: 3, background: { r: 0, g: 0, b: 0 } }
+            }).png().toBuffer();
+            const maskComposites: any[] = [];
+            for (const el of analysis.textElements) {
+              const rx = Math.max(0, Math.round((el.x / 100) * imgW) - 4);
+              const ry = Math.max(0, Math.round((el.y / 100) * imgH) - 4);
+              const rw = Math.min(imgW - rx, Math.round((el.w / 100) * imgW) + 8);
+              const rh = Math.min(imgH - ry, Math.round((el.h / 100) * imgH) + 8);
+              if (rw <= 0 || rh <= 0) continue;
+              const whitePatch = await sharpMod({
+                create: { width: rw, height: rh, channels: 3, background: { r: 255, g: 255, b: 255 } }
+              }).png().toBuffer();
+              maskComposites.push({ input: whitePatch, left: rx, top: ry });
+            }
+            const finalMaskBuf = maskComposites.length > 0
+              ? await sharpMod(maskBuf).composite(maskComposites).png().toBuffer()
+              : maskBuf;
+            const maskBase64 = finalMaskBuf.toString("base64");
+
+            // Step 2: Composite red highlight onto original image (same as compositeMaskOnImage)
+            const { compositeMaskOnImage: _compositeMaskFn } = await import("./imageProcessor");
+            // Upload original to S3 so compositeMaskOnImage can fetch it
             const origKey = `presentations/inpaint/${jobId}-page${i}-orig.png`;
             const { url: origUrl } = await storagePut(origKey, imgBuf, "image/png");
+            const compositeResult = await _compositeMaskFn(origUrl, maskBase64);
+
+            // Step 3: Call generateImageWithTool with the highlighted image + INPAINTING INSTRUCTION
+            const inpaintPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] Remove all text from the red-highlighted areas. Fill those areas with the surrounding background color and texture so the result looks natural and seamless.`;
             const inpaintResult = await generateImageWithTool({
               toolId: input.inpaintToolId,
-              prompt: "Remove all visible text labels, titles, captions, and annotations from this image. Fill the areas where text was with the surrounding background color and texture. Keep all non-text visual elements (illustrations, photos, shapes, lines) completely unchanged. The result should look like the original image but with all text removed.",
-              originalImages: [{ url: origUrl, mimeType: "image/png" }]
+              prompt: inpaintPrompt,
+              originalImages: [{ b64Json: compositeResult.b64, mimeType: compositeResult.mimeType }]
             });
             if (inpaintResult?.url) {
               try {

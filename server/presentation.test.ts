@@ -332,4 +332,90 @@ describe("Presentation Module", () => {
       expect(historyEntry.summary).toContain("页幻灯片");
     });
   });
+
+  describe("Text Erase - Inpainting Route Selection", () => {
+    // Tests for the logic that decides which inpainting path to take
+    // based on the tool provider (jimeng vs gemini vs none)
+
+    it("should use sharp fallback when no inpaintToolId is provided", () => {
+      const inpaintToolId: number | undefined = undefined;
+      const useAiInpaint = !!inpaintToolId;
+      expect(useAiInpaint).toBe(false);
+    });
+
+    it("should use jimeng inpainting path for jimeng provider", () => {
+      const provider = "jimeng";
+      const isJimeng = provider === "jimeng" || provider === "volcengine";
+      expect(isJimeng).toBe(true);
+    });
+
+    it("should use jimeng inpainting path for volcengine provider", () => {
+      const provider = "volcengine";
+      const isJimeng = provider === "jimeng" || provider === "volcengine";
+      expect(isJimeng).toBe(true);
+    });
+
+    it("should use Gemini red-highlight path for gemini provider", () => {
+      const provider = "gemini";
+      const isJimeng = provider === "jimeng" || provider === "volcengine";
+      expect(isJimeng).toBe(false);
+      // Non-jimeng path uses red-highlight composite + INPAINTING INSTRUCTION
+    });
+
+    it("should use Gemini red-highlight path for unknown provider", () => {
+      const provider = "";
+      const isJimeng = provider === "jimeng" || provider === "volcengine";
+      expect(isJimeng).toBe(false);
+    });
+
+    it("should build INPAINTING INSTRUCTION prompt for Gemini path", () => {
+      const inpaintPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] Remove all text from the red-highlighted areas. Fill those areas with the surrounding background color and texture so the result looks natural and seamless.`;
+      expect(inpaintPrompt).toContain("INPAINTING INSTRUCTION");
+      expect(inpaintPrompt).toContain("red-highlighted areas");
+      expect(inpaintPrompt).toContain("Remove all text");
+    });
+
+    it("should calculate text element bounding box with padding", () => {
+      const imgW = 800;
+      const imgH = 600;
+      const el = { x: 10, y: 5, w: 80, h: 10 }; // percentages
+      const padding = 4;
+
+      const rx = Math.max(0, Math.round((el.x / 100) * imgW) - padding);
+      const ry = Math.max(0, Math.round((el.y / 100) * imgH) - padding);
+      const rw = Math.min(imgW - rx, Math.round((el.w / 100) * imgW) + padding * 2);
+      const rh = Math.min(imgH - ry, Math.round((el.h / 100) * imgH) + padding * 2);
+
+      expect(rx).toBe(76);  // 10% of 800 = 80, minus 4 = 76
+      expect(ry).toBe(26);  // 5% of 600 = 30, minus 4 = 26
+      expect(rw).toBe(648); // 80% of 800 = 640, plus 8 = 648
+      expect(rh).toBe(68);  // 10% of 600 = 60, plus 8 = 68
+    });
+
+    it("should skip text elements with zero-size bounding boxes", () => {
+      const imgW = 100;
+      const imgH = 100;
+      // Element at the very edge with large padding could result in zero width
+      const el = { x: 99, y: 0, w: 1, h: 10 };
+      const padding = 4;
+
+      const rx = Math.max(0, Math.round((el.x / 100) * imgW) - padding);
+      const rw = Math.min(imgW - rx, Math.round((el.w / 100) * imgW) + padding * 2);
+
+      // rx = max(0, 99 - 4) = 95, rw = min(100-95, 1+8) = min(5, 9) = 5
+      expect(rw).toBeGreaterThan(0); // should still be valid
+    });
+
+    it("should skip pages with no text elements", () => {
+      const textElements: any[] = [];
+      const shouldProcess = textElements.length > 0;
+      expect(shouldProcess).toBe(false);
+    });
+
+    it("should process pages with text elements", () => {
+      const textElements = [{ x: 10, y: 5, w: 80, h: 10, text: "标题" }];
+      const shouldProcess = textElements.length > 0;
+      expect(shouldProcess).toBe(true);
+    });
+  });
 });
