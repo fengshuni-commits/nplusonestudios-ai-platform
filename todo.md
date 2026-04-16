@@ -1761,3 +1761,7 @@
 - [x] 即梦路径：生成白/黑 mask 图上传 S3，调用 jimengMode="inpaint"
 - [x] Gemini 路径：叠加红色高亮 mask 后作为参考图，加 INPAINTING INSTRUCTION prompt
 - [x] 无 inpaintToolId 时保留现有 sharp 色块遮盖作为默认兜底
+
+## AI 平面图历史记录「重新编辑」恢复生成结果
+- [x] History.tsx：「重新编辑」按钮额外传 resultUrl（chainItem.outputUrl）
+- [x] ColorPlan.tsx：从 URL 参数读取 resultUrl 并初始化 resultUrl state，使右侧直接展示历史结果图

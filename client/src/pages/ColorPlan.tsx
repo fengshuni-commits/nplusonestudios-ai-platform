@@ -502,6 +502,10 @@ export default function ColorPlan() {
   const initReferenceUrl = urlParams.get('referenceUrl') || null;
   const initPlanStyle = (urlParams.get('planStyle') as PlanStyle) || 'colored';
   const initExtraPrompt = urlParams.get('extraPrompt') || '';
+  // Restore previous generation result so user can continue editing (inpainting) directly
+  const initResultUrl = urlParams.get('resultUrl') || null;
+  // Restore historyId so "import to assets" still works after restore
+  const initHistoryId = urlParams.get('historyId') ? Number(urlParams.get('historyId')) : undefined;
 
   // Floor plan (base image)
   const [floorPlanFile, setFloorPlanFile] = useState<File | null>(null);
@@ -525,8 +529,8 @@ export default function ColorPlan() {
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [resultHistoryId, setResultHistoryId] = useState<number | undefined>(undefined);
+  const [resultUrl, setResultUrl] = useState<string | null>(initResultUrl);
+  const [resultHistoryId, setResultHistoryId] = useState<number | undefined>(initHistoryId);
 
   // Asset picker
   const [assetPickerTarget, setAssetPickerTarget] = useState<"floor" | "reference" | null>(null);

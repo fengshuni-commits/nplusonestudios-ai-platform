@@ -1202,7 +1202,7 @@ export default function HistoryPage() {
                                       </Button>
                                     </>
                                   )}
-                                  {/* 重新编辑：将参数回填到生成表单 */}
+                                  {/* 重新编辑：将参数和生成结果回填到生成表单 */}
                                   {inputParams?.floorPlanUrl && (
                                     <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary/80"
                                       onClick={() => {
@@ -1211,9 +1211,13 @@ export default function HistoryPage() {
                                         if (inputParams.referenceUrl) params.set('referenceUrl', inputParams.referenceUrl);
                                         if (inputParams.planStyle) params.set('planStyle', inputParams.planStyle);
                                         if (inputParams.extraPrompt) params.set('extraPrompt', inputParams.extraPrompt);
+                                        // Pass the generated result so ColorPlan can restore it for further editing
+                                        if (chainItem.outputUrl) params.set('resultUrl', chainItem.outputUrl);
+                                        // Pass historyId so "import to assets" still works after restore
+                                        params.set('historyId', String(chainItem.id));
                                         setDetailOpen(false);
                                         setTimeout(() => navigate(`/design/color-plan?${params.toString()}`), 150);
-                                      }} title="回填参数并重新生成">
+                                      }} title="回填参数和生成结果，继续编辑">
                                       <RefreshCw className="h-3 w-3 mr-1" />
                                       重新编辑
                                     </Button>

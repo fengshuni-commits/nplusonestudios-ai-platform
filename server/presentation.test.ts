@@ -333,6 +333,70 @@ describe("Presentation Module", () => {
     });
   });
 
+  describe("ColorPlan Re-edit URL Param Restoration", () => {
+    // Tests for the logic that restores ColorPlan state from URL params when navigating from history
+
+    it("should parse floorPlanUrl from URL params", () => {
+      const search = '?floorPlanUrl=https%3A%2F%2Fcdn.example.com%2Ffloor.png&planStyle=colored';
+      const params = new URLSearchParams(search);
+      expect(params.get('floorPlanUrl')).toBe('https://cdn.example.com/floor.png');
+      expect(params.get('planStyle')).toBe('colored');
+    });
+
+    it("should parse resultUrl from URL params to restore generation result", () => {
+      const search = '?resultUrl=https%3A%2F%2Fcdn.example.com%2Fresult.png';
+      const params = new URLSearchParams(search);
+      const initResultUrl = params.get('resultUrl') || null;
+      expect(initResultUrl).toBe('https://cdn.example.com/result.png');
+    });
+
+    it("should parse historyId from URL params and convert to number", () => {
+      const search = '?historyId=42';
+      const params = new URLSearchParams(search);
+      const initHistoryId = params.get('historyId') ? Number(params.get('historyId')) : undefined;
+      expect(initHistoryId).toBe(42);
+    });
+
+    it("should return undefined historyId when not in URL", () => {
+      const search = '?floorPlanUrl=https%3A%2F%2Fcdn.example.com%2Ffloor.png';
+      const params = new URLSearchParams(search);
+      const initHistoryId = params.get('historyId') ? Number(params.get('historyId')) : undefined;
+      expect(initHistoryId).toBeUndefined();
+    });
+
+    it("should return null resultUrl when not in URL", () => {
+      const search = '?floorPlanUrl=https%3A%2F%2Fcdn.example.com%2Ffloor.png';
+      const params = new URLSearchParams(search);
+      const initResultUrl = params.get('resultUrl') || null;
+      expect(initResultUrl).toBeNull();
+    });
+
+    it("should build correct URL params for re-edit navigation", () => {
+      const inputParams = {
+        floorPlanUrl: 'https://cdn.example.com/floor.png',
+        referenceUrl: 'https://cdn.example.com/ref.png',
+        planStyle: 'colored',
+        extraPrompt: '现代风格',
+      };
+      const outputUrl = 'https://cdn.example.com/result.png';
+      const historyId = 123;
+
+      const params = new URLSearchParams();
+      if (inputParams.floorPlanUrl) params.set('floorPlanUrl', inputParams.floorPlanUrl);
+      if (inputParams.referenceUrl) params.set('referenceUrl', inputParams.referenceUrl);
+      if (inputParams.planStyle) params.set('planStyle', inputParams.planStyle);
+      if (inputParams.extraPrompt) params.set('extraPrompt', inputParams.extraPrompt);
+      if (outputUrl) params.set('resultUrl', outputUrl);
+      params.set('historyId', String(historyId));
+
+      const url = `/design/color-plan?${params.toString()}`;
+      expect(url).toContain('floorPlanUrl=');
+      expect(url).toContain('resultUrl=');
+      expect(url).toContain('historyId=123');
+      expect(url).toContain('planStyle=colored');
+    });
+  });
+
   describe("Text Erase - Inpainting Route Selection", () => {
     // Tests for the logic that decides which inpainting path to take
     // based on the tool provider (jimeng vs gemini vs none)
