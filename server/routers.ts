@@ -4514,10 +4514,49 @@ async function generatePresentationFromFileInBackground(
     }
 
     presentationJobStore.set(jobId, { status: "processing", progress: 72, stage: "building_pptx" });
-    // ── Step 2.5: Inpainting (if tool selected) ──────────────────────────────
-    // For each page, if inpaintToolId is set and there are text elements,
-    // use the selected AI tool to remove text from the image.
+    // ── Step 2.5: Remove text from images ──────────────────────────────────────
+    // Always erase text regions using sharp (fill with bg color).
+    // If inpaintToolId is set, additionally use AI inpainting for better quality.
     const inpaintedPageImages: Array<{ data: string; ext: string; url: string }> = [...pageImageBase64s];
+
+    // Default: use sharp to paint bg-colored rectangles over text areas (no AI needed)
+    for (let i = 0; i < pageImageBase64s.length; i++) {
+      const pg = pageImageBase64s[i];
+      const analysis = slideAnalyses[i];
+      if (!analysis.textElements || analysis.textElements.length === 0) continue;
+      try {
+        const sharpMod = (await import("sharp")).default;
+        const imgBuf = Buffer.from(pg.data, "base64");
+        const meta = await sharpMod(imgBuf).metadata();
+        const imgW = meta.width || 800;
+        const imgH = meta.height || 600;
+        // Parse bg color
+        const bgHex = (analysis.bgColor || "#FFFFFF").replace("#", "");
+        const bgR = parseInt(bgHex.slice(0, 2), 16) || 255;
+        const bgG = parseInt(bgHex.slice(2, 4), 16) || 255;
+        const bgB = parseInt(bgHex.slice(4, 6), 16) || 255;
+        // Build composites: one solid-color patch per text element
+        const composites: any[] = [];
+        for (const el of analysis.textElements) {
+          const rx = Math.max(0, Math.round((el.x / 100) * imgW) - 4);
+          const ry = Math.max(0, Math.round((el.y / 100) * imgH) - 4);
+          const rw = Math.min(imgW - rx, Math.round((el.w / 100) * imgW) + 8);
+          const rh = Math.min(imgH - ry, Math.round((el.h / 100) * imgH) + 8);
+          if (rw <= 0 || rh <= 0) continue;
+          const patch = await sharpMod({
+            create: { width: rw, height: rh, channels: 3, background: { r: bgR, g: bgG, b: bgB } }
+          }).png().toBuffer();
+          composites.push({ input: patch, left: rx, top: ry });
+        }
+        if (composites.length > 0) {
+          const cleaned = await sharpMod(imgBuf).composite(composites).png().toBuffer();
+          inpaintedPageImages[i] = { data: cleaned.toString("base64"), ext: "png", url: pg.url };
+        }
+      } catch (e) {
+        console.error(`[PresentationConvert] Sharp text erase failed for page ${i}:`, e);
+      }
+    }
+
     if (input.inpaintToolId) {
       const totalInpaintPages = pageImageBase64s.length;
       for (let i = 0; i < totalInpaintPages; i++) {

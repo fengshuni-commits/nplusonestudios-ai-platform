@@ -1751,3 +1751,7 @@
 
 ## AI 平面图局部修改缩略图更新
 - [x] inpaint 完成后将结果图 URL 更新到左侧基础图缩略图（resultUrl → floorPlanPreview + floorPlanUrl）
+
+## 演示文稿文件转换去除原始文字
+- [x] 排查 convertFromFile 流程中图片内文字未被去除的原因
+- [x] 修复：在 Step 2.5 默认用 sharp 将文字区域填充为背景色色块，无需 AI 工具即可自动去除文字
