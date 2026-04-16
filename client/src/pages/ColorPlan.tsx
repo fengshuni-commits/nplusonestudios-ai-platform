@@ -1130,13 +1130,15 @@ export default function ColorPlan() {
                         if (!maskDataUrl || !inpaintPrompt.trim() || !resultUrl) return;
                         setIsInpainting(true);
                         try {
-                          const result = await inpaintMutation.mutateAsync({
-                            imageUrl: resultUrl,
-                            maskImageData: maskDataUrl,
-                            prompt: inpaintPrompt.trim(),
-                            toolId,
-                            parentHistoryId: resultHistoryId,
-                          });
+                           const result = await inpaintMutation.mutateAsync({
+                             imageUrl: resultUrl,
+                             maskImageData: maskDataUrl,
+                             prompt: inpaintPrompt.trim(),
+                             toolId,
+                             parentHistoryId: resultHistoryId,
+                             // Pass floor plan as structural reference for AI inpainting
+                             floorPlanUrl: floorPlanUrl || undefined,
+                           });
                           setInpaintJobId(result.jobId);
                         } catch (e: any) {
                           toast.error(e.message || "局部修改失败，请稍后重试");

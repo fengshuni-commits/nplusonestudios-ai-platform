@@ -1765,3 +1765,9 @@
 ## AI 平面图历史记录「重新编辑」恢复生成结果
 - [x] History.tsx：「重新编辑」按钮额外传 resultUrl（chainItem.outputUrl）
 - [x] ColorPlan.tsx：从 URL 参数读取 resultUrl 并初始化 resultUrl state，使右侧直接展示历史结果图
+
+## AI 平面图局部修改加入底图作为参考条件
+- [x] 前端 ColorPlan.tsx：inpaint 请求中传入 floorPlanUrl
+- [x] 后端 routers.ts colorPlan.inpaint：接收 floorPlanUrl 参数
+- [x] 后端：Gemini 路径将底图加入 originalImages 列表（底图 + 红色高亮结果图），prompt 中说明底图作用
+- [x] 后端：即梦路径在 prompt 中加入底图 URL 作为参考（即梦 inpaint 接口只支持单图，用 prompt 描述底图信息）

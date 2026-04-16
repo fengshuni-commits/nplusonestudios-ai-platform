@@ -2746,6 +2746,7 @@ const colorPlanRouter = router({
       imageUrl: z.string(),           // 原始彩平图 URL
       maskImageData: z.string(),      // base64 mask PNG
       prompt: z.string(),             // 修改说明
+      floorPlanUrl: z.string().optional(), // 底图 URL（线稿/黑白平面图），作为 AI 参考条件
       toolId: z.number().optional(),
       parentHistoryId: z.number().optional(),
       projectId: z.number().optional(),
@@ -2762,13 +2763,46 @@ const colorPlanRouter = router({
         }
 
         let originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }> = [];
-        const fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${input.prompt}`;
+
+        // Determine tool provider to decide how to pass the floor plan
+        let toolProvider = "";
+        if (input.toolId) {
+          try { const tool = await db.getAiToolById(input.toolId); toolProvider = tool?.provider?.toLowerCase() || ""; } catch { /* ignore */ }
+        }
+        const isJimengTool = toolProvider === "jimeng" || toolProvider === "volcengine";
+
+        // Build prompt — for Gemini multi-image, describe image order; for jimeng, mention floor plan in text
+        let fullPrompt: string;
+        if (input.floorPlanUrl && !isJimengTool) {
+          // Gemini path: floor plan will be image[0], highlighted result will be image[1]
+          fullPrompt = `[INPAINTING INSTRUCTION: You are given two reference images. Image 1 is the original floor plan (line drawing / base plan) — use it as the structural reference. Image 2 is the current colored floor plan with red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas in Image 2. Keep all other areas exactly unchanged. Use Image 1 as a guide for the spatial structure when filling the modified areas.] ${input.prompt}`;
+        } else if (input.floorPlanUrl && isJimengTool) {
+          // Jimeng path: can only accept one image, mention floor plan in prompt
+          fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged. Reference the original floor plan structure when filling the modified areas.] ${input.prompt}`;
+        } else {
+          fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${input.prompt}`;
+        }
 
         try {
           const composite = await compositeMaskOnImage(input.imageUrl, input.maskImageData);
-          originalImages = [{ b64Json: composite.b64, mimeType: composite.mimeType }];
+          if (input.floorPlanUrl && !isJimengTool) {
+            // Gemini: pass floor plan first, then the highlighted result image
+            originalImages = [
+              { url: input.floorPlanUrl, mimeType: "image/png" },
+              { b64Json: composite.b64, mimeType: composite.mimeType },
+            ];
+          } else {
+            originalImages = [{ b64Json: composite.b64, mimeType: composite.mimeType }];
+          }
         } catch {
-          originalImages = [{ url: input.imageUrl, mimeType: "image/png" }];
+          if (input.floorPlanUrl && !isJimengTool) {
+            originalImages = [
+              { url: input.floorPlanUrl, mimeType: "image/png" },
+              { url: input.imageUrl, mimeType: "image/png" },
+            ];
+          } else {
+            originalImages = [{ url: input.imageUrl, mimeType: "image/png" }];
+          }
         }
 
         try {
@@ -2784,6 +2818,7 @@ const colorPlanRouter = router({
               prompt: input.prompt,
               hasMask: true,
               isInpaint: true,
+              floorPlanUrl: input.floorPlanUrl || null,
             },
             outputUrl: result.url,
             status: "success",

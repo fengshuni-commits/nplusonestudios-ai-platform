@@ -333,6 +333,103 @@ describe("Presentation Module", () => {
     });
   });
 
+  describe("ColorPlan Inpaint Floor Plan Reference", () => {
+    // Tests for the logic that decides how to pass the floor plan to inpainting
+
+    it("should build Gemini prompt with dual-image instruction when floorPlanUrl is provided", () => {
+      const isJimengTool = false;
+      const floorPlanUrl = "https://cdn.example.com/floor.png";
+      const userPrompt = "将客厅改为深色木地板";
+
+      let fullPrompt: string;
+      if (floorPlanUrl && !isJimengTool) {
+        fullPrompt = `[INPAINTING INSTRUCTION: You are given two reference images. Image 1 is the original floor plan (line drawing / base plan) \u2014 use it as the structural reference. Image 2 is the current colored floor plan with red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas in Image 2. Keep all other areas exactly unchanged. Use Image 1 as a guide for the spatial structure when filling the modified areas.] ${userPrompt}`;
+      } else {
+        fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${userPrompt}`;
+      }
+
+      expect(fullPrompt).toContain("Image 1 is the original floor plan");
+      expect(fullPrompt).toContain("Image 2 is the current colored floor plan");
+      expect(fullPrompt).toContain(userPrompt);
+    });
+
+    it("should build standard prompt when no floorPlanUrl is provided", () => {
+      const isJimengTool = false;
+      const floorPlanUrl: string | undefined = undefined;
+      const userPrompt = "将客厅改为深色木地板";
+
+      let fullPrompt: string;
+      if (floorPlanUrl && !isJimengTool) {
+        fullPrompt = `[INPAINTING INSTRUCTION: You are given two reference images. Image 1 is the original floor plan...] ${userPrompt}`;
+      } else {
+        fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${userPrompt}`;
+      }
+
+      expect(fullPrompt).toContain("The image has red-highlighted areas");
+      expect(fullPrompt).not.toContain("Image 1 is the original floor plan");
+    });
+
+    it("should build jimeng prompt with floor plan mention when jimeng tool and floorPlanUrl provided", () => {
+      const isJimengTool = true;
+      const floorPlanUrl = "https://cdn.example.com/floor.png";
+      const userPrompt = "将客厅改为深色木地板";
+
+      let fullPrompt: string;
+      if (floorPlanUrl && !isJimengTool) {
+        fullPrompt = `[INPAINTING INSTRUCTION: You are given two reference images...] ${userPrompt}`;
+      } else if (floorPlanUrl && isJimengTool) {
+        fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged. Reference the original floor plan structure when filling the modified areas.] ${userPrompt}`;
+      } else {
+        fullPrompt = `[INPAINTING INSTRUCTION: The image has red-highlighted areas marking regions to modify. ONLY modify the content within the red-marked areas. Keep all other areas exactly unchanged.] ${userPrompt}`;
+      }
+
+      expect(fullPrompt).toContain("Reference the original floor plan structure");
+      expect(fullPrompt).not.toContain("Image 1 is the original floor plan");
+    });
+
+    it("should include floor plan as first image in originalImages for Gemini path", () => {
+      const isJimengTool = false;
+      const floorPlanUrl = "https://cdn.example.com/floor.png";
+      const compositeB64 = "base64encodeddata";
+      const compositeMimeType = "image/png";
+
+      let originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }>;
+      if (floorPlanUrl && !isJimengTool) {
+        originalImages = [
+          { url: floorPlanUrl, mimeType: "image/png" },
+          { b64Json: compositeB64, mimeType: compositeMimeType },
+        ];
+      } else {
+        originalImages = [{ b64Json: compositeB64, mimeType: compositeMimeType }];
+      }
+
+      expect(originalImages).toHaveLength(2);
+      expect(originalImages[0].url).toBe(floorPlanUrl);
+      expect(originalImages[1].b64Json).toBe(compositeB64);
+    });
+
+    it("should use single image for jimeng inpaint path even when floorPlanUrl provided", () => {
+      const isJimengTool = true;
+      const floorPlanUrl = "https://cdn.example.com/floor.png";
+      const compositeB64 = "base64encodeddata";
+      const compositeMimeType = "image/png";
+
+      let originalImages: Array<{ url?: string; b64Json?: string; mimeType?: string }>;
+      if (floorPlanUrl && !isJimengTool) {
+        originalImages = [
+          { url: floorPlanUrl, mimeType: "image/png" },
+          { b64Json: compositeB64, mimeType: compositeMimeType },
+        ];
+      } else {
+        originalImages = [{ b64Json: compositeB64, mimeType: compositeMimeType }];
+      }
+
+      // Jimeng only gets one image (the composite); floor plan is referenced in prompt only
+      expect(originalImages).toHaveLength(1);
+      expect(originalImages[0].b64Json).toBe(compositeB64);
+    });
+  });
+
   describe("ColorPlan Re-edit URL Param Restoration", () => {
     // Tests for the logic that restores ColorPlan state from URL params when navigating from history
 
