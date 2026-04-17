@@ -1012,12 +1012,17 @@ const tasksRouter = router({
   updateStatus: protectedProcedure
     .input(z.object({ id: z.number(), status: z.enum(["backlog", "todo", "in_progress", "review", "done"]) }))
     .mutation(async ({ input, ctx }) => {
-      // 权限检查：仅项目创建者和任务负责人可修改状态
       const task = await db.getTaskById(input.id);
       if (!task) throw new TRPCError({ code: "NOT_FOUND" });
-      const project = await db.getProjectById(task.projectId);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND" });
-      if (project.createdBy !== ctx.user.id && task.assigneeId !== ctx.user.id) {
+      const isAdmin = ctx.user.role === "admin";
+      // API-created tasks can only be modified by admins
+      if ((task as any).source === "api" && !isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "该任务由 API 创建，只有管理员可以修改" });
+      }
+      // Task creator, assignee, or admin can update status
+      const isTaskCreator = task.createdBy === ctx.user.id;
+      const isAssignee = task.assigneeId === ctx.user.id;
+      if (!isAdmin && !isTaskCreator && !isAssignee) {
         throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限修改任务" });
       }
       await db.updateTaskStatus(input.id, input.status);
@@ -1042,16 +1047,20 @@ const tasksRouter = router({
     .mutation(async ({ input, ctx }) => {
       const task = await db.getTaskById(input.id);
       if (!task) throw new TRPCError({ code: "NOT_FOUND" });
-      const project = await db.getProjectById(task.projectId);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND" });
-      const isCreator = project.createdBy === ctx.user.id;
+      const isAdmin = ctx.user.role === "admin";
+      // API-created tasks can only be modified by admins
+      if ((task as any).source === "api" && !isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "该任务由 API 创建，只有管理员可以修改" });
+      }
+      // User-created tasks: task creator or admin can fully modify; assignee/reviewer can only update progress
+      const isTaskCreator = task.createdBy === ctx.user.id;
       const isAssignee = task.assigneeId === ctx.user.id;
       const isReviewer = task.reviewerId === ctx.user.id;
-      if (!isCreator && !isAssignee && !isReviewer) {
+      if (!isAdmin && !isTaskCreator && !isAssignee && !isReviewer) {
         throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限修改任务" });
       }
-      // Assignees can only update progress/progressNote, not status or other fields
-      if (isAssignee && !isCreator) {
+      // Assignees/reviewers (not creator, not admin) can only update progress/progressNote
+      if (!isAdmin && !isTaskCreator && (isAssignee || isReviewer)) {
         const allowedFields = ["progress", "progressNote"];
         const attemptedFields = Object.keys(input).filter(k => k !== "id" && input[k as keyof typeof input] !== undefined);
         const forbidden = attemptedFields.filter(f => !allowedFields.includes(f));

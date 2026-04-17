@@ -28,7 +28,8 @@ async function authenticateApiKey(req: Request, res: Response, next: NextFunctio
     if (!user) {
       return res.status(401).json({ error: "User not found", code: "UNAUTHORIZED" });
     }
-    (req as any).apiKey = { id: tokenInfo.userId, userId: tokenInfo.userId, type: tokenInfo.type };
+    // Attach user role so downstream handlers can check admin status
+    (req as any).apiKey = { id: tokenInfo.userId, userId: tokenInfo.userId, type: tokenInfo.type, isAdmin: user.role === "admin" };
     (req as any).apiUser = user;
     return next();
   }
@@ -216,7 +217,7 @@ router.post("/projects/:projectId/tasks", async (req: Request, res: Response) =>
     if (!title) {
       return res.status(400).json({ error: "Task title is required", code: "VALIDATION_ERROR" });
     }
-    const result = await db.createTask({ projectId, title, description, priority, category, assigneeId });
+    const result = await db.createTask({ projectId, title, description, priority, category, assigneeId, source: "api" } as any);
 
     await triggerWebhook("task.created", { taskId: result.id, projectId, title });
 
@@ -229,6 +230,30 @@ router.post("/projects/:projectId/tasks", async (req: Request, res: Response) =>
 router.patch("/tasks/:id", async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid task ID", code: "VALIDATION_ERROR" });
+    }
+
+    const task = await db.getTaskById(id);
+    if (!task) {
+      return res.status(404).json({ error: "Task not found", code: "NOT_FOUND" });
+    }
+
+    // Permission check:
+    // - API-created tasks (source = "api"): any authenticated API key can modify
+    // - User-created tasks (source = "user" or createdBy is set): only admin API key can modify
+    const apiKeyInfo = (req as any).apiKey;
+    // isAdmin is set during authentication based on the token owner's user role
+    const isAdminApiKey = apiKeyInfo?.isAdmin === true;
+    const taskSource = (task as any).source || "user";
+
+    if (taskSource === "user" && !isAdminApiKey) {
+      return res.status(403).json({
+        error: "This task was created by a user. Only admin API keys can modify user-created tasks.",
+        code: "FORBIDDEN",
+      });
+    }
+
     const { status, title, description, priority, category, assigneeId } = req.body;
 
     if (status) {

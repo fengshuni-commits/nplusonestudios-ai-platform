@@ -102,6 +102,7 @@ export const tasks = mysqlTable("tasks", {
   sortOrder: int("sortOrder").default(0),
   createdBy: int("createdBy"),
   approval: boolean("approval").default(false).notNull(),
+  source: mysqlEnum("source", ["user", "api"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -1771,3 +1771,11 @@
 - [x] 后端 routers.ts colorPlan.inpaint：接收 floorPlanUrl 参数
 - [x] 后端：Gemini 路径将底图加入 originalImages 列表（底图 + 红色高亮结果图），prompt 中说明底图作用
 - [x] 后端：即梦路径在 prompt 中加入底图 URL 作为参考（即梦 inpaint 接口只支持单图，用 prompt 描述底图信息）
+
+## 任务权限控制
+- [x] schema：tasks 表加 source 字段（enum: "user" | "api"）
+- [x] 迁移 SQL：ALTER TABLE tasks ADD COLUMN source
+- [x] tRPC tasks.update：权限改为任务创建者（task.createdBy === ctx.user.id）或管理员可修改
+- [x] tRPC tasks.updateStatus：同步更新权限逻辑
+- [x] REST API PATCH /tasks/:id：API 创建的任务允许修改；用户创建的任务只有管理员 API key 可修改
+- [x] API 创建任务时标记 source = "api"

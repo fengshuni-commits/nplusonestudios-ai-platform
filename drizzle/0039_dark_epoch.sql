@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `source` enum('user','api') DEFAULT 'user' NOT NULL;

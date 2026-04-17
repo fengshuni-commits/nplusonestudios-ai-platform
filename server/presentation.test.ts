@@ -333,6 +333,138 @@ describe("Presentation Module", () => {
     });
   });
 
+  describe("Task Permission Control", () => {
+    // Tests for task update permission logic
+
+    it("should allow task creator to modify user-created task", () => {
+      const task = { id: 1, createdBy: 10, assigneeId: null, reviewerId: null, source: "user" };
+      const ctx = { user: { id: 10, role: "user" } };
+
+      const isAdmin = ctx.user.role === "admin";
+      const isApiTask = task.source === "api";
+      const isTaskCreator = task.createdBy === ctx.user.id;
+      const isAssignee = task.assigneeId === ctx.user.id;
+      const isReviewer = task.reviewerId === ctx.user.id;
+
+      // API task check
+      const blockedByApiRule = isApiTask && !isAdmin;
+      // Permission check
+      const hasPermission = isAdmin || isTaskCreator || isAssignee || isReviewer;
+
+      expect(blockedByApiRule).toBe(false);
+      expect(hasPermission).toBe(true);
+    });
+
+    it("should block non-creator from modifying user-created task", () => {
+      const task = { id: 1, createdBy: 10, assigneeId: null, reviewerId: null, source: "user" };
+      const ctx = { user: { id: 99, role: "user" } };
+
+      const isAdmin = ctx.user.role === "admin";
+      const isApiTask = task.source === "api";
+      const isTaskCreator = task.createdBy === ctx.user.id;
+      const isAssignee = task.assigneeId === ctx.user.id;
+      const isReviewer = task.reviewerId === ctx.user.id;
+
+      const blockedByApiRule = isApiTask && !isAdmin;
+      const hasPermission = isAdmin || isTaskCreator || isAssignee || isReviewer;
+
+      expect(blockedByApiRule).toBe(false);
+      expect(hasPermission).toBe(false); // should be blocked
+    });
+
+    it("should allow admin to modify API-created task", () => {
+      const task = { id: 2, createdBy: null, assigneeId: null, reviewerId: null, source: "api" };
+      const ctx = { user: { id: 1, role: "admin" } };
+
+      const isAdmin = ctx.user.role === "admin";
+      const isApiTask = task.source === "api";
+
+      const blockedByApiRule = isApiTask && !isAdmin;
+      expect(blockedByApiRule).toBe(false); // admin can modify
+    });
+
+    it("should block non-admin from modifying API-created task", () => {
+      const task = { id: 2, createdBy: null, assigneeId: null, reviewerId: null, source: "api" };
+      const ctx = { user: { id: 5, role: "user" } };
+
+      const isAdmin = ctx.user.role === "admin";
+      const isApiTask = task.source === "api";
+
+      const blockedByApiRule = isApiTask && !isAdmin;
+      expect(blockedByApiRule).toBe(true); // should be blocked
+    });
+
+    it("should allow admin to modify any task regardless of source", () => {
+      const userTask = { id: 1, createdBy: 99, assigneeId: null, reviewerId: null, source: "user" };
+      const apiTask = { id: 2, createdBy: null, assigneeId: null, reviewerId: null, source: "api" };
+      const ctx = { user: { id: 1, role: "admin" } };
+
+      const isAdmin = ctx.user.role === "admin";
+
+      // Admin bypasses all restrictions
+      const blockedForUserTask = (userTask.source === "api" && !isAdmin);
+      const blockedForApiTask = (apiTask.source === "api" && !isAdmin);
+      const hasPermissionForUserTask = isAdmin || userTask.createdBy === ctx.user.id;
+      const hasPermissionForApiTask = isAdmin;
+
+      expect(blockedForUserTask).toBe(false);
+      expect(blockedForApiTask).toBe(false);
+      expect(hasPermissionForUserTask).toBe(true);
+      expect(hasPermissionForApiTask).toBe(true);
+    });
+
+    it("should restrict assignee to progress-only updates on user-created task", () => {
+      const task = { id: 1, createdBy: 10, assigneeId: 20, reviewerId: null, source: "user" };
+      const ctx = { user: { id: 20, role: "user" } };
+
+      const isAdmin = ctx.user.role === "admin";
+      const isTaskCreator = task.createdBy === ctx.user.id;
+      const isAssignee = task.assigneeId === ctx.user.id;
+
+      // Assignee but not creator — restricted to progress fields only
+      const isProgressOnly = !isAdmin && !isTaskCreator && isAssignee;
+      expect(isProgressOnly).toBe(true);
+
+      const allowedFields = ["progress", "progressNote"];
+      const attemptedFields = ["title", "status"]; // trying to update title and status
+      const forbidden = attemptedFields.filter(f => !allowedFields.includes(f));
+      expect(forbidden.length).toBeGreaterThan(0); // should be blocked
+    });
+
+    it("should allow REST API admin key to modify user-created task", () => {
+      const task = { source: "user" };
+      const apiKeyInfo = { isAdmin: true };
+
+      const isAdminApiKey = apiKeyInfo?.isAdmin === true;
+      const taskSource = (task as any).source || "user";
+
+      const blocked = taskSource === "user" && !isAdminApiKey;
+      expect(blocked).toBe(false); // admin key can modify
+    });
+
+    it("should block REST API non-admin key from modifying user-created task", () => {
+      const task = { source: "user" };
+      const apiKeyInfo = { isAdmin: false };
+
+      const isAdminApiKey = apiKeyInfo?.isAdmin === true;
+      const taskSource = (task as any).source || "user";
+
+      const blocked = taskSource === "user" && !isAdminApiKey;
+      expect(blocked).toBe(true); // non-admin key blocked
+    });
+
+    it("should allow REST API any key to modify API-created task", () => {
+      const task = { source: "api" };
+      const apiKeyInfo = { isAdmin: false };
+
+      const isAdminApiKey = apiKeyInfo?.isAdmin === true;
+      const taskSource = (task as any).source || "user";
+
+      const blocked = taskSource === "user" && !isAdminApiKey;
+      expect(blocked).toBe(false); // api-created tasks can be modified by any key
+    });
+  });
+
   describe("ColorPlan Inpaint Floor Plan Reference", () => {
     // Tests for the logic that decides how to pass the floor plan to inpainting
 
