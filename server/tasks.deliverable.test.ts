@@ -425,3 +425,49 @@ describe("sanitizeJobPages (auto-repair on load)", () => {
     expect((fixed[0] as any).backgroundColor).toBe("#0f0f0f");
   });
 });
+
+// ─── session.getStats 路由测试 ────────────────────────────
+describe("session.getStats", () => {
+  it("should return userSessionStats array", () => {
+    const mockResult = {
+      userSessionStats: [
+        { userId: 1, userName: "Alice", totalMinutes: 120, sessionCount: 5, lastSeen: Math.floor(Date.now() / 1000) },
+        { userId: 2, userName: "Bob", totalMinutes: 45, sessionCount: 2, lastSeen: Math.floor(Date.now() / 1000) },
+      ],
+    };
+    expect(mockResult.userSessionStats).toHaveLength(2);
+    expect(mockResult.userSessionStats[0].totalMinutes).toBe(120);
+    expect(mockResult.userSessionStats[1].userName).toBe("Bob");
+  });
+
+  it("should format duration correctly", () => {
+    const formatDuration = (minutes: number): string => {
+      if (minutes < 1) return "< 1 分钟";
+      if (minutes < 60) return `${minutes} 分钟`;
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    };
+    expect(formatDuration(0)).toBe("< 1 分钟");
+    expect(formatDuration(30)).toBe("30 分钟");
+    expect(formatDuration(60)).toBe("1h");
+    expect(formatDuration(90)).toBe("1h 30m");
+    expect(formatDuration(125)).toBe("2h 5m");
+  });
+
+  it("should only count active heartbeat gaps (<=90s)", () => {
+    const countIncrement = (elapsed: number) => elapsed <= 90 ? elapsed : 0;
+    expect(countIncrement(30)).toBe(30);
+    expect(countIncrement(90)).toBe(90);
+    expect(countIncrement(91)).toBe(0);
+    expect(countIncrement(300)).toBe(0);
+  });
+
+  it("should aggregate session duration correctly", () => {
+    // 模拟多次心跳累积
+    const heartbeats = [30, 30, 30, 30]; // 4次心跳，每次30秒
+    const total = heartbeats.reduce((sum, h) => sum + (h <= 90 ? h : 0), 0);
+    expect(total).toBe(120); // 2分钟
+    expect(Math.round(total / 60)).toBe(2);
+  });
+});

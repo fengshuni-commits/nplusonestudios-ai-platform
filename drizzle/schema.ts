@@ -772,3 +772,15 @@ export const taskDeliverableHistory = mysqlTable("task_deliverable_history", {
 });
 export type TaskDeliverableHistory = typeof taskDeliverableHistory.$inferSelect;
 export type InsertTaskDeliverableHistory = typeof taskDeliverableHistory.$inferInsert;
+
+// ─── User Sessions (platform usage time tracking) ────────────────────────────
+export const userSessions = mysqlTable("user_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  // Unix timestamp in seconds (int is sufficient for dates up to 2038)
+  sessionStart: int("session_start").notNull(),
+  lastHeartbeat: int("last_heartbeat").notNull(),
+  durationSeconds: int("duration_seconds").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type UserSession = typeof userSessions.$inferSelect;

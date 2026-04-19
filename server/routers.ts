@@ -1945,6 +1945,130 @@ const aiToolsRouter = router({
       const userActionStats = await db.getAiToolStatsByUserAndAction(days);
       return { userStats, userActionStats };
     }),
+
+  getSessionStats: adminProcedure
+    .input(z.object({
+      days: z.number().min(1).max(90).default(30),
+    }))
+    .query(async ({ input }) => {
+      const { days } = input;
+      const since = Math.floor(Date.now() / 1000) - days * 86400;
+      const { sql: drizzleSql, inArray: drizzleInArray } = await import('drizzle-orm');
+      const { userSessions, users: usersTable } = await import('../drizzle/schema');
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return { sessionStats: [], totalSeconds: 0 };
+
+      const rows = await drizzleDb
+        .select({
+          userId: userSessions.userId,
+          totalSeconds: drizzleSql<number>`SUM(${userSessions.durationSeconds})`,
+          sessionCount: drizzleSql<number>`COUNT(*)`,
+          lastSeen: drizzleSql<number>`MAX(${userSessions.lastHeartbeat})`,
+        })
+        .from(userSessions)
+        .where(drizzleSql`${userSessions.sessionStart} >= ${since}`)
+        .groupBy(userSessions.userId)
+        .orderBy(drizzleSql`SUM(${userSessions.durationSeconds}) DESC`);
+
+      // Attach user info
+      const userIds = rows.map((r: any) => r.userId);
+      const userRows = userIds.length > 0
+        ? await drizzleDb.select({ id: usersTable.id, name: usersTable.name, department: usersTable.department })
+            .from(usersTable)
+            .where(drizzleInArray(usersTable.id, userIds))
+        : [];
+      const userMap = new Map(userRows.map((u: any) => [u.id, u]));
+
+      const totalSeconds = rows.reduce((s: number, r: any) => s + Number(r.totalSeconds), 0);
+
+      return {
+        sessionStats: rows.map((r: any) => ({
+          userId: r.userId,
+          userName: (userMap.get(r.userId) as any)?.name ?? null,
+          department: (userMap.get(r.userId) as any)?.department ?? null,
+          totalSeconds: Number(r.totalSeconds),
+          totalMinutes: Math.round(Number(r.totalSeconds) / 60),
+          sessionCount: Number(r.sessionCount),
+          lastSeen: r.lastSeen ? new Date(Number(r.lastSeen) * 1000).toISOString() : null,
+        })),
+        totalSeconds,
+      };
+    }),
+});
+
+// ─── Session Router ───────────────────────────────────────
+const sessionRouter = router({
+  start: protectedProcedure.mutation(async ({ ctx }) => {
+    const now = Math.floor(Date.now() / 1000);
+    const { userSessions } = await import('../drizzle/schema');
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+    const result = await drizzleDb.insert(userSessions).values({
+      userId: ctx.user.id,
+      sessionStart: now,
+      lastHeartbeat: now,
+      durationSeconds: 0,
+    });
+    return { sessionId: Number((result as any).insertId) };
+  }),
+
+  heartbeat: protectedProcedure
+    .input(z.object({ sessionId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const now = Math.floor(Date.now() / 1000);
+      const { eq, and } = await import('drizzle-orm');
+      const { userSessions } = await import('../drizzle/schema');
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return { ok: false };
+      // Fetch current session
+      const [session] = await drizzleDb
+        .select()
+        .from(userSessions)
+        .where(
+          and(
+            eq(userSessions.id, input.sessionId),
+            eq(userSessions.userId, ctx.user.id)
+          )
+        )
+        .limit(1);
+      if (!session) return { ok: false };
+      const elapsed = now - session.lastHeartbeat;
+      // Only count gaps <= 90s (2 heartbeat intervals) as active time
+      const increment = elapsed <= 90 ? elapsed : 0;
+      await drizzleDb
+        .update(userSessions)
+        .set({
+          lastHeartbeat: now,
+          durationSeconds: session.durationSeconds + increment,
+        })
+        .where(eq(userSessions.id, input.sessionId));
+      return { ok: true };
+    }),
+
+  getStats: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(365).default(30) }))
+    .query(async ({ input }) => {
+      const { userSessions } = await import('../drizzle/schema');
+      const { users } = await import('../drizzle/schema');
+      const { gte, eq, sql } = await import('drizzle-orm');
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return { userSessionStats: [] };
+      const since = Math.floor(Date.now() / 1000) - input.days * 86400;
+      const rows = await drizzleDb
+        .select({
+          userId: userSessions.userId,
+          userName: users.name,
+          totalMinutes: sql<number>`ROUND(SUM(${userSessions.durationSeconds}) / 60)`,
+          sessionCount: sql<number>`COUNT(*)`,
+          lastSeen: sql<number>`MAX(${userSessions.lastHeartbeat})`,
+        })
+        .from(userSessions)
+        .leftJoin(users, eq(users.id, userSessions.userId))
+        .where(gte(userSessions.sessionStart, since))
+        .groupBy(userSessions.userId, users.name)
+        .orderBy(sql`SUM(${userSessions.durationSeconds}) DESC`);
+      return { userSessionStats: rows };
+    }),
 });
 
 // ─── AI Module: Benchmarking Research ────────────────────
@@ -6562,6 +6686,7 @@ export const appRouter = router({system: systemRouter,
       }),
   }),
   analysisImage: analysisImageRouter,
+  session: sessionRouter,
 });
 export type AppRouter = typeof appRouter;
 

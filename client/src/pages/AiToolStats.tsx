@@ -408,9 +408,19 @@ function UserDetailRow({
   );
 }
 
+// 格式化时长（分钟 → 小时/分钟）
+function formatDuration(minutes: number): string {
+  if (minutes < 1) return "< 1 分钟";
+  if (minutes < 60) return `${minutes} 分钟`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 // ── 按成员视图 ──
 function UserStatsView({ days }: { days: number }) {
   const { data, isLoading } = trpc.aiTools.getStatsByUser.useQuery({ days });
+  const { data: sessionData } = trpc.session.getStats.useQuery({ days });
   const [expandedUsers, setExpandedUsers] = useState<Set<number>>(new Set());
 
   const userStats = useMemo(() => {
@@ -423,6 +433,32 @@ function UserStatsView({ days }: { days: number }) {
       avgDurationMs: u.avgDurationMs ? Number(u.avgDurationMs) : null,
     }));
   }, [data?.userStats]);
+
+  // 按用户 id 建立 session 时长映射
+  const sessionMap = useMemo(() => {
+    const map = new Map<number, { totalMinutes: number; sessionCount: number; lastSeen: number }>();
+    if (sessionData?.userSessionStats) {
+      for (const s of sessionData.userSessionStats) {
+        map.set(s.userId, {
+          totalMinutes: Number(s.totalMinutes) || 0,
+          sessionCount: Number(s.sessionCount) || 0,
+          lastSeen: Number(s.lastSeen) || 0,
+        });
+      }
+    }
+    return map;
+  }, [sessionData?.userSessionStats]);
+
+  // 使用时长图表数据
+  const sessionChartData = useMemo(() => {
+    if (!sessionData?.userSessionStats?.length) return [];
+    return sessionData.userSessionStats.slice(0, 8).map((s, idx) => ({
+      name: s.userName || `用户 #${s.userId}`,
+      totalMinutes: Number(s.totalMinutes) || 0,
+      sessionCount: Number(s.sessionCount) || 0,
+      color: USER_COLORS[idx % USER_COLORS.length],
+    }));
+  }, [sessionData?.userSessionStats]);
 
   // 按成员分组的操作统计
   type UserActionRow = NonNullable<typeof data>["userActionStats"][number];
@@ -497,6 +533,36 @@ function UserStatsView({ days }: { days: number }) {
         </CardContent>
       </Card>
 
+      {/* 成员使用时长图表 */}
+      {sessionChartData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium flex items-center gap-2">
+              <Clock className="h-4 w-4" />成员使用时长对比
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={Math.max(180, sessionChartData.length * 40)}>
+              <BarChart data={sessionChartData} layout="vertical" margin={{ top: 5, right: 60, left: 80, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} allowDecimals={false}
+                  tickFormatter={(v) => v >= 60 ? `${Math.floor(v/60)}h` : `${v}m`} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={80} />
+                <Tooltip
+                  contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "6px", fontSize: 12 }}
+                  formatter={(value: number) => [formatDuration(value), "使用时长"]}
+                />
+                <Bar dataKey="totalMinutes" name="使用时长" radius={[0,3,3,0]}>
+                  {sessionChartData.map((entry, idx) => (
+                    <Cell key={`cell-${idx}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
       {/* 成员详细列表（可展开） */}
       <Card>
         <CardHeader className="pb-3">
@@ -517,6 +583,7 @@ function UserStatsView({ days }: { days: number }) {
                   <th className="text-right py-2.5 px-3 font-medium hidden sm:table-cell">失败</th>
                   <th className="py-2.5 px-3 font-medium" style={{ minWidth: 120 }}>成功率</th>
                   <th className="text-right py-2.5 px-3 font-medium hidden md:table-cell">占比</th>
+                  <th className="text-right py-2.5 px-3 font-medium hidden lg:table-cell">使用时长</th>
                   <th className="text-right py-2.5 px-3 font-medium hidden md:table-cell">最近使用</th>
                   <th className="py-2.5 px-4 w-8" />
                 </tr>
@@ -574,6 +641,14 @@ function UserStatsView({ days }: { days: number }) {
                         </td>
                         <td className="text-right py-3 px-3 hidden md:table-cell">
                           <span className="text-xs text-muted-foreground font-mono">{share}%</span>
+                        </td>
+                        <td className="text-right py-3 px-3 hidden lg:table-cell">
+                          {(() => {
+                            const sess = sessionMap.get(user.userId);
+                            return sess && sess.totalMinutes > 0
+                              ? <span className="text-xs font-mono text-blue-600">{formatDuration(sess.totalMinutes)}</span>
+                              : <span className="text-xs text-muted-foreground">—</span>;
+                          })()}
                         </td>
                         <td className="text-right py-3 px-3 hidden md:table-cell">
                           <span className="text-xs text-muted-foreground">

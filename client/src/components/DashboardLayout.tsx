@@ -46,6 +46,7 @@ import {
   Layers,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
+import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { HelpGuide } from "./HelpGuide";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -196,6 +197,8 @@ export default function DashboardLayout({
 function IconSidebarLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  // Track session time for usage statistics
+  useSessionTracker();
   const isAdmin = user?.role === "admin";
   const [expanded, setExpanded] = useState(() => {
     try {

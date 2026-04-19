@@ -1811,3 +1811,11 @@
 ## 图文排版历史记录自动修复重复 textBlock id
 - [x] 后端 graphicLayout.status 路由：加载时检测并修复重复/空 id，有修复时写回数据库
 - [x] 提取 sanitizeTextBlocks 为共享工具函数，供 graphicLayoutService 和 status 路由复用
+
+## 调用统计增加成员使用时间统计
+- [x] 数据库：新建 user_sessions 表（userId, sessionStart, lastHeartbeat, durationSeconds）
+- [x] 后端：session.start / session.heartbeat / aiTools.getSessionStats 路由
+- [x] 前端：全局心跳上报 hook（登录后每 30 秒）
+- [x] 前端：「按成员」Tab 表格增加「使用时长」列
+- [x] 前端：新增「成员使用时长」柱状图
+- [ ] 前端：顶部汇总卡片增加「总使用时长」指标（可选后续改进）
