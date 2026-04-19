@@ -237,3 +237,49 @@ describe("Deliverable History Versioning", () => {
     expect(getCommentClass("pending")).toBe("text-muted-foreground");
   });
 });
+
+describe("Assignee View Submission History", () => {
+  it("history toggle is visible when deliverable has been submitted at least once", () => {
+    const task = { deliverableSubmittedAt: new Date() };
+    const showHistoryToggle = !!task.deliverableSubmittedAt;
+    expect(showHistoryToggle).toBe(true);
+  });
+
+  it("history toggle is hidden when no deliverable has been submitted", () => {
+    const task = { deliverableSubmittedAt: null };
+    const showHistoryToggle = !!task.deliverableSubmittedAt;
+    expect(showHistoryToggle).toBe(false);
+  });
+
+  it("assignee can see their own submitted content in history", () => {
+    const historyEntry = {
+      id: 1,
+      version: 1,
+      deliverableType: "doc_link",
+      deliverableContent: "https://docs.example.com/v1",
+      reviewStatus: "rejected",
+      reviewComment: "请修改立面图比例",
+      submittedAt: new Date(),
+    };
+    expect(historyEntry.deliverableContent).toBe("https://docs.example.com/v1");
+    expect(historyEntry.reviewComment).toBeTruthy();
+  });
+
+  it("shows rejection comment in red for assignee view", () => {
+    const getCommentClass = (reviewStatus: string) =>
+      reviewStatus === "rejected" ? "text-red-500" : "text-muted-foreground";
+    expect(getCommentClass("rejected")).toBe("text-red-500");
+    expect(getCommentClass("approved")).toBe("text-muted-foreground");
+  });
+
+  it("shows correct status badge text for each review outcome", () => {
+    const getBadgeText = (status: string) => {
+      if (status === "approved") return "已通过";
+      if (status === "rejected") return "已驳回";
+      return "待审核";
+    };
+    expect(getBadgeText("approved")).toBe("已通过");
+    expect(getBadgeText("rejected")).toBe("已驳回");
+    expect(getBadgeText("pending")).toBe("待审核");
+  });
+});

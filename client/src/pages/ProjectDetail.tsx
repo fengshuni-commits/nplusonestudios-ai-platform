@@ -2127,6 +2127,57 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                     {selectedTask.progressNote && (
                       <p className="text-xs text-muted-foreground">上次说明：{selectedTask.progressNote}</p>
                     )}
+                    {/* Assignee: view submission history */}
+                    {(selectedTask as any).deliverableSubmittedAt && (
+                      <div>
+                        <button
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setShowDeliverableHistory(v => !v)}
+                        >
+                          {showDeliverableHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          查看提交历史
+                        </button>
+                        {showDeliverableHistory && (
+                          <div className="mt-1.5 space-y-1.5 max-h-56 overflow-y-auto">
+                            {deliverableHistory.isLoading ? (
+                              <p className="text-xs text-muted-foreground">加载中...</p>
+                            ) : (deliverableHistory.data ?? []).length === 0 ? (
+                              <p className="text-xs text-muted-foreground">暂无历史记录</p>
+                            ) : (deliverableHistory.data ?? []).map((h: any) => (
+                              <div key={h.id} className="rounded border bg-muted/30 p-2 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium">第 {h.version} 次提交</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {h.reviewStatus === 'approved' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">已通过</span>}
+                                    {h.reviewStatus === 'rejected' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">已驳回</span>}
+                                    {h.reviewStatus === 'pending' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400">待审核</span>}
+                                    <span className="text-[10px] text-muted-foreground">{new Date(h.submittedAt).toLocaleDateString()}</span>
+                                  </div>
+                                </div>
+                                {h.deliverableType === 'upload' && h.deliverableFileUrl ? (
+                                  <a href={h.deliverableFileUrl} target="_blank" rel="noopener noreferrer"
+                                    className="text-xs text-primary underline flex items-center gap-1">
+                                    <ExternalLink className="h-3 w-3" />{h.deliverableFileName || '下载文件'}
+                                  </a>
+                                ) : h.deliverableType === 'doc_link' ? (
+                                  <a href={h.deliverableContent} target="_blank" rel="noopener noreferrer"
+                                    className="text-xs text-primary underline flex items-center gap-1">
+                                    <ExternalLink className="h-3 w-3" />{h.deliverableContent}
+                                  </a>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground break-all">{h.deliverableContent}</p>
+                                )}
+                                {h.reviewComment && (
+                                  <p className={`text-xs ${h.reviewStatus === 'rejected' ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                    审核批注：{h.reviewComment}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
