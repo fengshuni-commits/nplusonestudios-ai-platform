@@ -1784,3 +1784,11 @@
 - [x] invokeLLM fetch 加 3 分钟超时，防止 socket 挂起
 - [x] graphicLayoutService 加页面级重试（超时时自动重试一次）
 - [x] 多页生成加页面级错误隔离（某页失败不影响其他页）
+
+## 任务成果提交与审核功能
+- [x] tasks 表加成果提交字段（deliverableType/Content/FileUrl/SubmittedAt/reviewComment/reviewStatus）
+- [x] 后端 tasks.submitDeliverable 路由（进度=100时才允许）
+- [x] 后端 tasks.reviewDeliverable 路由（审核人通过/驳回+批注）
+- [x] 前端：进度100%时弹出成果提交弹窗（文件位置/链接/上传三种方式）
+- [x] 前端：审核人面板展示成果内容+通过/驳回+批注
+- [x] 前端：负责人可看到审核结果和批注

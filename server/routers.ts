@@ -1117,11 +1117,85 @@ const tasksRouter = router({
       await drizzleDb.update(tasks).set({
         approval: true,
         status: 'done',
+         updatedAt: new Date(),
+      }).where(eq(tasks.id, input.id));
+      return { success: true };
+    }),
+  // Submit deliverable when progress reaches 100%
+  submitDeliverable: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      deliverableType: z.enum(["file_location", "doc_link", "upload"]),
+      deliverableContent: z.string().optional(),
+      deliverableFileUrl: z.string().optional(),
+      deliverableFileName: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      if (task.assigneeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "只有任务负责人可以提交成果" });
+      }
+      if (!input.deliverableContent && !input.deliverableFileUrl) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "请填写文件存储位置、文档链接或上传完成文件" });
+      }
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { eq } = await import('drizzle-orm');
+      const { tasks } = await import('../drizzle/schema');
+      await drizzleDb.update(tasks).set({
+        progress: 100,
+        deliverableType: input.deliverableType,
+        deliverableContent: input.deliverableContent ?? null,
+        deliverableFileUrl: input.deliverableFileUrl ?? null,
+        deliverableFileName: input.deliverableFileName ?? null,
+        deliverableSubmittedAt: new Date(),
+        reviewStatus: 'pending',
+        reviewComment: null,
+        status: 'review',
         updatedAt: new Date(),
       }).where(eq(tasks.id, input.id));
       return { success: true };
     }),
-
+  // Reviewer approves or rejects deliverable
+  reviewDeliverable: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      approved: z.boolean(),
+      comment: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      if (task.reviewerId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "只有任务审核人可以审核成果" });
+      }
+      if (!(task as any).deliverableSubmittedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "任务尚未提交成果" });
+      }
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { eq } = await import('drizzle-orm');
+      const { tasks } = await import('../drizzle/schema');
+      if (input.approved) {
+        await drizzleDb.update(tasks).set({
+          reviewStatus: 'approved',
+          reviewComment: input.comment ?? null,
+          approval: true,
+          status: 'done',
+          updatedAt: new Date(),
+        }).where(eq(tasks.id, input.id));
+      } else {
+        await drizzleDb.update(tasks).set({
+          reviewStatus: 'rejected',
+          reviewComment: input.comment ?? null,
+          status: 'in_progress',
+          progress: 90,
+          updatedAt: new Date(),
+        }).where(eq(tasks.id, input.id));
+      }
+      return { success: true };
+    }),
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {

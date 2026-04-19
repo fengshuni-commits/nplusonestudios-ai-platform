@@ -1578,6 +1578,44 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const [progressDraft, setProgressDraft] = useState<number | null>(null);
   const [progressNoteDraft, setProgressNoteDraft] = useState("");
 
+  // ─── Deliverable submission state ───────────────────────
+  const [deliverableModalOpen, setDeliverableModalOpen] = useState(false);
+  const [deliverableType, setDeliverableType] = useState<"file_location" | "doc_link" | "upload">("file_location");
+  const [deliverableContent, setDeliverableContent] = useState("");
+  const [deliverableFile, setDeliverableFile] = useState<File | null>(null);
+  const [deliverableUploading, setDeliverableUploading] = useState(false);
+  const [reviewComment, setReviewComment] = useState("");
+
+  const submitDeliverable = trpc.tasks.submitDeliverable.useMutation({
+    onSuccess: () => {
+      utils.tasks.listByProject.invalidate({ projectId });
+      toast.success("成果已提交，等待审核");
+      setDeliverableModalOpen(false);
+      setDeliverableContent("");
+      setDeliverableFile(null);
+      if (selectedTask) setSelectedTask({ ...selectedTask, reviewStatus: 'pending', status: 'review', progress: 100 } as any);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const reviewDeliverable = trpc.tasks.reviewDeliverable.useMutation({
+    onSuccess: (_, vars) => {
+      utils.tasks.listByProject.invalidate({ projectId });
+      toast.success(vars.approved ? "已通过审核" : "已驳回，已通知负责人修改");
+      setReviewComment("");
+      if (selectedTask) {
+        setSelectedTask({ ...selectedTask,
+          reviewStatus: vars.approved ? 'approved' : 'rejected',
+          reviewComment: vars.comment ?? null,
+          status: vars.approved ? 'done' : 'in_progress',
+          approval: vars.approved,
+          progress: vars.approved ? 100 : 90,
+        } as any);
+      }
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const createSubTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
       if (selectedTask) utils.tasks.listSubTasks.invalidate({ parentId: selectedTask.id });
@@ -2034,25 +2072,53 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                       value={progressNoteDraft}
                       onChange={(e) => setProgressNoteDraft(e.target.value)}
                     />
-                    <button
-                      className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-                      disabled={submitProgress.isPending}
-                      onClick={() => {
-                        submitProgress.mutate({
-                          id: selectedTask.id,
-                          progress: progressDraft ?? selectedTask.progress ?? 0,
-                          progressNote: progressNoteDraft || undefined,
-                        }, {
-                          onSuccess: () => {
-                            setSelectedTask({ ...selectedTask, progress: progressDraft ?? selectedTask.progress ?? 0 });
-                            setProgressDraft(null);
-                            setProgressNoteDraft("");
-                          }
-                        });
-                      }}
-                    >
-                      {submitProgress.isPending ? "提交中..." : "提交进度"}
-                    </button>
+                    {(progressDraft ?? selectedTask.progress ?? 0) === 100 ? (
+                      <button
+                        className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                        onClick={() => setDeliverableModalOpen(true)}
+                      >
+                        📎 提交成果
+                      </button>
+                    ) : (
+                      <button
+                        className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                        disabled={submitProgress.isPending}
+                        onClick={() => {
+                          submitProgress.mutate({
+                            id: selectedTask.id,
+                            progress: progressDraft ?? selectedTask.progress ?? 0,
+                            progressNote: progressNoteDraft || undefined,
+                          }, {
+                            onSuccess: () => {
+                              setSelectedTask({ ...selectedTask, progress: progressDraft ?? selectedTask.progress ?? 0 });
+                              setProgressDraft(null);
+                              setProgressNoteDraft("");
+                            }
+                          });
+                        }}
+                      >
+                        {submitProgress.isPending ? "提交中..." : "提交进度"}
+                      </button>
+                    )}
+                    {/* Show deliverable status for assignee */}
+                    {(selectedTask as any).reviewStatus === 'rejected' && (
+                      <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30 p-2 space-y-1">
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">⚠ 成果被驳回，请修改后重新提交</p>
+                        {(selectedTask as any).reviewComment && (
+                          <p className="text-xs text-red-500">{(selectedTask as any).reviewComment}</p>
+                        )}
+                        <button
+                          className="text-xs text-primary underline"
+                          onClick={() => setDeliverableModalOpen(true)}
+                        >重新提交成果</button>
+                      </div>
+                    )}
+                    {(selectedTask as any).reviewStatus === 'pending' && (selectedTask as any).deliverableSubmittedAt && (
+                      <p className="text-xs text-muted-foreground">✓ 成果已提交，等待审核人审核</p>
+                    )}
+                    {(selectedTask as any).reviewStatus === 'approved' && (
+                      <p className="text-xs text-green-600">✓ 成果已通过审核</p>
+                    )}
                     {selectedTask.progressNote && (
                       <p className="text-xs text-muted-foreground">上次说明：{selectedTask.progressNote}</p>
                     )}
@@ -2080,28 +2146,59 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                   </div>
                 )}
 
-                {/* Approve button — visible only to reviewer when task is not yet done */}
+                {/* Reviewer panel — visible only to reviewer */}
                 {selectedTask.reviewerId === currentUser?.id && selectedTask.status !== 'done' && (
                   <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <div className="h-2 w-2 rounded-full bg-green-500" />
                       <span className="text-xs font-semibold text-green-700 dark:text-green-400">审核人操作</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">确认任务已按要求完成，点击下方按钮将自动通过审核并标记任务为已完成。</p>
-                    <button
-                      className="w-full h-8 rounded-md bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                      disabled={approveTask.isPending}
-                      onClick={() => {
-                        approveTask.mutate({ id: selectedTask.id }, {
-                          onSuccess: () => {
-                            setSelectedTask({ ...selectedTask, status: 'done', approval: true });
-                            toast.success('审核已通过，任务已标记为已完成');
-                          },
-                        });
-                      }}
-                    >
-                      {approveTask.isPending ? '处理中...' : '✓ 通过审核'}
-                    </button>
+                    {/* Show submitted deliverable */}
+                    {(selectedTask as any).deliverableSubmittedAt ? (
+                      <div className="rounded-md border bg-background p-2 space-y-1">
+                        <p className="text-xs font-medium">负责人提交的成果：</p>
+                        {(selectedTask as any).deliverableType === 'upload' && (selectedTask as any).deliverableFileUrl ? (
+                          <a href={(selectedTask as any).deliverableFileUrl} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-primary underline flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            {(selectedTask as any).deliverableFileName || '下载文件'}
+                          </a>
+                        ) : (selectedTask as any).deliverableType === 'doc_link' ? (
+                          <a href={(selectedTask as any).deliverableContent} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-primary underline flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            {(selectedTask as any).deliverableContent}
+                          </a>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">{(selectedTask as any).deliverableContent}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">负责人尚未提交成果</p>
+                    )}
+                    {/* Review comment */}
+                    <textarea
+                      className="w-full text-xs rounded-md border bg-background px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                      rows={2}
+                      placeholder="批注修改要求（可选）"
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        className="flex-1 h-8 rounded-md bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                        disabled={reviewDeliverable.isPending || !(selectedTask as any).deliverableSubmittedAt}
+                        onClick={() => reviewDeliverable.mutate({ id: selectedTask.id, approved: true, comment: reviewComment || undefined })}
+                      >✓ 通过</button>
+                      <button
+                        className="flex-1 h-8 rounded-md bg-red-500 text-white text-xs font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                        disabled={reviewDeliverable.isPending || !(selectedTask as any).deliverableSubmittedAt}
+                        onClick={() => {
+                          if (!reviewComment.trim()) { toast.error('驳回时请填写修改要求'); return; }
+                          reviewDeliverable.mutate({ id: selectedTask.id, approved: false, comment: reviewComment });
+                        }}
+                      >✕ 驳回</button>
+                    </div>
                   </div>
                 )}
 
@@ -2179,6 +2276,139 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Deliverable Submission Modal */}
+      <Dialog open={deliverableModalOpen} onOpenChange={(open) => { setDeliverableModalOpen(open); if (!open) { setDeliverableContent(""); setDeliverableFile(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>提交任务成果</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">请提供完成的任务成果，审核人将根据此进行审核。</p>
+            {/* Type selector */}
+            <div className="space-y-1">
+              <Label className="text-xs">成果类型</Label>
+              <div className="flex gap-2">
+                {([['file_location', '📂 文件存储位置'], ['doc_link', '🔗 文档链接'], ['upload', '⬆ 上传文件']] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    className={`flex-1 h-8 rounded-md text-xs border transition-colors ${
+                      deliverableType === val
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background border-border hover:bg-muted'
+                    }`}
+                    onClick={() => setDeliverableType(val)}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            {/* Content input based on type */}
+            {deliverableType === 'file_location' && (
+              <div className="space-y-1">
+                <Label className="text-xs">文件存储位置</Label>
+                <textarea
+                  className="w-full text-sm rounded-md border bg-background px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  rows={3}
+                  placeholder="输入文件存储路径或位置说明，例如：OneDrive/项目/XXX/最终成果.dwg"
+                  value={deliverableContent}
+                  onChange={(e) => setDeliverableContent(e.target.value)}
+                />
+              </div>
+            )}
+            {deliverableType === 'doc_link' && (
+              <div className="space-y-1">
+                <Label className="text-xs">文档链接</Label>
+                <input
+                  type="url"
+                  className="w-full text-sm rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="https://..."
+                  value={deliverableContent}
+                  onChange={(e) => setDeliverableContent(e.target.value)}
+                />
+              </div>
+            )}
+            {deliverableType === 'upload' && (
+              <div className="space-y-2">
+                <Label className="text-xs">上传文件</Label>
+                <div
+                  className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => document.getElementById('deliverable-file-input')?.click()}
+                >
+                  {deliverableFile ? (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{deliverableFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{(deliverableFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">点击选择文件</p>
+                    </div>
+                  )}
+                </div>
+                <input
+                  id="deliverable-file-input"
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => setDeliverableFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            )}
+            {/* Submit button */}
+            <button
+              className="w-full h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={deliverableUploading || submitDeliverable.isPending ||
+                (deliverableType !== 'upload' && !deliverableContent.trim()) ||
+                (deliverableType === 'upload' && !deliverableFile)
+              }
+              onClick={async () => {
+                if (!selectedTask) return;
+                if (deliverableType === 'upload' && deliverableFile) {
+                  setDeliverableUploading(true);
+                  try {
+                    const arrayBuffer = await deliverableFile.arrayBuffer();
+                    const uint8 = new Uint8Array(arrayBuffer);
+                    let binary = "";
+                    for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+                    const base64 = btoa(binary);
+                    // Upload via documents.uploadFile to S3
+                    const result = await utils.client.documents.uploadFile.mutate({
+                      projectId,
+                      title: deliverableFile.name.replace(/\.[^.]+$/, ""),
+                      fileName: deliverableFile.name,
+                      fileData: base64,
+                      contentType: deliverableFile.type || 'application/octet-stream',
+                      fileSize: deliverableFile.size,
+                      type: 'other',
+                      category: 'design',
+                    });
+                    submitDeliverable.mutate({
+                      id: selectedTask.id,
+                      deliverableType: 'upload',
+                      deliverableFileUrl: result.url,
+                      deliverableFileName: deliverableFile.name,
+                    });
+                  } catch {
+                    toast.error('文件上传失败');
+                  } finally {
+                    setDeliverableUploading(false);
+                  }
+                } else {
+                  submitDeliverable.mutate({
+                    id: selectedTask.id,
+                    deliverableType,
+                    deliverableContent: deliverableContent.trim(),
+                  });
+                }
+              }}
+            >
+              {(deliverableUploading || submitDeliverable.isPending) ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />提交中...</>
+              ) : '确认提交'}
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -103,6 +103,15 @@ export const tasks = mysqlTable("tasks", {
   createdBy: int("createdBy"),
   approval: boolean("approval").default(false).notNull(),
   source: mysqlEnum("source", ["user", "api"]).default("user").notNull(),
+  // Deliverable submission fields
+  deliverableType: mysqlEnum("deliverableType", ["file_location", "doc_link", "upload"]),
+  deliverableContent: text("deliverableContent"),
+  deliverableFileUrl: text("deliverableFileUrl"),
+  deliverableFileName: varchar("deliverableFileName", { length: 512 }),
+  deliverableSubmittedAt: timestamp("deliverableSubmittedAt"),
+  // Review fields
+  reviewStatus: mysqlEnum("reviewStatus", ["pending", "approved", "rejected"]),
+  reviewComment: text("reviewComment"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
