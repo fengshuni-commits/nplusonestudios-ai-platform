@@ -568,7 +568,7 @@ export default function DesignTools() {
               <h1 className="text-2xl font-semibold tracking-tight">AI效果图</h1>
               <p className="text-sm text-muted-foreground mt-1">AI 渲染与草图生成，支持图生图迭代与局部调整</p>
             </div>
-            <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" />
+            <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
           </div>
 
           <div className="grid lg:grid-cols-5 gap-6">

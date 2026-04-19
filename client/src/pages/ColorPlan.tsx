@@ -801,6 +801,7 @@ export default function ColorPlan() {
             value={toolId}
             onChange={setToolId}
             label="AI 工具"
+            showBuiltIn={false}
           />
         </div>
       </div>

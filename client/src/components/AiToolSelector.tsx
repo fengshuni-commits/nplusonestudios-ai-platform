@@ -77,7 +77,10 @@ export function AiToolSelector({ category, capability, value, onChange, label, s
     onChange(id === BUILTIN_TOOL_ID ? undefined : id);
   };
 
-  const currentValue = selectedValue?.toString() || BUILTIN_TOOL_ID.toString();
+  // showBuiltIn=false 时，没有选中工具就显示 placeholder（空字符串）
+  const currentValue = selectedValue !== undefined
+    ? selectedValue.toString()
+    : (showBuiltIn ? BUILTIN_TOOL_ID.toString() : "");
 
   // 判断某工具是否是当前 capability 的默认工具
   const isCapabilityDefault = (toolId: number) => {

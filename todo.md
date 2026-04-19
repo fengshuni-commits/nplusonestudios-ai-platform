@@ -1819,3 +1819,8 @@
 - [x] 前端：「按成员」Tab 表格增加「使用时长」列
 - [x] 前端：新增「成员使用时长」柱状图
 - [ ] 前端：顶部汇总卡片增加「总使用时长」指标（可选后续改进）
+
+## 去掉 AI 效果图和 AI 平面图的内置 AI 选项
+- [x] AI 效果图（DesignTools.tsx）：工具选择器加入 showBuiltIn={false}，去掉内置 AI 选项
+- [x] AI 平面图（ColorPlan.tsx）：工具选择器加入 showBuiltIn={false}，去掉内置 AI 选项
+- [x] AiToolSelector：修复 showBuiltIn=false 时无默认工具不会回退显示内置 AI，改为显示 placeholder
