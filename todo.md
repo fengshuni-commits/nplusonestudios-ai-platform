@@ -1802,3 +1802,8 @@
 
 ## 任务负责人查看提交历史
 - [x] 负责人进度区域加入「查看提交历史」折叠列表，展示每次提交内容、审核状态和批注
+
+## 图文排版文字块可编辑性修复
+- [x] 后端 graphicLayoutService：保存前校验并修复 textBlocks 中重复/空 id
+- [x] JSON schema id 字段描述明确要求唯一性
+- [x] 前端 TextBlockOverlay：防御性处理重复 id（用 index 作为 fallback key）

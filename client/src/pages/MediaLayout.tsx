@@ -335,7 +335,7 @@ function PageImageViewer({
       )}
 
       {/* 文字块热区叠加 */}
-      {containerW > 0 && (page.textBlocks ?? []).map((block) => {
+      {containerW > 0 && (page.textBlocks ?? []).map((block, blockIdx) => {
         const left = block.x * scale;
         const top = block.y * scale;
         const width = block.width * scale;
@@ -344,7 +344,7 @@ function PageImageViewer({
 
         return (
           <div
-            key={block.id}
+            key={block.id ? `${block.id}-${blockIdx}` : `block-${blockIdx}`}
             onClick={() => onClickBlock(block)}
             title={`点击编辑：${block.text}`}
             className={`absolute group cursor-pointer transition-all ${

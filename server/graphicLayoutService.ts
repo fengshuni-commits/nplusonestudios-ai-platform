@@ -190,7 +190,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
                       items: {
                         type: "object",
                         properties: {
-                          id: { type: "string" },
+                          id: { type: "string", description: "唯一标识符，格式必须为 block_1、block_2、block_3...（每个块编号不同，严禁重复）" },
                           role: { type: "string", enum: ["title", "subtitle", "body", "caption", "label"] },
                           text: { type: "string" },
                           x: { type: "number" },
@@ -218,7 +218,20 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
 
         const planContent = planResponse.choices[0]?.message?.content ?? "{}";
         const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
-        const textBlocks: any[] = plan.textBlocks ?? [];
+        // Sanitize textBlocks: ensure every block has a unique non-empty id
+        const rawBlocks: any[] = plan.textBlocks ?? [];
+        const seenIds = new Set<string>();
+        const textBlocks: any[] = rawBlocks.map((b: any, idx: number) => {
+          let id: string = (typeof b.id === "string" && b.id.trim()) ? b.id.trim() : "";
+          if (!id || seenIds.has(id)) {
+            // Generate a deterministic unique id using role + pageIdx + idx
+            id = `${b.role ?? "block"}_p${pageIdx}_${idx}`;
+            let counter = 0;
+            while (seenIds.has(id)) { id = `${b.role ?? "block"}_p${pageIdx}_${idx}_${++counter}`; }
+          }
+          seenIds.add(id);
+          return { ...b, id };
+        });
         const pageTheme: string = plan.pageTheme ?? "";
         const bgColor: string = plan.backgroundColor ?? (sg?.colorPalette?.background ?? "#0f0f0f");
         const selectedGroup: string | undefined = plan.selectedAssetGroup || undefined;

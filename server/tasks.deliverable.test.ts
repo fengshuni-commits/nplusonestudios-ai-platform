@@ -283,3 +283,81 @@ describe("Assignee View Submission History", () => {
     expect(getBadgeText("pending")).toBe("待审核");
   });
 });
+
+// ─── TextBlock id sanitization tests ────────────────────────────────────────
+describe("textBlock id sanitization (graphicLayoutService)", () => {
+  function sanitizeTextBlocks(rawBlocks: any[], pageIdx: number): any[] {
+    const seenIds = new Set<string>();
+    return rawBlocks.map((b: any, idx: number) => {
+      let id: string = (typeof b.id === "string" && b.id.trim()) ? b.id.trim() : "";
+      if (!id || seenIds.has(id)) {
+        id = `${b.role ?? "block"}_p${pageIdx}_${idx}`;
+        let counter = 0;
+        while (seenIds.has(id)) { id = `${b.role ?? "block"}_p${pageIdx}_${idx}_${++counter}`; }
+      }
+      seenIds.add(id);
+      return { ...b, id };
+    });
+  }
+
+  it("should keep unique ids unchanged", () => {
+    const blocks = [
+      { id: "block_1", role: "title", text: "Title" },
+      { id: "block_2", role: "body", text: "Body" },
+    ];
+    const result = sanitizeTextBlocks(blocks, 0);
+    expect(result[0].id).toBe("block_1");
+    expect(result[1].id).toBe("block_2");
+  });
+
+  it("should fix duplicate ids", () => {
+    const blocks = [
+      { id: "block_1", role: "title", text: "Title" },
+      { id: "block_1", role: "body", text: "Body" },   // duplicate!
+      { id: "block_1", role: "caption", text: "Cap" }, // duplicate!
+    ];
+    const result = sanitizeTextBlocks(blocks, 0);
+    const ids = result.map((b: any) => b.id);
+    expect(new Set(ids).size).toBe(3); // all unique
+    expect(ids[0]).toBe("block_1");    // first one kept
+    expect(ids[1]).not.toBe("block_1");
+    expect(ids[2]).not.toBe("block_1");
+  });
+
+  it("should fix empty string ids", () => {
+    const blocks = [
+      { id: "", role: "title", text: "Title" },
+      { id: "   ", role: "body", text: "Body" },
+    ];
+    const result = sanitizeTextBlocks(blocks, 1);
+    expect(result[0].id).toBe("title_p1_0");
+    expect(result[1].id).toBe("body_p1_1");
+  });
+
+  it("should handle missing id field", () => {
+    const blocks = [
+      { role: "title", text: "Title" }, // no id field
+    ];
+    const result = sanitizeTextBlocks(blocks, 2);
+    expect(result[0].id).toBe("title_p2_0");
+  });
+
+  it("should preserve other block fields after id fix", () => {
+    const blocks = [
+      { id: "block_1", role: "title", text: "Hello", x: 10, y: 20, fontSize: 48, color: "#fff", align: "center", width: 200, height: 60 },
+    ];
+    const result = sanitizeTextBlocks(blocks, 0);
+    expect(result[0].text).toBe("Hello");
+    expect(result[0].x).toBe(10);
+    expect(result[0].fontSize).toBe(48);
+  });
+
+  it("should produce all unique ids even when all blocks have same id", () => {
+    const blocks = Array.from({ length: 6 }, (_, i) => ({
+      id: "text1", role: "body", text: `Block ${i}`,
+    }));
+    const result = sanitizeTextBlocks(blocks, 0);
+    const ids = result.map((b: any) => b.id);
+    expect(new Set(ids).size).toBe(6);
+  });
+});
