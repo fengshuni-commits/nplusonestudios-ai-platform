@@ -750,3 +750,25 @@ export const caseStudyPrompts = mysqlTable("case_study_prompts", {
 }));
 export type CaseStudyPrompt = typeof caseStudyPrompts.$inferSelect;
 export type InsertCaseStudyPrompt = typeof caseStudyPrompts.$inferInsert;
+
+// ─── Task Deliverable History (任务成果提交历史) ──────────────────────────────
+// 每次负责人提交成果时保存一条历史记录，审核人可对比每次提交的内容和审核结果
+export const taskDeliverableHistory = mysqlTable("task_deliverable_history", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  // 版本号，从 1 开始递增
+  version: int("version").notNull().default(1),
+  deliverableType: mysqlEnum("deliverableType", ["file_location", "doc_link", "upload"]).notNull(),
+  deliverableContent: text("deliverableContent"),
+  deliverableFileUrl: text("deliverableFileUrl"),
+  deliverableFileName: varchar("deliverableFileName", { length: 512 }),
+  submittedAt: timestamp("submittedAt").defaultNow().notNull(),
+  submittedBy: int("submittedBy").notNull(),
+  // 审核结果（由 reviewDeliverable 更新）
+  reviewStatus: mysqlEnum("reviewStatus", ["pending", "approved", "rejected"]).default("pending"),
+  reviewComment: text("reviewComment"),
+  reviewedAt: timestamp("reviewedAt"),
+  reviewedBy: int("reviewedBy"),
+});
+export type TaskDeliverableHistory = typeof taskDeliverableHistory.$inferSelect;
+export type InsertTaskDeliverableHistory = typeof taskDeliverableHistory.$inferInsert;

@@ -1141,21 +1141,41 @@ const tasksRouter = router({
       }
       const drizzleDb = await db.getDb();
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      const { eq } = await import('drizzle-orm');
-      const { tasks } = await import('../drizzle/schema');
+      const { eq, sql: drizzleSql } = await import('drizzle-orm');
+      const { tasks, taskDeliverableHistory } = await import('../drizzle/schema');
+      const now = new Date();
+      // Calculate next version number
+      const [countRow] = await drizzleDb
+        .select({ count: drizzleSql<number>`COUNT(*)` })
+        .from(taskDeliverableHistory)
+        .where(eq(taskDeliverableHistory.taskId, input.id));
+      const nextVersion = Number((countRow as any)?.count ?? 0) + 1;
+      // Insert history record
+      await drizzleDb.insert(taskDeliverableHistory).values({
+        taskId: input.id,
+        version: nextVersion,
+        deliverableType: input.deliverableType,
+        deliverableContent: input.deliverableContent ?? null,
+        deliverableFileUrl: input.deliverableFileUrl ?? null,
+        deliverableFileName: input.deliverableFileName ?? null,
+        submittedAt: now,
+        submittedBy: ctx.user.id,
+        reviewStatus: 'pending',
+      });
+      // Update task with latest deliverable info
       await drizzleDb.update(tasks).set({
         progress: 100,
         deliverableType: input.deliverableType,
         deliverableContent: input.deliverableContent ?? null,
         deliverableFileUrl: input.deliverableFileUrl ?? null,
         deliverableFileName: input.deliverableFileName ?? null,
-        deliverableSubmittedAt: new Date(),
+        deliverableSubmittedAt: now,
         reviewStatus: 'pending',
         reviewComment: null,
         status: 'review',
-        updatedAt: new Date(),
+        updatedAt: now,
       }).where(eq(tasks.id, input.id));
-      return { success: true };
+      return { success: true, version: nextVersion };
     }),
   // Reviewer approves or rejects deliverable
   reviewDeliverable: protectedProcedure
@@ -1175,15 +1195,31 @@ const tasksRouter = router({
       }
       const drizzleDb = await db.getDb();
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      const { eq } = await import('drizzle-orm');
-      const { tasks } = await import('../drizzle/schema');
+      const { eq, desc } = await import('drizzle-orm');
+      const { tasks, taskDeliverableHistory } = await import('../drizzle/schema');
+      const now = new Date();
+      // Update the latest history record with review result
+      const [latestHistory] = await drizzleDb
+        .select({ id: taskDeliverableHistory.id })
+        .from(taskDeliverableHistory)
+        .where(eq(taskDeliverableHistory.taskId, input.id))
+        .orderBy(desc(taskDeliverableHistory.version))
+        .limit(1);
+      if (latestHistory) {
+        await drizzleDb.update(taskDeliverableHistory).set({
+          reviewStatus: input.approved ? 'approved' : 'rejected',
+          reviewComment: input.comment ?? null,
+          reviewedAt: now,
+          reviewedBy: ctx.user.id,
+        }).where(eq(taskDeliverableHistory.id, latestHistory.id));
+      }
       if (input.approved) {
         await drizzleDb.update(tasks).set({
           reviewStatus: 'approved',
           reviewComment: input.comment ?? null,
           approval: true,
           status: 'done',
-          updatedAt: new Date(),
+          updatedAt: now,
         }).where(eq(tasks.id, input.id));
       } else {
         await drizzleDb.update(tasks).set({
@@ -1191,10 +1227,35 @@ const tasksRouter = router({
           reviewComment: input.comment ?? null,
           status: 'in_progress',
           progress: 90,
-          updatedAt: new Date(),
+          updatedAt: now,
         }).where(eq(tasks.id, input.id));
       }
       return { success: true };
+    }),
+  // Get deliverable submission history for a task
+  getDeliverableHistory: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND" });
+      // Only assignee, reviewer, project creator, or admin can view history
+      const project = await db.getProjectById(task.projectId);
+      const isAllowed =
+        task.assigneeId === ctx.user.id ||
+        task.reviewerId === ctx.user.id ||
+        project?.createdBy === ctx.user.id ||
+        ctx.user.role === 'admin';
+      if (!isAllowed) throw new TRPCError({ code: "FORBIDDEN" });
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { eq, desc } = await import('drizzle-orm');
+      const { taskDeliverableHistory } = await import('../drizzle/schema');
+      const history = await drizzleDb
+        .select()
+        .from(taskDeliverableHistory)
+        .where(eq(taskDeliverableHistory.taskId, input.id))
+        .orderBy(desc(taskDeliverableHistory.version));
+      return history;
     }),
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))

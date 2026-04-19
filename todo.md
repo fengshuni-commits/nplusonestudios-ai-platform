@@ -1792,3 +1792,10 @@
 - [x] 前端：进度100%时弹出成果提交弹窗（文件位置/链接/上传三种方式）
 - [x] 前端：审核人面板展示成果内容+通过/驳回+批注
 - [x] 前端：负责人可看到审核结果和批注
+
+## 任务成果历史版本功能
+- [x] 新建 task_deliverable_history 表（taskId/version/deliverableType/Content/FileUrl/FileName/submittedAt/reviewStatus/reviewComment）
+- [x] submitDeliverable 时写入历史记录
+- [x] reviewDeliverable 时更新对应历史记录的审核结果
+- [x] 新增 tasks.getDeliverableHistory 路由
+- [x] 前端：审核人面板增加历史版本折叠列表

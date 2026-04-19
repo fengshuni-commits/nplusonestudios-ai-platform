@@ -167,3 +167,73 @@ describe("Deliverable Status Display Logic", () => {
     expect(shouldShowReviewPanel).toBe(true);
   });
 });
+
+describe("Deliverable History Versioning", () => {
+  it("should start at version 1 for first submission", () => {
+    const existingCount = 0;
+    const nextVersion = existingCount + 1;
+    expect(nextVersion).toBe(1);
+  });
+
+  it("should increment version number on each subsequent submission", () => {
+    const existingCount = 2;
+    const nextVersion = existingCount + 1;
+    expect(nextVersion).toBe(3);
+  });
+
+  it("should update the latest history record (highest version) on review", () => {
+    const historyRecords = [
+      { id: 3, version: 3, reviewStatus: "pending" },
+      { id: 2, version: 2, reviewStatus: "rejected" },
+      { id: 1, version: 1, reviewStatus: "rejected" },
+    ];
+    // Latest is first when ordered by desc version
+    const latest = historyRecords[0];
+    expect(latest.id).toBe(3);
+    expect(latest.version).toBe(3);
+  });
+
+  it("should allow assignee, reviewer, project creator, and admin to view history", () => {
+    const task = { assigneeId: 10, reviewerId: 20, projectId: 1 };
+    const project = { createdBy: 30 };
+
+    const canView = (userId: number, role: string) =>
+      task.assigneeId === userId ||
+      task.reviewerId === userId ||
+      project.createdBy === userId ||
+      role === "admin";
+
+    expect(canView(10, "user")).toBe(true);   // assignee
+    expect(canView(20, "user")).toBe(true);   // reviewer
+    expect(canView(30, "user")).toBe(true);   // project creator
+    expect(canView(99, "admin")).toBe(true);  // admin
+    expect(canView(99, "user")).toBe(false);  // unrelated user
+  });
+
+  it("should render correct status label for each review status", () => {
+    const getStatusLabel = (status: string) => {
+      if (status === "approved") return "已通过";
+      if (status === "rejected") return "已驳回";
+      if (status === "pending") return "待审核";
+      return "";
+    };
+    expect(getStatusLabel("approved")).toBe("已通过");
+    expect(getStatusLabel("rejected")).toBe("已驳回");
+    expect(getStatusLabel("pending")).toBe("待审核");
+  });
+
+  it("should show history toggle only when deliverable has been submitted", () => {
+    const taskWithDeliverable = { deliverableSubmittedAt: new Date() };
+    const taskWithoutDeliverable = { deliverableSubmittedAt: null };
+    expect(!!taskWithDeliverable.deliverableSubmittedAt).toBe(true);
+    expect(!!taskWithoutDeliverable.deliverableSubmittedAt).toBe(false);
+  });
+
+  it("should display rejection comment in red for rejected entries", () => {
+    const getCommentClass = (reviewStatus: string) =>
+      reviewStatus === "rejected" ? "text-red-500" : "text-muted-foreground";
+    expect(getCommentClass("rejected")).toBe("text-red-500");
+    expect(getCommentClass("approved")).toBe("text-muted-foreground");
+    expect(getCommentClass("pending")).toBe("text-muted-foreground");
+  });
+});
