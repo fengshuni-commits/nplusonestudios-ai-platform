@@ -1807,3 +1807,7 @@
 - [x] 后端 graphicLayoutService：保存前校验并修复 textBlocks 中重复/空 id
 - [x] JSON schema id 字段描述明确要求唯一性
 - [x] 前端 TextBlockOverlay：防御性处理重复 id（用 index 作为 fallback key）
+
+## 图文排版历史记录自动修复重复 textBlock id
+- [x] 后端 graphicLayout.status 路由：加载时检测并修复重复/空 id，有修复时写回数据库
+- [x] 提取 sanitizeTextBlocks 为共享工具函数，供 graphicLayoutService 和 status 路由复用

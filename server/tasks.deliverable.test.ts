@@ -361,3 +361,67 @@ describe("textBlock id sanitization (graphicLayoutService)", () => {
     expect(new Set(ids).size).toBe(6);
   });
 });
+
+// ─── sanitizeJobPages integration tests ─────────────────────────────────────
+import { sanitizeJobPages } from "./graphicLayoutService";
+
+describe("sanitizeJobPages (auto-repair on load)", () => {
+  it("returns dirty=false when all ids are already unique", () => {
+    const pages = [
+      { textBlocks: [{ id: "block_1", role: "title" }, { id: "block_2", role: "body" }] },
+    ];
+    const { dirty } = sanitizeJobPages(pages);
+    expect(dirty).toBe(false);
+  });
+
+  it("fixes duplicate ids across a page and returns dirty=true", () => {
+    const pages = [
+      { textBlocks: [{ id: "block_1", role: "title" }, { id: "block_1", role: "body" }] },
+    ];
+    const { pages: fixed, dirty } = sanitizeJobPages(pages);
+    expect(dirty).toBe(true);
+    const ids = fixed[0].textBlocks.map((b: any) => b.id);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("fixes empty ids and returns dirty=true", () => {
+    const pages = [
+      { textBlocks: [{ id: "", role: "title" }, { id: "  ", role: "body" }] },
+    ];
+    const { pages: fixed, dirty } = sanitizeJobPages(pages);
+    expect(dirty).toBe(true);
+    fixed[0].textBlocks.forEach((b: any) => expect(b.id.length).toBeGreaterThan(0));
+  });
+
+  it("handles multiple pages: only dirty pages are modified", () => {
+    const pages = [
+      { textBlocks: [{ id: "block_1", role: "title" }, { id: "block_1", role: "body" }] }, // dirty
+      { textBlocks: [{ id: "block_1", role: "title" }, { id: "block_2", role: "body" }] }, // clean
+    ];
+    const { pages: fixed, dirty } = sanitizeJobPages(pages);
+    expect(dirty).toBe(true);
+    const ids0 = fixed[0].textBlocks.map((b: any) => b.id);
+    expect(new Set(ids0).size).toBe(2);
+    expect(fixed[1].textBlocks[0].id).toBe("block_1");
+    expect(fixed[1].textBlocks[1].id).toBe("block_2");
+  });
+
+  it("returns empty pages array unchanged with dirty=false", () => {
+    const { pages: fixed, dirty } = sanitizeJobPages([]);
+    expect(dirty).toBe(false);
+    expect(fixed).toHaveLength(0);
+  });
+
+  it("preserves all other page fields after repair", () => {
+    const pages = [
+      {
+        imageUrl: "https://s3.example.com/img.png",
+        backgroundColor: "#0f0f0f",
+        textBlocks: [{ id: "block_1", role: "title" }, { id: "block_1", role: "body" }],
+      },
+    ];
+    const { pages: fixed } = sanitizeJobPages(pages);
+    expect((fixed[0] as any).imageUrl).toBe("https://s3.example.com/img.png");
+    expect((fixed[0] as any).backgroundColor).toBe("#0f0f0f");
+  });
+});

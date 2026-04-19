@@ -5556,6 +5556,18 @@ const graphicLayoutRouter = router({
       const { eq: _eq, and: _and } = await import("drizzle-orm");
       const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.id), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      // Auto-repair legacy records: fix duplicate/empty textBlock ids on load
+      const rawPages = (job.pages as any[] | null) ?? [];
+      if (rawPages.length > 0) {
+        const { sanitizeJobPages } = await import("./graphicLayoutService");
+        const { pages: fixedPages, dirty } = sanitizeJobPages(rawPages);
+        if (dirty) {
+          // Write back repaired pages so subsequent loads are already clean
+          await drizzleDb.update(graphicLayoutJobs).set({ pages: fixedPages }).where(_eq(graphicLayoutJobs.id, job.id));
+          console.log(`[GraphicLayout] Auto-repaired duplicate textBlock ids for job ${job.id}`);
+          return { ...job, pages: fixedPages };
+        }
+      }
       return job;
     }),
 

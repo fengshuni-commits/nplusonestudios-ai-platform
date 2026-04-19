@@ -7,6 +7,38 @@ import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { generateImageWithTool } from "./_core/generateImageWithTool";
 
+/**
+ * Sanitize all pages in a job: fix duplicate/empty textBlock ids.
+ * Returns { pages, dirty } where dirty=true means at least one id was fixed.
+ * Safe to call on already-clean data (no-op if nothing needs fixing).
+ */
+export function sanitizeJobPages(pages: any[]): { pages: any[]; dirty: boolean } {
+  let dirty = false;
+  const sanitized = pages.map((page: any, pageIdx: number) => {
+    const rawBlocks: any[] = page.textBlocks ?? [];
+    if (rawBlocks.length === 0) return page;
+    const seenIds = new Set<string>();
+    let pageDirty = false;
+    const fixedBlocks = rawBlocks.map((b: any, idx: number) => {
+      let id: string = (typeof b.id === "string" && b.id.trim()) ? b.id.trim() : "";
+      if (!id || seenIds.has(id)) {
+        id = `${b.role ?? "block"}_p${pageIdx}_${idx}`;
+        let counter = 0;
+        while (seenIds.has(id)) { id = `${b.role ?? "block"}_p${pageIdx}_${idx}_${++counter}`; }
+        pageDirty = true;
+      }
+      seenIds.add(id);
+      return pageDirty || b.id !== id ? { ...b, id } : b;
+    });
+    if (pageDirty) {
+      dirty = true;
+      return { ...page, textBlocks: fixedBlocks };
+    }
+    return page;
+  });
+  return { pages: sanitized, dirty };
+}
+
 /** Retry a function up to `maxAttempts` times on timeout/abort errors */
 async function withRetryOnTimeout<T>(fn: () => Promise<T>, maxAttempts = 2, label = "operation"): Promise<T> {
   let lastError: unknown;
@@ -219,19 +251,8 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         const planContent = planResponse.choices[0]?.message?.content ?? "{}";
         const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
         // Sanitize textBlocks: ensure every block has a unique non-empty id
-        const rawBlocks: any[] = plan.textBlocks ?? [];
-        const seenIds = new Set<string>();
-        const textBlocks: any[] = rawBlocks.map((b: any, idx: number) => {
-          let id: string = (typeof b.id === "string" && b.id.trim()) ? b.id.trim() : "";
-          if (!id || seenIds.has(id)) {
-            // Generate a deterministic unique id using role + pageIdx + idx
-            id = `${b.role ?? "block"}_p${pageIdx}_${idx}`;
-            let counter = 0;
-            while (seenIds.has(id)) { id = `${b.role ?? "block"}_p${pageIdx}_${idx}_${++counter}`; }
-          }
-          seenIds.add(id);
-          return { ...b, id };
-        });
+        const { pages: [sanitizedPage] } = sanitizeJobPages([{ textBlocks: plan.textBlocks ?? [] }]);
+        const textBlocks: any[] = sanitizedPage.textBlocks ?? [];
         const pageTheme: string = plan.pageTheme ?? "";
         const bgColor: string = plan.backgroundColor ?? (sg?.colorPalette?.background ?? "#0f0f0f");
         const selectedGroup: string | undefined = plan.selectedAssetGroup || undefined;
