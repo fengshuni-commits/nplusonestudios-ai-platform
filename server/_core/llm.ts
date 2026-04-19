@@ -321,6 +321,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       authorization: `Bearer ${ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(180000), // 3 min timeout to prevent socket hang
   });
 
   if (!response.ok) {

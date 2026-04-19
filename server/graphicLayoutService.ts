@@ -7,6 +7,28 @@ import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { generateImageWithTool } from "./_core/generateImageWithTool";
 
+/** Retry a function up to `maxAttempts` times on timeout/abort errors */
+async function withRetryOnTimeout<T>(fn: () => Promise<T>, maxAttempts = 2, label = "operation"): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.includes("timeout") || msg.includes("aborted") || msg.includes("abort");
+      if (isTimeout && attempt < maxAttempts) {
+        console.warn(`[GraphicLayout] ${label} timed out (attempt ${attempt}/${maxAttempts}), retrying...`);
+        // Wait 2s before retry
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 export async function generateGraphicLayoutAsync(
   jobId: number,
   userId: number,
@@ -125,131 +147,170 @@ export async function generateGraphicLayoutAsync(
 
     const generatedPages: any[] = [];
     const byTypeGroupNames = getByTypeGroupNames();
+    let anyPageFailed = false;
 
     for (let pageIdx = 0; pageIdx < job.pageCount; pageIdx++) {
-      const byTypeInstruction = byTypeGroupNames.length > 0
-        ? `\n- 可用素材文件夹：${byTypeGroupNames.join("、")}，请根据这一页的主题选择最合适的一个文件夹，输出到 selectedAssetGroup 字段`
-        : "";
+      try {
+        const byTypeInstruction = byTypeGroupNames.length > 0
+          ? `\n- 可用素材文件夹：${byTypeGroupNames.join("、")}，请根据这一页的主题选择最合适的一个文件夹，输出到 selectedAssetGroup 字段`
+          : "";
 
-      const planResponse = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `${layoutPlanSystemPrompt}
+        // Step 1: Layout planning with retry on timeout
+        const planResponse = await withRetryOnTimeout(
+          () => invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: `${layoutPlanSystemPrompt}
 页面尺寸：${imgW}x${imgH}px
 ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
 
 ⚠️ 优先级规则：如果用户的内容描述中包含配色、版式、风格等具体要求，必须以用户描述为准，覆盖上方参考风格中的对应设置。用户描述的优先级高于一切参考风格。${byTypeInstruction ? "\n" + byTypeInstruction : ""}`
-          },
-          {
-            role: "user",
-            content: `文档类型：${docTypeName}，第 ${pageIdx + 1} 页 / 共 ${job.pageCount} 页
+              },
+              {
+                role: "user",
+                content: `文档类型：${docTypeName}，第 ${pageIdx + 1} 页 / 共 ${job.pageCount} 页
 内容描述（最高优先级，其中的配色/版式/风格要求必须覆盖参考风格）：${job.contentText}
 请规划这一页的排版结构，输出文字块列表。`
-          }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "layout_plan",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                pageTheme: { type: "string", description: "这一页的视觉主题描述（用于图像生成 prompt）" },
-                backgroundColor: { type: "string", description: "背景主色 hex" },
-                selectedAssetGroup: { type: "string", description: "选择的素材文件夹名称，必须是可用文件夹列表中的一个，无文件夹时输出空字符串" },
-                textBlocks: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string" },
-                      role: { type: "string", enum: ["title", "subtitle", "body", "caption", "label"] },
-                      text: { type: "string" },
-                      x: { type: "number" },
-                      y: { type: "number" },
-                      width: { type: "number" },
-                      height: { type: "number" },
-                      fontSize: { type: "number" },
-                      color: { type: "string" },
-                      align: { type: "string", enum: ["left", "center", "right"] },
-                    },
-                    required: ["id", "role", "text", "x", "y", "width", "height", "fontSize", "color", "align"],
-                    additionalProperties: false,
-                  }
+              }
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "layout_plan",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    pageTheme: { type: "string", description: "这一页的视觉主题描述（用于图像生成 prompt）" },
+                    backgroundColor: { type: "string", description: "背景主色 hex" },
+                    selectedAssetGroup: { type: "string", description: "选择的素材文件夹名称，必须是可用文件夹列表中的一个，无文件夹时输出空字符串" },
+                    textBlocks: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          role: { type: "string", enum: ["title", "subtitle", "body", "caption", "label"] },
+                          text: { type: "string" },
+                          x: { type: "number" },
+                          y: { type: "number" },
+                          width: { type: "number" },
+                          height: { type: "number" },
+                          fontSize: { type: "number" },
+                          color: { type: "string" },
+                          align: { type: "string", enum: ["left", "center", "right"] },
+                        },
+                        required: ["id", "role", "text", "x", "y", "width", "height", "fontSize", "color", "align"],
+                        additionalProperties: false,
+                      }
+                    }
+                  },
+                  required: ["pageTheme", "backgroundColor", "selectedAssetGroup", "textBlocks"],
+                  additionalProperties: false,
                 }
-              },
-              required: ["pageTheme", "backgroundColor", "selectedAssetGroup", "textBlocks"],
-              additionalProperties: false,
+              }
             }
-          }
-        }
-      });
+          }),
+          2,
+          `page ${pageIdx + 1} layout planning`
+        );
 
-      const planContent = planResponse.choices[0]?.message?.content ?? "{}";
-      const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
-      const textBlocks: any[] = plan.textBlocks ?? [];
-      const pageTheme: string = plan.pageTheme ?? "";
-      const bgColor: string = plan.backgroundColor ?? (sg?.colorPalette?.background ?? "#0f0f0f");
-      const selectedGroup: string | undefined = plan.selectedAssetGroup || undefined;
-      const pageAssets = getAssetsForPage(pageIdx, selectedGroup);
-      const assetImagesForPage = pageAssets.length > 0
-        ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
-        : undefined;
+        const planContent = planResponse.choices[0]?.message?.content ?? "{}";
+        const plan = JSON.parse(typeof planContent === "string" ? planContent : JSON.stringify(planContent));
+        const textBlocks: any[] = plan.textBlocks ?? [];
+        const pageTheme: string = plan.pageTheme ?? "";
+        const bgColor: string = plan.backgroundColor ?? (sg?.colorPalette?.background ?? "#0f0f0f");
+        const selectedGroup: string | undefined = plan.selectedAssetGroup || undefined;
+        const pageAssets = getAssetsForPage(pageIdx, selectedGroup);
+        const assetImagesForPage = pageAssets.length > 0
+          ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
+          : undefined;
 
-      const textDescriptions = textBlocks.map((b: any) =>
-        `"${b.text}" (${b.role}, ${b.fontSize}px, color ${b.color}, at position ${Math.round(b.x/imgW*100)}% from left, ${Math.round(b.y/imgH*100)}% from top)`
-      ).join("; ");
+        const textDescriptions = textBlocks.map((b: any) =>
+          `"${b.text}" (${b.role}, ${b.fontSize}px, color ${b.color}, at position ${Math.round(b.x/imgW*100)}% from left, ${Math.round(b.y/imgH*100)}% from top)`
+        ).join("; ");
 
-      const byTypeDesc = getByTypeDescription(selectedGroup);
-      const assetDesc = pageAssets.length > 0
-        ? (byTypeDesc
-            ? `incorporate the provided reference images as visual elements; ${byTypeDesc}`
-            : `incorporate the provided reference images as visual elements`)
-        : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
+        const byTypeDesc = getByTypeDescription(selectedGroup);
+        const assetDesc = pageAssets.length > 0
+          ? (byTypeDesc
+              ? `incorporate the provided reference images as visual elements; ${byTypeDesc}`
+              : `incorporate the provided reference images as visual elements`)
+          : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
 
-      const styleHintEn = sg
-        ? [
-            sg.description ? `STYLE REFERENCE: ${sg.description}` : "",
-            `Color palette: background ${sg.colorPalette?.background}, primary ${sg.colorPalette?.primary}, text ${sg.colorPalette?.text}, accent ${sg.colorPalette?.accent}.`,
-            sg.styleKeywords?.length ? `Visual keywords: ${sg.styleKeywords.join(", ")}.` : "",
-            sg.typography?.style ? `Typography: ${sg.typography.style}.` : "",
-          ].filter(Boolean).join(" ")
-        : "";
+        const styleHintEn = sg
+          ? [
+              sg.description ? `STYLE REFERENCE: ${sg.description}` : "",
+              `Color palette: background ${sg.colorPalette?.background}, primary ${sg.colorPalette?.primary}, text ${sg.colorPalette?.text}, accent ${sg.colorPalette?.accent}.`,
+              sg.styleKeywords?.length ? `Visual keywords: ${sg.styleKeywords.join(", ")}.` : "",
+              sg.typography?.style ? `Typography: ${sg.typography.style}.` : "",
+            ].filter(Boolean).join(" ")
+          : "";
 
-      const userDescPrefix = job.contentText.match(/(背景|配色|风格|色调|#[0-9a-fA-F]{6})/)
-        ? `USER REQUIREMENT (HIGHEST PRIORITY, OVERRIDES STYLE REFERENCE): ${job.contentText}. `
-        : "";
-      const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
+        const userDescPrefix = job.contentText.match(/(背景|配色|风格|色调|#[0-9a-fA-F]{6})/)
+          ? `USER REQUIREMENT (HIGHEST PRIORITY, OVERRIDES STYLE REFERENCE): ${job.contentText}. `
+          : "";
+        const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
 
-      const genResult = await generateImageWithTool({
-        prompt: imagePrompt,
-        originalImages: assetImagesForPage,
-        size: imageSize,
-        toolId: imageToolId ?? null,
-      });
+        // Step 2: Image generation with retry on timeout
+        const genResult = await withRetryOnTimeout(
+          () => generateImageWithTool({
+            prompt: imagePrompt,
+            originalImages: assetImagesForPage,
+            size: imageSize,
+            toolId: imageToolId ?? null,
+          }),
+          2,
+          `page ${pageIdx + 1} image generation`
+        );
 
-      const pageImageUrl = genResult.url ?? "";
+        const pageImageUrl = genResult.url ?? "";
 
-      generatedPages.push({
-        pageIndex: pageIdx,
-        imageUrl: pageImageUrl,
-        backgroundColor: bgColor,
-        textBlocks: textBlocks,
-        imageSize: { width: imgW, height: imgH },
-      });
+        generatedPages.push({
+          pageIndex: pageIdx,
+          imageUrl: pageImageUrl,
+          backgroundColor: bgColor,
+          textBlocks: textBlocks,
+          imageSize: { width: imgW, height: imgH },
+        });
+
+        console.log(`[GraphicLayout] Job ${jobId} page ${pageIdx + 1}/${job.pageCount} done`);
+      } catch (pageError: unknown) {
+        // Page-level error isolation: one page failure doesn't abort the whole job
+        const pageMsg = pageError instanceof Error ? pageError.message : "未知错误";
+        console.error(`[GraphicLayout] Job ${jobId} page ${pageIdx + 1} failed:`, pageMsg);
+        anyPageFailed = true;
+        generatedPages.push({
+          pageIndex: pageIdx,
+          imageUrl: "",
+          backgroundColor: sg?.colorPalette?.background ?? "#0f0f0f",
+          textBlocks: [],
+          imageSize: { width: imgW, height: imgH },
+          error: pageMsg,
+        });
+      }
     }
 
+    const successPages = generatedPages.filter(p => p.imageUrl);
+    if (successPages.length === 0) {
+      // All pages failed — mark job as failed
+      throw new Error(`所有页面生成失败，请重试`);
+    }
+
+    const finalStatus = anyPageFailed ? "done" : "done";
+    const errorSummary = anyPageFailed
+      ? `部分页面生成失败（${generatedPages.filter(p => !p.imageUrl).length}/${job.pageCount} 页）`
+      : null;
+
     await drizzleDb.update(graphicLayoutJobs)
-      .set({ status: "done", pages: generatedPages, htmlPages: [] } as any)
+      .set({ status: finalStatus, pages: generatedPages, htmlPages: [], errorMessage: errorSummary } as any)
       .where(_eq(graphicLayoutJobs.id, jobId));
 
     const docTypeLabels: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
       project_board: "项目图板", custom: "自定义排版",
     };
-    const firstPageUrl = generatedPages[0]?.imageUrl ?? null;
+    const firstPageUrl = successPages[0]?.imageUrl ?? null;
     const [jobForHistory] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.id, jobId)).limit(1);
     if (jobForHistory) {
       const docLabel = docTypeLabels[jobForHistory.docType] ?? jobForHistory.docType;

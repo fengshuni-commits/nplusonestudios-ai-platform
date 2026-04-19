@@ -1779,3 +1779,8 @@
 - [x] tRPC tasks.updateStatus：同步更新权限逻辑
 - [x] REST API PATCH /tasks/:id：API 创建的任务允许修改；用户创建的任务只有管理员 API key 可修改
 - [x] API 创建任务时标记 source = "api"
+
+## 图文排版生成失败修复
+- [x] invokeLLM fetch 加 3 分钟超时，防止 socket 挂起
+- [x] graphicLayoutService 加页面级重试（超时时自动重试一次）
+- [x] 多页生成加页面级错误隔离（某页失败不影响其他页）
