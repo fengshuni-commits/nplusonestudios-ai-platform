@@ -2009,7 +2009,9 @@ const sessionRouter = router({
       lastHeartbeat: now,
       durationSeconds: 0,
     });
-    return { sessionId: Number((result as any).insertId) };
+    // Drizzle MySQL insert returns [ResultSetHeader, fields]; insertId is in result[0]
+    const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+    return { sessionId: Number(insertId) };
   }),
 
   heartbeat: protectedProcedure
