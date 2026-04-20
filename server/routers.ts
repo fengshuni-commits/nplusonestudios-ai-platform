@@ -1964,6 +1964,8 @@ const aiToolsRouter = router({
           totalSeconds: drizzleSql<number>`SUM(${userSessions.durationSeconds})`,
           sessionCount: drizzleSql<number>`COUNT(*)`,
           lastSeen: drizzleSql<number>`MAX(${userSessions.lastHeartbeat})`,
+          // COUNT distinct calendar dates (UTC) within the period
+          activeDays: drizzleSql<number>`COUNT(DISTINCT DATE(FROM_UNIXTIME(${userSessions.sessionStart})))`,
         })
         .from(userSessions)
         .where(drizzleSql`${userSessions.sessionStart} >= ${since}`)
@@ -1989,6 +1991,7 @@ const aiToolsRouter = router({
           totalSeconds: Number(r.totalSeconds),
           totalMinutes: Math.round(Number(r.totalSeconds) / 60),
           sessionCount: Number(r.sessionCount),
+          activeDays: Number(r.activeDays),
           lastSeen: r.lastSeen ? new Date(Number(r.lastSeen) * 1000).toISOString() : null,
         })),
         totalSeconds,
