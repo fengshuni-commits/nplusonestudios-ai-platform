@@ -608,15 +608,41 @@ export default function MediaLayout() {
     onSuccess: () => { refetchJobs(); setActiveJobId(undefined); toast.success("已删除"); },
   });
 
+  const trpcUtils = trpc.useUtils();
+
   const deleteTextBlockMutation = trpc.graphicLayout.deleteTextBlock.useMutation({
+    onMutate: async ({ jobId, pageIndex, blockId }) => {
+      // 乐观更新：立即从本地缓存移除文字块
+      await trpcUtils.graphicLayout.status.cancel({ id: jobId });
+      const previous = trpcUtils.graphicLayout.status.getData({ id: jobId });
+      trpcUtils.graphicLayout.status.setData({ id: jobId }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: (old.pages ?? []).map((p: any) =>
+            p.pageIndex !== pageIndex
+              ? p
+              : { ...p, textBlocks: (p.textBlocks ?? []).filter((b: any) => b.id !== blockId) }
+          ),
+        };
+      });
+      return { previous };
+    },
     onSuccess: () => {
       toast.success("文字块已删除");
       setEditingBlock(null);
       setNewText("");
-      refetchActiveJob();
     },
-    onError: (err) => {
+    onError: (err, _vars, context) => {
       toast.error("删除失败：" + err.message);
+      // 回滚乐观更新
+      if (context?.previous) {
+        trpcUtils.graphicLayout.status.setData({ id: _vars.jobId }, context.previous);
+      }
+    },
+    onSettled: (_data, _err, { jobId }) => {
+      // 兑底刷新确保服务端数据一致
+      trpcUtils.graphicLayout.status.invalidate({ id: jobId });
     },
   });
 
