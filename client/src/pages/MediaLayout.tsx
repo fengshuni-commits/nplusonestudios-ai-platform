@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { AiToolSelector } from "@/components/AiToolSelector";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
@@ -1381,6 +1382,12 @@ export default function MediaLayout() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* 反馈按钮 */}
+                  {activeJobId && (
+                    <div className="relative">
+                      <FeedbackButtons module="layout_design" historyId={activeJobId} compact />
+                    </div>
+                  )}
                   {/* 导出图片按钮 */}
                   <Button
                     variant="outline"

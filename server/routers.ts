@@ -44,7 +44,7 @@ import { pdfToImages } from "./pdfToImages";
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
 type PptJob =
   | { status: "processing"; progress: number; stage: string; currentPage?: number; totalPages?: number }
-  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; slides?: PptSlidePreview[]; pageImages?: string[]; pageSummaries?: Array<{ texts: string[]; imageCount: number }>; previewImages?: string[] }
+  | { status: "done"; url: string; title: string; slideCount: number; imageCount: number; historyId?: number; slides?: PptSlidePreview[]; pageImages?: string[]; pageSummaries?: Array<{ texts: string[]; imageCount: number }>; previewImages?: string[] }
   | { status: "failed"; error: string };
 
 const pptJobStore = new Map<string, PptJob>();
@@ -4488,27 +4488,32 @@ async function generatePresentationInBackground(
       imageUrl: imageUrlMap.get(i),
       styleGuide: input.layoutPackStyleGuide || undefined,
     }));
+    let presentationHistoryId: number | undefined;
+    if (userId) {
+      try {
+        const historyRow = await db.createGenerationHistory({
+          userId,
+          module: "presentation",
+          title: `${input.title} - 演示文稿`,
+          summary: `${slideData.slides.length} 页幻灯片，${imageBase64Map.size} 张配图`,
+          outputUrl: url,
+          status: "success",
+          durationMs: Date.now() - presStartTime,
+        });
+        presentationHistoryId = (historyRow as any)[0]?.insertId ?? (historyRow as any).insertId;
+      } catch {}
+    }
     presentationJobStore.set(jobId, {
       status: "done",
       url,
       title: input.title,
       slideCount: slideData.slides.length,
       imageCount: imageBase64Map.size,
+      historyId: presentationHistoryId,
       slides: slidePreviews,
       previewImages,
     });
     console.log(`[Presentation] Job ${jobId} completed: ${slideData.slides.length} slides, ${imageBase64Map.size} images`);
-    if (userId) {
-      await db.createGenerationHistory({
-        userId,
-        module: "presentation",
-        title: `${input.title} - 演示文稿`,
-        summary: `${slideData.slides.length} 页幻灯片，${imageBase64Map.size} 张配图`,
-        outputUrl: url,
-        status: "success",
-        durationMs: Date.now() - presStartTime,
-      }).catch(() => {});
-    }
 
   } catch (err: any) {
     console.error("[Presentation] Background job failed:", err);
@@ -4602,7 +4607,7 @@ const presentationRouter = router({
       if (!job) return { status: "not_found" as const, progress: 0, stage: "" as const };
       if (job.status === "done") {
         setTimeout(() => presentationJobStore.delete(input.jobId), 5 * 60 * 1000);
-        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount, slides: job.slides, pageImages: job.pageImages, pageSummaries: job.pageSummaries, previewImages: job.previewImages };
+        return { status: "done" as const, progress: 100, stage: "done" as const, url: job.url, title: job.title, slideCount: job.slideCount, imageCount: job.imageCount, historyId: job.historyId, slides: job.slides, pageImages: job.pageImages, pageSummaries: job.pageSummaries, previewImages: job.previewImages };
       }
       if (job.status === "failed") {
         setTimeout(() => presentationJobStore.delete(input.jobId), 60 * 1000);
@@ -6597,6 +6602,7 @@ export const appRouter = router({system: systemRouter,
                 videoUrl: permanentVideoUrl,
                 errorMessage: apiStatus.errorMessage,
                 progress: apiStatus.progress || 0,
+                recordId: record.id,
               };
             }
           } catch (err) {
@@ -6631,6 +6637,7 @@ export const appRouter = router({system: systemRouter,
           videoUrl: finalVideoUrl,
           errorMessage: record.errorMessage,
           progress,
+          recordId: record.id,
          };
       }),
     list: protectedProcedure

@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,6 +113,7 @@ export default function PresentationPage() {
   const [isFileConvertResult, setIsFileConvertResult] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [resultPreviewImages, setResultPreviewImages] = useState<string[]>([]); // Real PPTX slide screenshots
+  const [resultHistoryId, setResultHistoryId] = useState<number | undefined>();
 
   // History
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -176,6 +178,7 @@ export default function PresentationPage() {
       setResultTitle(jobStatus.title || null);
       setResultSlideCount(jobStatus.slideCount || null);
       setResultSlides((jobStatus.slides as any) || []);
+      setResultHistoryId((jobStatus as any).historyId ?? undefined);
       setPreviewSlideIndex(0);
       // Save real PPTX preview images (LibreOffice-rendered screenshots)
       const previewImgs = (jobStatus as any).previewImages as string[] | undefined;
@@ -870,6 +873,9 @@ export default function PresentationPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {resultHistoryId && (
+                      <FeedbackButtons module="presentation" historyId={resultHistoryId} compact />
+                    )}
                     <Button asChild size="sm">
                       <a href={resultUrl} download target="_blank" rel="noopener noreferrer">
                         <FileDown className="h-4 w-4 mr-1.5" />

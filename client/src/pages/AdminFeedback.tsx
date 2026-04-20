@@ -12,6 +12,10 @@ const MODULE_LABELS: Record<string, string> = {
   media_xiaohongshu: "小红书内容",
   media_wechat: "公众号内容",
   media_instagram: "Instagram 内容",
+  color_plan: "AI 彩平图",
+  layout_design: "图文排版",
+  presentation: "演示文稿",
+  video_generation: "视频生成",
 };
 
 function getModuleLabel(module: string) {

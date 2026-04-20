@@ -36,6 +36,7 @@ import {
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { cn } from "@/lib/utils";
 import ImageMaskEditor from "@/components/ImageMaskEditor";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { useRef, useState, useCallback, useEffect } from "react";
 
 // ─── Plan Style Config ─────────────────────────────────────
@@ -955,7 +956,10 @@ export default function ColorPlan() {
               )}
 
               {resultUrl && !editingMask && !isInpainting && (
-                <div className="ml-auto flex gap-1.5 flex-wrap justify-end">
+                <div className="ml-auto flex items-center gap-1.5 flex-wrap justify-end">
+                  {resultHistoryId && (
+                    <FeedbackButtons module="color_plan" historyId={resultHistoryId} compact />
+                  )}
                   <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isGenerating || !canGenerate}>
                     <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                     重新生成

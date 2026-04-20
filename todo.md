@@ -1851,3 +1851,13 @@
 - [x] 后端：getSessionStats 路由增加 activeDays（COUNT DISTINCT DATE）
 - [x] 前端：成员统计表格增加「活跃天数」列（绿色字体）
 - [x] 前端：成员统计区域新增「成员活跃天数」独立柱状图，与使用时长图并排
+
+## AI 生成结果反馈功能（正/负面 + 文字意见）
+- [x] 数据库：feedback 表已存在（id, userId, module, historyId, rating, comment, createdAt）
+- [x] 后端：feedback.submit / feedback.getByHistory 路由已存在
+- [x] 前端：FeedbackButtons 通用组件（满意/不满意 + 文字备注 Popover）已存在
+- [x] 已接入：AI 效果图、会议纪要、小红书/公众号/Instagram、案例调研报告、图像分析
+- [x] 新增接入：AI 彩平图（ColorPlan）
+- [x] 新增接入：图文排版（MediaLayout）
+- [x] 新增接入：演示文稿（Presentation），后端已写入 historyId
+- [x] 新增接入：视频生成（VideoGeneration），后端返回 recordId

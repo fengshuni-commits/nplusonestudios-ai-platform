@@ -16,6 +16,7 @@ import {
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { FeedbackButtons } from "@/components/FeedbackButtons";
 import {
   Play,
   Download,
@@ -120,6 +121,7 @@ export default function VideoGeneration() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoRecordId, setVideoRecordId] = useState<number | undefined>();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   // 是否有正在进行中或已完成的任务（用于控制工作区显示）
@@ -173,6 +175,7 @@ export default function VideoGeneration() {
     setProgress(statusData.progress ?? 0);
 
     if (statusData.videoUrl) setVideoUrl(statusData.videoUrl);
+    if ((statusData as any).recordId) setVideoRecordId((statusData as any).recordId);
     if (statusData.errorMessage) setErrorMessage(statusData.errorMessage);
 
     if (newStatus === "failed" && prevStatus !== "failed") {
@@ -516,7 +519,12 @@ export default function VideoGeneration() {
                     onError={() => toast.error("视频加载失败，请尝试直接下载")}
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  {videoRecordId && (
+                    <div className="flex items-center">
+                      <FeedbackButtons module="video_generation" historyId={videoRecordId} compact />
+                    </div>
+                  )}
                   <Button onClick={handleDownloadVideo} variant="outline" className="flex-1">
                     <Download className="h-4 w-4 mr-2" />
                     下载视频
