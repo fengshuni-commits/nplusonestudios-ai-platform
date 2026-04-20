@@ -349,6 +349,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
     if (jobForHistory) {
       const docLabel = docTypeLabels[jobForHistory.docType] ?? jobForHistory.docType;
       const histTitle = jobForHistory.title ? `${jobForHistory.title}` : `${docLabel}（${jobForHistory.pageCount}页）`;
+      // 写入成果历史
       await db.createGenerationHistory({
         userId,
         module: "layout_design",
@@ -360,6 +361,19 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         status: "success",
         durationMs: null,
       });
+      // 写入调用统计日志（每页一条，记录实际调用次数）
+      const effectiveToolId = imageToolId ?? 0;
+      for (let pi = 0; pi < generatedPages.length; pi++) {
+        const pg = generatedPages[pi];
+        await db.createAiToolLog({
+          toolId: effectiveToolId,
+          userId,
+          action: "layout_design",
+          inputSummary: `${docLabel} 第${pi + 1}页 - ${(jobForHistory.contentText ?? "").slice(0, 100)}`,
+          outputSummary: pg.imageUrl ? pg.imageUrl.slice(-60) : "",
+          status: pg.imageUrl ? "success" : "failed",
+        });
+      }
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "未知错误";

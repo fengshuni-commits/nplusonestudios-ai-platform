@@ -1837,3 +1837,12 @@
 ## Bug: 文字块删除后热区仍然显示
 - [x] 诊断原因：删除成功后 refetchActiveJob 在 job done 状态下可能不触发重新请求，导致前端缓存未刷新
 - [x] 修复：改用乐观更新（onMutate 立即移除缓存中的文字块），onSettled invalidate 兑底刷新，删除后热区即时消失
+
+## Bug: 图文排版调用次数统计为0
+- [x] 排查原因：调用统计查询 ai_tool_logs 表，但图文排版只写 generation_history，两张表分离
+- [x] 修复：在 graphicLayoutService 生成完成后同时写入 ai_tool_logs（每页一条，action=layout_design）
+
+## 改进: 使用时长统计精度
+- [x] 加入用户活跃检测（鼠标/键盘/滚动/点击），非活跃超过5分钟暂停计时
+- [x] 页面关闭/刷新时用 sendBeacon 补报最后一段时长
+- [x] 防止多标签重复计数（localStorage leader election，同一浏览器只有一个标签上报）
