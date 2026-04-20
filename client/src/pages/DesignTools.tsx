@@ -20,6 +20,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Link2, Link2Off } from "lucide-react";
 
 
 export default function DesignTools() {
@@ -79,6 +81,23 @@ export default function DesignTools() {
   const enhanceMutation = trpc.enhance.submit.useMutation();
   const enhanceUrlMutation = trpc.enhance.submitUrl.useMutation();
   const utils = trpc.useUtils();
+
+  // Project association
+  const { data: projectsData } = trpc.projects.list.useQuery({});
+  const allProjects = Array.isArray(projectsData) ? projectsData : [];
+  const updateProjectMutation = trpc.history.updateProject.useMutation({
+    onSuccess: () => {
+      utils.history.listGrouped.invalidate();
+      toast.success("项目关联已更新");
+    },
+    onError: (e) => toast.error(e.message || "操作失败"),
+  });
+  // Track current projectId per generated image historyId
+  const [imageProjectIds, setImageProjectIds] = useState<Record<number, number | null>>({});
+  const handleAssociateProject = useCallback((historyId: number, projectId: number | null) => {
+    updateProjectMutation.mutate({ historyId, projectId });
+    setImageProjectIds(prev => ({ ...prev, [historyId]: projectId }));
+  }, [updateProjectMutation]);
   const enhanceStatusQuery = trpc.enhance.status.useQuery(
     { historyId: enhancingId! },
     {
@@ -960,19 +979,50 @@ export default function DesignTools() {
                       {img.historyId && (
                         <FeedbackButtons module="ai_render" historyId={img.historyId} compact />
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => {
-                          if (img.historyId) {
-                            setParentHistoryId(img.historyId);
-                          }
-                        }}
-                      >
-                        <FolderOpen className="h-3 w-3 mr-1" />
-                        关联项目
-                      </Button>
+                      {img.historyId && (() => {
+                        const hid = img.historyId!;
+                        const currentProjectId = imageProjectIds[hid] ?? null;
+                        return (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={`h-7 text-xs ${currentProjectId ? 'border-primary/50 text-primary' : ''}`}
+                              >
+                                <Link2 className="h-3 w-3 mr-1" />
+                                {currentProjectId ? allProjects.find((p: any) => p.id === currentProjectId)?.name || '已关联' : '关联项目'}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-52 p-2" side="top" align="start">
+                              <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">关联到项目</p>
+                              <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                                {currentProjectId && (
+                                  <button
+                                    className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors text-destructive/80 hover:text-destructive"
+                                    onClick={() => handleAssociateProject(hid, null)}>
+                                    <Link2Off className="h-3 w-3 inline mr-1.5" />
+                                    解除关联
+                                  </button>
+                                )}
+                                {allProjects.length === 0 && (
+                                  <p className="text-xs text-muted-foreground px-2 py-1.5">暂无项目</p>
+                                )}
+                                {allProjects.map((p: any) => (
+                                  <button
+                                    key={p.id}
+                                    className={`w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted transition-colors ${
+                                      currentProjectId === p.id ? 'bg-primary/10 text-primary font-medium' : ''
+                                    }`}
+                                    onClick={() => handleAssociateProject(hid, p.id)}>
+                                    {p.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        );
+                      })()}
                       {/* Magnific enhance button */}
                       {img.historyId && (() => {
                         const hid = img.historyId!;

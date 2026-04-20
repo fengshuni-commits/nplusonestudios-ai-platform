@@ -1220,38 +1220,33 @@ export async function getEditChain(rootId: number, userId: number) {
   const rootModule = rootItem[0]?.module || "ai_render";
 
   // Now collect the full chain: root + all descendants
-  // Use iterative approach: collect all items for this user in the same module,
-  // then build the chain in memory
-  const allRenderItems = await db.select().from(generationHistory)
-    .where(and(eq(generationHistory.userId, userId), eq(generationHistory.module, rootModule)))
-    .orderBy(generationHistory.createdAt);
+  // Use iterative BFS, fetching only children of known IDs (not all records)
+  const rootItemRow = await db.select().from(generationHistory)
+    .where(and(eq(generationHistory.id, actualRootId), eq(generationHistory.userId, userId)))
+    .limit(1);
+  if (!rootItemRow[0]) return [];
 
-  // Build a map of parentId -> children
-  const childrenMap = new Map<number, typeof allRenderItems>();
-  const itemMap = new Map<number, (typeof allRenderItems)[0]>();
-  for (const item of allRenderItems) {
-    itemMap.set(item.id, item);
-    if (item.parentId) {
-      const siblings = childrenMap.get(item.parentId) || [];
-      siblings.push(item);
-      childrenMap.set(item.parentId, siblings);
+  const chain: (typeof rootItemRow) = [rootItemRow[0]];
+  const toExpand: number[] = [actualRootId];
+  let safetyBfs = 200;
+
+  while (toExpand.length > 0 && safetyBfs-- > 0) {
+    const parentIds = toExpand.splice(0, toExpand.length);
+    // Fetch all direct children of current batch
+    const children = await db.select().from(generationHistory)
+      .where(and(
+        eq(generationHistory.userId, userId),
+        inArray(generationHistory.parentId, parentIds)
+      ))
+      .orderBy(generationHistory.createdAt);
+    for (const child of children) {
+      chain.push(child);
+      toExpand.push(child.id);
     }
   }
 
-  // BFS from root to collect chain in order
-  const chain: typeof allRenderItems = [];
-  const root = itemMap.get(actualRootId);
-  if (!root) return [];
-  
-  const queue = [root];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    chain.push(current);
-    const children = childrenMap.get(current.id) || [];
-    // Sort children by createdAt
-    children.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    queue.push(...children);
-  }
+  // Sort chain by createdAt to maintain chronological order
+  chain.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   return chain;
 }

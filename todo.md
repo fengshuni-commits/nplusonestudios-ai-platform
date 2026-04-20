@@ -1861,3 +1861,11 @@
 - [x] 新增接入：图文排版（MediaLayout）
 - [x] 新增接入：演示文稿（Presentation），后端已写入 historyId
 - [x] 新增接入：视频生成（VideoGeneration），后端返回 recordId
+
+## Bug: 效果图生成页面关联项目按钮无反应
+- [x] 排查原因：按钮只设置 parentHistoryId，没有弹出项目选择弹窗
+- [x] 修复：改为 Popover 项目选择器，调用 history.updateProject 关联
+
+## Bug: 历史记录图片无法查看
+- [x] 排查原因： getEditChain 加载所有用户 ai_render 记录，记录越多越慢导致 listGrouped 请求超时
+- [x] 修复：改为迭代 BFS，每次只查询当前批次的直接子节点，不加载全量记录
