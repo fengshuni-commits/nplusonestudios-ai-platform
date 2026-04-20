@@ -14,7 +14,7 @@ import {
   Plus, ChevronLeft, ChevronRight, Check, Palette,
   BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images, HelpCircle,
   Link2, Library, RotateCcw, Eye, ChevronDown, ChevronUp, Folder,
-  Search, ImageIcon
+  Search, ImageIcon, X
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -290,11 +290,13 @@ function PageImageViewer({
   page,
   aspectRatio,
   onClickBlock,
+  onDeleteBlock,
   inpaintingBlockId,
 }: {
   page: PageData;
   aspectRatio: string;
   onClickBlock: (block: TextBlock) => void;
+  onDeleteBlock?: (block: TextBlock) => void;
   inpaintingBlockId?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -354,15 +356,39 @@ function PageImageViewer({
             } rounded`}
             style={{ left, top, width, height }}
           >
-            {/* 编辑图标 */}
-            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center transition-opacity ${
-              isInpainting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-            }`}>
-              {isInpainting
-                ? <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
-                : <Pencil className="w-2 h-2 text-white" />
-              }
-            </div>
+            {/* 加载中图标 */}
+            {isInpainting && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center">
+                <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
+              </div>
+            )}
+
+            {/* 悬停时显示编辑 + 删除图标 */}
+            {!isInpainting && (
+              <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* 编辑按钮 */}
+                <div
+                  className="w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center"
+                  title="编辑文字"
+                >
+                  <Pencil className="w-2 h-2 text-white" />
+                </div>
+                {/* 删除按钮 */}
+                {onDeleteBlock && (
+                  <div
+                    className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-400 transition-colors"
+                    title="删除文字块"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteBlock(block);
+                    }}
+                  >
+                    <X className="w-2 h-2 text-white" />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 角色标签 */}
             <div className={`absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap transition-opacity ${
               isInpainting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -1377,6 +1403,15 @@ export default function MediaLayout() {
                       page={currentPageData}
                       aspectRatio={activeAspectRatio}
                       onClickBlock={handleClickBlock}
+                      onDeleteBlock={(block) => {
+                        if (!activeJobId) return;
+                        if (!confirm(`确定删除文字块「${block.text.slice(0, 20)}${block.text.length > 20 ? "…" : ""}」？`)) return;
+                        deleteTextBlockMutation.mutate({
+                          jobId: activeJobId,
+                          pageIndex: currentPage,
+                          blockId: block.id,
+                        });
+                      }}
                       inpaintingBlockId={inpaintingBlockId}
                     />
                   )}
