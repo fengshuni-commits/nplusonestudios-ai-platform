@@ -582,6 +582,28 @@ export default function MediaLayout() {
     onSuccess: () => { refetchJobs(); setActiveJobId(undefined); toast.success("已删除"); },
   });
 
+  const deleteTextBlockMutation = trpc.graphicLayout.deleteTextBlock.useMutation({
+    onSuccess: () => {
+      toast.success("文字块已删除");
+      setEditingBlock(null);
+      setNewText("");
+      refetchActiveJob();
+    },
+    onError: (err) => {
+      toast.error("删除失败：" + err.message);
+    },
+  });
+
+  const handleDeleteBlock = () => {
+    if (!activeJobId || !editingBlock) return;
+    if (!confirm(`确定删除文字块「${editingBlock.text.slice(0, 20)}${editingBlock.text.length > 20 ? "…" : ""}」？此操作仅移除热区标记，不会重绘图像。`)) return;
+    deleteTextBlockMutation.mutate({
+      jobId: activeJobId,
+      pageIndex: editingPageIndex,
+      blockId: editingBlock.id,
+    });
+  };
+
   const inpaintMutation = trpc.graphicLayout.inpaintTextBlock.useMutation({
     onSuccess: () => {
       toast.success("文字已更新");
@@ -1679,7 +1701,16 @@ export default function MediaLayout() {
                   className="flex-1 border-white/15 text-white/60 bg-transparent hover:bg-white/5">
                   取消
                 </Button>
-                <Button onClick={handleConfirmEdit} disabled={!newText.trim() || inpaintMutation.isPending}
+                <Button
+                  variant="outline"
+                  onClick={handleDeleteBlock}
+                  disabled={deleteTextBlockMutation.isPending || inpaintMutation.isPending}
+                  className="border-red-500/30 text-red-400/70 bg-transparent hover:bg-red-500/10 hover:text-red-400"
+                  title="删除此文字块热区（不重绘图像）"
+                >
+                  {deleteTextBlockMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </Button>
+                <Button onClick={handleConfirmEdit} disabled={!newText.trim() || inpaintMutation.isPending || deleteTextBlockMutation.isPending}
                   className="flex-1 bg-[#B87333] hover:bg-[#D4956B] text-white">
                   {inpaintMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />重绘中...</> : "确认重绘"}
                 </Button>

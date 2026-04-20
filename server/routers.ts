@@ -6120,6 +6120,34 @@ const graphicLayoutRouter = router({
       }
       return { savedCount: savedAssets.length, assets: savedAssets };
     }),
+
+  // ─── 删除文字块（从 pages 数据中移除，不重绘图像） ──────────────────────────
+  deleteTextBlock: protectedProcedure
+    .input(z.object({
+      jobId: z.number(),
+      pageIndex: z.number(),
+      blockId: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicLayoutJobs } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+        .where(_and(_eq(graphicLayoutJobs.id, input.jobId), _eq(graphicLayoutJobs.userId, ctx.user.id)))
+        .limit(1);
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      const pages = (job.pages as any[]) ?? [];
+      const updatedPages = pages.map((p: any) => {
+        if (p.pageIndex !== input.pageIndex) return p;
+        return {
+          ...p,
+          textBlocks: (p.textBlocks ?? []).filter((b: any) => b.id !== input.blockId),
+        };
+      });
+      await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, input.jobId));
+      return { success: true };
+    }),
 });
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 

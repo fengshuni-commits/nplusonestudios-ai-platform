@@ -1824,3 +1824,8 @@
 - [x] AI 效果图（DesignTools.tsx）：工具选择器加入 showBuiltIn={false}，去掉内置 AI 选项
 - [x] AI 平面图（ColorPlan.tsx）：工具选择器加入 showBuiltIn={false}，去掉内置 AI 选项
 - [x] AiToolSelector：修复 showBuiltIn=false 时无默认工具不会回退显示内置 AI，改为显示 placeholder
+
+## 图文排版成果编辑：文字块删除功能
+- [x] 定位图文排版编辑器中文字块的数据结构和选中逻辑
+- [x] 选中文字块后在编辑 Dialog 中显示删除按钮（小红色垃圾桶图标）
+- [x] 后端新增 deleteTextBlock 路由，删除后更新 pages 数据并重新渲染
