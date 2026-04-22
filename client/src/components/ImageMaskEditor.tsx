@@ -194,8 +194,8 @@ export default function ImageMaskEditor({
         onTouchEnd={onUp}
       />
 
-      {/* Floating toolbar at the top of the image */}
-      <div className="absolute top-2 left-2 right-2 z-30 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm rounded-lg px-2 py-1.5 shadow-lg border border-border">
+      {/* Floating toolbar at the bottom of the image */}
+      <div className="absolute bottom-2 left-2 right-2 z-30 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm rounded-lg px-2 py-1.5 shadow-lg border border-border">
         <div className="flex items-center gap-0.5 bg-muted rounded p-0.5">
           <button
             type="button"
@@ -250,8 +250,8 @@ export default function ImageMaskEditor({
         </div>
       </div>
 
-      {/* Hint text at the bottom */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 bg-black/60 text-white text-[10px] px-3 py-1 rounded-full">
+      {/* Hint text at the top */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-black/60 text-white text-[10px] px-3 py-1 rounded-full pointer-events-none">
         在图片上圈出需要调整的区域
       </div>
     </>

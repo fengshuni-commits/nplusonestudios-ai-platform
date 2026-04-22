@@ -1869,3 +1869,6 @@
 ## Bug: 历史记录图片无法查看
 - [x] 排查原因： getEditChain 加载所有用户 ai_render 记录，记录越多越慢导致 listGrouped 请求超时
 - [x] 修复：改为迭代 BFS，每次只查询当前批次的直接子节点，不加载全量记录
+## AI效果图局部修改工具条移到画面下方
+- [x] 定位 ImageMaskEditor.tsx 中工具条的代码（absolute top-2）
+- [x] 将工具条改为 absolute bottom-2，提示文字移到顶部
