@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AiToolSelector } from "@/components/AiToolSelector";
-import ImageMaskEditor from "@/components/ImageMaskEditor";
+import ImageMaskEditor, { ImageMaskToolbar, type ImageMaskEditorHandle } from "@/components/ImageMaskEditor";
 import { trpc } from "@/lib/trpc";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -32,6 +32,12 @@ export default function DesignTools() {
   const [resolution, setResolution] = useState("standard");
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string; historyId?: number }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Mask editor imperative ref + toolbar state (lifted so toolbar can live outside the image)
+  const maskEditorRef = useRef<ImageMaskEditorHandle>(null);
+  const [maskBrushSize, setMaskBrushSize] = useState(30);
+  const [maskTool, setMaskTool] = useState<"brush" | "eraser">("brush");
+  const [maskHasDrawn, setMaskHasDrawn] = useState(false);
 
   // Reference image state
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
@@ -444,6 +450,9 @@ export default function DesignTools() {
   const handleMaskSave = useCallback((dataUrl: string, displayDataUrl?: string) => {
     setMaskDataUrl(dataUrl);
     if (displayDataUrl) setMaskPreviewUrl(displayDataUrl);
+    setMaskHasDrawn(false);
+    setEditingImageIdx(null);
+    setEditImgDims(null);
     toast.success("标注区域已保存，修改描述后点击「局部重绘」");
   }, []);
 
@@ -452,6 +461,7 @@ export default function DesignTools() {
     setEditImgDims(null);
     setMaskDataUrl(null);
     setMaskPreviewUrl(null);
+    setMaskHasDrawn(false);
   }, []);
 
   // Track result image load for mask overlay dimensions
@@ -927,12 +937,14 @@ export default function DesignTools() {
                       {/* Mask editor overlay on this image */}
                       {editingImageIdx === idx && editImgDims && (
                         <ImageMaskEditor
+                          ref={maskEditorRef}
                           displayWidth={editImgDims.dw}
                           displayHeight={editImgDims.dh}
                           naturalWidth={editImgDims.nw}
                           naturalHeight={editImgDims.nh}
                           onSave={handleMaskSave}
                           onCancel={handleMaskCancel}
+                          onHasDrawnChange={setMaskHasDrawn}
                         />
                       )}
 
@@ -974,6 +986,19 @@ export default function DesignTools() {
                         </div>
                       )}
                     </div>
+                    {/* Mask toolbar — outside the image container, below it */}
+                    {editingImageIdx === idx && editImgDims && (
+                      <ImageMaskToolbar
+                        brushSize={maskBrushSize}
+                        setBrushSize={(v) => { setMaskBrushSize(v); maskEditorRef.current?.setBrushSize(v); }}
+                        tool={maskTool}
+                        setTool={(t) => { setMaskTool(t); maskEditorRef.current?.setTool(t); }}
+                        hasDrawn={maskHasDrawn}
+                        onClear={() => maskEditorRef.current?.clear()}
+                        onSave={() => maskEditorRef.current?.save()}
+                        onCancel={handleMaskCancel}
+                      />
+                    )}
                     <p className="text-xs text-muted-foreground line-clamp-2">{img.prompt}</p>
                     <div className="flex items-center gap-2 flex-wrap">
                       {img.historyId && (
@@ -1167,12 +1192,14 @@ export default function DesignTools() {
                   {/* Mask editor overlay on the base image preview */}
                   {editingImageIdx === -1 && editImgDims && (
                     <ImageMaskEditor
+                      ref={maskEditorRef}
                       displayWidth={editImgDims.dw}
                       displayHeight={editImgDims.dh}
                       naturalWidth={editImgDims.nw}
                       naturalHeight={editImgDims.nh}
                       onSave={handleMaskSave}
                       onCancel={handleMaskCancel}
+                      onHasDrawnChange={setMaskHasDrawn}
                     />
                   )}
 
@@ -1243,6 +1270,19 @@ export default function DesignTools() {
                     </div>
                   )}
                 </div>
+                {/* Mask toolbar — outside the image container, below it */}
+                {editingImageIdx === -1 && editImgDims && (
+                  <ImageMaskToolbar
+                    brushSize={maskBrushSize}
+                    setBrushSize={(v) => { setMaskBrushSize(v); maskEditorRef.current?.setBrushSize(v); }}
+                    tool={maskTool}
+                    setTool={(t) => { setMaskTool(t); maskEditorRef.current?.setTool(t); }}
+                    hasDrawn={maskHasDrawn}
+                    onClear={() => maskEditorRef.current?.clear()}
+                    onSave={() => maskEditorRef.current?.save()}
+                    onCancel={handleMaskCancel}
+                  />
+                )}
                 <p className="text-xs text-muted-foreground text-center">
                   悬停图片可使用「局部标注」工具圈出需要修改的区域
                 </p>

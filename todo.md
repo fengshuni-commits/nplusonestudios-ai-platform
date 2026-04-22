@@ -1872,3 +1872,6 @@
 ## AI效果图局部修改工具条移到画面下方
 - [x] 定位 ImageMaskEditor.tsx 中工具条的代码（absolute top-2）
 - [x] 将工具条改为 absolute bottom-2，提示文字移到顶部
+
+## AI效果图局部修改工具条移到图片外部下方
+- [x] 将工具条从 ImageMaskEditor 内部浮层提取出来，移到图片容器外部下方独立区域
