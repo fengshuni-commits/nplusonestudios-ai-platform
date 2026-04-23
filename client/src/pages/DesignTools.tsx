@@ -34,6 +34,9 @@ export default function DesignTools() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateCount, setGenerateCount] = useState(1);
   const [compareMode, setCompareMode] = useState(false);
+  // Progress tracking
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [jobProgress, setJobProgress] = useState<Record<number, number>>({}); // index -> 0-100
 
   // Mask editor imperative ref + toolbar state (lifted so toolbar can live outside the image)
   const maskEditorRef = useRef<ImageMaskEditorHandle>(null);
@@ -362,12 +365,36 @@ export default function DesignTools() {
       setCurrentJobId(ids[0]);
       setCurrentJobIds(ids);
       completedJobIdsRef.current.clear();
+      setGenerationStartTime(Date.now());
+      setJobProgress({});
     },
     onError: (err) => {
       setIsGenerating(false);
       toast.error(err.message || "生成失败，请重试");
     },
   });
+
+  // Simulate progress for each generating job (0→90% over ~25s, then hold until done)
+  useEffect(() => {
+    if (!isGenerating || generationStartTime === null) return;
+    const count = currentJobIds.length || 1;
+    const TOTAL_MS = 25000; // estimated 25s to reach 90%
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - generationStartTime;
+      setJobProgress((prev) => {
+        const next = { ...prev };
+        for (let i = 0; i < count; i++) {
+          const current = prev[i] ?? 0;
+          if (current >= 90) continue; // hold at 90 until real completion
+          // Ease-out: fast at start, slow near 90
+          const target = Math.min(90, Math.round(90 * (1 - Math.exp(-elapsed / TOTAL_MS * 2.5))));
+          next[i] = Math.max(current, target);
+        }
+        return next;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isGenerating, generationStartTime, currentJobIds.length]);
 
   // ─── File handling helpers ─────────────────────────────
   const validateImageFile = useCallback((file: File): boolean => {
@@ -1404,18 +1431,53 @@ export default function DesignTools() {
                 </p>
               </div>
             ) : isGenerating ? (
-              /* ── Generating skeleton ── */
+              /* ── Generating skeleton with progress ── */
               <div className="space-y-4">
-                {Array.from({ length: currentJobIds.length || 1 }).map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="relative rounded-lg overflow-hidden bg-muted aspect-video animate-pulse flex flex-col items-center justify-center gap-3">
-                      <Loader2 className="h-8 w-8 text-muted-foreground/40 animate-spin" />
-                      <p className="text-xs text-muted-foreground/60">
-                        {currentJobIds.length > 1 ? `图片 ${i + 1}/${currentJobIds.length} 生成中...` : "图像生成中..."}
-                      </p>
+                {Array.from({ length: currentJobIds.length || 1 }).map((_, i) => {
+                  const pct = jobProgress[i] ?? 0;
+                  const elapsed = generationStartTime ? Math.floor((Date.now() - generationStartTime) / 1000) : 0;
+                  // Estimate remaining: assume 90% takes ~25s total
+                  const estTotal = 30;
+                  const remaining = Math.max(0, estTotal - elapsed);
+                  const stage =
+                    pct < 10 ? "初始化任务..."
+                    : pct < 30 ? "解析提示词..."
+                    : pct < 60 ? "生成图像中..."
+                    : pct < 85 ? "细化渲染中..."
+                    : "即将完成...";
+                  return (
+                    <div key={i} className="space-y-2">
+                      <div className="relative rounded-lg overflow-hidden bg-muted aspect-video flex flex-col items-center justify-center gap-4">
+                        {/* Subtle shimmer overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_ease-in-out_infinite] bg-[length:200%_100%]" />
+                        <Loader2 className="h-8 w-8 text-muted-foreground/40 animate-spin" />
+                        <div className="flex flex-col items-center gap-2 w-48">
+                          {/* Progress bar */}
+                          <div className="w-full h-1.5 bg-muted-foreground/20 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary/60 rounded-full transition-all duration-500 ease-out"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          {/* Stage text + percent */}
+                          <div className="flex items-center justify-between w-full">
+                            <p className="text-[11px] text-muted-foreground/70">{stage}</p>
+                            <p className="text-[11px] text-muted-foreground/50">{pct}%</p>
+                          </div>
+                          {/* Estimated time */}
+                          {remaining > 0 && pct < 90 && (
+                            <p className="text-[10px] text-muted-foreground/40">
+                              预计剩余 {remaining < 60 ? `${remaining}s` : `${Math.ceil(remaining / 60)}min`}
+                            </p>
+                          )}
+                          {currentJobIds.length > 1 && (
+                            <p className="text-[10px] text-muted-foreground/40">图片 {i + 1} / {currentJobIds.length}</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
