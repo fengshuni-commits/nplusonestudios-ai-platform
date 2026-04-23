@@ -6,10 +6,200 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock } from "lucide-react";
-import { useState } from "react";
+import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock, Timer, TrendingUp, AlertTriangle, Zap } from "lucide-react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shared/toolCapabilities";
+
+// ─── Key 池卡片组件 ────────────────────────────────────────────────────────────
+
+/** 格式化相对时间（秒数 → 人类可读） */
+function formatRelativeTime(unixSec: number | null | undefined): string {
+  if (!unixSec) return "从未";
+  const diff = Math.floor(Date.now() / 1000) - unixSec;
+  if (diff < 60) return `${diff} 秒前`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  return `${Math.floor(diff / 86400)} 天前`;
+}
+
+/** 冷却倒计时 hook */
+function useCooldownTimer(cooldownUntil: number | null | undefined) {
+  const [remaining, setRemaining] = useState<number>(0);
+  useEffect(() => {
+    if (!cooldownUntil) { setRemaining(0); return; }
+    const update = () => {
+      const r = cooldownUntil - Math.floor(Date.now() / 1000);
+      setRemaining(Math.max(0, r));
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownUntil]);
+  return remaining;
+}
+
+/** 格式化冷却剩余时间 */
+function formatCooldown(seconds: number): string {
+  if (seconds <= 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+type PoolKeyData = {
+  id: number;
+  apiKeyMasked: string;
+  label?: string | null;
+  isActive: boolean;
+  successCount: number;
+  failCount: number;
+  lastSuccessAt?: number | null;
+  lastFailAt?: number | null;
+  cooldownUntil?: number | null;
+};
+
+function KeyPoolCard({
+  k,
+  onToggle,
+  onResetCooldown,
+  onDelete,
+}: {
+  k: PoolKeyData;
+  onToggle: () => void;
+  onResetCooldown: () => void;
+  onDelete: () => void;
+}) {
+  const cooldownRemaining = useCooldownTimer(k.cooldownUntil);
+  const inCooldown = cooldownRemaining > 0;
+  const total = k.successCount + k.failCount;
+  const successRate = total > 0 ? Math.round((k.successCount / total) * 100) : null;
+
+  // Status color
+  const statusColor = !k.isActive
+    ? "text-muted-foreground"
+    : inCooldown
+    ? "text-amber-500"
+    : "text-green-600";
+
+  const statusIcon = !k.isActive ? (
+    <ShieldOff className={`h-3.5 w-3.5 ${statusColor} shrink-0`} />
+  ) : inCooldown ? (
+    <Timer className={`h-3.5 w-3.5 ${statusColor} shrink-0`} />
+  ) : (
+    <ShieldCheck className={`h-3.5 w-3.5 ${statusColor} shrink-0`} />
+  );
+
+  const statusLabel = !k.isActive ? "已停用" : inCooldown ? "冷却中" : "正常";
+  const statusBg = !k.isActive
+    ? "bg-muted/50 border-border"
+    : inCooldown
+    ? "bg-amber-50/50 border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800/40"
+    : "bg-green-50/30 border-green-200/50 dark:bg-green-950/10 dark:border-green-800/30";
+
+  return (
+    <div className={`rounded-md border p-2.5 text-xs ${statusBg}`}>
+      {/* Row 1: Key + status badge + actions */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {statusIcon}
+          <span className="font-mono text-muted-foreground truncate">{k.apiKeyMasked}</span>
+          {k.label && (
+            <span className="shrink-0 text-foreground/60 bg-muted/60 px-1 rounded">{k.label}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${statusColor} ${
+            !k.isActive ? "bg-muted/40 border-border" :
+            inCooldown ? "bg-amber-100/60 border-amber-300/60 dark:bg-amber-900/30 dark:border-amber-700/50" :
+            "bg-green-100/60 border-green-300/60 dark:bg-green-900/30 dark:border-green-700/50"
+          }`}>{statusLabel}</span>
+          <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={onToggle}
+            title={k.isActive ? "停用" : "启用"}>
+            {k.isActive ? <ShieldOff className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+          </Button>
+          {inCooldown && (
+            <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={onResetCooldown} title="重置冷却">
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-6 px-1.5 text-destructive hover:text-destructive"
+            onClick={onDelete}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Row 2: Stats */}
+      <div className="mt-2 space-y-1.5">
+        {/* Success rate bar */}
+        {total > 0 && (
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <TrendingUp className="h-3 w-3" />调用成功率
+              </span>
+              <span className={`font-semibold ${
+                successRate === null ? "text-muted-foreground" :
+                successRate >= 90 ? "text-green-600" :
+                successRate >= 70 ? "text-amber-600" : "text-red-500"
+              }`}>
+                {successRate !== null ? `${successRate}%` : "—"}
+                <span className="font-normal text-muted-foreground ml-1">({k.successCount}/{total})</span>
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  successRate === null ? "bg-muted" :
+                  successRate >= 90 ? "bg-green-500" :
+                  successRate >= 70 ? "bg-amber-500" : "bg-red-500"
+                }`}
+                style={{ width: `${successRate ?? 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Cooldown countdown */}
+        {inCooldown && (
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-amber-600">
+              <Timer className="h-3 w-3" />冷却剩余
+            </span>
+            <span className="font-mono font-semibold text-amber-600">{formatCooldown(cooldownRemaining)}</span>
+          </div>
+        )}
+
+        {/* Last fail time */}
+        {k.lastFailAt && (
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <AlertTriangle className="h-3 w-3" />最近失败
+            </span>
+            <span className="text-muted-foreground">{formatRelativeTime(k.lastFailAt)}</span>
+          </div>
+        )}
+
+        {/* Last success time (only if no fail info) */}
+        {!k.lastFailAt && k.lastSuccessAt && (
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Zap className="h-3 w-3" />最近成功
+            </span>
+            <span className="text-muted-foreground">{formatRelativeTime(k.lastSuccessAt)}</span>
+          </div>
+        )}
+
+        {/* No calls yet */}
+        {total === 0 && (
+          <p className="text-muted-foreground/60 text-center py-0.5">尚未调用</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // 需要在 UI 中展示的功能类别（与 toolCapabilities.ts 中的真实 capability 一一对应）
 const DISPLAY_CAPABILITIES: { key: ToolCapability; label: string; desc: string }[] = [
@@ -493,62 +683,16 @@ export default function AdminApiKeys() {
                             <div className="space-y-2 bg-background rounded border p-2">
                               {/* 已有备用 Key 列表 */}
                               {poolKeys && poolKeys.length > 0 ? (
-                                <div className="space-y-1.5">
-                                  {poolKeys.map((k: any) => {
-                                    const inCooldown = k.cooldownUntil && k.cooldownUntil > Math.floor(Date.now() / 1000);
-                                    return (
-                                      <div key={k.id} className="flex items-center gap-2 text-xs">
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-1.5">
-                                            {k.isActive && !inCooldown ? (
-                                              <ShieldCheck className="h-3 w-3 text-green-600 shrink-0" />
-                                            ) : inCooldown ? (
-                                              <Clock className="h-3 w-3 text-amber-500 shrink-0" />
-                                            ) : (
-                                              <ShieldOff className="h-3 w-3 text-muted-foreground shrink-0" />
-                                            )}
-                                            <span className="font-mono text-muted-foreground truncate">{k.apiKeyMasked}</span>
-                                            {k.label && <span className="text-foreground/60 shrink-0">({k.label})</span>}
-                                          </div>
-                                          <div className="flex gap-2 mt-0.5 text-muted-foreground/70">
-                                            <span>成功 {k.successCount}</span>
-                                            {k.failCount > 0 && <span className="text-amber-600">失败 {k.failCount}</span>}
-                                            {inCooldown && <span className="text-amber-500">冷却中</span>}
-                                          </div>
-                                        </div>
-                                        <div className="flex gap-1 shrink-0">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 px-1.5 text-xs"
-                                            onClick={() => updateKey.mutate({ id: k.id, isActive: !k.isActive })}
-                                            title={k.isActive ? "停用" : "启用"}
-                                          >
-                                            {k.isActive ? <ShieldOff className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
-                                          </Button>
-                                          {inCooldown && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-6 px-1.5 text-xs"
-                                              onClick={() => updateKey.mutate({ id: k.id, isActive: true })}
-                                              title="重置冷却"
-                                            >
-                                              <RefreshCw className="h-3 w-3" />
-                                            </Button>
-                                          )}
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 px-1.5 text-xs text-destructive hover:text-destructive"
-                                            onClick={() => { if (confirm("确定删除此备用 Key？")) deleteKey.mutate({ id: k.id }); }}
-                                          >
-                                            <Trash2 className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+                                <div className="space-y-2">
+                                  {poolKeys.map((k: any) => (
+                                    <KeyPoolCard
+                                      key={k.id}
+                                      k={k}
+                                      onToggle={() => updateKey.mutate({ id: k.id, isActive: !k.isActive })}
+                                      onResetCooldown={() => updateKey.mutate({ id: k.id, isActive: true })}
+                                      onDelete={() => { if (confirm("确定删除此备用 Key？")) deleteKey.mutate({ id: k.id }); }}
+                                    />
+                                  ))}
                                 </div>
                               ) : (
                                 <p className="text-xs text-muted-foreground py-1">暂无备用 Key，添加后将与主 Key 轮换使用</p>

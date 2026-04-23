@@ -1884,3 +1884,8 @@
 - [x] generateImageWithTool.ts：接入 Key 池轮换逻辑（成功/失败自动回报）
 - [x] llm.ts invokeLLMWithUserTool：接入 Key 池轮换逻辑（成功/失败自动回报）
 - [x] keyPool.test.ts：12 个单元测试全部通过
+
+## Key 池状态监控面板
+- [x] KeyPoolCard 组件：成功率进度条（绿/黄/红三档）、冷却倒计时（秒级实时更新）、最近失败时间、状态徽章
+- [x] useCooldownTimer hook：每秒更新冷却剩余时长
+- [x] formatRelativeTime：相对时间格式化（秒/分/时/天前）
