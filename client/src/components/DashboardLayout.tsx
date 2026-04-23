@@ -70,6 +70,16 @@ const homeItem: MenuItem = { icon: LayoutDashboard, label: "工作台", path: "/
 
 const menuSections: MenuSection[] = [
   {
+    id: "project",
+    label: "项目管理",
+    icon: ClipboardList,
+    items: [
+      { icon: FolderKanban, label: "项目看板", path: "/projects" },
+      { icon: FileText, label: "会议纪要", path: "/meeting" },
+      { icon: FileText, label: "设计任务书", path: "/design/brief" },
+    ],
+  },
+  {
     id: "design",
     label: "设计",
     icon: PenTool,
@@ -89,16 +99,6 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: HardHat, label: "施工管理", path: "/construction/docs" },
       { icon: ShoppingCart, label: "采购跟踪", path: "/construction/procurement" },
-    ],
-  },
-  {
-    id: "project",
-    label: "项目管理",
-    icon: ClipboardList,
-    items: [
-      { icon: FolderKanban, label: "项目看板", path: "/projects" },
-      { icon: FileText, label: "会议纪要", path: "/meeting" },
-      { icon: FileText, label: "设计任务书", path: "/design/brief" },
     ],
   },
   {
