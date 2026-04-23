@@ -32,6 +32,7 @@ export default function DesignTools() {
   const [resolution, setResolution] = useState("standard");
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string; historyId?: number }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generateCount, setGenerateCount] = useState(1);
 
   // Mask editor imperative ref + toolbar state (lifted so toolbar can live outside the image)
   const maskEditorRef = useRef<ImageMaskEditorHandle>(null);
@@ -262,12 +263,17 @@ export default function DesignTools() {
     }
   }, [searchString]);
 
-  // Async rendering job polling
+  // Async rendering job polling (supports 1-3 parallel jobs)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [currentJobIds, setCurrentJobIds] = useState<string[]>([]);
+  // Track which jobs have already been added to generatedImages to avoid duplicates
+  const completedJobIdsRef = useRef<Set<string>>(new Set());
+
+  // Single-job poll (kept for mask edit / inpaint which always produce 1 job)
   const pollJobQuery = trpc.rendering.pollJob.useQuery(
     { jobId: currentJobId! },
     {
-      enabled: currentJobId !== null,
+      enabled: currentJobId !== null && currentJobIds.length <= 1,
       refetchInterval: (query) => {
         const data = query.state.data;
         if (!data) return 2000;
@@ -278,7 +284,7 @@ export default function DesignTools() {
     }
   );
   useEffect(() => {
-    if (!currentJobId || !pollJobQuery.data) return;
+    if (!currentJobId || currentJobIds.length > 1 || !pollJobQuery.data) return;
     const data = pollJobQuery.data;
     if (data.status === "done") {
       const url = (data as any).url as string;
@@ -287,22 +293,74 @@ export default function DesignTools() {
       setGeneratedImages((prev) => [{ url, prompt, historyId }, ...prev]);
       if (historyId) setParentHistoryId(historyId);
       setCurrentJobId(null);
+      setCurrentJobIds([]);
       setIsGenerating(false);
       setEditingImageIdx(null);
       setMaskDataUrl(null);
+      completedJobIdsRef.current.clear();
       toast.success("图像生成完成");
     } else if (data.status === "failed") {
       const error = (data as any).error as string;
       setCurrentJobId(null);
+      setCurrentJobIds([]);
       setIsGenerating(false);
+      completedJobIdsRef.current.clear();
       toast.error(error || "生成失败，请重试");
     }
-  }, [currentJobId, pollJobQuery.data]);
+  }, [currentJobId, currentJobIds.length, pollJobQuery.data]);
+
+  // Multi-job poll (for count >= 2)
+  const pollJobsQuery = trpc.rendering.pollJobs.useQuery(
+    { jobIds: currentJobIds },
+    {
+      enabled: currentJobIds.length >= 2,
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return 2000;
+        const allDone = data.every((j: any) => j.status === "done" || j.status === "failed" || j.status === "not_found");
+        return allDone ? false : 2000;
+      },
+      staleTime: 0,
+    }
+  );
+  useEffect(() => {
+    if (currentJobIds.length < 2 || !pollJobsQuery.data) return;
+    const results = pollJobsQuery.data as Array<{ jobId: string; status: string; url?: string; prompt?: string; historyId?: number; error?: string }>;
+    let anyNewDone = false;
+    for (const r of results) {
+      if (r.status === "done" && r.url && !completedJobIdsRef.current.has(r.jobId)) {
+        completedJobIdsRef.current.add(r.jobId);
+        setGeneratedImages((prev) => [{ url: r.url!, prompt: r.prompt || "", historyId: r.historyId }, ...prev]);
+        if (r.historyId) setParentHistoryId(r.historyId);
+        anyNewDone = true;
+      }
+    }
+    const allFinished = results.every((r: any) => r.status === "done" || r.status === "failed" || r.status === "not_found");
+    if (allFinished) {
+      const failedCount = results.filter((r: any) => r.status === "failed").length;
+      const doneCount = results.filter((r: any) => r.status === "done").length;
+      setCurrentJobId(null);
+      setCurrentJobIds([]);
+      setIsGenerating(false);
+      setEditingImageIdx(null);
+      setMaskDataUrl(null);
+      completedJobIdsRef.current.clear();
+      if (doneCount > 0) toast.success(`生成完成，共 ${doneCount} 张`);
+      if (failedCount > 0) toast.error(`${failedCount} 张生成失败`);
+    } else if (anyNewDone) {
+      // Show partial results as they arrive
+      const doneCount = results.filter((r: any) => r.status === "done").length;
+      toast.success(`已生成 ${doneCount}/${currentJobIds.length} 张`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pollJobsQuery.data]);
 
   const generateMutation = trpc.rendering.generate.useMutation({
     onSuccess: (data) => {
-      // data.jobId returned — start polling
-      setCurrentJobId(data.jobId);
+      const ids = data.jobIds ?? [data.jobId];
+      setCurrentJobId(ids[0]);
+      setCurrentJobIds(ids);
+      completedJobIdsRef.current.clear();
     },
     onError: (err) => {
       setIsGenerating(false);
@@ -552,6 +610,8 @@ export default function DesignTools() {
         maskImageData,
         aspectRatio: aspectRatio !== "auto" ? aspectRatio : undefined,
         resolution: resolution !== "standard" ? resolution : undefined,
+        // Only allow multi-generation when not doing inpaint/mask edit
+        count: maskDataUrl ? 1 : generateCount,
       });
     } catch { setIsGenerating(false); setIsUploading(false); }
   };
@@ -790,17 +850,40 @@ export default function DesignTools() {
               </div>
             </div>
 
+            {/* ── Generate Count Selector ── */}
+            {!maskDataUrl && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">生成数量</Label>
+                <div className="flex gap-1">
+                  {[1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setGenerateCount(n)}
+                      disabled={isGenerating}
+                      className={`w-8 h-7 rounded text-xs font-medium transition-colors border ${
+                        generateCount === n
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Generate Button ── */}
             <Button onClick={handleGenerate} disabled={isGenerating} className="w-full">
               {isGenerating ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {isUploading ? "上传图片..." : "生成中..."}
+                  {isUploading ? "上传图片..." : currentJobIds.length > 1 ? `生成中... (${completedJobIdsRef.current.size}/${currentJobIds.length})` : "生成中..."}
                 </>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  {maskDataUrl ? "局部重绘" : hasReference ? "图生图" : "生成图像"}
+                  {maskDataUrl ? "局部重绘" : hasReference ? `图生图${generateCount > 1 ? ` ×${generateCount}` : ""}` : `生成图像${generateCount > 1 ? ` ×${generateCount}` : ""}`}
                 </>
               )}
             </Button>
@@ -1286,6 +1369,20 @@ export default function DesignTools() {
                 <p className="text-xs text-muted-foreground text-center">
                   悬停图片可使用「局部标注」工具圈出需要修改的区域
                 </p>
+              </div>
+            ) : isGenerating ? (
+              /* ── Generating skeleton ── */
+              <div className="space-y-4">
+                {Array.from({ length: currentJobIds.length || 1 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="relative rounded-lg overflow-hidden bg-muted aspect-video animate-pulse flex flex-col items-center justify-center gap-3">
+                      <Loader2 className="h-8 w-8 text-muted-foreground/40 animate-spin" />
+                      <p className="text-xs text-muted-foreground/60">
+                        {currentJobIds.length > 1 ? `图片 ${i + 1}/${currentJobIds.length} 生成中...` : "图像生成中..."}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

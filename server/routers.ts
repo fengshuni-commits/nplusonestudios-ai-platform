@@ -2766,20 +2766,25 @@ const renderingRouter = router({
       // upscale 专用参数
       jimengUpscaleResolution: z.enum(["4k", "8k"]).optional(),
       jimengUpscaleScale: z.number().min(0).max(100).optional(),
+      // 生成数量 1-3
+      count: z.number().min(1).max(3).default(1),
     }))
     .mutation(async ({ input, ctx }) => {
-      // Async mode: create job immediately and return jobId
-      const jobId = nanoid();
-      await db.createRenderingJob({
-        id: jobId,
-        userId: ctx.user.id,
-        inputParams: input as Record<string, unknown>,
-      });
-      // Fire-and-forget background generation
-      generateRenderingInBackground(jobId, input, ctx.user.id, ctx.user.name || null).catch(err => {
-        console.error("[Rendering] Unhandled error:", err);
-      });
-      return { jobId };
+      const { count = 1, ...baseInput } = input;
+      const jobIds: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const jobId = nanoid();
+        await db.createRenderingJob({
+          id: jobId,
+          userId: ctx.user.id,
+          inputParams: baseInput as Record<string, unknown>,
+        });
+        generateRenderingInBackground(jobId, baseInput, ctx.user.id, ctx.user.name || null).catch(err => {
+          console.error("[Rendering] Unhandled error:", err);
+        });
+        jobIds.push(jobId);
+      }
+      return { jobId: jobIds[0], jobIds };
     }),
 
   /** Poll status of a rendering generation job */
@@ -2796,6 +2801,22 @@ const renderingRouter = router({
         return { status: "failed" as const, error: job.error || "生成失败" };
       }
       return { status: job.status as "pending" | "processing" };
+    }),
+
+  /** Poll multiple rendering jobs status */
+  pollJobs: protectedProcedure
+    .input(z.object({ jobIds: z.array(z.string()) }))
+    .query(async ({ input, ctx }) => {
+      const results = await Promise.all(
+        input.jobIds.map(async (jobId) => {
+          const job = await db.getRenderingJob(jobId);
+          if (!job || job.userId !== ctx.user.id) return { jobId, status: "not_found" as const };
+          if (job.status === "done") return { jobId, status: "done" as const, url: job.resultUrl || "", prompt: job.resultPrompt || "", historyId: job.historyId };
+          if (job.status === "failed") return { jobId, status: "failed" as const, error: job.error || "生成失败" };
+          return { jobId, status: job.status as "pending" | "processing" };
+        })
+      );
+      return results;
     }),
 
   edit: protectedProcedure
