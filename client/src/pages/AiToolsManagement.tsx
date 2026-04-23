@@ -58,6 +58,7 @@ type PoolKeyData = {
   lastSuccessAt?: number | null;
   lastFailAt?: number | null;
   cooldownUntil?: number | null;
+  weight?: number;
 };
 
 function KeyPoolCard({
@@ -65,11 +66,13 @@ function KeyPoolCard({
   onToggle,
   onResetCooldown,
   onDelete,
+  onWeightChange,
 }: {
   k: PoolKeyData;
   onToggle: () => void;
   onResetCooldown: () => void;
   onDelete: () => void;
+  onWeightChange: (weight: number) => void;
 }) {
   const cooldownRemaining = useCooldownTimer(k.cooldownUntil);
   const inCooldown = cooldownRemaining > 0;
@@ -108,6 +111,18 @@ function KeyPoolCard({
           {k.label && (
             <span className="shrink-0 text-foreground/60 bg-muted/60 px-1 rounded">{k.label}</span>
           )}
+          {/* Weight badge */}
+          <span
+            className="shrink-0 flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100/60 border border-blue-300/60 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700/50 dark:text-blue-300 cursor-pointer hover:bg-blue-200/60 transition-colors select-none"
+            title="点击调整权重（1-10，越高被选中概率越大）"
+            onClick={() => {
+              const cur = k.weight ?? 1;
+              const next = cur >= 10 ? 1 : cur + 1;
+              onWeightChange(next);
+            }}
+          >
+            <Star className="h-2.5 w-2.5" />{k.weight ?? 1}
+          </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${statusColor} ${
@@ -192,6 +207,26 @@ function KeyPoolCard({
           </div>
         )}
 
+        {/* Weight info row */}
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <Star className="h-3 w-3" />选取权重
+          </span>
+          <div className="flex items-center gap-1">
+            {[1,2,3,4,5,6,7,8,9,10].map((w) => (
+              <button
+                key={w}
+                className={`w-4 h-4 rounded-sm text-[9px] font-bold transition-colors ${
+                  (k.weight ?? 1) >= w
+                    ? "bg-blue-500 text-white"
+                    : "bg-muted text-muted-foreground hover:bg-blue-200"
+                }`}
+                onClick={() => onWeightChange(w)}
+                title={`设置权重为 ${w}`}
+              >{w}</button>
+            ))}
+          </div>
+        </div>
         {/* No calls yet */}
         {total === 0 && (
           <p className="text-muted-foreground/60 text-center py-0.5">尚未调用</p>
@@ -278,7 +313,7 @@ export default function AdminApiKeys() {
 
   // Key 池管理状态
   const [keyPoolOpenId, setKeyPoolOpenId] = useState<number | null>(null);
-  const [addKeyForm, setAddKeyForm] = useState({ apiKey: "", label: "" });
+  const [addKeyForm, setAddKeyForm] = useState({ apiKey: "", label: "", weight: 1 });
   const [showAddKey, setShowAddKey] = useState(false);
   const [addingKeyToolId, setAddingKeyToolId] = useState<number | null>(null);
 
@@ -290,7 +325,7 @@ export default function AdminApiKeys() {
   const addKey = trpc.aiTools.addKey.useMutation({
     onSuccess: () => {
       refetchPoolKeys();
-      setAddKeyForm({ apiKey: "", label: "" });
+      setAddKeyForm({ apiKey: "", label: "", weight: 1 });
       setAddingKeyToolId(null);
       toast.success("备用 Key 已添加");
     },
@@ -691,6 +726,7 @@ export default function AdminApiKeys() {
                                       onToggle={() => updateKey.mutate({ id: k.id, isActive: !k.isActive })}
                                       onResetCooldown={() => updateKey.mutate({ id: k.id, isActive: true })}
                                       onDelete={() => { if (confirm("确定删除此备用 Key？")) deleteKey.mutate({ id: k.id }); }}
+                                      onWeightChange={(w) => updateKey.mutate({ id: k.id, weight: w })}
                                     />
                                   ))}
                                 </div>
@@ -715,6 +751,25 @@ export default function AdminApiKeys() {
                                     placeholder="备注名称（可选，如：Key 2）"
                                     className="text-xs h-7"
                                   />
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1"><Star className="h-3 w-3" />选取权重</span>
+                                    <div className="flex items-center gap-0.5">
+                                      {[1,2,3,4,5,6,7,8,9,10].map((w) => (
+                                        <button
+                                          key={w}
+                                          type="button"
+                                          className={`w-4 h-4 rounded-sm text-[9px] font-bold transition-colors ${
+                                            addKeyForm.weight >= w
+                                              ? "bg-blue-500 text-white"
+                                              : "bg-muted text-muted-foreground hover:bg-blue-200"
+                                          }`}
+                                          onClick={() => setAddKeyForm({ ...addKeyForm, weight: w })}
+                                          title={`权重 ${w}`}
+                                        >{w}</button>
+                                      ))}
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">（默认 1，主 Key 默认 3）</span>
+                                  </div>
                                   <div className="flex gap-1.5">
                                     <Button
                                       size="sm"
@@ -722,7 +777,7 @@ export default function AdminApiKeys() {
                                       disabled={addKey.isPending}
                                       onClick={() => {
                                         if (!addKeyForm.apiKey.trim()) { toast.error("请输入 API Key"); return; }
-                                        addKey.mutate({ toolId: tool.id, apiKey: addKeyForm.apiKey.trim(), label: addKeyForm.label.trim() || undefined });
+                                        addKey.mutate({ toolId: tool.id, apiKey: addKeyForm.apiKey.trim(), label: addKeyForm.label.trim() || undefined, weight: addKeyForm.weight });
                                       }}
                                     >
                                       确认添加
@@ -731,7 +786,7 @@ export default function AdminApiKeys() {
                                       size="sm"
                                       variant="ghost"
                                       className="h-7 text-xs"
-                                      onClick={() => { setAddingKeyToolId(null); setAddKeyForm({ apiKey: "", label: "" }); }}
+                                      onClick={() => { setAddingKeyToolId(null); setAddKeyForm({ apiKey: "", label: "", weight: 1 }); }}
                                     >
                                       取消
                                     </Button>

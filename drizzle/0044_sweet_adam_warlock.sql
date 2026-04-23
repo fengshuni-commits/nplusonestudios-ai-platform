@@ -1,0 +1,1 @@
+ALTER TABLE `ai_tool_keys` ADD `weight` int DEFAULT 1 NOT NULL;

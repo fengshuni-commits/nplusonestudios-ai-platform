@@ -1889,3 +1889,12 @@
 - [x] KeyPoolCard 组件：成功率进度条（绿/黄/红三档）、冷却倒计时（秒级实时更新）、最近失败时间、状态徽章
 - [x] useCooldownTimer hook：每秒更新冷却剩余时长
 - [x] formatRelativeTime：相对时间格式化（秒/分/时/天前）
+
+## Key 池权重支持
+- [x] ai_tool_keys 表添加 weight 字段（默认 1，整数 1-10）
+- [x] keyPool.ts pickKey 改为加权随机选取（Weighted Random Sampling）
+- [x] addToolKey / updateToolKey 支持 weight 参数
+- [x] routers.ts addKey / updateKey 路由支持 weight 字段
+- [x] 前端 KeyPoolCard 显示权重标签，支持点击编辑
+- [x] addKey 表单添加权重输入（默认 1）
+- [x] 更新 keyPool.test.ts 覆盖加权随机逻辑，15 个测试全部通过

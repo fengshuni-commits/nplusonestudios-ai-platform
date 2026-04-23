@@ -309,6 +309,13 @@
       "when": 1776913434331,
       "tag": "0043_fearless_robin_chapel",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1776915826586,
+      "tag": "0044_sweet_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

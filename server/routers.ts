@@ -1962,19 +1962,21 @@ const aiToolsRouter = router({
       apiKey: z.string().min(1),
       label: z.string().optional(),
       sortOrder: z.number().optional(),
+      weight: z.number().min(1).max(10).optional(),
     }))
     .mutation(async ({ input }) => {
       const { addToolKey } = await import("./_core/keyPool");
-      return addToolKey(input.toolId, input.apiKey, input.label, input.sortOrder);
+      return addToolKey(input.toolId, input.apiKey, input.label, input.sortOrder, input.weight);
     }),
 
-  /** 更新备用 Key（改标签、启停、重置冷却、更换 Key 值） */
+  /** 更新备用 Key（改标签、启停、重置冷却、更换 Key 值、调整权重） */
   updateKey: adminProcedure
     .input(z.object({
       id: z.number(),
       label: z.string().optional(),
       isActive: z.boolean().optional(),
       sortOrder: z.number().optional(),
+      weight: z.number().min(1).max(10).optional(),
       apiKey: z.string().optional(),
     }))
     .mutation(async ({ input }) => {

@@ -810,6 +810,8 @@ export const aiToolKeys = mysqlTable("ai_tool_keys", {
   successCount: int("successCount").default(0).notNull(),
   /** 排序权重（越小越优先） */
   sortOrder: int("sortOrder").default(0).notNull(),
+  /** 选取权重（1-10，越大被选中概率越高，默认 1） */
+  weight: int("weight").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

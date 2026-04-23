@@ -31,6 +31,7 @@ vi.mock("../drizzle/schema", () => ({
     lastSuccessAt: "lastSuccessAt",
     lastFailAt: "lastFailAt",
     successCount: "successCount",
+    weight: "weight",
     createdAt: "createdAt",
   },
 }));
@@ -59,12 +60,18 @@ const getDbMock = getDb as ReturnType<typeof vi.fn>;
 
 // ─── Helper: build a fake DB ──────────────────────────────────────────────────
 function makeFakeDb(selectRows: any[] = []) {
-  const chain: any = {
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    orderBy: vi.fn().mockResolvedValue(selectRows),
-    limit: vi.fn().mockResolvedValue(selectRows),
-  };
+  // Build a chainable thenable: supports .from().where().limit() and also await directly
+  function makeChainable(rows: any[]): any {
+    const obj: any = {
+      from: vi.fn(() => obj),
+      where: vi.fn(() => obj),
+      orderBy: vi.fn(() => Promise.resolve(rows)),
+      limit: vi.fn(() => Promise.resolve(rows)),
+      then: (resolve: any, reject: any) => Promise.resolve(rows).then(resolve, reject),
+    };
+    return obj;
+  }
+  const chain = makeChainable(selectRows);
 
   const updateSetChain = { where: vi.fn().mockResolvedValue(undefined) };
   const updateChain = { set: vi.fn().mockReturnValue(updateSetChain) };
@@ -116,18 +123,54 @@ describe("keyPool", () => {
     it("returns a valid key when extra active keys exist", async () => {
       const id = nextTid();
       const extraKeys = [
-        { id: 10, apiKeyEncrypted: "enc:sk-extra1", label: "E1", sortOrder: 0, cooldownUntil: null, isActive: true },
+        { id: 10, apiKeyEncrypted: "enc:sk-extra1", label: "E1", sortOrder: 0, cooldownUntil: null, isActive: true, weight: 1 },
       ];
       getDbMock.mockResolvedValue(makeFakeDb(extraKeys));
       const result = await pickKey(id, "enc:sk-primary");
       expect(result?.apiKey).toBeTruthy();
     });
 
+    it("returns weight on the picked primary key", async () => {
+      const id = nextTid();
+      getDbMock.mockResolvedValue(makeFakeDb([]));
+      const result = await pickKey(id, "enc:sk-primary", 5);
+      expect(result?.weight).toBe(5);
+    });
+
+    it("selects primary key when Math.random returns 0 (first item wins)", async () => {
+      const id = nextTid();
+      // primary weight=1, extra weight=9 → total=10
+      // rand = 0*10 = 0 → primary: rand-=1 → -1 ≤ 0 → primary selected
+      const extraKeys = [
+        { id: 50, apiKeyEncrypted: "enc:sk-heavy", label: "Heavy", sortOrder: 0, cooldownUntil: null, isActive: true, weight: 9 },
+      ];
+      getDbMock.mockResolvedValue(makeFakeDb(extraKeys));
+      const spy = vi.spyOn(Math, "random").mockReturnValue(0);
+      const result = await pickKey(id, "enc:sk-primary", 1);
+      spy.mockRestore();
+      expect(result?.id).toBe(0);
+    });
+
+    it("selects heavy-weight pool key when Math.random returns 0.15", async () => {
+      const id = nextTid();
+      // primary weight=1, extra weight=9 → total=10
+      // rand = 0.15*10 = 1.5 → primary: rand-=1 → 0.5 > 0 → extra: rand-=9 → -8.5 ≤ 0 → extra selected
+      const extraKeys = [
+        { id: 51, apiKeyEncrypted: "enc:sk-heavy2", label: "Heavy2", sortOrder: 0, cooldownUntil: null, isActive: true, weight: 9 },
+      ];
+      getDbMock.mockResolvedValue(makeFakeDb(extraKeys));
+      const spy = vi.spyOn(Math, "random").mockReturnValue(0.15);
+      const result = await pickKey(id, "enc:sk-primary", 1);
+      spy.mockRestore();
+      expect(result?.id).toBe(51);
+      expect(result?.apiKey).toBe("sk-heavy2");
+    });
+
     it("skips extra keys in cooldown, falls back to primary", async () => {
       const id = nextTid();
       const futureTs = Math.floor(Date.now() / 1000) + 3600;
       const extraKeys = [
-        { id: 20, apiKeyEncrypted: "enc:sk-cool", label: "C", sortOrder: 0, cooldownUntil: futureTs, isActive: true },
+        { id: 20, apiKeyEncrypted: "enc:sk-cool", label: "C", sortOrder: 0, cooldownUntil: futureTs, isActive: true, weight: 1 },
       ];
       getDbMock.mockResolvedValue(makeFakeDb(extraKeys));
       const result = await pickKey(id, "enc:sk-primary");
@@ -140,7 +183,7 @@ describe("keyPool", () => {
       const id = nextTid();
       const futureTs = Math.floor(Date.now() / 1000) + 3600;
       const extraKeys = [
-        { id: 30, apiKeyEncrypted: "enc:sk-cool", label: "C", sortOrder: 0, cooldownUntil: futureTs, isActive: true },
+        { id: 30, apiKeyEncrypted: "enc:sk-cool", label: "C", sortOrder: 0, cooldownUntil: futureTs, isActive: true, weight: 1 },
       ];
       getDbMock.mockResolvedValue(makeFakeDb(extraKeys));
       const result = await pickKey(id, null);
