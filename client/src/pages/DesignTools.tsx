@@ -14,7 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import {
   Loader2, Sparkles, Download, ImageIcon, Upload, X, ImagePlus,
   RefreshCw, Paintbrush, RatioIcon, MonitorIcon, FolderOpen, Search, Check,
-  Wand2, ChevronDown, ChevronUp,
+  Wand2, ChevronDown, ChevronUp, LayoutList, Columns2,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -33,6 +33,7 @@ export default function DesignTools() {
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string; historyId?: number }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateCount, setGenerateCount] = useState(1);
+  const [compareMode, setCompareMode] = useState(false);
 
   // Mask editor imperative ref + toolbar state (lifted so toolbar can live outside the image)
   const maskEditorRef = useRef<ImageMaskEditorHandle>(null);
@@ -997,15 +998,46 @@ export default function DesignTools() {
         {/* ─── Output Panel ────────────────────────────── */}
         <Card className="lg:col-span-3">
           <CardHeader className="pb-4">
-            <CardTitle className="text-base font-medium">
-              {generatedImages.length > 0 ? "生成结果" : referencePreview ? "基础图片预览" : "工作区"}
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-medium">
+                {generatedImages.length > 0 ? "生成结果" : referencePreview ? "基础图片预览" : "工作区"}
+              </CardTitle>
+              {generatedImages.length > 1 && (
+                <div className="flex items-center gap-1 rounded-md border p-0.5">
+                  <button
+                    onClick={() => setCompareMode(false)}
+                    title="列表视图"
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                      !compareMode
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <LayoutList className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">列表</span>
+                  </button>
+                  <button
+                    onClick={() => setCompareMode(true)}
+                    title="并排对比"
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                      compareMode
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Columns2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">对比</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {generatedImages.length > 0 ? (
-              <div className="space-y-4">
+              <div className={compareMode ? "overflow-x-auto" : "space-y-4"}>
+                <div className={compareMode ? "flex gap-4 pb-2" : "space-y-4"}>
                 {generatedImages.map((img, idx) => (
-                  <div key={idx} className="space-y-2">
+                  <div key={idx} className={compareMode ? "flex-none w-[min(80vw,480px)] space-y-2" : "space-y-2"}>
                     <div className="relative group rounded-lg overflow-hidden bg-muted">
                       <img
                         ref={(el) => { if (idx === 0 || editingImageIdx === idx) (editImgRef as React.MutableRefObject<HTMLImageElement | null>).current = el; }}
@@ -1249,6 +1281,7 @@ export default function DesignTools() {
                     )}
                   </div>
                 ))}
+                </div>
               </div>
             ) : referencePreview ? (
               /* ── Base image enlarged preview with mask editing support ── */
