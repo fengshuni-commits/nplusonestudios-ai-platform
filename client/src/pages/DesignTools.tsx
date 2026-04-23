@@ -37,6 +37,7 @@ export default function DesignTools() {
   // Progress tracking
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
   const [jobProgress, setJobProgress] = useState<Record<number, number>>({}); // index -> 0-100
+  const [pendingJobCount, setPendingJobCount] = useState(0); // how many skeletons still showing
 
   // Mask editor imperative ref + toolbar state (lifted so toolbar can live outside the image)
   const maskEditorRef = useRef<ImageMaskEditorHandle>(null);
@@ -299,6 +300,7 @@ export default function DesignTools() {
       setCurrentJobId(null);
       setCurrentJobIds([]);
       setIsGenerating(false);
+      setPendingJobCount(0);
       setEditingImageIdx(null);
       setMaskDataUrl(null);
       completedJobIdsRef.current.clear();
@@ -330,14 +332,18 @@ export default function DesignTools() {
   useEffect(() => {
     if (currentJobIds.length < 2 || !pollJobsQuery.data) return;
     const results = pollJobsQuery.data as Array<{ jobId: string; status: string; url?: string; prompt?: string; historyId?: number; error?: string }>;
-    let anyNewDone = false;
+    let newlyDoneCount = 0;
     for (const r of results) {
       if (r.status === "done" && r.url && !completedJobIdsRef.current.has(r.jobId)) {
         completedJobIdsRef.current.add(r.jobId);
         setGeneratedImages((prev) => [{ url: r.url!, prompt: r.prompt || "", historyId: r.historyId }, ...prev]);
         if (r.historyId) setParentHistoryId(r.historyId);
-        anyNewDone = true;
+        newlyDoneCount++;
       }
+    }
+    // Reduce skeleton count as images complete
+    if (newlyDoneCount > 0) {
+      setPendingJobCount((prev) => Math.max(0, prev - newlyDoneCount));
     }
     const allFinished = results.every((r: any) => r.status === "done" || r.status === "failed" || r.status === "not_found");
     if (allFinished) {
@@ -346,15 +352,12 @@ export default function DesignTools() {
       setCurrentJobId(null);
       setCurrentJobIds([]);
       setIsGenerating(false);
+      setPendingJobCount(0);
       setEditingImageIdx(null);
       setMaskDataUrl(null);
       completedJobIdsRef.current.clear();
       if (doneCount > 0) toast.success(`生成完成，共 ${doneCount} 张`);
       if (failedCount > 0) toast.error(`${failedCount} 张生成失败`);
-    } else if (anyNewDone) {
-      // Show partial results as they arrive
-      const doneCount = results.filter((r: any) => r.status === "done").length;
-      toast.success(`已生成 ${doneCount}/${currentJobIds.length} 张`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollJobsQuery.data]);
@@ -367,6 +370,7 @@ export default function DesignTools() {
       completedJobIdsRef.current.clear();
       setGenerationStartTime(Date.now());
       setJobProgress({});
+      setPendingJobCount(ids.length);
     },
     onError: (err) => {
       setIsGenerating(false);
@@ -1433,7 +1437,7 @@ export default function DesignTools() {
             ) : isGenerating ? (
               /* ── Generating skeleton with progress ── */
               <div className="space-y-4">
-                {Array.from({ length: currentJobIds.length || 1 }).map((_, i) => {
+                {Array.from({ length: pendingJobCount || 1 }).map((_, i) => {
                   const pct = jobProgress[i] ?? 0;
                   const elapsed = generationStartTime ? Math.floor((Date.now() - generationStartTime) / 1000) : 0;
                   // Estimate remaining: assume 90% takes ~25s total
@@ -1471,7 +1475,7 @@ export default function DesignTools() {
                             </p>
                           )}
                           {currentJobIds.length > 1 && (
-                            <p className="text-[10px] text-muted-foreground/40">图片 {i + 1} / {currentJobIds.length}</p>
+                            <p className="text-[10px] text-muted-foreground/40">剩余 {pendingJobCount} 张等待中</p>
                           )}
                         </div>
                       </div>
