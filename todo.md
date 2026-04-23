@@ -1875,3 +1875,12 @@
 
 ## AI效果图局部修改工具条移到图片外部下方
 - [x] 将工具条从 ImageMaskEditor 内部浮层提取出来，移到图片容器外部下方独立区域
+
+## 多 API Key 轮换池
+- [x] 新建 ai_tool_keys 数据库表（drizzle schema + 迁移脚本）
+- [x] 后端 keyPool.ts：pickKey / reportSuccess / reportFailure / addToolKey / deleteToolKey / listToolKeys
+- [x] routers.ts：aiTools.listKeys / addKey / updateKey / deleteKey 路由
+- [x] 前端 AiToolsManagement.tsx：备用 Key 池管理 UI（添加/启停/重置冷却/删除）
+- [x] generateImageWithTool.ts：接入 Key 池轮换逻辑（成功/失败自动回报）
+- [x] llm.ts invokeLLMWithUserTool：接入 Key 池轮换逻辑（成功/失败自动回报）
+- [x] keyPool.test.ts：12 个单元测试全部通过

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, longtext, uniqueIndex } from "drizzle-orm/mysql-core";
+import { int, bigint, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, longtext, uniqueIndex } from "drizzle-orm/mysql-core";
 
 // ─── Users ───────────────────────────────────────────────
 export const users = mysqlTable("users", {
@@ -784,3 +784,34 @@ export const userSessions = mysqlTable("user_sessions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type UserSession = typeof userSessions.$inferSelect;
+
+// ─── AI Tool Key Pool (多 Key 轮换池) ────────────────────────────────────────
+// 每个 AI 工具可以配置多个 API Key，调用时按轮询顺序选取可用 Key
+// 主 Key 仍存储在 ai_tools.apiKeyEncrypted，此表存储额外的备用 Key
+export const aiToolKeys = mysqlTable("ai_tool_keys", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 关联的 AI 工具 ID */
+  toolId: int("toolId").notNull(),
+  /** 加密存储的 API Key */
+  apiKeyEncrypted: text("apiKeyEncrypted").notNull(),
+  /** 显示名称（便于区分，如"Key 1"、"备用 Key"） */
+  label: varchar("label", { length: 128 }),
+  /** 是否启用 */
+  isActive: boolean("isActive").default(true).notNull(),
+  /** 失败次数（连续失败超过阈值时自动禁用） */
+  failCount: int("failCount").default(0).notNull(),
+  /** 最后一次成功调用时间（Unix 秒） */
+  lastSuccessAt: int("lastSuccessAt"),
+  /** 最后一次失败时间（Unix 秒） */
+  lastFailAt: int("lastFailAt"),
+  /** 冷却截止时间（Unix 秒），在此时间前跳过此 Key */
+  cooldownUntil: int("cooldownUntil"),
+  /** 累计成功调用次数 */
+  successCount: int("successCount").default(0).notNull(),
+  /** 排序权重（越小越优先） */
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AiToolKey = typeof aiToolKeys.$inferSelect;
+export type InsertAiToolKey = typeof aiToolKeys.$inferInsert;

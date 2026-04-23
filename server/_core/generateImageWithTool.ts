@@ -15,6 +15,7 @@ import { decryptApiKey } from "./crypto";
 import { storagePut } from "server/storage";
 import { generateImage, type GenerateImageOptions } from "./imageGeneration";
 import { generateImageWithJimeng, imageToImageWithJimeng, inpaintWithJimeng, upscaleWithJimeng, type VolcengineConfig } from "./volcengine";
+import { pickKey, reportSuccess, reportFailure } from "./keyPool";
 
 export type GenerateWithToolOptions = GenerateImageOptions & {
   toolId?: number | null;
@@ -232,13 +233,15 @@ export async function generateImageWithTool(
     return { url: result.url || "", modelName: tool?.name };
   }
 
-  // Decrypt API key
-  const apiKey = decryptApiKey(tool.apiKeyEncrypted);
-  if (!apiKey) {
-    console.error(`[generateImageWithTool] Failed to decrypt API key for tool ${toolId}, falling back to built-in AI`);
+  // Pick API key from pool (round-robin across primary + extra keys)
+  const poolKey = await pickKey(toolId, tool.apiKeyEncrypted);
+  if (!poolKey) {
+    console.error(`[generateImageWithTool] No available API key for tool ${toolId}, falling back to built-in AI`);
     const result = await generateImage(genOpts);
     return { url: result.url || "", modelName: tool.name };
   }
+  const apiKey = poolKey.apiKey;
+  const _poolKeyId = poolKey.id;
 
   // Auto-detect provider from apiEndpoint if not explicitly set
   let provider = tool.provider?.toLowerCase() || "";
@@ -463,9 +466,14 @@ export async function generateImageWithTool(
       "image/png"
     );
 
+    // Report success to key pool
+    await reportSuccess(toolId, _poolKeyId).catch(() => {});
+
     return { url, modelName: tool.name };
   } catch (err) {
     console.error(`[generateImageWithTool] External API failed for tool ${toolId}:`, err);
+    // Report failure to key pool (triggers cooldown for this key)
+    await reportFailure(toolId, _poolKeyId).catch(() => {});
     throw err; // Don't silently fall back — let the user know the selected API failed
   }
 }

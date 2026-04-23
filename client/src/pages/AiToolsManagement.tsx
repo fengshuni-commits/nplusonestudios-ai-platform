@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star } from "lucide-react";
+import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shared/toolCapabilities";
@@ -83,6 +83,37 @@ export default function AdminApiKeys() {
       utils.aiTools.getCapabilityDefaults.invalidate();
       toast.success("已设为该类别的默认工具");
     },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Key 池管理状态
+  const [keyPoolOpenId, setKeyPoolOpenId] = useState<number | null>(null);
+  const [addKeyForm, setAddKeyForm] = useState({ apiKey: "", label: "" });
+  const [showAddKey, setShowAddKey] = useState(false);
+  const [addingKeyToolId, setAddingKeyToolId] = useState<number | null>(null);
+
+  const { data: poolKeys, refetch: refetchPoolKeys } = trpc.aiTools.listKeys.useQuery(
+    { toolId: keyPoolOpenId! },
+    { enabled: keyPoolOpenId !== null }
+  );
+
+  const addKey = trpc.aiTools.addKey.useMutation({
+    onSuccess: () => {
+      refetchPoolKeys();
+      setAddKeyForm({ apiKey: "", label: "" });
+      setAddingKeyToolId(null);
+      toast.success("备用 Key 已添加");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateKey = trpc.aiTools.updateKey.useMutation({
+    onSuccess: () => { refetchPoolKeys(); toast.success("已更新"); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteKey = trpc.aiTools.deleteKey.useMutation({
+    onSuccess: () => { refetchPoolKeys(); toast.success("已删除"); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -431,6 +462,147 @@ export default function AdminApiKeys() {
                               >
                                 {tool.hasApiKey ? "更换" : "配置"}
                               </Button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ─── Key 池管理 ─── */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <KeyRound className="h-3 w-3" />
+                              备用 Key 池
+                              {keyPoolOpenId === tool.id && poolKeys && poolKeys.length > 0 && (
+                                <span className="ml-1 text-primary font-medium">{poolKeys.length} 个</span>
+                              )}
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setKeyPoolOpenId(keyPoolOpenId === tool.id ? null : tool.id);
+                              }}
+                            >
+                              {keyPoolOpenId === tool.id ? "收起" : "管理"}
+                            </Button>
+                          </div>
+
+                          {keyPoolOpenId === tool.id && (
+                            <div className="space-y-2 bg-background rounded border p-2">
+                              {/* 已有备用 Key 列表 */}
+                              {poolKeys && poolKeys.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  {poolKeys.map((k: any) => {
+                                    const inCooldown = k.cooldownUntil && k.cooldownUntil > Math.floor(Date.now() / 1000);
+                                    return (
+                                      <div key={k.id} className="flex items-center gap-2 text-xs">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            {k.isActive && !inCooldown ? (
+                                              <ShieldCheck className="h-3 w-3 text-green-600 shrink-0" />
+                                            ) : inCooldown ? (
+                                              <Clock className="h-3 w-3 text-amber-500 shrink-0" />
+                                            ) : (
+                                              <ShieldOff className="h-3 w-3 text-muted-foreground shrink-0" />
+                                            )}
+                                            <span className="font-mono text-muted-foreground truncate">{k.apiKeyMasked}</span>
+                                            {k.label && <span className="text-foreground/60 shrink-0">({k.label})</span>}
+                                          </div>
+                                          <div className="flex gap-2 mt-0.5 text-muted-foreground/70">
+                                            <span>成功 {k.successCount}</span>
+                                            {k.failCount > 0 && <span className="text-amber-600">失败 {k.failCount}</span>}
+                                            {inCooldown && <span className="text-amber-500">冷却中</span>}
+                                          </div>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-1.5 text-xs"
+                                            onClick={() => updateKey.mutate({ id: k.id, isActive: !k.isActive })}
+                                            title={k.isActive ? "停用" : "启用"}
+                                          >
+                                            {k.isActive ? <ShieldOff className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+                                          </Button>
+                                          {inCooldown && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-1.5 text-xs"
+                                              onClick={() => updateKey.mutate({ id: k.id, isActive: true })}
+                                              title="重置冷却"
+                                            >
+                                              <RefreshCw className="h-3 w-3" />
+                                            </Button>
+                                          )}
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-1.5 text-xs text-destructive hover:text-destructive"
+                                            onClick={() => { if (confirm("确定删除此备用 Key？")) deleteKey.mutate({ id: k.id }); }}
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground py-1">暂无备用 Key，添加后将与主 Key 轮换使用</p>
+                              )}
+
+                              {/* 添加新 Key 表单 */}
+                              {addingKeyToolId === tool.id ? (
+                                <div className="space-y-1.5 pt-1 border-t border-border">
+                                  <Input
+                                    type="password"
+                                    value={addKeyForm.apiKey}
+                                    onChange={(e) => setAddKeyForm({ ...addKeyForm, apiKey: e.target.value })}
+                                    placeholder="粘贴 API Key"
+                                    className="font-mono text-xs h-7"
+                                    autoFocus
+                                  />
+                                  <Input
+                                    value={addKeyForm.label}
+                                    onChange={(e) => setAddKeyForm({ ...addKeyForm, label: e.target.value })}
+                                    placeholder="备注名称（可选，如：Key 2）"
+                                    className="text-xs h-7"
+                                  />
+                                  <div className="flex gap-1.5">
+                                    <Button
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      disabled={addKey.isPending}
+                                      onClick={() => {
+                                        if (!addKeyForm.apiKey.trim()) { toast.error("请输入 API Key"); return; }
+                                        addKey.mutate({ toolId: tool.id, apiKey: addKeyForm.apiKey.trim(), label: addKeyForm.label.trim() || undefined });
+                                      }}
+                                    >
+                                      确认添加
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 text-xs"
+                                      onClick={() => { setAddingKeyToolId(null); setAddKeyForm({ apiKey: "", label: "" }); }}
+                                    >
+                                      取消
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs w-full border border-dashed border-border hover:border-primary/50"
+                                  onClick={() => setAddingKeyToolId(tool.id)}
+                                >
+                                  <PlusCircle className="h-3.5 w-3.5 mr-1" />添加备用 Key
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>

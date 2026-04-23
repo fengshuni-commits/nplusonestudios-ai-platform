@@ -362,15 +362,17 @@ export async function invokeLLMWithUserTool(
 
         if (defaultTools.length > 0) {
           const tool = defaultTools[0] as any;
-          let apiKey: string | null = null;
 
-          // Try encrypted key first
-          if (tool.apiKeyEncrypted) {
-            apiKey = decryptApiKey(tool.apiKeyEncrypted);
-          } else if (tool.apiKeyName && tool.apiKeyName.startsWith("sk-")) {
-            // Legacy: plaintext key stored in apiKeyName
+          // Use key pool rotation (primary key + extra keys)
+          const { pickKey: _pickKey, reportSuccess: _reportSuccess, reportFailure: _reportFailure } = await import("./keyPool");
+          const poolKey = await _pickKey(tool.id, tool.apiKeyEncrypted || null);
+
+          // Legacy fallback: plaintext key stored in apiKeyName
+          let apiKey: string | null = poolKey?.apiKey ?? null;
+          if (!apiKey && tool.apiKeyName && tool.apiKeyName.startsWith("sk-")) {
             apiKey = tool.apiKeyName;
           }
+          const _llmPoolKeyId = poolKey?.id ?? 0;
 
           if (apiKey && tool.apiEndpoint) {
             // Use the user's tool
@@ -429,9 +431,11 @@ export async function invokeLLMWithUserTool(
             });
 
             if (response.ok) {
+              await _reportSuccess(tool.id, _llmPoolKeyId).catch(() => {});
               return (await response.json()) as InvokeResult;
             }
-            // If user's tool fails, fall through to built-in
+            // If user's tool fails, report to key pool and fall through to built-in
+            await _reportFailure(tool.id, _llmPoolKeyId).catch(() => {});
             console.warn(`[LLM] User tool "${tool.name}" failed (${response.status}), falling back to built-in API`);
           }
         }

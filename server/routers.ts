@@ -1946,6 +1946,53 @@ const aiToolsRouter = router({
       return { userStats, userActionStats };
     }),
 
+  // ─── Key 池管理路由 ─────────────────────────────────────
+  /** 列出某工具的所有备用 Key */
+  listKeys: adminProcedure
+    .input(z.object({ toolId: z.number() }))
+    .query(async ({ input }) => {
+      const { listToolKeys } = await import("./_core/keyPool");
+      return listToolKeys(input.toolId);
+    }),
+
+  /** 添加备用 Key */
+  addKey: adminProcedure
+    .input(z.object({
+      toolId: z.number(),
+      apiKey: z.string().min(1),
+      label: z.string().optional(),
+      sortOrder: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { addToolKey } = await import("./_core/keyPool");
+      return addToolKey(input.toolId, input.apiKey, input.label, input.sortOrder);
+    }),
+
+  /** 更新备用 Key（改标签、启停、重置冷却、更换 Key 值） */
+  updateKey: adminProcedure
+    .input(z.object({
+      id: z.number(),
+      label: z.string().optional(),
+      isActive: z.boolean().optional(),
+      sortOrder: z.number().optional(),
+      apiKey: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { updateToolKey } = await import("./_core/keyPool");
+      const { id, apiKey, ...rest } = input;
+      await updateToolKey(id, { ...rest, plainApiKey: apiKey });
+      return { success: true };
+    }),
+
+  /** 删除备用 Key */
+  deleteKey: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const { deleteToolKey } = await import("./_core/keyPool");
+      await deleteToolKey(input.id);
+      return { success: true };
+    }),
+
   getSessionStats: adminProcedure
     .input(z.object({
       days: z.number().min(1).max(90).default(30),
