@@ -519,9 +519,14 @@ export default function DesignTools() {
       setMaskPreviewUrl(null);
       if (img.historyId) setParentHistoryId(img.historyId);
     }
-    // Use double rAF to ensure React has committed the DOM update
+    // After React commits, find the img element by data-editidx attribute and read its dims
     const readDims = () => {
-      const imgEl = editImgRef.current;
+      // First try via ref (if already bound)
+      let imgEl: HTMLImageElement | null = editImgRef.current;
+      // Fallback: query by data attribute in case ref hasn't been bound yet
+      if (!imgEl || imgEl.clientWidth === 0) {
+        imgEl = document.querySelector<HTMLImageElement>(`[data-editidx="${idx}"]`);
+      }
       if (imgEl && imgEl.clientWidth > 0) {
         setEditImgDims({
           dw: imgEl.clientWidth,
@@ -529,12 +534,14 @@ export default function DesignTools() {
           nw: imgEl.naturalWidth || imgEl.clientWidth,
           nh: imgEl.naturalHeight || imgEl.clientHeight,
         });
+        // Also update the ref so handleEditImgLoad can use it
+        (editImgRef as React.MutableRefObject<HTMLImageElement | null>).current = imgEl;
       }
     };
     // Double rAF to wait for React commit + browser paint
     requestAnimationFrame(() => requestAnimationFrame(readDims));
     // Also try after a short delay as fallback
-    setTimeout(readDims, 100);
+    setTimeout(readDims, 150);
   }, [generatedImages]);
 
   const handleMaskSave = useCallback((dataUrl: string, displayDataUrl?: string) => {
@@ -1071,7 +1078,8 @@ export default function DesignTools() {
                   <div key={idx} className={compareMode ? "flex-none w-[min(80vw,480px)] space-y-2" : "space-y-2"}>
                     <div className="relative group rounded-lg overflow-hidden bg-muted">
                       <img
-                        ref={(el) => { if (idx === 0 || editingImageIdx === idx) (editImgRef as React.MutableRefObject<HTMLImageElement | null>).current = el; }}
+                        ref={(el) => { if (editingImageIdx === idx) (editImgRef as React.MutableRefObject<HTMLImageElement | null>).current = el; }}
+                        data-editidx={idx}
                         src={img.url}
                         alt={img.prompt}
                         className={`w-full h-auto ${editingImageIdx === idx ? "" : "cursor-pointer"} transition-transform`}
