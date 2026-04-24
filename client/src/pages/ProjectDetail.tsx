@@ -14,7 +14,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye, Maximize2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -589,6 +589,9 @@ function ProjectDocumentsTab({
   // ─── Document preview state ──────────────────────────────
   const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string; fileName: string; title: string } | null>(null);
 
+  // ─── Image lightbox state ────────────────────────────────
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const uploadFileMutation = trpc.documents.uploadFile.useMutation({
     onSuccess: () => {
       utils.documents.listByProject.invalidate({ projectId });
@@ -811,6 +814,17 @@ function ProjectDocumentsTab({
                 </div>
                 {/* Action buttons - only visible on hover */}
                 <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  {/* Zoom button */}
+                  {item.outputUrl && (
+                    <Button
+                      size="icon" variant="secondary"
+                      className="h-6 w-6 rounded-full bg-black/60 hover:bg-black/80 text-white border-0"
+                      title="放大查看"
+                      onClick={(e) => { e.stopPropagation(); setLightboxUrl(item.outputUrl); }}
+                    >
+                      <Maximize2 className="h-3 w-3" />
+                    </Button>
+                  )}
                   {/* Unlink button */}
                   <Button
                     size="icon" variant="secondary"
@@ -1445,8 +1459,16 @@ function ProjectDocumentsTab({
                             </div>
                           </div>
                           {chainItem.outputUrl && (
-                            <div className="mt-2 rounded-lg overflow-hidden border border-border/50 bg-muted">
+                            <div
+                              className="mt-2 rounded-lg overflow-hidden border border-border/50 bg-muted relative group/img cursor-zoom-in"
+                              onClick={() => setLightboxUrl(chainItem.outputUrl!)}
+                            >
                               <img src={chainItem.outputUrl} alt={chainItem.title} className="w-full h-auto max-h-[300px] object-contain" />
+                              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                <div className="h-6 w-6 rounded-full bg-black/60 flex items-center justify-center">
+                                  <Maximize2 className="h-3 w-3 text-white" />
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1491,6 +1513,35 @@ function ProjectDocumentsTab({
           fileName={previewDoc.fileName}
           title={previewDoc.title}
         />
+      )}
+      {/* ─── Image Lightbox ─── */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="放大查看"
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <a
+            href={lightboxUrl}
+            download
+            className="absolute bottom-4 right-4 h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            onClick={(e) => e.stopPropagation()}
+            title="下载图片"
+          >
+            <Download className="h-4 w-4" />
+          </a>
+        </div>
       )}
     </div>
   );
