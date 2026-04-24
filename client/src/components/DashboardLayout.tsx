@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getLoginUrl } from "@/const";
+import { getLoginUrl, getRegisterUrl } from "@/const";
 import {
   LogOut,
   PenTool,
@@ -183,6 +183,19 @@ export default function DashboardLayout({
             >
               登录
             </Button>
+            <Button
+              onClick={() => {
+                window.location.href = getRegisterUrl();
+              }}
+              size="lg"
+              variant="outline"
+              className="w-full bg-transparent"
+            >
+              注册新账号
+            </Button>
+            <p className="text-xs text-muted-foreground text-center leading-relaxed px-2">
+              注册后需等待管理员审批，审批通过后方可使用平台功能
+            </p>
           </div>
         </div>
       </div>
