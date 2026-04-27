@@ -114,6 +114,7 @@ type AssetItem = {
   id: number;
   name: string;
   fileUrl: string;
+  fileKey?: string;
   thumbnailUrl: string | null;
   isFolder?: boolean;
 };
@@ -123,15 +124,20 @@ function AssetPickerDialog({
   onClose,
   onSelect,
   title = "从素材库选择",
+  multiSelect = false,
+  onMultiSelect,
 }: {
   open: boolean;
   onClose: () => void;
-  onSelect: (url: string, name: string) => void;
+  onSelect: (url: string, name: string, fileKey?: string) => void;
   title?: string;
+  multiSelect?: boolean;
+  onMultiSelect?: (items: Array<{ id: number; name: string; fileUrl: string; fileKey: string; thumbnailUrl?: string | null }>) => void;
 }) {
   const [search, setSearch] = useState("");
   const [folderId, setFolderId] = useState<number | undefined>(undefined);
-  const [folderPath, setFolderPath] = useState<Array<{ id: number | undefined; name: string }>>([]);
+  const [folderPath, setFolderPath] = useState<Array<{ id: number | undefined; name: string }>>([])
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data: assetsData } = trpc.assets.listByParent.useQuery(
     { parentId: folderId },
@@ -188,8 +194,14 @@ function AssetPickerDialog({
               onClick={() => {
                 if (asset.isFolder) {
                   handleOpenFolder(asset.id, asset.name);
+                } else if (multiSelect) {
+                  setSelectedIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
+                    return next;
+                  });
                 } else {
-                  onSelect(asset.fileUrl, asset.name);
+                  onSelect(asset.fileUrl, asset.name, asset.fileKey);
                   onClose();
                 }
               }}
@@ -202,9 +214,15 @@ function AssetPickerDialog({
               ) : (
                 <>
                   <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                    <Check className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
+                  {multiSelect && selectedIds.has(asset.id) ? (
+                    <div className="absolute inset-0 bg-primary/40 flex items-center justify-center">
+                      <Check className="h-5 w-5 text-white" />
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <Check className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  )}
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <p className="text-white text-xs truncate">{asset.name}</p>
                   </div>
@@ -219,6 +237,19 @@ function AssetPickerDialog({
             </div>
           )}
         </div>
+        {multiSelect && selectedIds.size > 0 && (
+          <div className="flex items-center justify-between pt-2 border-t border-border/40">
+            <span className="text-sm text-muted-foreground">已选 {selectedIds.size} 张</span>
+            <Button size="sm" onClick={() => {
+              const items = filtered.filter(a => !a.isFolder && selectedIds.has(a.id)).map(a => ({
+                id: a.id, name: a.name, fileUrl: a.fileUrl, fileKey: a.fileKey ?? "", thumbnailUrl: a.thumbnailUrl
+              }));
+              onMultiSelect?.(items);
+              setSelectedIds(new Set());
+              onClose();
+            }}>确认选择（{selectedIds.size}）</Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -478,6 +509,10 @@ export default function MediaLayout() {
   const [pendingAssetName, setPendingAssetName] = useState<string | null>(null);
   const [byTypeNameDialogOpen, setByTypeNameDialogOpen] = useState(false);
   const [byTypeNameInput, setByTypeNameInput] = useState("");
+  // 版式包素材库选择器
+  const [packAssetPickerOpen, setPackAssetPickerOpen] = useState(false);
+  const [packAssetSearch, setPackAssetSearch] = useState("");
+  const [packAssetSelected, setPackAssetSelected] = useState<Array<{ id: number; name: string; fileUrl: string; fileKey: string; thumbnailUrl?: string | null }>>([]);
 
   // Jobs
   const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery(undefined, { staleTime: 30_000 });
@@ -1699,25 +1734,35 @@ export default function MediaLayout() {
                 className="bg-white/5 border-white/10 text-white" />
             </div>
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">上传文件</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <Label className="text-xs text-white/50 mb-1.5 block">选择来源</Label>
+              <div className="grid grid-cols-3 gap-2">
                 <div role="button" tabIndex={0} onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-white/15 rounded-xl p-4 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
+                  className="border-2 border-dashed border-white/15 rounded-xl p-3 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
                   {uploadingPack ? (
                     <Loader2 className="w-5 h-5 text-[#B87333] animate-spin mx-auto" />
                   ) : (
                     <>
                       <Upload className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
                       <p className="text-[11px] text-white/40">选择文件</p>
-                      <p className="text-[10px] text-white/20 mt-0.5">PDF / 图片（可多选）</p>
+                      <p className="text-[10px] text-white/20 mt-0.5">PDF/图片</p>
                     </>
                   )}
                 </div>
                 <div role="button" tabIndex={0} onClick={() => folderInputRef.current?.click()}
-                  className="border-2 border-dashed border-white/15 rounded-xl p-4 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
+                  className="border-2 border-dashed border-white/15 rounded-xl p-3 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
                   <FolderOpen className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
-                  <p className="text-[11px] text-white/40">选择文件夹</p>
-                  <p className="text-[10px] text-white/20 mt-0.5">上传整个文件夹</p>
+                  <p className="text-[11px] text-white/40">文件夹</p>
+                  <p className="text-[10px] text-white/20 mt-0.5">整个文件夹</p>
+                </div>
+                <div role="button" tabIndex={0} onClick={() => {
+                  if (!packNameInput.trim()) { toast.error("请先输入版式包名称"); return; }
+                  setShowPackUpload(false);
+                  setPackAssetPickerOpen(true);
+                }}
+                  className="border-2 border-dashed border-white/15 rounded-xl p-3 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
+                  <Library className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
+                  <p className="text-[11px] text-white/40">素材库</p>
+                  <p className="text-[10px] text-white/20 mt-0.5">已上传图片</p>
                 </div>
               </div>
               <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden"
@@ -1733,6 +1778,38 @@ export default function MediaLayout() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Pack Asset Library Picker */}
+      <AssetPickerDialog
+        open={packAssetPickerOpen}
+        onClose={() => setPackAssetPickerOpen(false)}
+        title="从素材库选择版式参考图片"
+        multiSelect
+        onSelect={() => {}}
+        onMultiSelect={async (items) => {
+          if (items.length === 0) return;
+          if (!packNameInput.trim()) { toast.error("请先输入版式包名称"); return; }
+          setUploadingPack(true);
+          try {
+            // Use the first selected asset's URL/key as the source
+            const first = items[0];
+            await createPackMutation.mutateAsync({
+              name: packNameInput.trim(),
+              sourceType: "images",
+              sourceFileUrl: first.fileUrl,
+              sourceFileKey: first.fileKey,
+            });
+            const extra = items.length > 1 ? `（已选 ${items.length} 张，使用第一张作为版式参考）` : "";
+            toast.success(`版式包创建成功${extra}，AI 正在分析风格...`);
+            setPackNameInput("");
+            refetchPacks();
+          } catch (err: any) {
+            toast.error("创建失败：" + err.message);
+          } finally {
+            setUploadingPack(false);
+          }
+        }}
+      />
 
       {/* Text Block Edit Dialog */}
       <Dialog open={!!editingBlock} onOpenChange={(open) => { if (!open) { setEditingBlock(null); setNewText(""); } }}>
