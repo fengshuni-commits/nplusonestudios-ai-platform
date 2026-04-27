@@ -503,6 +503,7 @@ export async function listTasksByProject(projectId: number) {
       parentId: tasks.parentId,
       sortOrder: tasks.sortOrder,
       createdBy: tasks.createdBy,
+      completedAt: tasks.completedAt,
       createdAt: tasks.createdAt,
       updatedAt: tasks.updatedAt,
     })
@@ -577,7 +578,19 @@ export async function updateTaskStatus(id: number, status: string) {
 export async function updateTask(id: number, data: Partial<InsertTask>) {
   const db = await getDb();
   if (!db) return;
-  await db.update(tasks).set(data).where(eq(tasks.id, id));
+  // Auto-set completedAt when status changes to 'done', clear when reverting from 'done'
+  const updateData = { ...data } as any;
+  if (data.status === 'done' && !updateData.completedAt) {
+    // Only set completedAt if not already set (preserve original completion time)
+    const existing = await db.select({ completedAt: tasks.completedAt }).from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!existing[0]?.completedAt) {
+      updateData.completedAt = new Date();
+    }
+  } else if (data.status && data.status !== 'done') {
+    // Reverting from done — clear completedAt
+    updateData.completedAt = null;
+  }
+  await db.update(tasks).set(updateData).where(eq(tasks.id, id));
 }
 
 export async function deleteTask(id: number) {
@@ -608,6 +621,7 @@ export async function listAllTasks() {
       progress: tasks.progress,
       parentId: tasks.parentId,
       createdBy: tasks.createdBy,
+      completedAt: tasks.completedAt,
       createdAt: tasks.createdAt,
       updatedAt: tasks.updatedAt,
       projectName: projects.name,
@@ -641,6 +655,7 @@ export async function listTasksByUser(userId: number) {
       progress: tasks.progress,
       parentId: tasks.parentId,
       createdBy: tasks.createdBy,
+      completedAt: tasks.completedAt,
       createdAt: tasks.createdAt,
       updatedAt: tasks.updatedAt,
       projectName: projects.name,

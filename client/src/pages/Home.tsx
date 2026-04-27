@@ -1121,6 +1121,13 @@ function TaskListView({
         const isDone = task.status === "done";
         const isOverdue = !isDone && daysLeft !== null && daysLeft < 0;
         const isUrgent = !isDone && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
+        const completionDiff = (isDone && task.dueDate && task.completedAt)
+          ? Math.ceil((new Date(task.completedAt).getTime() - new Date(task.dueDate).getTime()) / 86400000)
+          : null;
+        const completionLabel = completionDiff === null ? null
+          : completionDiff < 0 ? `提前 ${Math.abs(completionDiff)} 天`
+          : completionDiff === 0 ? "准时完成"
+          : `超期 ${completionDiff} 天完成`;
 
         return (
           <div
@@ -1156,7 +1163,19 @@ function TaskListView({
                     {task.assigneeName}
                   </span>
                 )}
-                {task.dueDate && (
+                {isDone && completionLabel ? (
+                  <span className={`text-[10px] flex items-center gap-0.5 ${
+                    completionDiff! > 0 ? "text-amber-600" : completionDiff === 0 ? "text-muted-foreground" : "text-green-600"
+                  }`}>
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                    {completionLabel}
+                  </span>
+                ) : isDone && task.dueDate ? (
+                  <span className="text-[10px] flex items-center gap-0.5 text-muted-foreground">
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                    已完成
+                  </span>
+                ) : task.dueDate ? (
                   <span className={`text-[10px] flex items-center gap-0.5 ${
                     isOverdue ? "text-red-500" : isUrgent ? "text-amber-600" : "text-muted-foreground"
                   }`}>
@@ -1168,7 +1187,7 @@ function TaskListView({
                         : `截止 ${new Date(task.dueDate).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}`
                     }
                   </span>
-                )}
+                ) : null}
                 {/* Progress */}
                 {(task.progress ?? 0) > 0 && (
                   <span className="text-[10px] text-muted-foreground">{task.progress}%</span>

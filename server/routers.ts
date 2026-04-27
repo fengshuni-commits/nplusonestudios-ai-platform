@@ -1114,10 +1114,14 @@ const tasksRouter = router({
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const { eq } = await import('drizzle-orm');
       const { tasks } = await import('../drizzle/schema');
+      // Check if completedAt is already set to preserve original completion time
+      const existing = await drizzleDb.select({ completedAt: tasks.completedAt }).from(tasks).where(eq(tasks.id, input.id)).limit(1);
+      const completedAt = existing[0]?.completedAt ?? new Date();
       await drizzleDb.update(tasks).set({
         approval: true,
         status: 'done',
-         updatedAt: new Date(),
+        completedAt,
+        updatedAt: new Date(),
       }).where(eq(tasks.id, input.id));
       return { success: true };
     }),

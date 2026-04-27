@@ -112,6 +112,8 @@ export const tasks = mysqlTable("tasks", {
   // Review fields
   reviewStatus: mysqlEnum("reviewStatus", ["pending", "approved", "rejected"]),
   reviewComment: text("reviewComment"),
+  // Completion tracking
+  completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

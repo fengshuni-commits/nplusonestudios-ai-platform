@@ -14,7 +14,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   Image as ImageIcon, BookMarked, MessageCircle, Camera,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
-  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye, Maximize2,
+  Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye, Maximize2, CheckCircle2,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -1852,6 +1852,14 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                   const isDone = task.status === "done";
                   const isUrgent = !isDone && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
                   const isOverdue = !isDone && daysLeft !== null && daysLeft < 0;
+                  // Completion status (only for done tasks with dueDate)
+                  const completionDiff = (isDone && task.dueDate && task.completedAt)
+                    ? Math.ceil((new Date(task.completedAt).getTime() - new Date(task.dueDate).getTime()) / 86400000)
+                    : null;
+                  const completionLabel = completionDiff === null ? null
+                    : completionDiff < 0 ? `提前 ${Math.abs(completionDiff)} 天`
+                    : completionDiff === 0 ? "准时完成"
+                    : `超期 ${completionDiff} 天完成`;
                   return (
                     <Card key={task.id}
                       className={`shadow-sm cursor-pointer hover:shadow-md transition-shadow ${
@@ -1876,7 +1884,19 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                           </div>
                         )}
                         <div className="flex items-center justify-between mt-2">
-                          {task.dueDate && (
+                          {isDone && completionLabel ? (
+                            <p className={`text-[10px] flex items-center gap-0.5 ${
+                              completionDiff! > 0 ? 'text-amber-600' : completionDiff === 0 ? 'text-muted-foreground' : 'text-green-600'
+                            }`}>
+                              <CheckCircle2 className="h-2.5 w-2.5" />
+                              {completionLabel}
+                            </p>
+                          ) : isDone && task.dueDate ? (
+                            <p className="text-[10px] flex items-center gap-0.5 text-muted-foreground">
+                              <CheckCircle2 className="h-2.5 w-2.5" />
+                              已完成
+                            </p>
+                          ) : task.dueDate ? (
                             <p className={`text-[10px] flex items-center gap-0.5 ${
                               isOverdue ? 'text-red-500' : isUrgent ? 'text-amber-600' : 'text-muted-foreground'
                             }`}>
@@ -1888,7 +1908,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                                   : new Date(task.dueDate).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
                               }
                             </p>
-                          )}
+                          ) : null}
                           {task.assigneeId && (
                             <Avatar className="h-5 w-5 ml-auto">
                               <AvatarImage src={task.assigneeAvatar} />
@@ -2102,6 +2122,19 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                         }}
                       />
                     )}
+                    {/* Completion status badge */}
+                    {selectedTask.status === 'done' && selectedTask.dueDate && selectedTask.completedAt && (() => {
+                      const diff = Math.ceil((new Date(selectedTask.completedAt).getTime() - new Date(selectedTask.dueDate).getTime()) / 86400000);
+                      return (
+                        <p className={`text-[11px] flex items-center gap-1 mt-1 ${
+                          diff > 0 ? 'text-amber-600' : diff === 0 ? 'text-muted-foreground' : 'text-green-600'
+                        }`}>
+                          <CheckCircle2 className="h-3 w-3" />
+                          {diff < 0 ? `提前 ${Math.abs(diff)} 天完成` : diff === 0 ? '准时完成' : `超期 ${diff} 天完成`}
+                          <span className="text-muted-foreground ml-1">（{new Date(selectedTask.completedAt).toLocaleDateString('zh-CN')}）</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
 
