@@ -747,7 +747,6 @@ export default function MediaLayout() {
   }, []);
 
   const handlePackFilesUpload = async (files: FileList) => {
-    if (!packNameInput.trim()) { toast.error("请先输入版式包名称"); return; }
     if (files.length === 0) return;
     setUploadingPack(true);
     try {
@@ -755,7 +754,10 @@ export default function MediaLayout() {
       const { url, key } = await uploadFile(file);
       const ext = file.name.split(".").pop()?.toLowerCase();
       const sourceType = ext === "pdf" ? "pdf" : "images";
-      await createPackMutation.mutateAsync({ name: packNameInput.trim(), sourceType, sourceFileUrl: url, sourceFileKey: key });
+      // 名称优先用用户输入，否则自动从文件名生成
+      const autoName = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").trim() || "版式包";
+      const name = packNameInput.trim() || autoName;
+      await createPackMutation.mutateAsync({ name, sourceType, sourceFileUrl: url, sourceFileKey: key });
       const extra = files.length > 1 ? `（已选 ${files.length} 个文件，使用第一个作为版式参考）` : "";
       toast.success(`版式包上传成功${extra}，AI 正在分析风格...`);
       setShowPackUpload(false);
@@ -1728,9 +1730,9 @@ export default function MediaLayout() {
           </DialogHeader>
           <div className="flex flex-col gap-4 pt-2">
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">版式包名称</Label>
+              <Label className="text-xs text-white/50 mb-1.5 block">版式包名称（可选，不填则自动从文件名生成）</Label>
               <Input value={packNameInput} onChange={(e) => setPackNameInput(e.target.value)}
-                placeholder="如：N+1 品牌手册风格"
+                placeholder="不填则自动从文件名生成"
                 className="bg-white/5 border-white/10 text-white" />
             </div>
             <div>
@@ -1755,7 +1757,6 @@ export default function MediaLayout() {
                   <p className="text-[10px] text-white/20 mt-0.5">整个文件夹</p>
                 </div>
                 <div role="button" tabIndex={0} onClick={() => {
-                  if (!packNameInput.trim()) { toast.error("请先输入版式包名称"); return; }
                   setShowPackUpload(false);
                   setPackAssetPickerOpen(true);
                 }}
@@ -1788,13 +1789,14 @@ export default function MediaLayout() {
         onSelect={() => {}}
         onMultiSelect={async (items) => {
           if (items.length === 0) return;
-          if (!packNameInput.trim()) { toast.error("请先输入版式包名称"); return; }
           setUploadingPack(true);
           try {
-            // Use the first selected asset's URL/key as the source
             const first = items[0];
+            // 名称优先用用户输入，否则自动从素材名生成
+            const autoName = first.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").trim() || "版式包";
+            const name = packNameInput.trim() || autoName;
             await createPackMutation.mutateAsync({
-              name: packNameInput.trim(),
+              name,
               sourceType: "images",
               sourceFileUrl: first.fileUrl,
               sourceFileKey: first.fileKey,
