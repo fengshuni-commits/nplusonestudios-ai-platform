@@ -1849,8 +1849,9 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
               <div className="space-y-2">
                 {columnTasks.map((task: any) => {
                   const daysLeft = task.dueDate ? Math.ceil((new Date(task.dueDate).getTime() - Date.now()) / 86400000) : null;
-                  const isUrgent = daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
-                  const isOverdue = daysLeft !== null && daysLeft < 0;
+                  const isDone = task.status === "done";
+                  const isUrgent = !isDone && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
+                  const isOverdue = !isDone && daysLeft !== null && daysLeft < 0;
                   return (
                     <Card key={task.id}
                       className={`shadow-sm cursor-pointer hover:shadow-md transition-shadow ${
@@ -2902,8 +2903,9 @@ function ProjectGanttChart({
             Math.ceil((task._end.getTime() - task._start.getTime()) / 86400000)
           );
           const daysLeft = Math.ceil((task._end.getTime() - Date.now()) / 86400000);
-          const isOverdue = daysLeft < 0;
-          const isUrgent = daysLeft >= 0 && daysLeft <= 3;
+          const isTaskDone = task.status === "done";
+          const isOverdue = !isTaskDone && daysLeft < 0;
+          const isUrgent = !isTaskDone && daysLeft >= 0 && daysLeft <= 3;
           const barColor = isOverdue
             ? "#ef4444"
             : isUrgent

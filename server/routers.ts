@@ -5865,8 +5865,9 @@ const graphicLayoutRouter = router({
       const imgW: number = page.imageSize?.width ?? 1024;
       const imgH: number = page.imageSize?.height ?? 1365;
 
-      // 用 sharp 生成 mask 图（白色矩形=重绘区域，黑色=保留）
-      let maskB64: string;
+      // 用红色覆盖层标记文字区域（与彩平图局部修改一致），让 AI 理解需要修改的范围
+      let compositeB64: string;
+      let compositeMimeType = "image/png";
       try {
         const sharp = (await import("sharp")).default;
         // 扩展重绘区域 20px 确保覆盖完整
@@ -5875,35 +5876,43 @@ const graphicLayoutRouter = router({
         const my = Math.max(0, Math.round(block.y) - padding);
         const mw = Math.min(imgW - mx, Math.round(block.width) + padding * 2);
         const mh = Math.min(imgH - my, Math.round(block.height) + padding * 2);
-        // 创建全黑图像，在文字区域画白色矩形
-        // 创建全黑背景
-        const blackBg = await sharp(Buffer.alloc(imgW * imgH, 0), {
-          raw: { width: imgW, height: imgH, channels: 1 }
-        }).png().toBuffer();
-        // 在文字区域叠加白色矩形
-        const maskBuffer = await sharp(blackBg)
-          .composite([{
-            input: Buffer.alloc(mw * mh, 255),
-            raw: { width: mw, height: mh, channels: 1 },
-            left: mx, top: my,
-          }])
+
+        // 下载原图
+        const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
+        if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
+        const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+
+        // 创建半透明红色覆盖层（仅覆盖文字区域）
+        const overlayPixels = Buffer.alloc(mw * mh * 4);
+        for (let i = 0; i < mw * mh; i++) {
+          overlayPixels[i * 4] = 255;   // R
+          overlayPixels[i * 4 + 1] = 60;  // G
+          overlayPixels[i * 4 + 2] = 60;  // B
+          overlayPixels[i * 4 + 3] = 120; // A (半透明)
+        }
+        const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } })
           .png()
           .toBuffer();
-        maskB64 = maskBuffer.toString("base64");
+
+        // 合成：原图 + 红色覆盖层
+        const compositeBuffer = await sharp(imgBuffer)
+          .composite([{ input: overlay, left: mx, top: my, blend: "over" }])
+          .png()
+          .toBuffer();
+        compositeB64 = compositeBuffer.toString("base64");
       } catch (err) {
-        console.error("[inpaintTextBlock] Failed to generate mask:", err);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "生成 mask 失败" });
+        console.error("[inpaintTextBlock] Failed to generate red overlay composite:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "生成标注图失败" });
       }
 
-      // 构建 inpainting prompt
-      const inpaintPrompt = `Replace the text in the highlighted region with: "${input.newText}". Keep the same font style, size (${block.fontSize}px), color (${block.color}), alignment (${block.align}), and background. Only change the text content, preserve everything else exactly.`;
+      // 构建 inpainting prompt（与彩平图局部修改保持一致的指令格式）
+      const inpaintPrompt = `[INPAINTING INSTRUCTION: The image has a red-highlighted area marking the region to modify. ONLY modify the content within the red-marked area. Keep all other areas exactly unchanged.] Replace the text in the red-highlighted region with: "${input.newText}". Keep the same font style, size (approximately ${block.fontSize}px), color (${block.color}), alignment (${block.align}), and background. Only change the text content, preserve everything else exactly.`;
 
-      // 调用图像 API 进行 inpainting
+      // 调用图像 API 进行 inpainting（传入红色标注合成图）
       const result = await generateImageWithTool({
         prompt: inpaintPrompt,
         originalImages: [
-          { url: originalImageUrl, mimeType: "image/jpeg" },
-          { b64Json: maskB64, mimeType: "image/png" },
+          { b64Json: compositeB64, mimeType: compositeMimeType },
         ],
         size: `${imgW}x${imgH}`,
         toolId: input.imageToolId ?? null,

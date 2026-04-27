@@ -1118,8 +1118,9 @@ function TaskListView({
     <div className="space-y-1">
       {tasks.map((task: any) => {
         const daysLeft = task.dueDate ? Math.ceil((new Date(task.dueDate).getTime() - Date.now()) / 86400000) : null;
-        const isOverdue = daysLeft !== null && daysLeft < 0;
-        const isUrgent = daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
+        const isDone = task.status === "done";
+        const isOverdue = !isDone && daysLeft !== null && daysLeft < 0;
+        const isUrgent = !isDone && daysLeft !== null && daysLeft <= 3 && daysLeft >= 0;
 
         return (
           <div
@@ -1342,8 +1343,9 @@ function GanttView({ tasks, colorByProject = false, onTaskClick }: { tasks: any[
             const startOffset = Math.floor((task._start.getTime() - rangeStart.getTime()) / 86400000);
             const duration = Math.max(1, Math.ceil((task._end.getTime() - task._start.getTime()) / 86400000));
             const daysLeft = Math.ceil((task._end.getTime() - Date.now()) / 86400000);
-            const isOverdue = daysLeft < 0;
-            const isUrgent = daysLeft >= 0 && daysLeft <= 3;
+            const isGanttTaskDone = task.status === "done";
+            const isOverdue = !isGanttTaskDone && daysLeft < 0;
+            const isUrgent = !isGanttTaskDone && daysLeft >= 0 && daysLeft <= 3;
 
             // Determine bar color
             let barColor: string;
