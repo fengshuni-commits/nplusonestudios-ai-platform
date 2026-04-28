@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo, memo } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -437,6 +438,7 @@ function PageImageViewer({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MediaLayout() {
+  const [location] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const assetInputRef = useRef<HTMLInputElement>(null); // per_page 模式用
@@ -514,11 +516,31 @@ export default function MediaLayout() {
   const [packAssetSearch, setPackAssetSearch] = useState("");
   const [packAssetSelected, setPackAssetSelected] = useState<Array<{ id: number; name: string; fileUrl: string; fileKey: string; thumbnailUrl?: string | null }>>([]);
 
+  // 从 URL 参数读取 jobId（由生成记录模块跳转过来时自动恢复）
+  const urlJobId = useMemo(() => {
+    const search = location.includes("?") ? location.split("?")[1] : "";
+    const params = new URLSearchParams(search);
+    const v = params.get("jobId");
+    return v ? Number(v) : undefined;
+  }, [location]);
+
   // Jobs
   const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery(undefined, { staleTime: 30_000 });
   const [activeJobId, setActiveJobId] = useState<number | undefined>();
   const [currentPage, setCurrentPage] = useState(0);
   const [generating, setGenerating] = useState(false);
+
+  // URL 参数恢复：jobs 加载后自动跳转到对应记录
+  const urlJobIdAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!urlJobId || urlJobIdAppliedRef.current || jobs.length === 0) return;
+    const target = jobs.find((j: any) => j.id === urlJobId);
+    if (target) {
+      setActiveJobId(urlJobId);
+      setCurrentPage(0);
+      urlJobIdAppliedRef.current = true;
+    }
+  }, [urlJobId, jobs]);
 
   // 历史记录详情面板
   const [selectedHistoryJobId, setSelectedHistoryJobId] = useState<number | undefined>(); // 当前展开详情的 job

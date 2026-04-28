@@ -450,8 +450,8 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
 
   const handleClick = () => {
     if (item.module === "layout_design") {
-      // 图文排版：跳转到图文排版页面
-      if (onNavigate) onNavigate("/media/layout");
+      // 图文排版：跳转到图文排版页面，并带上 jobId 以自动恢复对应记录
+      if (onNavigate) onNavigate(`/media/layout?jobId=${item.id}`);
       return;
     }
     if (item.module === "analysis_image") {
