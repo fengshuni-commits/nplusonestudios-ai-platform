@@ -605,19 +605,58 @@ function ApiDocsSection({ copiedId, handleCopy }: { copiedId: string | null; han
       </div>
 
       {/* 公开文档链接 */}
-      <div className="p-4 bg-muted rounded-lg flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold">查看完整公开 API 文档</p>
-          <p className="text-xs text-muted-foreground mt-0.5">包含详细的 curl 示例、JSON 示例和错误处理说明</p>
+      <div className="space-y-3">
+        <div className="p-4 bg-muted rounded-lg flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">查看完整公开 API 文档</p>
+            <p className="text-xs text-muted-foreground mt-0.5">包含详细的 curl 示例、JSON 示例和错误处理说明</p>
+          </div>
+          <a
+            href="/api-docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 transition"
+          >
+            打开文档 <ExternalLink className="w-3.5 h-3.5" />
+          </a>
         </div>
-        <a
-          href="/api-docs"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 transition"
-        >
-          打开文档 <ExternalLink className="w-3.5 h-3.5" />
-        </a>
+        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-purple-900">OpenClaw / Swagger 机器可读文档</p>
+              <p className="text-xs text-purple-700 mt-0.5 mb-2">OpenAPI 3.0 JSON 格式，可直接导入 OpenClaw、Swagger UI、Postman 等工具</p>
+              <div className="flex items-center gap-2 p-2 bg-white border border-purple-200 rounded text-xs font-mono text-purple-800 overflow-x-auto">
+                <span className="shrink-0 text-purple-400">GET</span>
+                <span className="truncate">{BASE_URL}/api/openapi.json</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-5 px-1 shrink-0"
+                  onClick={() => handleCopy(`${BASE_URL}/api/openapi.json`, 'openapi-url')}
+                >
+                  {copiedId === 'openapi-url' ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                </Button>
+              </div>
+            </div>
+            <a
+              href={`${BASE_URL}/api/openapi.json`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition shrink-0"
+            >
+              查看 JSON <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+          <div className="mt-3 pt-3 border-t border-purple-200">
+            <p className="text-xs text-purple-700 font-medium mb-1.5">OpenClaw 导入步骤：</p>
+            <ol className="text-xs text-purple-600 space-y-0.5 list-decimal list-inside">
+              <li>在 OpenClaw 项目中选择「添加 API 来源」</li>
+              <li>选择「OpenAPI / Swagger URL」</li>
+              <li>粘贴上方 URL，OpenClaw 将自动解析所有端点</li>
+              <li>在请求头中配置 <code className="bg-purple-100 px-1 rounded">Authorization: Bearer sk_...</code></li>
+            </ol>
+          </div>
+        </div>
       </div>
     </>
   );

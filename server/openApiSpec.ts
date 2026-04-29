@@ -114,6 +114,13 @@ export function getOpenApiSpec(baseUrl: string) {
             reviewerId: { type: "integer", nullable: true, description: "审核人用户 ID" },
             sortOrder: { type: "integer", description: "排序顺序（数字越小越靠前）", example: 0 },
             approval: { type: "boolean", description: "是否需要审批", example: false },
+            completedAt: {
+              type: "string",
+              format: "date-time",
+              nullable: true,
+              description: "任务完成时间（status 变为 done 时自动记录，status 改回时清除）",
+              example: "2026-04-12T09:30:00.000Z",
+            },
             createdBy: { type: "integer", nullable: true, description: "创建人用户 ID" },
             createdAt: { type: "string", format: "date-time", description: "创建时间" },
             updatedAt: { type: "string", format: "date-time", description: "最后更新时间" },
@@ -1374,6 +1381,72 @@ export function getOpenApiSpec(baseUrl: string) {
               },
             },
             "404": { description: "任务不存在或无权访问", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/graphic-layout/inpaint/{jobId}/{pageIndex}/{blockId}": {
+        post: {
+          summary: "局部重绘图文排版文字块",
+          description:
+            "对已完成的图文排版任务中的某个文字块进行局部重绘（inpainting）。\n\n" +
+            "修改文字内容后，AI 将只重绘该文字区域，保留页面其余部分不变。\n\n" +
+            "重绘成功后返回新的页面图片 URL，同时更新该文字块的 `text` 内容。",
+          operationId: "inpaintTextBlock",
+          tags: ["图文排版"],
+          parameters: [
+            { name: "jobId", in: "path", required: true, schema: { type: "integer" }, description: "任务 ID" },
+            { name: "pageIndex", in: "path", required: true, schema: { type: "integer" }, description: "页面索引（从 0 开始）" },
+            { name: "blockId", in: "path", required: true, schema: { type: "string" }, description: "文字块 ID（如 tb_0_title）" },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["newText"],
+                  properties: {
+                    newText: { type: "string", description: "修改后的文字内容", example: "N+1 STUDIOS 建筑设计" },
+                    imageToolId: { type: "integer", nullable: true, description: "指定使用的图像生成 AI 工具 ID（可选）" },
+                  },
+                },
+                example: { newText: "N+1 STUDIOS 建筑设计" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "重绘成功",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          imageUrl: { type: "string", format: "uri", description: "重绘后的新页面图片 URL" },
+                          pageIndex: { type: "integer" },
+                          blockId: { type: "string" },
+                          newText: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                  example: {
+                    data: {
+                      imageUrl: "https://cdn.example.com/graphic-layout/job42-page0-repainted.png",
+                      pageIndex: 0,
+                      blockId: "tb_0_title",
+                      newText: "N+1 STUDIOS 建筑设计",
+                    },
+                  },
+                },
+              },
+            },
+            "400": { description: "参数错误或任务未完成", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "任务、页面或文字块不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
