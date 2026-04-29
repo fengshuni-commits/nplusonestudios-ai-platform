@@ -2015,3 +2015,8 @@
 ## Bug: /api/v1/graphic-layout/inpaint 返回 500 "Failed to generate composite image"
 - [x] 排查合成图像失败的根本原因：block.x/y/width/height 为 undefined 时 Math.round(undefined)=NaN，导致 Buffer.alloc(NaN) 抛异常
 - [x] 修复合成逻辑：对坐标做防御性处理，超界时降级为直接使用原图，同时修复 tRPC 版本中相同的问题
+
+## Bug: inpaint 500 持续复现（job 1080071, block_1, page 0）
+- [x] 查询 DB 中 job 1080071 的 pages[0].imageUrl、textBlocks、imageSize 实际数据
+- [x] 定位根本原因：DB 存储的 imageSize (1024x1365) 与实际图片尺寸 (864x1184) 不一致，导致 sharp composite 抛出 "Image to composite must have same dimensions or smaller"
+- [x] 修复：先 fetch 图片再用 sharp.metadata() 读取实际尺寸，用实际尺寸计算 overlay 坐标（REST + tRPC 两处均已修复）

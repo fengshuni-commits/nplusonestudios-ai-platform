@@ -5876,6 +5876,16 @@ const graphicLayoutRouter = router({
         const sharp = (await import("sharp")).default;
         // 扩展重绘区域 20px 确保覆盖完整
         const padding = 20;
+        // 先下载原图，再读取实际尺寸（DB 存储的 imageSize 可能与实际图片不一致）
+        const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
+        if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
+        const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+        const meta = await sharp(imgBuffer).metadata();
+        const actualW = meta.width ?? imgW;
+        const actualH = meta.height ?? imgH;
+        if (actualW !== imgW || actualH !== imgH) {
+          console.warn(`[inpaintTextBlock] DB imageSize (${imgW}x${imgH}) differs from actual (${actualW}x${actualH}), using actual`);
+        }
         // 防御性处理：DB JSON 中字段可能为 undefined/null
         const bx = isFinite(Number(block.x)) ? Number(block.x) : 0;
         const by = isFinite(Number(block.y)) ? Number(block.y) : 0;
@@ -5883,13 +5893,8 @@ const graphicLayoutRouter = router({
         const bh = isFinite(Number(block.height)) ? Number(block.height) : 0;
         const mx = Math.max(0, Math.round(bx) - padding);
         const my = Math.max(0, Math.round(by) - padding);
-        const mw = Math.min(imgW - mx, Math.round(bw) + padding * 2);
-        const mh = Math.min(imgH - my, Math.round(bh) + padding * 2);
-
-        // 下载原图
-        const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
-        if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
-        const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+        const mw = Math.min(actualW - mx, Math.round(bw) + padding * 2);
+        const mh = Math.min(actualH - my, Math.round(bh) + padding * 2);
 
         if (mw > 0 && mh > 0) {
           // 创建半透明红色覆盖层（仅覆盖文字区域）

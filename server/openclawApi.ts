@@ -727,6 +727,17 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
     try {
       const sharp = (await import("sharp")).default;
       const padding = 20;
+      // Fetch image first so we can read actual dimensions (DB imageSize may differ from real image)
+      const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
+      if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
+      const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+      // Use actual image dimensions to avoid "Image to composite must have same dimensions or smaller" error
+      const meta = await sharp(imgBuffer).metadata();
+      const actualW = meta.width ?? imgW;
+      const actualH = meta.height ?? imgH;
+      if (actualW !== imgW || actualH !== imgH) {
+        console.warn(`[API] graphic-layout/inpaint: DB imageSize (${imgW}x${imgH}) differs from actual (${actualW}x${actualH}), using actual`);
+      }
       // Sanitize block coordinates — DB JSON may have undefined/null fields
       const bx = isFinite(Number(block.x)) ? Number(block.x) : 0;
       const by = isFinite(Number(block.y)) ? Number(block.y) : 0;
@@ -734,11 +745,8 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
       const bh = isFinite(Number(block.height)) ? Number(block.height) : 0;
       const mx = Math.max(0, Math.round(bx) - padding);
       const my = Math.max(0, Math.round(by) - padding);
-      const mw = Math.min(imgW - mx, Math.round(bw) + padding * 2);
-      const mh = Math.min(imgH - my, Math.round(bh) + padding * 2);
-      const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
-      if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
-      const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+      const mw = Math.min(actualW - mx, Math.round(bw) + padding * 2);
+      const mh = Math.min(actualH - my, Math.round(bh) + padding * 2);
       // If overlay dimensions are invalid (block outside image bounds), fall back to original image
       if (mw > 0 && mh > 0) {
         const overlayPixels = Buffer.alloc(mw * mh * 4);
@@ -751,7 +759,7 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
         compositeB64 = compositeBuffer.toString("base64");
       } else {
         // Block is outside image bounds — use original image without overlay
-        console.warn(`[API] graphic-layout/inpaint: block out of bounds (mx=${mx} my=${my} mw=${mw} mh=${mh}), using original image`);
+        console.warn(`[API] graphic-layout/inpaint: block out of bounds (mx=${mx} my=${my} mw=${mw} mh=${mh} actualW=${actualW} actualH=${actualH}), using original image`);
         compositeB64 = imgBuffer.toString("base64");
       }
     } catch (err) {
