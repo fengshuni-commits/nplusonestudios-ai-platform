@@ -1970,3 +1970,8 @@
 - [x] 梳理最新平台 API 列表，更新前端 API 文档页面内容
 - [x] 生成 OpenAPI 3.0 JSON 格式机器可读文档，添加后端 /api/openapi.json 接口
 - [x] 在 API 管理页面添加 OpenClaw 可直接读取的文档链接
+
+## OpenAPI 文档补全：彩平图 / AI 分析图 / 视频生成
+- [x] 在 openApiSpec.ts 中添加彩平图（colorPlan）端点
+- [x] 在 openApiSpec.ts 中添加 AI 分析图（analysisImage）端点
+- [x] 在 openApiSpec.ts 中添加视频生成（video）端点

@@ -1512,6 +1512,472 @@ export function getOpenApiSpec(baseUrl: string) {
           },
         },
       },
+      "/color-plan/generate": {
+        post: {
+          summary: "生成彩平图",
+          description:
+            "上传平面图（线稿 / 黑白），可选传入参考风格图，AI 自动生成彩色建筑平面图。\n\n" +
+            "该接口为异步任务：提交后返回 `jobId`，需要轮询 `/color-plan/job-status/{jobId}` 直到 `status=done`。",
+          operationId: "colorPlanGenerate",
+          tags: ["彩平图"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["floorPlanUrl"],
+                  properties: {
+                    floorPlanUrl: { type: "string", format: "uri", description: "平面图 URL（线稿 / 黑白）", example: "https://cdn.example.com/floor-plan.png" },
+                    referenceUrl: { type: "string", format: "uri", nullable: true, description: "参考风格图 URL（可选）" },
+                    planStyle: {
+                      type: "string",
+                      enum: ["colored", "hand_drawn", "line_drawing"],
+                      default: "colored",
+                      description: "彩平风格：colored=彩色建筑风、hand_drawn=手绘风、line_drawing=线稿风",
+                    },
+                    style: { type: "string", nullable: true, description: "额外风格描述（如“日式简约”）" },
+                    extraPrompt: { type: "string", nullable: true, description: "额外生成指令（自由文本）" },
+                    projectId: { type: "integer", nullable: true, description: "关联项目 ID（可选）" },
+                    toolId: { type: "integer", nullable: true, description: "指定 AI 工具 ID（不填则使用默认工具）" },
+                    floorPlanWidth: { type: "integer", nullable: true, description: "平面图原始宽度（像素），用于保留画面比例" },
+                    floorPlanHeight: { type: "integer", nullable: true, description: "平面图原始高度（像素）" },
+                    zones: {
+                      type: "array",
+                      nullable: true,
+                      description: "功能分区标注（可选），每个分区包含名称和位置（相对比例 0-1）",
+                      items: {
+                        type: "object",
+                        required: ["name", "x", "y", "w", "h"],
+                        properties: {
+                          name: { type: "string", example: "客厅" },
+                          x: { type: "number", example: 0.1 },
+                          y: { type: "number", example: 0.2 },
+                          w: { type: "number", example: 0.3 },
+                          h: { type: "number", example: 0.25 },
+                          color: { type: "string", nullable: true, example: "#E8D5B7" },
+                        },
+                      },
+                    },
+                  },
+                },
+                example: {
+                  floorPlanUrl: "https://cdn.example.com/floor-plan.png",
+                  planStyle: "colored",
+                  projectId: 3,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "任务已提交",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { data: { type: "object", properties: { jobId: { type: "string", description: "异步任务 ID，用于轮询状态" } } } },
+                  },
+                  example: { data: { jobId: "abc123xyz" } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/color-plan/job-status/{jobId}": {
+        get: {
+          summary: "轮询彩平图生成状态",
+          description: "轮询异步彩平图生成任务的状态。建议每 3–5 秒轮询一次，直到 `status=done` 或 `status=failed`。",
+          operationId: "colorPlanJobStatus",
+          tags: ["彩平图"],
+          parameters: [
+            { name: "jobId", in: "path", required: true, schema: { type: "string" }, description: "任务 ID（由 /color-plan/generate 返回）" },
+          ],
+          responses: {
+            "200": {
+              description: "任务状态",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          status: { type: "string", enum: ["processing", "done", "failed", "not_found"], description: "任务状态" },
+                          url: { type: "string", format: "uri", nullable: true, description: "生成的彩平图 URL（status=done 时返回）" },
+                          historyId: { type: "integer", nullable: true, description: "生成记录 ID（可用于关联项目）" },
+                          error: { type: "string", nullable: true, description: "错误信息（status=failed 时返回）" },
+                        },
+                      },
+                    },
+                  },
+                  example: { data: { status: "done", url: "https://cdn.example.com/color-plan/result.png", historyId: 88 } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/color-plan/inpaint": {
+        post: {
+          summary: "彩平图局部修改",
+          description:
+            "对已生成的彩平图进行局部修改（inpainting）。\n\n" +
+            "用户在彩平图上用画笔标注需要修改的区域（生成 base64 mask 图），\n" +
+            "AI 只重绘标注区域，保留其余部分不变。\n\n" +
+            "与 /color-plan/generate 相同，返回 `jobId` 需要轮询 `/color-plan/job-status/{jobId}`。",
+          operationId: "colorPlanInpaint",
+          tags: ["彩平图"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["imageUrl", "maskImageData", "prompt"],
+                  properties: {
+                    imageUrl: { type: "string", format: "uri", description: "原始彩平图 URL" },
+                    maskImageData: { type: "string", description: "base64 编码的 PNG mask 图（白色=要修改的区域）" },
+                    prompt: { type: "string", description: "修改说明（如“将客厅区域改为木地板风格”）", example: "将客厅区域改为木地板风格" },
+                    floorPlanUrl: { type: "string", format: "uri", nullable: true, description: "底图 URL（线稿/黑白平面图），作为 AI 参考条件（可选）" },
+                    toolId: { type: "integer", nullable: true, description: "指定 AI 工具 ID（可选）" },
+                    projectId: { type: "integer", nullable: true, description: "关联项目 ID（可选）" },
+                  },
+                },
+                example: {
+                  imageUrl: "https://cdn.example.com/color-plan/result.png",
+                  maskImageData: "data:image/png;base64,iVBORw0KGgo...",
+                  prompt: "将客厅区域改为木地板风格",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "任务已提交",
+              content: {
+                "application/json": {
+                  schema: { type: "object", properties: { data: { type: "object", properties: { jobId: { type: "string" } } } } },
+                  example: { data: { jobId: "def456uvw" } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/analysis-image/submit": {
+        post: {
+          summary: "提交 AI 分析图生成任务",
+          description:
+            "上传参考图，AI 生成对应的材质搜配图或软装配图。\n\n" +
+            "支持同时提交 1–3 个并行任务（`count` 参数），返回 `jobId`（第一个）和 `jobIds`（全部）。\n\n" +
+            "轮询状态使用 `/analysis-image/poll/{jobId}`。",
+          operationId: "analysisImageSubmit",
+          tags: ["AI 分析图"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["type", "referenceImageUrl"],
+                  properties: {
+                    type: {
+                      type: "string",
+                      enum: ["material", "soft_furnishing"],
+                      description: "分析类型：material=材质搜配图、soft_furnishing=软装配图",
+                      example: "material",
+                    },
+                    referenceImageUrl: { type: "string", format: "uri", description: "参考图 URL（已上传到 S3 的公开链接）", example: "https://cdn.example.com/ref.jpg" },
+                    referenceImageContentType: { type: "string", nullable: true, description: "参考图 MIME 类型（如 image/jpeg）", example: "image/jpeg" },
+                    extraPrompt: { type: "string", nullable: true, description: "额外生成指令（自由文本）" },
+                    aspectRatio: { type: "string", nullable: true, description: "图片比例，格式 \"W x H\"，如 \"1024x1024\"" , example: "1024x1024" },
+                    count: { type: "integer", minimum: 1, maximum: 3, default: 1, description: "并行生成数量（1–3）" },
+                    toolId: { type: "integer", nullable: true, description: "指定 AI 工具 ID（可选）" },
+                  },
+                },
+                example: {
+                  type: "material",
+                  referenceImageUrl: "https://cdn.example.com/ref.jpg",
+                  count: 2,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "任务已提交",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          jobId: { type: "string", description: "第一个任务 ID（单个任务时使用）" },
+                          jobIds: { type: "array", items: { type: "string" }, description: "全部任务 ID列表（count>1 时使用）" },
+                        },
+                      },
+                    },
+                  },
+                  example: { data: { jobId: "job001", jobIds: ["job001", "job002"] } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/analysis-image/poll/{jobId}": {
+        get: {
+          summary: "轮询 AI 分析图任务状态",
+          description: "轮询单个分析图任务的状态。建议每 3–5 秒轮询一次。",
+          operationId: "analysisImagePollJob",
+          tags: ["AI 分析图"],
+          parameters: [
+            { name: "jobId", in: "path", required: true, schema: { type: "string" }, description: "任务 ID" },
+          ],
+          responses: {
+            "200": {
+              description: "任务状态",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          status: { type: "string", enum: ["pending", "processing", "done", "failed", "not_found"] },
+                          url: { type: "string", format: "uri", nullable: true, description: "生成的分析图 URL（status=done 时返回）" },
+                          historyId: { type: "integer", nullable: true },
+                          error: { type: "string", nullable: true },
+                        },
+                      },
+                    },
+                  },
+                  example: { data: { status: "done", url: "https://cdn.example.com/analysis/result.png", historyId: 99 } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "403": { description: "无权访问该任务", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "任务不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/analysis-image/poll-jobs": {
+        post: {
+          summary: "批量轮询 AI 分析图任务状态",
+          description: "一次查询多个分析图任务的状态（count>1 时使用）。",
+          operationId: "analysisImagePollJobs",
+          tags: ["AI 分析图"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["jobIds"],
+                  properties: {
+                    jobIds: { type: "array", items: { type: "string" }, description: "任务 ID 列表" },
+                  },
+                },
+                example: { jobIds: ["job001", "job002"] },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "各任务状态列表",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            jobId: { type: "string" },
+                            status: { type: "string", enum: ["pending", "processing", "done", "failed", "not_found"] },
+                            url: { type: "string", format: "uri", nullable: true },
+                            historyId: { type: "integer", nullable: true },
+                            error: { type: "string", nullable: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  example: {
+                    data: [
+                      { jobId: "job001", status: "done", url: "https://cdn.example.com/analysis/r1.png", historyId: 99 },
+                      { jobId: "job002", status: "processing" },
+                    ],
+                  },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/video/generate": {
+        post: {
+          summary: "生成视频",
+          description:
+            "提交视频生成任务，支持文生视频（text-to-video）和图生视频（image-to-video）两种模式。\n\n" +
+            "提交后返回 `taskId`，需要轮询 `/video/status/{taskId}` 直到 `status=completed`。\n\n" +
+            "视频生成通常需要 30–120 秒，请实现合理的轮询间隔（建议 5–10 秒）。",
+          operationId: "videoGenerate",
+          tags: ["视频生成"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["mode", "prompt", "duration", "toolId"],
+                  properties: {
+                    mode: {
+                      type: "string",
+                      enum: ["text-to-video", "image-to-video"],
+                      description: "生成模式：text-to-video=文生视频、image-to-video=图生视频",
+                      example: "image-to-video",
+                    },
+                    prompt: { type: "string", minLength: 1, description: "视频内容描述", example: "建筑内部空间漫游，光线流动，气幕宁静" },
+                    duration: { type: "integer", minimum: 1, maximum: 8, description: "视频时长（秒），范围 1–8 秒", example: 5 },
+                    toolId: { type: "integer", description: "指定视频生成 AI 工具 ID（必填）" },
+                    inputImageUrl: { type: "string", format: "uri", nullable: true, description: "输入图片 URL（image-to-video 模式必填）" },
+                  },
+                },
+                example: {
+                  mode: "image-to-video",
+                  prompt: "建筑内部空间漫游，光线流动，气幕安静",
+                  duration: 5,
+                  toolId: 2,
+                  inputImageUrl: "https://cdn.example.com/render.jpg",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "任务已提交",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          taskId: { type: "string", description: "视频任务 ID，用于轮询状态" },
+                          status: { type: "string", enum: ["pending", "processing", "completed", "failed"] },
+                          videoUrl: { type: "string", format: "uri", nullable: true, description: "视频 URL（如果已完成）" },
+                          errorMessage: { type: "string", nullable: true },
+                        },
+                      },
+                    },
+                  },
+                  example: { data: { taskId: "vid_abc123", status: "pending", videoUrl: null } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "工具不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/video/status/{taskId}": {
+        get: {
+          summary: "轮询视频生成状态",
+          description: "轮询视频生成任务的状态。建议每 5–10 秒轮询一次，直到 `status=completed` 或 `status=failed`。",
+          operationId: "videoGetStatus",
+          tags: ["视频生成"],
+          parameters: [
+            { name: "taskId", in: "path", required: true, schema: { type: "string" }, description: "视频任务 ID（由 /video/generate 返回）" },
+          ],
+          responses: {
+            "200": {
+              description: "任务状态",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          status: { type: "string", enum: ["pending", "processing", "completed", "failed"] },
+                          videoUrl: { type: "string", format: "uri", nullable: true, description: "视频永久 URL（S3 公开链接，status=completed 时返回）" },
+                          errorMessage: { type: "string", nullable: true },
+                          progress: { type: "integer", minimum: 0, maximum: 100, description: "生成进度（%）" },
+                          recordId: { type: "integer", description: "数据库记录 ID" },
+                        },
+                      },
+                    },
+                  },
+                  example: { data: { status: "completed", videoUrl: "https://cdn.example.com/video/result.mp4", progress: 100, recordId: 12 } },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "任务不存在", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
+      "/video/list": {
+        get: {
+          summary: "获取视频生成历史",
+          description: "获取当前用户的视频生成历史列表。",
+          operationId: "videoList",
+          tags: ["视频生成"],
+          parameters: [
+            { name: "limit", in: "query", schema: { type: "integer", default: 20, minimum: 1, maximum: 100 }, description: "返回条数限制" },
+            { name: "offset", in: "query", schema: { type: "integer", default: 0, minimum: 0 }, description: "跳过条数偏移量" },
+          ],
+          responses: {
+            "200": {
+              description: "视频历史列表",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "integer" },
+                            mode: { type: "string", enum: ["text-to-video", "image-to-video"] },
+                            prompt: { type: "string" },
+                            duration: { type: "integer" },
+                            status: { type: "string", enum: ["pending", "processing", "completed", "failed"] },
+                            outputVideoUrl: { type: "string", format: "uri", nullable: true },
+                            inputImageUrl: { type: "string", format: "uri", nullable: true },
+                            taskId: { type: "string", nullable: true },
+                            createdAt: { type: "string", format: "date-time" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
     },
     tags: [
       { name: "系统", description: "系统状态检查" },
@@ -1520,6 +1986,9 @@ export function getOpenApiSpec(baseUrl: string) {
       { name: "文档管理", description: "项目文档的管理" },
       { name: "AI 功能", description: "AI 辅助设计功能（案例调研、效果图生成、会议纪要）" },
       { name: "图文排版", description: "AI 图文排版生成（品牌手册、详情页、项目图板）" },
+      { name: "彩平图", description: "AI 彩色建筑平面图生成与局部修改" },
+      { name: "AI 分析图", description: "AI 材质搜配图 / 软装配图生成" },
+      { name: "视频生成", description: "AI 视频生成（文生视频 / 图生视频）" },
       { name: "工作台", description: "工作台统计数据" },
       { name: "素材库", description: "设计素材管理" },
       { name: "设计规范", description: "设计规范文档" },
