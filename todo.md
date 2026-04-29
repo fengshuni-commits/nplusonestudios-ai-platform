@@ -1975,3 +1975,14 @@
 - [x] 在 openApiSpec.ts 中添加彩平图（colorPlan）端点
 - [x] 在 openApiSpec.ts 中添加 AI 分析图（analysisImage）端点
 - [x] 在 openApiSpec.ts 中添加视频生成（video）端点
+
+## Bug: OpenAPI 文档路径与实际 REST 接口不一致
+- [x] 将 openApiSpec.ts 的 servers[0].url 改为 {baseUrl}/api/v1，路径去掉 /api/v1 前缀
+- [x] 实现了 colorPlan/analysisImage/video REST 端点，文档与实现完全对应
+- [x] 确保文档路径与 openclawApi.ts 实际路由完全对应
+
+## 实现彩平图/AI分析图/视频生成 REST 外部接口
+- [x] 在 openclawApi.ts 中实现 /color-plan/generate、/color-plan/status/:jobId REST 端点
+- [x] 在 openclawApi.ts 中实现 /analysis-image/submit、/analysis-image/status/:jobId REST 端点
+- [x] 在 openclawApi.ts 中实现 /video/generate、/video/status/:taskId REST 端点
+- [x] 更新 openApiSpec.ts 确保文档与实现完全一致

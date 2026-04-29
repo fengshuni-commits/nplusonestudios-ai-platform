@@ -5,6 +5,9 @@ import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
 import { generateGraphicLayoutAsync } from "./graphicLayoutService";
+import { generateImageWithTool } from "./_core/generateImageWithTool";
+import { generateVideoWithTool, queryVideoTaskStatus } from "./_core/generateVideoWithTool";
+import { storagePut } from "./storage";
 
 const router = Router();
 
@@ -661,6 +664,241 @@ router.post("/graphic-layout/export-pdf/:id", async (req: Request, res: Response
   } catch (error) {
     console.error("[API] graphic-layout/export-pdf error:", error);
     res.status(500).json({ error: "Failed to export PDF", code: "INTERNAL_ERROR" });
+  }
+});
+
+// ─── Color Plan REST API ────────────────────────────────────
+
+// In-memory job store shared with tRPC colorPlan router
+// (jobs are stored in the same process memory)
+const colorPlanJobStoreApi = new Map<string, { status: string; url?: string; historyId?: number; error?: string }>();
+
+// POST /api/v1/color-plan/generate
+router.post("/color-plan/generate", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { floorPlanUrl, referenceUrl, planStyle = "colored", style, extraPrompt, toolId, zones, floorPlanWidth, floorPlanHeight } = req.body;
+    if (!floorPlanUrl) return res.status(400).json({ error: "floorPlanUrl is required", code: "VALIDATION_ERROR" });
+    const validStyles = ["colored", "hand_drawn", "line_drawing"];
+    if (!validStyles.includes(planStyle)) return res.status(400).json({ error: `planStyle must be one of: ${validStyles.join(", ")}`, code: "VALIDATION_ERROR" });
+
+    const jobId = nanoid();
+    colorPlanJobStoreApi.set(jobId, { status: "processing" });
+
+    (async () => {
+      try {
+        const defaultPrompts: Record<string, { base: string; refPrefix: string }> = {
+          colored: {
+            base: `Architectural colored floor plan. Transform the provided black-and-white or line-drawing floor plan into a richly colored architectural floor plan. Apply realistic material textures and colors: warm wood flooring for living and dining areas, light tile or stone for bathrooms and kitchens, soft carpet or parquet for bedrooms, green indoor plants, furniture with drop shadows for depth. Maintain the exact spatial layout, room boundaries, walls, doors, and windows from the original floor plan. Clean top-down orthographic view. High quality architectural presentation style.`,
+            refPrefix: `[STYLE REFERENCE: The second image shows the target color style and material palette. Apply the same color scheme and material textures to the floor plan.]`,
+          },
+          hand_drawn: {
+            base: `Architectural hand-drawn floor plan. Transform the provided floor plan into a hand-drawn style architectural plan. Apply watercolor washes for room fills with soft, organic color bleeding at edges. Use pencil-sketch line work for walls, doors, and windows with slight imperfections for a human touch. Maintain exact spatial layout. Top-down orthographic view with artistic, sketch-like quality.`,
+            refPrefix: `[STYLE REFERENCE: The second image shows the target hand-drawn style, color palette and sketch technique. Apply the same watercolor wash style, line weight, and color tones to the floor plan.]`,
+          },
+          line_drawing: {
+            base: `Architectural floor plan line drawing. Transform the provided floor plan into a clean, precise architectural line drawing. Use crisp black lines on white background for all walls, doors, windows, and furniture outlines. No color fills, no textures. Clean, technical drafting style. Top-down orthographic view.`,
+            refPrefix: `[STYLE REFERENCE: The second image shows the target line drawing style and line weight convention. Apply the same drafting technique to the floor plan.]`,
+          },
+        };
+        const basePromptRow = await db.getColorPlanPrompt("base", planStyle);
+        const refPrefixRow = await db.getColorPlanPrompt("reference_prefix", planStyle);
+        const defaults = defaultPrompts[planStyle] || defaultPrompts.colored;
+        let prompt = basePromptRow?.prompt || defaults.base;
+        if (style) prompt += ` Style: ${style}.`;
+        if (zones && Array.isArray(zones) && zones.length > 0) {
+          const zoneDescriptions = zones.map((z: any, i: number) => {
+            const xPct = Math.round(z.x * 100); const yPct = Math.round(z.y * 100);
+            const wPct = Math.round(z.w * 100); const hPct = Math.round(z.h * 100);
+            return `Zone ${i + 1}: "${z.name}" — located at approximately ${xPct}% from left, ${yPct}% from top, spanning ${wPct}% wide and ${hPct}% tall.`;
+          }).join(" ");
+          prompt += ` FUNCTIONAL ZONES: ${zoneDescriptions}`;
+        }
+        if (extraPrompt) prompt += ` ${extraPrompt}`;
+        const originalImages: Array<{ url?: string; mimeType?: string }> = [{ url: floorPlanUrl, mimeType: "image/png" }];
+        if (referenceUrl) {
+          originalImages.push({ url: referenceUrl, mimeType: "image/png" });
+          prompt = `${refPrefixRow?.prompt || defaults.refPrefix} ` + prompt;
+        }
+        let colorPlanSize: string | undefined;
+        if (floorPlanWidth && floorPlanHeight) {
+          const BASE = 1024;
+          const ratio = floorPlanWidth / floorPlanHeight;
+          let outW = ratio >= 1 ? BASE : Math.round(BASE * ratio);
+          let outH = ratio >= 1 ? Math.round(BASE / ratio) : BASE;
+          outW = Math.max(64, Math.round(outW / 64) * 64);
+          outH = Math.max(64, Math.round(outH / 64) * 64);
+          colorPlanSize = `${outW}x${outH}`;
+        }
+        const result = await generateImageWithTool({ prompt, originalImages, toolId: toolId ?? undefined, size: colorPlanSize });
+        const historyResult = await db.createGenerationHistory({
+          userId: user.id, module: "color_plan",
+          title: `AI 彩平 - ${new Date().toLocaleDateString("zh-CN")}`,
+          summary: prompt, inputParams: { floorPlanUrl, referenceUrl: referenceUrl || null, planStyle },
+          outputUrl: result.url, status: "success", createdByName: user.name || null,
+        }).catch(() => ({ id: 0 }));
+        colorPlanJobStoreApi.set(jobId, { status: "done", url: result.url, historyId: historyResult.id });
+        setTimeout(() => colorPlanJobStoreApi.delete(jobId), 10 * 60 * 1000);
+      } catch (err: any) {
+        colorPlanJobStoreApi.set(jobId, { status: "failed", error: err?.message || "彩平生成失败" });
+        setTimeout(() => colorPlanJobStoreApi.delete(jobId), 5 * 60 * 1000);
+      }
+    })().catch(console.error);
+
+    res.json({ data: { jobId, status: "processing" } });
+  } catch (error) {
+    console.error("[API] color-plan/generate error:", error);
+    res.status(500).json({ error: "Failed to create color plan job", code: "INTERNAL_ERROR" });
+  }
+});
+
+// GET /api/v1/color-plan/status/:jobId
+router.get("/color-plan/status/:jobId", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { jobId } = req.params;
+    const job = colorPlanJobStoreApi.get(jobId);
+    if (!job) return res.status(404).json({ error: "Job not found or expired (jobs expire after 10 minutes)", code: "NOT_FOUND" });
+    if (job.status === "done") return res.json({ data: { jobId, status: "done", url: job.url, historyId: job.historyId } });
+    if (job.status === "failed") return res.json({ data: { jobId, status: "failed", error: job.error } });
+    res.json({ data: { jobId, status: "processing" } });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get job status", code: "INTERNAL_ERROR" });
+  }
+});
+
+// ─── Analysis Image REST API ─────────────────────────────────
+
+// POST /api/v1/analysis-image/submit
+router.post("/analysis-image/submit", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { type, referenceImageUrl, referenceImageContentType, extraPrompt, aspectRatio, count = 1, toolId } = req.body;
+    if (!type || !referenceImageUrl) return res.status(400).json({ error: "type and referenceImageUrl are required", code: "VALIDATION_ERROR" });
+    if (!["material", "soft_furnishing"].includes(type)) return res.status(400).json({ error: "type must be material or soft_furnishing", code: "VALIDATION_ERROR" });
+    const safeCount = Math.min(Math.max(parseInt(count) || 1, 1), 3);
+    let width: number | undefined; let height: number | undefined;
+    if (aspectRatio) {
+      const parts = String(aspectRatio).split("x");
+      if (parts.length === 2) { width = parseInt(parts[0], 10); height = parseInt(parts[1], 10); }
+    }
+    const jobIds: string[] = [];
+    for (let i = 0; i < safeCount; i++) {
+      const jobId = nanoid();
+      await db.createAnalysisImageJob({ id: jobId, userId: user.id, type, toolId: toolId ?? null, referenceImageUrl, width: width ?? null, height: height ?? null });
+      // Fire-and-forget background generation
+      (async () => {
+        try {
+          await db.updateAnalysisImageJob(jobId, { status: "processing" });
+          const builtinPrompt = await db.getAnalysisImagePrompt(type);
+          const basePrompt = builtinPrompt?.prompt ?? (type === "material" ? "Generate a professional material palette board based on the reference image." : "Generate a professional soft furnishing mood board based on the reference image.");
+          const fullPrompt = extraPrompt ? `${basePrompt}\n\n${extraPrompt}` : basePrompt;
+          await db.updateAnalysisImageJob(jobId, { fullPrompt });
+          const sizeStr = (width && height) ? `${width}x${height}` : undefined;
+          const refMimeType = referenceImageContentType || (/\.png$/i.test(referenceImageUrl) ? "image/png" : /\.webp$/i.test(referenceImageUrl) ? "image/webp" : "image/jpeg");
+          let resultUrl: string;
+          if (toolId) {
+            const r = await generateImageWithTool({ toolId, prompt: fullPrompt, originalImages: [{ url: referenceImageUrl, mimeType: refMimeType }], size: sizeStr });
+            resultUrl = r.url;
+          } else {
+            const r = await generateImage({ prompt: fullPrompt, originalImages: [{ url: referenceImageUrl, mimeType: refMimeType }], size: sizeStr });
+            resultUrl = r.url || "";
+          }
+          const historyEntry = await db.createGenerationHistory({ userId: user.id, module: "analysis_image", title: type === "material" ? "材质搜配图" : "软装搜配图", outputUrl: resultUrl, inputParams: { type, toolId, referenceImageUrl, fullPrompt } });
+          await db.updateAnalysisImageJob(jobId, { status: "done", resultUrl, historyId: historyEntry.id });
+        } catch (err: any) {
+          await db.updateAnalysisImageJob(jobId, { status: "failed", error: err?.message || "生成失败" });
+        }
+      })().catch(console.error);
+      jobIds.push(jobId);
+    }
+    res.json({ data: { jobId: jobIds[0], jobIds } });
+  } catch (error) {
+    console.error("[API] analysis-image/submit error:", error);
+    res.status(500).json({ error: "Failed to submit analysis image job", code: "INTERNAL_ERROR" });
+  }
+});
+
+// GET /api/v1/analysis-image/status/:jobId
+router.get("/analysis-image/status/:jobId", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { jobId } = req.params;
+    const job = await db.getAnalysisImageJob(jobId);
+    if (!job) return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
+    if (job.userId !== user.id) return res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" });
+    if (job.status === "done") return res.json({ data: { jobId, status: "done", url: job.resultUrl, historyId: job.historyId } });
+    if (job.status === "failed") return res.json({ data: { jobId, status: "failed", error: job.error } });
+    res.json({ data: { jobId, status: job.status } });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get job status", code: "INTERNAL_ERROR" });
+  }
+});
+
+// ─── Video Generation REST API ───────────────────────────────
+
+// POST /api/v1/video/generate
+router.post("/video/generate", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { mode, prompt, duration, toolId, inputImageUrl } = req.body;
+    if (!mode || !prompt || !duration || !toolId) return res.status(400).json({ error: "mode, prompt, duration, and toolId are required", code: "VALIDATION_ERROR" });
+    if (!["text-to-video", "image-to-video"].includes(mode)) return res.status(400).json({ error: "mode must be text-to-video or image-to-video", code: "VALIDATION_ERROR" });
+    if (mode === "image-to-video" && !inputImageUrl) return res.status(400).json({ error: "inputImageUrl is required for image-to-video mode", code: "VALIDATION_ERROR" });
+    const tool = await db.getAiToolById(parseInt(toolId));
+    if (!tool) return res.status(404).json({ error: "Tool not found", code: "NOT_FOUND" });
+    const result = await generateVideoWithTool({
+      mode, prompt, duration: parseInt(duration), inputImageUrl,
+      tool: { id: tool.id, name: tool.name, apiEndpoint: tool.apiEndpoint || undefined, apiKeyEncrypted: tool.apiKeyEncrypted || undefined, configJson: (tool.configJson as Record<string, unknown> | undefined) || undefined },
+    });
+    await db.db.insert(db.videoHistory).values({ userId: user.id, toolId: tool.id, mode, prompt, duration: parseInt(duration), inputImageUrl, taskId: result.taskId, status: result.status, outputVideoUrl: result.videoUrl, errorMessage: result.errorMessage });
+    res.json({ data: { taskId: result.taskId, status: result.status, videoUrl: result.videoUrl, errorMessage: result.errorMessage } });
+  } catch (error) {
+    console.error("[API] video/generate error:", error);
+    res.status(500).json({ error: "Failed to generate video", code: "INTERNAL_ERROR" });
+  }
+});
+
+// GET /api/v1/video/status/:taskId
+router.get("/video/status/:taskId", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const { taskId } = req.params;
+    const records = await db.listVideoHistory(user.id);
+    const record = records.find((r: any) => r.taskId === taskId);
+    if (!record) return res.status(404).json({ error: "Task not found", code: "NOT_FOUND" });
+    if (record.status === "pending" || record.status === "processing") {
+      try {
+        const tool = record.toolId ? await db.getAiToolById(record.toolId) : null;
+        if (tool && record.taskId) {
+          const apiStatus = await queryVideoTaskStatus(record.taskId, { name: tool.name, apiKeyEncrypted: tool.apiKeyEncrypted || undefined, configJson: (tool.configJson as Record<string, unknown> | undefined) || undefined }, (record.mode as "text-to-video" | "image-to-video") || "text-to-video");
+          let permanentVideoUrl = apiStatus.videoUrl;
+          if (apiStatus.status === "completed" && apiStatus.videoUrl) {
+            try {
+              const videoResp = await fetch(apiStatus.videoUrl);
+              if (videoResp.ok) {
+                const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
+                const s3Key = `video-history/${user.id}/${record.id}-${Date.now()}.mp4`;
+                const { url: s3Url } = await storagePut(s3Key, videoBuffer, "video/mp4");
+                permanentVideoUrl = s3Url;
+              }
+            } catch { /* use original URL if S3 upload fails */ }
+          }
+          await db.updateVideoHistory(record.id, { status: apiStatus.status, outputVideoUrl: permanentVideoUrl, errorMessage: apiStatus.errorMessage });
+          return res.json({ data: { taskId, status: apiStatus.status, videoUrl: permanentVideoUrl, errorMessage: apiStatus.errorMessage, progress: apiStatus.progress || 0 } });
+        }
+      } catch (err) { console.error("[API] video/status query failed:", err); }
+    }
+    let progress = record.status === "pending" ? 10 : record.status === "processing" ? 50 : record.status === "completed" ? 100 : 0;
+    res.json({ data: { taskId, status: record.status, videoUrl: record.outputVideoUrl, errorMessage: record.errorMessage, progress } });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get video status", code: "INTERNAL_ERROR" });
   }
 });
 
