@@ -2011,3 +2011,7 @@
 ## Bug: 生产环境 POST /api/graphic-layout/generate 返回 SPA HTML
 - [x] 排查生产环境 /api/* 路由是否被转发到后端（nginx/gateway 配置）
 - [x] 方案A：在 /api/v1 之外额外挂载 /api 别名路由，使 /api/* 也能访问 OpenClaw 端点（已调整路由注册顺序，确保 /api/trpc、/api/oauth、/api/openapi.json 优先匹配）
+
+## Bug: /api/v1/graphic-layout/inpaint 返回 500 "Failed to generate composite image"
+- [x] 排查合成图像失败的根本原因：block.x/y/width/height 为 undefined 时 Math.round(undefined)=NaN，导致 Buffer.alloc(NaN) 抛异常
+- [x] 修复合成逻辑：对坐标做防御性处理，超界时降级为直接使用原图，同时修复 tRPC 版本中相同的问题

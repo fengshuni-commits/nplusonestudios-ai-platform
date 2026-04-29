@@ -727,21 +727,33 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
     try {
       const sharp = (await import("sharp")).default;
       const padding = 20;
-      const mx = Math.max(0, Math.round(block.x) - padding);
-      const my = Math.max(0, Math.round(block.y) - padding);
-      const mw = Math.min(imgW - mx, Math.round(block.width) + padding * 2);
-      const mh = Math.min(imgH - my, Math.round(block.height) + padding * 2);
+      // Sanitize block coordinates — DB JSON may have undefined/null fields
+      const bx = isFinite(Number(block.x)) ? Number(block.x) : 0;
+      const by = isFinite(Number(block.y)) ? Number(block.y) : 0;
+      const bw = isFinite(Number(block.width)) ? Number(block.width) : 0;
+      const bh = isFinite(Number(block.height)) ? Number(block.height) : 0;
+      const mx = Math.max(0, Math.round(bx) - padding);
+      const my = Math.max(0, Math.round(by) - padding);
+      const mw = Math.min(imgW - mx, Math.round(bw) + padding * 2);
+      const mh = Math.min(imgH - my, Math.round(bh) + padding * 2);
       const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
       if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
       const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
-      const overlayPixels = Buffer.alloc(mw * mh * 4);
-      for (let i = 0; i < mw * mh; i++) {
-        overlayPixels[i * 4] = 255; overlayPixels[i * 4 + 1] = 60;
-        overlayPixels[i * 4 + 2] = 60; overlayPixels[i * 4 + 3] = 120;
+      // If overlay dimensions are invalid (block outside image bounds), fall back to original image
+      if (mw > 0 && mh > 0) {
+        const overlayPixels = Buffer.alloc(mw * mh * 4);
+        for (let i = 0; i < mw * mh; i++) {
+          overlayPixels[i * 4] = 255; overlayPixels[i * 4 + 1] = 60;
+          overlayPixels[i * 4 + 2] = 60; overlayPixels[i * 4 + 3] = 120;
+        }
+        const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } }).png().toBuffer();
+        const compositeBuffer = await sharp(imgBuffer).composite([{ input: overlay, left: mx, top: my, blend: "over" }]).png().toBuffer();
+        compositeB64 = compositeBuffer.toString("base64");
+      } else {
+        // Block is outside image bounds — use original image without overlay
+        console.warn(`[API] graphic-layout/inpaint: block out of bounds (mx=${mx} my=${my} mw=${mw} mh=${mh}), using original image`);
+        compositeB64 = imgBuffer.toString("base64");
       }
-      const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } }).png().toBuffer();
-      const compositeBuffer = await sharp(imgBuffer).composite([{ input: overlay, left: mx, top: my, blend: "over" }]).png().toBuffer();
-      compositeB64 = compositeBuffer.toString("base64");
     } catch (err) {
       console.error("[API] graphic-layout/inpaint composite error:", err);
       return res.status(500).json({ error: "Failed to generate composite image", code: "INTERNAL_ERROR" });

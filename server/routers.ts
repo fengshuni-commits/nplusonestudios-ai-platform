@@ -5876,34 +5876,45 @@ const graphicLayoutRouter = router({
         const sharp = (await import("sharp")).default;
         // 扩展重绘区域 20px 确保覆盖完整
         const padding = 20;
-        const mx = Math.max(0, Math.round(block.x) - padding);
-        const my = Math.max(0, Math.round(block.y) - padding);
-        const mw = Math.min(imgW - mx, Math.round(block.width) + padding * 2);
-        const mh = Math.min(imgH - my, Math.round(block.height) + padding * 2);
+        // 防御性处理：DB JSON 中字段可能为 undefined/null
+        const bx = isFinite(Number(block.x)) ? Number(block.x) : 0;
+        const by = isFinite(Number(block.y)) ? Number(block.y) : 0;
+        const bw = isFinite(Number(block.width)) ? Number(block.width) : 0;
+        const bh = isFinite(Number(block.height)) ? Number(block.height) : 0;
+        const mx = Math.max(0, Math.round(bx) - padding);
+        const my = Math.max(0, Math.round(by) - padding);
+        const mw = Math.min(imgW - mx, Math.round(bw) + padding * 2);
+        const mh = Math.min(imgH - my, Math.round(bh) + padding * 2);
 
         // 下载原图
         const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
         if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
         const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
 
-        // 创建半透明红色覆盖层（仅覆盖文字区域）
-        const overlayPixels = Buffer.alloc(mw * mh * 4);
-        for (let i = 0; i < mw * mh; i++) {
-          overlayPixels[i * 4] = 255;   // R
-          overlayPixels[i * 4 + 1] = 60;  // G
-          overlayPixels[i * 4 + 2] = 60;  // B
-          overlayPixels[i * 4 + 3] = 120; // A (半透明)
-        }
-        const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } })
-          .png()
-          .toBuffer();
+        if (mw > 0 && mh > 0) {
+          // 创建半透明红色覆盖层（仅覆盖文字区域）
+          const overlayPixels = Buffer.alloc(mw * mh * 4);
+          for (let i = 0; i < mw * mh; i++) {
+            overlayPixels[i * 4] = 255;   // R
+            overlayPixels[i * 4 + 1] = 60;  // G
+            overlayPixels[i * 4 + 2] = 60;  // B
+            overlayPixels[i * 4 + 3] = 120; // A (半透明)
+          }
+          const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } })
+            .png()
+            .toBuffer();
 
-        // 合成：原图 + 红色覆盖层
-        const compositeBuffer = await sharp(imgBuffer)
-          .composite([{ input: overlay, left: mx, top: my, blend: "over" }])
-          .png()
-          .toBuffer();
-        compositeB64 = compositeBuffer.toString("base64");
+          // 合成：原图 + 红色覆盖层
+          const compositeBuffer = await sharp(imgBuffer)
+            .composite([{ input: overlay, left: mx, top: my, blend: "over" }])
+            .png()
+            .toBuffer();
+          compositeB64 = compositeBuffer.toString("base64");
+        } else {
+          // 文字块坐标超出图像边界，降级为直接使用原图
+          console.warn(`[inpaintTextBlock] block out of bounds (mx=${mx} my=${my} mw=${mw} mh=${mh}), using original image`);
+          compositeB64 = imgBuffer.toString("base64");
+        }
       } catch (err) {
         console.error("[inpaintTextBlock] Failed to generate red overlay composite:", err);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "生成标注图失败" });
