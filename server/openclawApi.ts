@@ -11,6 +11,26 @@ import { storagePut } from "./storage";
 
 const router = Router();
 
+// ─── Webhook Helper ─────────────────────────────────────────
+async function fireWebhook(callbackUrl: string, payload: Record<string, unknown>, maxRetries = 3): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(callbackUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "N+1-STUDIOS-Webhook/1.0" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) return;
+      console.warn(`[Webhook] Attempt ${attempt}/${maxRetries} failed with status ${res.status} for ${callbackUrl}`);
+    } catch (err: any) {
+      console.warn(`[Webhook] Attempt ${attempt}/${maxRetries} error for ${callbackUrl}: ${err?.message}`);
+    }
+    if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+  }
+  console.error(`[Webhook] All ${maxRetries} attempts failed for ${callbackUrl}`);
+}
+
 // ─── API Key Authentication Middleware ──────────────────────
 
 async function authenticateApiKey(req: Request, res: Response, next: NextFunction) {
@@ -678,7 +698,7 @@ router.post("/color-plan/generate", async (req: Request, res: Response) => {
   try {
     const user = (req as any).apiUser;
     if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
-    const { floorPlanUrl, referenceUrl, planStyle = "colored", style, extraPrompt, toolId, zones, floorPlanWidth, floorPlanHeight } = req.body;
+    const { floorPlanUrl, referenceUrl, planStyle = "colored", style, extraPrompt, toolId, zones, floorPlanWidth, floorPlanHeight, callbackUrl } = req.body;
     if (!floorPlanUrl) return res.status(400).json({ error: "floorPlanUrl is required", code: "VALIDATION_ERROR" });
     const validStyles = ["colored", "hand_drawn", "line_drawing"];
     if (!validStyles.includes(planStyle)) return res.status(400).json({ error: `planStyle must be one of: ${validStyles.join(", ")}`, code: "VALIDATION_ERROR" });
@@ -740,9 +760,15 @@ router.post("/color-plan/generate", async (req: Request, res: Response) => {
         }).catch(() => ({ id: 0 }));
         colorPlanJobStoreApi.set(jobId, { status: "done", url: result.url, historyId: historyResult.id });
         setTimeout(() => colorPlanJobStoreApi.delete(jobId), 10 * 60 * 1000);
+        if (callbackUrl) {
+          await fireWebhook(callbackUrl, { event: "color_plan.done", jobId, status: "done", url: result.url, historyId: historyResult.id }).catch(console.error);
+        }
       } catch (err: any) {
         colorPlanJobStoreApi.set(jobId, { status: "failed", error: err?.message || "彩平生成失败" });
         setTimeout(() => colorPlanJobStoreApi.delete(jobId), 5 * 60 * 1000);
+        if (callbackUrl) {
+          await fireWebhook(callbackUrl, { event: "color_plan.failed", jobId, status: "failed", error: err?.message || "彩平生成失败" }).catch(console.error);
+        }
       }
     })().catch(console.error);
 
@@ -776,7 +802,7 @@ router.post("/analysis-image/submit", async (req: Request, res: Response) => {
   try {
     const user = (req as any).apiUser;
     if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
-    const { type, referenceImageUrl, referenceImageContentType, extraPrompt, aspectRatio, count = 1, toolId } = req.body;
+    const { type, referenceImageUrl, referenceImageContentType, extraPrompt, aspectRatio, count = 1, toolId, callbackUrl } = req.body;
     if (!type || !referenceImageUrl) return res.status(400).json({ error: "type and referenceImageUrl are required", code: "VALIDATION_ERROR" });
     if (!["material", "soft_furnishing"].includes(type)) return res.status(400).json({ error: "type must be material or soft_furnishing", code: "VALIDATION_ERROR" });
     const safeCount = Math.min(Math.max(parseInt(count) || 1, 1), 3);
@@ -809,8 +835,14 @@ router.post("/analysis-image/submit", async (req: Request, res: Response) => {
           }
           const historyEntry = await db.createGenerationHistory({ userId: user.id, module: "analysis_image", title: type === "material" ? "材质搜配图" : "软装搜配图", outputUrl: resultUrl, inputParams: { type, toolId, referenceImageUrl, fullPrompt } });
           await db.updateAnalysisImageJob(jobId, { status: "done", resultUrl, historyId: historyEntry.id });
+          if (callbackUrl) {
+            await fireWebhook(callbackUrl, { event: "analysis_image.done", jobId, status: "done", url: resultUrl, historyId: historyEntry.id }).catch(console.error);
+          }
         } catch (err: any) {
           await db.updateAnalysisImageJob(jobId, { status: "failed", error: err?.message || "生成失败" });
+          if (callbackUrl) {
+            await fireWebhook(callbackUrl, { event: "analysis_image.failed", jobId, status: "failed", error: err?.message || "生成失败" }).catch(console.error);
+          }
         }
       })().catch(console.error);
       jobIds.push(jobId);

@@ -1517,7 +1517,8 @@ export function getOpenApiSpec(baseUrl: string) {
           summary: "生成彩平图",
           description:
             "上传平面图（线稿 / 黑白），可选传入参考风格图，AI 自动生成彩色建筑平面图。\n\n" +
-            "该接口为异步任务：提交后返回 `jobId`，需要轮询 `/color-plan/job-status/{jobId}` 直到 `status=done`。",
+            "该接口为异步任务：提交后返回 `jobId`，需要轮询 `/color-plan/job-status/{jobId}` 直到 `status=done`。\n\n" +
+            "支持 `callbackUrl`：任务完成或失败后，服务器主动 POST 结果到该 URL，无需轮询。Webhook payload 格式见下方。",
           operationId: "colorPlanGenerate",
           tags: ["彩平图"],
           requestBody: {
@@ -1559,12 +1560,23 @@ export function getOpenApiSpec(baseUrl: string) {
                         },
                       },
                     },
+                    callbackUrl: {
+                      type: "string",
+                      format: "uri",
+                      nullable: true,
+                      description:
+                        "Webhook 回调 URL（可选）。任务完成或失败后，服务器主动 POST 以下 JSON 到该 URL，最多重试 3 次（指数退避）：\n" +
+                        "- 成功：`{ event: 'color_plan.done', jobId, status: 'done', url: '<图片URL>', historyId: <number> }`\n" +
+                        "- 失败：`{ event: 'color_plan.failed', jobId, status: 'failed', error: '<错误信息>' }`",
+                      example: "https://your-server.com/webhooks/color-plan",
+                    },
                   },
                 },
                 example: {
                   floorPlanUrl: "https://cdn.example.com/floor-plan.png",
                   planStyle: "colored",
                   projectId: 3,
+                  callbackUrl: "https://your-server.com/webhooks/color-plan",
                 },
               },
             },
@@ -1676,7 +1688,8 @@ export function getOpenApiSpec(baseUrl: string) {
           description:
             "上传参考图，AI 生成对应的材质搜配图或软装配图。\n\n" +
             "支持同时提交 1–3 个并行任务（`count` 参数），返回 `jobId`（第一个）和 `jobIds`（全部）。\n\n" +
-            "轮询状态使用 `/analysis-image/poll/{jobId}`。",
+            "轮询状态使用 `/analysis-image/poll/{jobId}`。\n\n" +
+            "支持 `callbackUrl`：每个任务完成或失败后单独回调，无需轮询。Webhook payload 格式见下方。",
           operationId: "analysisImageSubmit",
           tags: ["AI 分析图"],
           requestBody: {
@@ -1699,12 +1712,24 @@ export function getOpenApiSpec(baseUrl: string) {
                     aspectRatio: { type: "string", nullable: true, description: "图片比例，格式 \"W x H\"，如 \"1024x1024\"" , example: "1024x1024" },
                     count: { type: "integer", minimum: 1, maximum: 3, default: 1, description: "并行生成数量（1–3）" },
                     toolId: { type: "integer", nullable: true, description: "指定 AI 工具 ID（可选）" },
+                    callbackUrl: {
+                      type: "string",
+                      format: "uri",
+                      nullable: true,
+                      description:
+                        "Webhook 回调 URL（可选）。每个任务完成或失败后单独回调，最多重试 3 次（指数退避）：\n" +
+                        "- 成功：`{ event: 'analysis_image.done', jobId, status: 'done', url: '<图片URL>', historyId: <number> }`\n" +
+                        "- 失败：`{ event: 'analysis_image.failed', jobId, status: 'failed', error: '<错误信息>' }`\n" +
+                        "count>1 时每个 jobId 各自回调一次。",
+                      example: "https://your-server.com/webhooks/analysis-image",
+                    },
                   },
                 },
                 example: {
                   type: "material",
                   referenceImageUrl: "https://cdn.example.com/ref.jpg",
                   count: 2,
+                  callbackUrl: "https://your-server.com/webhooks/analysis-image",
                 },
               },
             },

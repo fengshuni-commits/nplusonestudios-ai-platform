@@ -1989,3 +1989,8 @@
 
 ## API 文档：视频生成 toolId 获取说明
 - [x] 在 openApiSpec.ts 视频生成端点中补充 toolId 参数说明（如何通过 GET /ai-tools 获取）
+
+## Webhook callbackUrl 支持（彩平图 / AI 分析图）
+- [x] 彩平图 /color-plan/generate 添加 callbackUrl 参数，任务完成后 POST 结果
+- [x] AI 分析图 /analysis-image/submit 添加 callbackUrl 参数，任务完成后 POST 结果
+- [x] 更新 openApiSpec.ts 文档说明 callbackUrl 参数和 webhook payload 格式
