@@ -187,3 +187,64 @@ describe("video callbackUrl webhook payloads", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("graphic layout inpaint callbackUrl webhook payloads", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends graphic_layout.inpaint.done payload with correct fields", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const payload = {
+      event: "graphic_layout.inpaint.done",
+      jobId: 42,
+      pageIndex: 0,
+      blockId: "tb_0_title",
+      newText: "N+1 STUDIOS 建筑设计",
+      imageUrl: "https://cdn.example.com/graphic-layout/job42-page0-repainted.png",
+    };
+    await fireWebhook("https://callback.example.com/graphic-layout", payload);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.event).toBe("graphic_layout.inpaint.done");
+    expect(body.jobId).toBe(42);
+    expect(body.pageIndex).toBe(0);
+    expect(body.blockId).toBe("tb_0_title");
+    expect(body.newText).toBe("N+1 STUDIOS 建筑设计");
+    expect(body.imageUrl).toBe("https://cdn.example.com/graphic-layout/job42-page0-repainted.png");
+  });
+
+  it("retries graphic layout inpaint webhook on non-ok response", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fireWebhook(
+      "https://callback.example.com/graphic-layout",
+      { event: "graphic_layout.inpaint.done", jobId: 42, pageIndex: 0, blockId: "tb_0_title" },
+      3
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends correct User-Agent header for graphic layout inpaint webhook", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fireWebhook("https://callback.example.com/graphic-layout", {
+      event: "graphic_layout.inpaint.done",
+      jobId: 10,
+      pageIndex: 1,
+      blockId: "tb_1_body",
+    });
+
+    const [, options] = mockFetch.mock.calls[0];
+    expect(options.headers["User-Agent"]).toBe("N+1-STUDIOS-Webhook/1.0");
+    expect(options.method).toBe("POST");
+  });
+});

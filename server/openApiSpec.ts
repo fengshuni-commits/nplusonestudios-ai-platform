@@ -1391,7 +1391,10 @@ export function getOpenApiSpec(baseUrl: string) {
           description:
             "对已完成的图文排版任务中的某个文字块进行局部重绘（inpainting）。\n\n" +
             "修改文字内容后，AI 将只重绘该文字区域，保留页面其余部分不变。\n\n" +
-            "重绘成功后返回新的页面图片 URL，同时更新该文字块的 `text` 内容。",
+            "重绘成功后返回新的页面图片 URL，同时更新该文字块的 `text` 内容。\n\n" +
+            "图像生成通常需要 10–30 秒。**支持 `callbackUrl`**：传入可选的 `callbackUrl` 参数后，\n" +
+            "重绘完成后服务器会主动 POST 结果到该 URL。\n\n" +
+            "Webhook payload 格式：`{ event: 'graphic_layout.inpaint.done', jobId, pageIndex, blockId, newText, imageUrl }`",
           operationId: "inpaintTextBlock",
           tags: ["图文排版"],
           parameters: [
@@ -1409,9 +1412,19 @@ export function getOpenApiSpec(baseUrl: string) {
                   properties: {
                     newText: { type: "string", description: "修改后的文字内容", example: "N+1 STUDIOS 建筑设计" },
                     imageToolId: { type: "integer", nullable: true, description: "指定使用的图像生成 AI 工具 ID（可选）" },
+                    callbackUrl: {
+                      type: "string",
+                      format: "uri",
+                      nullable: true,
+                      description:
+                        "可选。重绘完成后，服务器主动 POST 结果到该 URL（Webhook 回调）。\n" +
+                        "payload：`{ event: 'graphic_layout.inpaint.done', jobId, pageIndex, blockId, newText, imageUrl }`\n" +
+                        "服务器会以最多 3 次重试（指数退避）确保送达。",
+                      example: "https://your-server.com/webhooks/graphic-layout",
+                    },
                   },
                 },
-                example: { newText: "N+1 STUDIOS 建筑设计" },
+                example: { newText: "N+1 STUDIOS 建筑设计", callbackUrl: "https://your-server.com/webhooks/graphic-layout" },
               },
             },
           },

@@ -687,6 +687,110 @@ router.post("/graphic-layout/export-pdf/:id", async (req: Request, res: Response
   }
 });
 
+// POST /api/v1/graphic-layout/inpaint/:jobId/:pageIndex/:blockId
+router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const jobId = parseInt(req.params.jobId);
+    const pageIndex = parseInt(req.params.pageIndex);
+    const blockId = req.params.blockId;
+    if (isNaN(jobId) || isNaN(pageIndex)) return res.status(400).json({ error: "Invalid jobId or pageIndex", code: "VALIDATION_ERROR" });
+    const { newText, imageToolId, callbackUrl } = req.body;
+    if (!newText) return res.status(400).json({ error: "newText is required", code: "VALIDATION_ERROR" });
+
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
+    const { graphicLayoutJobs } = await import("../drizzle/schema");
+    const { eq: _eq, and: _and } = await import("drizzle-orm");
+
+    const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+      .where(_and(_eq(graphicLayoutJobs.id, jobId), _eq(graphicLayoutJobs.userId, user.id)))
+      .limit(1);
+    if (!job) return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
+
+    const pages = (job.pages as any[]) ?? [];
+    const page = pages.find((p: any) => p.pageIndex === pageIndex);
+    if (!page) return res.status(404).json({ error: "Page not found", code: "NOT_FOUND" });
+    const block = (page.textBlocks ?? []).find((b: any) => b.id === blockId);
+    if (!block) return res.status(404).json({ error: "Text block not found", code: "NOT_FOUND" });
+
+    const originalImageUrl: string = page.imageUrl ?? "";
+    if (!originalImageUrl) return res.status(400).json({ error: "Original image not available", code: "BAD_REQUEST" });
+
+    const imgW: number = page.imageSize?.width ?? 1024;
+    const imgH: number = page.imageSize?.height ?? 1365;
+
+    // Build red-overlay composite (same approach as tRPC inpaintTextBlock)
+    let compositeB64: string;
+    const compositeMimeType = "image/png";
+    try {
+      const sharp = (await import("sharp")).default;
+      const padding = 20;
+      const mx = Math.max(0, Math.round(block.x) - padding);
+      const my = Math.max(0, Math.round(block.y) - padding);
+      const mw = Math.min(imgW - mx, Math.round(block.width) + padding * 2);
+      const mh = Math.min(imgH - my, Math.round(block.height) + padding * 2);
+      const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
+      if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
+      const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+      const overlayPixels = Buffer.alloc(mw * mh * 4);
+      for (let i = 0; i < mw * mh; i++) {
+        overlayPixels[i * 4] = 255; overlayPixels[i * 4 + 1] = 60;
+        overlayPixels[i * 4 + 2] = 60; overlayPixels[i * 4 + 3] = 120;
+      }
+      const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } }).png().toBuffer();
+      const compositeBuffer = await sharp(imgBuffer).composite([{ input: overlay, left: mx, top: my, blend: "over" }]).png().toBuffer();
+      compositeB64 = compositeBuffer.toString("base64");
+    } catch (err) {
+      console.error("[API] graphic-layout/inpaint composite error:", err);
+      return res.status(500).json({ error: "Failed to generate composite image", code: "INTERNAL_ERROR" });
+    }
+
+    const inpaintPrompt = `[INPAINTING INSTRUCTION: The image has a red-highlighted area marking the region to modify. ONLY modify the content within the red-marked area. Keep all other areas exactly unchanged.] Replace the text in the red-highlighted region with: "${newText}". Keep the same font style, size (approximately ${block.fontSize}px), color (${block.color}), alignment (${block.align}), and background. Only change the text content, preserve everything else exactly.`;
+
+    const result = await generateImageWithTool({
+      prompt: inpaintPrompt,
+      originalImages: [{ b64Json: compositeB64, mimeType: compositeMimeType }],
+      size: `${imgW}x${imgH}`,
+      toolId: imageToolId ?? null,
+    });
+
+    const newImageUrl = result.url ?? "";
+    if (!newImageUrl) return res.status(500).json({ error: "Inpainting returned empty image", code: "INTERNAL_ERROR" });
+
+    // Update pages in DB
+    const updatedPages = pages.map((p: any) => {
+      if (p.pageIndex !== pageIndex) return p;
+      return {
+        ...p,
+        imageUrl: newImageUrl,
+        textBlocks: (p.textBlocks ?? []).map((b: any) =>
+          b.id === blockId ? { ...b, text: newText } : b
+        ),
+      };
+    });
+    await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, jobId));
+
+    res.json({ data: { imageUrl: newImageUrl, pageIndex, blockId, newText } });
+
+    // Fire webhook if callbackUrl provided
+    if (callbackUrl) {
+      fireWebhook(callbackUrl, {
+        event: "graphic_layout.inpaint.done",
+        jobId,
+        pageIndex,
+        blockId,
+        newText,
+        imageUrl: newImageUrl,
+      }).catch(console.error);
+    }
+  } catch (error) {
+    console.error("[API] graphic-layout/inpaint error:", error);
+    res.status(500).json({ error: "Failed to inpaint text block", code: "INTERNAL_ERROR" });
+  }
+});
+
 // ─── Color Plan REST API ────────────────────────────────────
 
 // In-memory job store shared with tRPC colorPlan router
