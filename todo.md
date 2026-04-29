@@ -2007,3 +2007,7 @@
 ## Bug: /api/v1/assets 和 /api/v1/graphic-layout/status/:id 带 Bearer Token 返回 HTML
 - [x] 排查路由注册顺序，确认 openclawRouter 是剆正确挂载到 /api/v1（路由本身正常，问题在于调用方缺少 /v1 前缀）
 - [x] 修复 API 文档中图文排版接口卡片使用正确的 /api/v1 基址，修正 inpaint curl 示例 URL 缺少路径参数的问题
+
+## Bug: 生产环境 POST /api/graphic-layout/generate 返回 SPA HTML
+- [x] 排查生产环境 /api/* 路由是否被转发到后端（nginx/gateway 配置）
+- [x] 方案A：在 /api/v1 之外额外挂载 /api 别名路由，使 /api/* 也能访问 OpenClaw 端点（已调整路由注册顺序，确保 /api/trpc、/api/oauth、/api/openapi.json 优先匹配）

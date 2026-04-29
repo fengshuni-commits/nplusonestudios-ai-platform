@@ -51,10 +51,9 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "200mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
-  // OpenClaw RESTful API (for external integrations)
-  app.use("/api/v1", openclawRouter);
 
   // ─── Multipart file upload endpoint (for large files like PDF/PPT) ───
+  // IMPORTANT: Must be registered BEFORE the /api alias for openclawRouter
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 200 * 1024 * 1024 }, // 200MB
@@ -85,6 +84,7 @@ async function startServer() {
   });
 
   // ─── OpenAPI spec endpoint (no auth required) ───
+  // IMPORTANT: Must be registered BEFORE the /api alias for openclawRouter
   app.get("/api/openapi.json", (req: any, res: any) => {
     const protocol = req.protocol || "https";
     const host = req.get("host") || "localhost:3000";
@@ -94,6 +94,7 @@ async function startServer() {
   });
 
   // tRPC API
+  // IMPORTANT: Must be registered BEFORE the /api alias for openclawRouter
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -101,6 +102,13 @@ async function startServer() {
       createContext,
     })
   );
+
+  // OpenClaw RESTful API (for external integrations)
+  // Mount at both /api/v1 (canonical) and /api (alias for backward-compat callers).
+  // The /api alias MUST come AFTER /api/oauth, /api/upload, /api/openapi.json, /api/trpc
+  // so those routes take priority and are not intercepted by openclawRouter's auth middleware.
+  app.use("/api/v1", openclawRouter);
+  app.use("/api", openclawRouter);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
