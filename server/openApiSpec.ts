@@ -1835,7 +1835,9 @@ export function getOpenApiSpec(baseUrl: string) {
           description:
             "提交视频生成任务，支持文生视频（text-to-video）和图生视频（image-to-video）两种模式。\n\n" +
             "提交后返回 `taskId`，需要轮询 `/video/status/{taskId}` 直到 `status=completed`。\n\n" +
-            "视频生成通常需要 30–120 秒，请实现合理的轮询间隔（建议 5–10 秒）。",
+            "视频生成通常需要 30–120 秒，请实现合理的轮询间隔（建议 5–10 秒）。\n\n" +
+            "**获取 toolId**：调用 `GET /api/v1/ai-tools` 获取平台上配置的 AI 工具列表，从返回结果中找到支持视频生成能力（`capabilities` 包含 `video`）的工具，取其 `id` 字段作为 `toolId`。" +
+            "如果不确定使用哪个工具，可先调用 `GET /api/v1/ai-tools` 查看 `isDefault=true` 的工具。",
           operationId: "videoGenerate",
           tags: ["视频生成"],
           requestBody: {
@@ -1854,7 +1856,14 @@ export function getOpenApiSpec(baseUrl: string) {
                     },
                     prompt: { type: "string", minLength: 1, description: "视频内容描述", example: "建筑内部空间漫游，光线流动，气幕宁静" },
                     duration: { type: "integer", minimum: 1, maximum: 8, description: "视频时长（秒），范围 1–8 秒", example: 5 },
-                    toolId: { type: "integer", description: "指定视频生成 AI 工具 ID（必填）" },
+                    toolId: {
+                      type: "integer",
+                      description:
+                        "指定视频生成 AI 工具 ID（必填）。" +
+                        "通过 `GET /api/v1/ai-tools` 获取工具列表，选择 capabilities 包含 video 的工具 id。" +
+                        "示例：先调用 GET /api/v1/ai-tools，找到 isDefault=true 或 capabilities 含 video 的条目，取其 id 填入此字段。",
+                      example: 2,
+                    },
                     inputImageUrl: { type: "string", format: "uri", nullable: true, description: "输入图片 URL（image-to-video 模式必填）" },
                   },
                 },

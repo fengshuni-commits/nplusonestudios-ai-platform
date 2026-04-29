@@ -1986,3 +1986,6 @@
 - [x] 在 openclawApi.ts 中实现 /analysis-image/submit、/analysis-image/status/:jobId REST 端点
 - [x] 在 openclawApi.ts 中实现 /video/generate、/video/status/:taskId REST 端点
 - [x] 更新 openApiSpec.ts 确保文档与实现完全一致
+
+## API 文档：视频生成 toolId 获取说明
+- [x] 在 openApiSpec.ts 视频生成端点中补充 toolId 参数说明（如何通过 GET /ai-tools 获取）
