@@ -563,40 +563,38 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
   {
     step: 3,
     name: "局部重绘文字区域",
-    endpoint: "graphicLayout.inpaintTextBlock",
+    endpoint: "graphic-layout/inpaint/1001/0/tb_1",
     method: "POST",
-    description: "对已生成页面中的某个文字块进行 AI 局部重绘，修改文案内容。重绘后返回新的整页图片 URL",
+    description: "对已生成页面中的某个文字块进行 AI 局部重绘，修改文案内容。路径参数依次为 jobId / pageIndex / blockId，请求体仅需 newText。重绘后返回新的整页图片 URL",
     params: [
-      { name: "jobId", type: "number", required: true, description: "排版任务 ID" },
-      { name: "pageIndex", type: "number", required: true, description: "目标页面索引（从 0 开始）" },
-      { name: "blockId", type: "string", required: true, description: "文字块 ID（从 status 接口的 textBlocks[].id 获取）" },
-      { name: "newText", type: "string", required: true, description: "替换后的新文案内容" },
-      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（可选）" },
+      { name: ":jobId（路径）", type: "number", required: true, description: "排版任务 ID（路径参数）" },
+      { name: ":pageIndex（路径）", type: "number", required: true, description: "目标页面索引，从 0 开始（路径参数）" },
+      { name: ":blockId（路径）", type: "string", required: true, description: "文字块 ID，从 status 接口的 textBlocks[].id 获取（路径参数）" },
+      { name: "newText", type: "string", required: true, description: "替换后的新文案内容（请求体）" },
+      { name: "callbackUrl", type: "string", required: false, description: "Webhook 回调 URL，重绘完成后 POST 结果（请求体，可选）" },
+      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（请求体，可选）" },
     ],
     responseFields: [
-      { name: "success", type: "boolean", description: "操作是否成功" },
-      { name: "newImageUrl", type: "string", description: "重绘后的新页面图片 URL" },
+      { name: "imageUrl", type: "string", description: "重绘后的新页面图片 URL" },
+      { name: "pageIndex", type: "number", description: "页面索引" },
+      { name: "blockId", type: "string", description: "文字块 ID" },
+      { name: "newText", type: "string", description: "已更新的文字内容" },
     ],
     requestExample: {
-      jobId: 1001,
-      pageIndex: 0,
-      blockId: "tb_1",
       newText: "百悦科技园·创新中心",
     },
     responseExample: {
-      result: {
-        data: {
-          json: {
-            success: true,
-            newImageUrl: "https://cdn.../graphic-layout/page-0-v2.jpg",
-          }
-        }
+      data: {
+        imageUrl: "https://cdn.../graphic-layout/job1001-page0-repainted.png",
+        pageIndex: 0,
+        blockId: "tb_1",
+        newText: "百悦科技园·创新中心",
       }
     },
-    curlExample: `curl -X POST '${BASE_URL}/api/v1/graphic-layout/inpaint' \\
+    curlExample: `curl -X POST '${BASE_URL}/api/v1/graphic-layout/inpaint/1001/0/tb_1' \\
   -H 'Authorization: Bearer sk_1774xxxxxxxxx_xxxxxxxxxx' \\
   -H 'Content-Type: application/json' \\
-  -d '{"jobId":1001,"pageIndex":0,"blockId":"tb_1","newText":"百悦科技园·创新中心"}'`,
+  -d '{"newText":"百悦科技园·创新中心"}'`,
   },
   {
     step: 4,
@@ -763,6 +761,7 @@ export default function ApiDocs() {
   };
 
   const apiEndpoint = `${BASE_URL}/api/trpc`;
+  const restApiBase = `${BASE_URL}/api/v1`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
@@ -1165,7 +1164,7 @@ export default function ApiDocs() {
               <GraphicLayoutStepCard
                 key={idx}
                 step={step}
-                apiEndpoint={apiEndpoint}
+                apiEndpoint={restApiBase}
                 copiedKey={copiedKey}
                 copyToClipboard={copyToClipboard}
               />

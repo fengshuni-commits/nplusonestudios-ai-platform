@@ -2003,3 +2003,7 @@
 - [x] 图文排版 /graphic-layout/inpaint 添加 callbackUrl 参数，任务完成后 POST 结果
 - [x] 更新 openApiSpec.ts 文档说明图文排版重绘 callbackUrl 参数和 webhook payload 格式
 - [x] 新增单元测试覆盖图文排版重绘 callbackUrl webhook
+
+## Bug: /api/v1/assets 和 /api/v1/graphic-layout/status/:id 带 Bearer Token 返回 HTML
+- [x] 排查路由注册顺序，确认 openclawRouter 是剆正确挂载到 /api/v1（路由本身正常，问题在于调用方缺少 /v1 前缀）
+- [x] 修复 API 文档中图文排版接口卡片使用正确的 /api/v1 基址，修正 inpaint curl 示例 URL 缺少路径参数的问题
