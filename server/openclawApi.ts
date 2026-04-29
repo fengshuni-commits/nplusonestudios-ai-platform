@@ -878,9 +878,9 @@ router.post("/video/generate", async (req: Request, res: Response) => {
   try {
     const user = (req as any).apiUser;
     if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
-    const { mode, prompt, duration, toolId, inputImageUrl } = req.body;
+    const { mode, prompt, duration, toolId, inputImageUrl, callbackUrl } = req.body;
     if (!mode || !prompt || !duration || !toolId) return res.status(400).json({ error: "mode, prompt, duration, and toolId are required", code: "VALIDATION_ERROR" });
-    if (!["text-to-video", "image-to-video"].includes(mode)) return res.status(400).json({ error: "mode must be text-to-video or image-to-video", code: "VALIDATION_ERROR" });
+    if (!["-to-video", "image-to-video"].includes(mode)) return res.status(400).json({ error: "mode must be text-to-video or image-to-video", code: "VALIDATION_ERROR" });
     if (mode === "image-to-video" && !inputImageUrl) return res.status(400).json({ error: "inputImageUrl is required for image-to-video mode", code: "VALIDATION_ERROR" });
     const tool = await db.getAiToolById(parseInt(toolId));
     if (!tool) return res.status(404).json({ error: "Tool not found", code: "NOT_FOUND" });
@@ -890,6 +890,55 @@ router.post("/video/generate", async (req: Request, res: Response) => {
     });
     await db.db.insert(db.videoHistory).values({ userId: user.id, toolId: tool.id, mode, prompt, duration: parseInt(duration), inputImageUrl, taskId: result.taskId, status: result.status, outputVideoUrl: result.videoUrl, errorMessage: result.errorMessage });
     res.json({ data: { taskId: result.taskId, status: result.status, videoUrl: result.videoUrl, errorMessage: result.errorMessage } });
+    // Fire webhook asynchronously if callbackUrl provided
+    if (callbackUrl) {
+      if (result.status === "completed") {
+        fireWebhook(callbackUrl, { event: "video.done", taskId: result.taskId, status: "completed", videoUrl: result.videoUrl }).catch(console.error);
+      } else if (result.status === "failed") {
+        fireWebhook(callbackUrl, { event: "video.failed", taskId: result.taskId, status: "failed", error: result.errorMessage }).catch(console.error);
+      } else {
+        // Task is still pending/processing — poll until done, then fire webhook
+        (async () => {
+          const maxPolls = 60; // up to 5 minutes (5s interval)
+          for (let i = 0; i < maxPolls; i++) {
+            await new Promise((r) => setTimeout(r, 5000));
+            try {
+              const apiStatus = await queryVideoTaskStatus(
+                result.taskId,
+                { name: tool.name, apiKeyEncrypted: tool.apiKeyEncrypted || undefined, configJson: (tool.configJson as Record<string, unknown> | undefined) || undefined },
+                (mode as "text-to-video" | "image-to-video")
+              );
+              if (apiStatus.status === "completed") {
+                let permanentVideoUrl = apiStatus.videoUrl;
+                if (apiStatus.videoUrl) {
+                  try {
+                    const videoResp = await fetch(apiStatus.videoUrl);
+                    if (videoResp.ok) {
+                      const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
+                      const s3Key = `video-history/${user.id}/${Date.now()}.mp4`;
+                      const { url: s3Url } = await storagePut(s3Key, videoBuffer, "video/mp4");
+                      permanentVideoUrl = s3Url;
+                    }
+                  } catch { /* use original URL */ }
+                }
+                // Update video history record by taskId
+                const records = await db.listVideoHistory(user.id);
+                const rec = records.find((r: any) => r.taskId === result.taskId);
+                if (rec) await db.updateVideoHistory(rec.id, { status: "completed", outputVideoUrl: permanentVideoUrl });
+                await fireWebhook(callbackUrl, { event: "video.done", taskId: result.taskId, status: "completed", videoUrl: permanentVideoUrl }).catch(console.error);
+                break;
+              } else if (apiStatus.status === "failed") {
+                const records = await db.listVideoHistory(user.id);
+                const rec = records.find((r: any) => r.taskId === result.taskId);
+                if (rec) await db.updateVideoHistory(rec.id, { status: "failed", errorMessage: apiStatus.errorMessage });
+                await fireWebhook(callbackUrl, { event: "video.failed", taskId: result.taskId, status: "failed", error: apiStatus.errorMessage }).catch(console.error);
+                break;
+              }
+            } catch (err) { console.error("[Webhook] video poll error:", err); }
+          }
+        })();
+      }
+    }
   } catch (error) {
     console.error("[API] video/generate error:", error);
     res.status(500).json({ error: "Failed to generate video", code: "INTERNAL_ERROR" });

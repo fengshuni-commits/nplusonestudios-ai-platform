@@ -1994,3 +1994,7 @@
 - [x] 彩平图 /color-plan/generate 添加 callbackUrl 参数，任务完成后 POST 结果
 - [x] AI 分析图 /analysis-image/submit 添加 callbackUrl 参数，任务完成后 POST 结果
 - [x] 更新 openApiSpec.ts 文档说明 callbackUrl 参数和 webhook payload 格式
+
+## Webhook callbackUrl 支持（视频生成）
+- [x] 视频生成 /video/generate 添加 callbackUrl 参数，任务完成后 POST 结果
+- [x] 更新 openApiSpec.ts 文档说明视频生成 callbackUrl 参数和 webhook payload 格式

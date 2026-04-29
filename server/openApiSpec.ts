@@ -1862,7 +1862,12 @@ export function getOpenApiSpec(baseUrl: string) {
             "提交后返回 `taskId`，需要轮询 `/video/status/{taskId}` 直到 `status=completed`。\n\n" +
             "视频生成通常需要 30–120 秒，请实现合理的轮询间隔（建议 5–10 秒）。\n\n" +
             "**获取 toolId**：调用 `GET /api/v1/ai-tools` 获取平台上配置的 AI 工具列表，从返回结果中找到支持视频生成能力（`capabilities` 包含 `video`）的工具，取其 `id` 字段作为 `toolId`。" +
-            "如果不确定使用哪个工具，可先调用 `GET /api/v1/ai-tools` 查看 `isDefault=true` 的工具。",
+            "如果不确定使用哪个工具，可先调用 `GET /api/v1/ai-tools` 查看 `isDefault=true` 的工具。\n\n" +
+            "**支持 `callbackUrl`**：传入可选的 `callbackUrl` 参数后，任务完成或失败时服务器会主动 POST 结果到该 URL，无需持续轮询。\n\n" +
+            "Webhook payload 格式：\n" +
+            "- 成功：`{ event: 'video.done', taskId, status: 'completed', videoUrl }` \n" +
+            "- 失败：`{ event: 'video.failed', taskId, status: 'failed', error }` \n\n" +
+            "服务器会在任务完成后立即回调，若任务处于 pending/processing 状态则后台轮询（最长 5 分钟），完成后自动触发回调。",
           operationId: "videoGenerate",
           tags: ["视频生成"],
           requestBody: {
@@ -1890,6 +1895,17 @@ export function getOpenApiSpec(baseUrl: string) {
                       example: 2,
                     },
                     inputImageUrl: { type: "string", format: "uri", nullable: true, description: "输入图片 URL（image-to-video 模式必填）" },
+                    callbackUrl: {
+                      type: "string",
+                      format: "uri",
+                      nullable: true,
+                      description:
+                        "可选。任务完成或失败后，服务器主动 POST 结果到该 URL（Webhook 回调），无需轮询。\n" +
+                        "成功 payload：`{ event: 'video.done', taskId, status: 'completed', videoUrl }`\n" +
+                        "失败 payload：`{ event: 'video.failed', taskId, status: 'failed', error }`\n" +
+                        "服务器会以最多 3 次重试（指数退避）确保送达。",
+                      example: "https://your-server.com/webhooks/video",
+                    },
                   },
                 },
                 example: {
@@ -1898,6 +1914,7 @@ export function getOpenApiSpec(baseUrl: string) {
                   duration: 5,
                   toolId: 2,
                   inputImageUrl: "https://cdn.example.com/render.jpg",
+                  callbackUrl: "https://your-server.com/webhooks/video",
                 },
               },
             },
