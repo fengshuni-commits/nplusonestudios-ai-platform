@@ -377,6 +377,13 @@ function PageImageViewer({
         const height = block.height * scale;
         const isInpainting = inpaintingBlockId === block.id;
 
+        // Scale font size proportionally to the container
+        const scaledFontSize = Math.round((block.fontSize ?? 16) * scale);
+        const textAlignMap: Record<string, React.CSSProperties["textAlign"]> = {
+          left: "left", center: "center", right: "right",
+        };
+        const textAlign = textAlignMap[block.align ?? "left"] ?? "left";
+
         return (
           <div
             key={block.id ? `${block.id}-${blockIdx}` : `block-${blockIdx}`}
@@ -384,29 +391,48 @@ function PageImageViewer({
             title={`点击编辑：${block.text}`}
             className={`absolute group cursor-pointer transition-all ${
               isInpainting
-                ? "ring-2 ring-[#B87333] bg-[#B87333]/20 animate-pulse"
-                : "hover:ring-2 hover:ring-white/40 hover:bg-white/10"
-            } rounded`}
+                ? "ring-2 ring-[#B87333] animate-pulse"
+                : "hover:ring-2 hover:ring-white/40"
+            } rounded overflow-hidden`}
             style={{ left, top, width, height }}
           >
+            {/* 实际文字内容——解决图像生成模型无法正确渲染中文的问题 */}
+            {!isInpainting && (
+              <div
+                className="absolute inset-0 flex items-start justify-start pointer-events-none select-none"
+                style={{
+                  fontSize: scaledFontSize,
+                  color: block.color ?? "#ffffff",
+                  textAlign,
+                  lineHeight: 1.3,
+                  padding: `${Math.max(2, Math.round(4 * scale))}px`,
+                  fontWeight: block.role === "title" ? 700 : block.role === "subtitle" ? 600 : 400,
+                  letterSpacing: block.role === "title" ? "0.02em" : "normal",
+                  wordBreak: "break-word",
+                  whiteSpace: "pre-wrap",
+                  overflow: "hidden",
+                }}
+              >
+                {block.text}
+              </div>
+            )}
+
             {/* 加载中图标 */}
             {isInpainting && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center">
-                <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center bg-[#B87333]/20">
+                <Loader2 className="w-4 h-4 text-[#B87333] animate-spin" />
               </div>
             )}
 
             {/* 悬停时显示编辑 + 删除图标 */}
             {!isInpainting && (
-              <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                {/* 编辑按钮 */}
+              <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                 <div
                   className="w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center"
                   title="编辑文字"
                 >
                   <Pencil className="w-2 h-2 text-white" />
                 </div>
-                {/* 删除按钮 */}
                 {onDeleteBlock && (
                   <div
                     className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-400 transition-colors"
@@ -422,10 +448,8 @@ function PageImageViewer({
               </div>
             )}
 
-            {/* 角色标签 */}
-            <div className={`absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap transition-opacity ${
-              isInpainting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-            }`}>
+            {/* 角色标签（悬停时显示） */}
+            <div className="absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
               {block.role} · {block.text.slice(0, 20)}{block.text.length > 20 ? "…" : ""}
             </div>
           </div>

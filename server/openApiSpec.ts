@@ -167,7 +167,7 @@ export function getOpenApiSpec(baseUrl: string) {
             },
             textBlocks: {
               type: "array",
-              description: "页面中的可编辑文字块列表。每个文字块对应图片中的一段文字，可通过 inpainting 接口修改文案后重绘该区域。",
+              description: "页面中的可编辑文字块列表。图片本身不包含文字（为避免 AI 图像生成模型对中文的渲染不准确问题），调用方需将 textBlocks 按坐标叠加在图片上渲染。每个文字块包含坐标、尺寸、字体、颜色、对齐等属性，可通过 inpainting 接口修改文案后重绘该区域。",
               items: {
                 type: "object",
                 required: ["id", "text", "x", "y", "width", "height"],

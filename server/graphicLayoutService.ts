@@ -261,9 +261,16 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
           : undefined;
 
-        const textDescriptions = textBlocks.map((b: any) =>
-          `"${b.text}" (${b.role}, ${b.fontSize}px, color ${b.color}, at position ${Math.round(b.x/imgW*100)}% from left, ${Math.round(b.y/imgH*100)}% from top)`
-        ).join("; ");
+        // Build text layout description WITHOUT actual text content.
+        // Chinese characters cannot be reliably rendered by image generation models.
+        // Actual text is rendered as an HTML overlay layer in the frontend (and returned in textBlocks for API callers).
+        const textDescriptions = textBlocks.map((b: any) => {
+          const left = Math.round(b.x / imgW * 100);
+          const top = Math.round(b.y / imgH * 100);
+          const w = Math.round(b.width / imgW * 100);
+          const h = Math.round(b.height / imgH * 100);
+          return `${b.role} text block (${b.fontSize}px, color ${b.color}, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — leave this area as a SOLID COLOR RECTANGLE matching the background or a subtle contrasting tone, NO text rendered in image`;
+        }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
         const assetDesc = pageAssets.length > 0

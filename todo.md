@@ -2025,3 +2025,13 @@
 - [x] REST 端点 /api/v1/graphic-layout/inpaint 响应体加入 actualWidth/actualHeight
 - [x] tRPC inpaintTextBlock 返回値加入 actualWidth/actualHeight
 - [x] 更新 openApiSpec.ts 文档说明新字段
+
+## Bug: API 生成的图文排版中文乱码
+- [x] 排查图文排版生成 prompt 中中文文字的处理方式（根本原因：AI 图像生成模型无法正确渲染中文）
+- [x] 确认 API 请求编码（JSON body、Content-Type）是否正确（编码正常，不是问题所在）
+- [x] 修复乱码问题（方案A：图片不渲染文字，前端 HTML 叠加层渲染）
+
+## Bug: 图文排版中文乱码修复（方案A：HTML叠加层渲染真实文字）
+- [x] graphicLayoutService.ts：图像生成 prompt 去掉文字内容，改为版式结构描述（色块留白区域）
+- [x] MediaLayout.tsx：叠加层从热区改为真实渲染文字（字体、字号、颜色、对齐）
+- [x] 更新 OpenAPI 文档说明 textBlocks 叠加渲染方式
