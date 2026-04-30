@@ -2059,3 +2059,8 @@
 - [x] 排查 /api/v1/graphic-layout/generate 异步任务卡住原因（根因：Cloud Run 实例关闭中断后台任务 + MySQL REPEATABLE READ 导致 status 端点读取旧快照）
 - [x] 修复：status 端点（tRPC + REST）改用 raw SQL 查询，并在每次轮询时自动将超过 15 分钟的 pending/processing 任务标记为 failed
 - [x] 验证修复后 API 调用可正常完成并返回结果（6 个 vitest 测试全部通过；已清理 54 个历史卡住任务）
+
+## Bug：API 调用记录次数显示为零
+- [x] 排查 API 调用次数统计为零的原因（根因：apiTokens.list 过程返回对象中漏写了 callCount 字段）
+- [x] 修复：在 routers.ts 的 apiTokens.list 返回对象中加入 callCount，同时移除前端的 (token as any) 强转
+- [x] 验证修复后调用次数显示正确（2 个 vitest 测试通过）

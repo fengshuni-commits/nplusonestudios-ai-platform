@@ -6821,6 +6821,7 @@ export const appRouter = router({system: systemRouter,
         type: t.type,
         expiresAt: t.expiresAt,
         lastUsedAt: t.lastUsedAt,
+        callCount: t.callCount,
         isActive: t.isActive,
         createdAt: t.createdAt,
       }));

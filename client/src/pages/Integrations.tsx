@@ -187,7 +187,7 @@ export default function Integrations() {
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
                             <BarChart2 className="w-3 h-3" />
-                            调用 {(token as any).callCount ?? 0} 次
+                            调用 {token.callCount ?? 0} 次
                           </span>
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock className="w-3 h-3" />
