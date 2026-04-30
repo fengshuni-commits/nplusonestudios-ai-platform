@@ -33,7 +33,7 @@ function getActionLabel(action: string | null) {
 
 function getToolDisplayName(toolId: number, toolName: string | null) {
   if (toolId === 0) return "内置 AI";
-  return toolName || `工具 #${toolId}`;
+  return toolName || "已删除工具";
 }
 
 function getUserDisplayName(userId: number, userName: string | null) {

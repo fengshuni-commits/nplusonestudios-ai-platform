@@ -2035,3 +2035,12 @@
 - [x] graphicLayoutService.ts：图像生成 prompt 去掉文字内容，改为版式结构描述（色块留白区域）
 - [x] MediaLayout.tsx：叠加层从热区改为真实渲染文字（字体、字号、颜色、对齐）
 - [x] 更新 OpenAPI 文档说明 textBlocks 叠加渲染方式
+
+## Bug: 效果图/图文排版已无内置AI选项，但调用记录仍显示内置AI条目
+- [ ] 排查 toolId=0 的调用日志来源（createAiToolLog 的调用点）
+- [ ] 确认调用记录 UI 如何展示 toolId=0 的条目（是否应过滤或改为显示"内置AI"标签）
+- [ ] 修复：移除内置AI选项后，toolId=0 的日志不应再产生或不应在记录中显示
+
+## 调用记录 UI：已删除工具标签 + 内置AI使用清单
+- [x] AiToolStats.tsx：getToolDisplayName 将 "工具#N" 改为 "已删除工具"
+- [x] 整理内置AI（toolId=0）在平台各模块的使用情况清单
