@@ -2020,3 +2020,8 @@
 - [x] 查询 DB 中 job 1080071 的 pages[0].imageUrl、textBlocks、imageSize 实际数据
 - [x] 定位根本原因：DB 存储的 imageSize (1024x1365) 与实际图片尺寸 (864x1184) 不一致，导致 sharp composite 抛出 "Image to composite must have same dimensions or smaller"
 - [x] 修复：先 fetch 图片再用 sharp.metadata() 读取实际尺寸，用实际尺寸计算 overlay 坐标（REST + tRPC 两处均已修复）
+
+## 功能：inpaint 响应体添加 actualWidth/actualHeight 字段
+- [x] REST 端点 /api/v1/graphic-layout/inpaint 响应体加入 actualWidth/actualHeight
+- [x] tRPC inpaintTextBlock 返回値加入 actualWidth/actualHeight
+- [x] 更新 openApiSpec.ts 文档说明新字段

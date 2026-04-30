@@ -724,6 +724,9 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
     // Build red-overlay composite (same approach as tRPC inpaintTextBlock)
     let compositeB64: string;
     const compositeMimeType = "image/png";
+    // Hoisted so actualWidth/actualHeight are available in the response after the try block
+    let actualWidth: number = imgW;
+    let actualHeight: number = imgH;
     try {
       const sharp = (await import("sharp")).default;
       const padding = 20;
@@ -735,6 +738,8 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
       const meta = await sharp(imgBuffer).metadata();
       const actualW = meta.width ?? imgW;
       const actualH = meta.height ?? imgH;
+      actualWidth = actualW;
+      actualHeight = actualH;
       if (actualW !== imgW || actualH !== imgH) {
         console.warn(`[API] graphic-layout/inpaint: DB imageSize (${imgW}x${imgH}) differs from actual (${actualW}x${actualH}), using actual`);
       }
@@ -792,7 +797,7 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
     });
     await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, jobId));
 
-    res.json({ data: { imageUrl: newImageUrl, pageIndex, blockId, newText } });
+    res.json({ data: { imageUrl: newImageUrl, pageIndex, blockId, newText, actualWidth, actualHeight } });
 
     // Fire webhook if callbackUrl provided
     if (callbackUrl) {

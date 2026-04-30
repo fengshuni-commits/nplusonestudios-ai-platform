@@ -5872,6 +5872,9 @@ const graphicLayoutRouter = router({
       // 用红色覆盖层标记文字区域（与彩平图局部修改一致），让 AI 理解需要修改的范围
       let compositeB64: string;
       let compositeMimeType = "image/png";
+      // Hoisted so actualWidth/actualHeight are available in the return value after the try block
+      let actualWidth: number = imgW;
+      let actualHeight: number = imgH;
       try {
         const sharp = (await import("sharp")).default;
         // 扩展重绘区域 20px 确保覆盖完整
@@ -5883,6 +5886,8 @@ const graphicLayoutRouter = router({
         const meta = await sharp(imgBuffer).metadata();
         const actualW = meta.width ?? imgW;
         const actualH = meta.height ?? imgH;
+        actualWidth = actualW;
+        actualHeight = actualH;
         if (actualW !== imgW || actualH !== imgH) {
           console.warn(`[inpaintTextBlock] DB imageSize (${imgW}x${imgH}) differs from actual (${actualW}x${actualH}), using actual`);
         }
@@ -5953,7 +5958,7 @@ const graphicLayoutRouter = router({
         };
       });
       await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, input.jobId));
-       return { success: true, newImageUrl };
+       return { success: true, newImageUrl, actualWidth, actualHeight };
     }),
 
   // ─── 导出 PDF ──────────────────────────────────────────────────────────────
