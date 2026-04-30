@@ -197,7 +197,9 @@ export async function generateGraphicLayoutAsync(
 页面尺寸：${imgW}x${imgH}px
 ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
 
-⚠️ 优先级规则：如果用户的内容描述中包含配色、版式、风格等具体要求，必须以用户描述为准，覆盖上方参考风格中的对应设置。用户描述的优先级高于一切参考风格。${byTypeInstruction ? "\n" + byTypeInstruction : ""}`
+⚠️ 优先级规则：如果用户的内容描述中包含配色、版式、风格等具体要求，必须以用户描述为准，覆盖上方参考风格中的对应设置。用户描述的优先级高于一切参考风格。${byTypeInstruction ? "\n" + byTypeInstruction : ""}
+
+imagePrompt 规则：输出一个完整的英文图像生成prompt（50-150词），必须包含视觉风格、配色方案、构图布局、关键视觉元素和光影氛围，参考用户内容描述和版式包风格，不要包含中文，不要描述文字内容只描述背景和视觉氛围。例如："Minimalist architectural studio brand cover, deep charcoal background #1a1a1a, warm gold accent lines, asymmetric geometric composition, subtle concrete texture, dramatic side lighting, high-end editorial feel, no text, clean negative space"`
               },
               {
                 role: "user",
@@ -214,7 +216,8 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
                 schema: {
                   type: "object",
                   properties: {
-                    pageTheme: { type: "string", description: "这一页的视觉主题描述（用于图像生成 prompt）" },
+                    pageTheme: { type: "string", description: "这一页的视觉主题描述（简短关键词）" },
+                    imagePrompt: { type: "string", description: "用于生成这一页背景图的完整英文prompt（50-150词），必须包含：视觉风格、配色方案、构图布局、关键视觉元素、光影氛围，参考用户内容描述和版式包风格，不要包含中文字符，不要描述文字内容只描述背景和视觉氛围" },
                     backgroundColor: { type: "string", description: "背景主色 hex" },
                     selectedAssetGroup: { type: "string", description: "选择的素材文件夹名称，必须是可用文件夹列表中的一个，无文件夹时输出空字符串" },
                     textBlocks: {
@@ -238,7 +241,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
                       }
                     }
                   },
-                  required: ["pageTheme", "backgroundColor", "selectedAssetGroup", "textBlocks"],
+                  required: ["pageTheme", "imagePrompt", "backgroundColor", "selectedAssetGroup", "textBlocks"],
                   additionalProperties: false,
                 }
               }
@@ -269,7 +272,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          return `${b.role} text block (${b.fontSize}px, color ${b.color}, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — leave this area as a SOLID COLOR RECTANGLE matching the background or a subtle contrasting tone, NO text rendered in image`;
+          return `${b.role} text block (${b.fontSize}px, color ${b.color}, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — keep this area clean and uncluttered with subtle background texture or gentle gradient, text will be overlaid later`;
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
@@ -291,7 +294,10 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         const userDescPrefix = job.contentText.match(/(背景|配色|风格|色调|#[0-9a-fA-F]{6})/)
           ? `USER REQUIREMENT (HIGHEST PRIORITY, OVERRIDES STYLE REFERENCE): ${job.contentText}. `
           : "";
-        const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
+        // Use LLM-generated imagePrompt when available (needs 1+2); fall back to template assembly
+        const imagePrompt = plan.imagePrompt && plan.imagePrompt.trim().length > 20
+          ? plan.imagePrompt.trim()
+          : `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
 
         // Step 2: Image generation with retry on timeout
         const genResult = await withRetryOnTimeout(

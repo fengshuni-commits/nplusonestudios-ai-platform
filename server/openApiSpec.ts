@@ -2046,6 +2046,73 @@ export function getOpenApiSpec(baseUrl: string) {
           },
         },
       },
+      "/media/generate": {
+        post: {
+          summary: "生成社交媒体图文内容",
+          description: "一步到位生成社交媒体内容：LLM 生成文案（标题/正文/标签）+ AI 生成封面图。支持小红书、微信公众号、Instagram 三个平台。该接口与网页版小红书功能走相同的代码路径，图像质量与网页版一致。",
+          operationId: "mediaGenerate",
+          tags: ["图文内容"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["platform", "topic"],
+                  properties: {
+                    platform: { type: "string", enum: ["xiaohongshu", "wechat", "instagram"], description: "目标平台" },
+                    topic: { type: "string", description: "内容主题（必填）", example: "工业厂房改造办公空间" },
+                    projectName: { type: "string", description: "项目名称（可选）" },
+                    style: { type: "string", description: "风格偏好（可选）", example: "现代简约、工业风" },
+                    referenceImageUrl: { type: "string", format: "uri", description: "参考图片 URL（可选）" },
+                    additionalNotes: { type: "string", description: "补充说明（可选）" },
+                  },
+                },
+                example: { platform: "xiaohongshu", topic: "工业厂房改造办公空间", style: "现代简约、工业风" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "内容生成成功",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          platform: { type: "string", enum: ["xiaohongshu", "wechat", "instagram"] },
+                          textContent: { type: "object", description: "文案内容（小红书：title/content/tags/coverImagePrompt；公众号：title/summary/content/coverImagePrompt；Instagram：caption/hashtags/coverImagePrompt）" },
+                          coverImageUrl: { type: "string", format: "uri", nullable: true, description: "AI 生成的封面图 URL" },
+                          historyId: { type: "integer", description: "历史记录 ID" },
+                        },
+                      },
+                    },
+                  },
+                  example: {
+                    data: {
+                      platform: "xiaohongshu",
+                      textContent: {
+                        title: "🏗️工业风办公室改造！这才是真正的创意工作场",
+                        content: "👀 工业风的远不止于粗糙感...",
+                        tags: ["#办公空间设计", "#工业风", "#N1STUDIOS"],
+                        coverImagePrompt: "Industrial loft office renovation, exposed concrete ceiling, warm Edison bulbs, minimalist furniture, architectural photography",
+                      },
+                      coverImageUrl: "https://cdn.example.com/media/xiaohongshu-cover-001.png",
+                      historyId: 456,
+                    },
+                  },
+                },
+              },
+            },
+            "400": { description: "参数错误", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "401": { description: "API Key 无效", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "500": { description: "服务器内部错误", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
     },
     tags: [
       { name: "系统", description: "系统状态检查" },
@@ -2057,6 +2124,7 @@ export function getOpenApiSpec(baseUrl: string) {
       { name: "彩平图", description: "AI 彩色建筑平面图生成与局部修改" },
       { name: "AI 分析图", description: "AI 材质搜配图 / 软装配图生成" },
       { name: "视频生成", description: "AI 视频生成（文生视频 / 图生视频）" },
+      { name: "图文内容", description: "AI 社交媒体图文内容生成（小红书、公众号、Instagram）" },
       { name: "工作台", description: "工作台统计数据" },
       { name: "素材库", description: "设计素材管理" },
       { name: "设计规范", description: "设计规范文档" },
