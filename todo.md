@@ -2054,3 +2054,8 @@
 ## 功能：AI分析图和设计规划关闭内置AI选项
 - [x] DesignAnalysis.tsx：showBuiltIn=false，未选工具时禁用生成按鈕
 - [x] DesignPlanning.tsx：showBuiltIn=false，未选工具时禁用生成按鈕
+
+## Bug：图文排版 API 任务卡在 processing 状态
+- [x] 排查 /api/v1/graphic-layout/generate 异步任务卡住原因（根因：Cloud Run 实例关闭中断后台任务 + MySQL REPEATABLE READ 导致 status 端点读取旧快照）
+- [x] 修复：status 端点（tRPC + REST）改用 raw SQL 查询，并在每次轮询时自动将超过 15 分钟的 pending/processing 任务标记为 failed
+- [x] 验证修复后 API 调用可正常完成并返回结果（6 个 vitest 测试全部通过；已清理 54 个历史卡住任务）

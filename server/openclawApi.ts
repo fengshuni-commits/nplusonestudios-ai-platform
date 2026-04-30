@@ -592,13 +592,9 @@ router.get("/graphic-layout/status/:id", async (req: Request, res: Response) => 
     if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
     const jobId = parseInt(req.params.id);
     if (isNaN(jobId)) return res.status(400).json({ error: "Invalid job id", code: "VALIDATION_ERROR" });
-    const drizzleDb = await db.getDb();
-    if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
-    const { graphicLayoutJobs } = await import("../drizzle/schema");
-    const { eq: _eq, and: _and } = await import("drizzle-orm");
-    const [job] = await drizzleDb.select().from(graphicLayoutJobs)
-      .where(_and(_eq(graphicLayoutJobs.id, jobId), _eq(graphicLayoutJobs.userId, user.id)))
-      .limit(1);
+    // Auto-timeout stale jobs (pending/processing for >15min) and use raw SQL to bypass REPEATABLE READ
+    await db.timeoutStaleGraphicLayoutJobs(15 * 60 * 1000);
+    const job = await db.getGraphicLayoutJobRaw(jobId, user.id);
     if (!job) return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
     const pages = (job.pages as any[] | null) ?? [];
     res.json({

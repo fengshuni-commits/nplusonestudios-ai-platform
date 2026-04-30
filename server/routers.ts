@@ -5758,22 +5758,25 @@ const graphicLayoutRouter = router({
   status: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input, ctx }) => {
-      const drizzleDb = await db.getDb();
-      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      const { graphicLayoutJobs } = await import("../drizzle/schema");
-      const { eq: _eq, and: _and } = await import("drizzle-orm");
-      const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.id), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
+      // Use raw SQL to bypass MySQL REPEATABLE READ isolation (same fix as benchmark/rendering jobs)
+      // Also auto-timeout stale jobs (pending/processing for >15min) on every status check
+      await db.timeoutStaleGraphicLayoutJobs(15 * 60 * 1000);
+      const job = await db.getGraphicLayoutJobRaw(input.id, ctx.user.id);
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
       // Auto-repair legacy records: fix duplicate/empty textBlock ids on load
       const rawPages = (job.pages as any[] | null) ?? [];
       if (rawPages.length > 0) {
-        const { sanitizeJobPages } = await import("./graphicLayoutService");
-        const { pages: fixedPages, dirty } = sanitizeJobPages(rawPages);
-        if (dirty) {
-          // Write back repaired pages so subsequent loads are already clean
-          await drizzleDb.update(graphicLayoutJobs).set({ pages: fixedPages }).where(_eq(graphicLayoutJobs.id, job.id));
-          console.log(`[GraphicLayout] Auto-repaired duplicate textBlock ids for job ${job.id}`);
-          return { ...job, pages: fixedPages };
+        const drizzleDb = await db.getDb();
+        if (drizzleDb) {
+          const { graphicLayoutJobs } = await import("../drizzle/schema");
+          const { eq: _eq } = await import("drizzle-orm");
+          const { sanitizeJobPages } = await import("./graphicLayoutService");
+          const { pages: fixedPages, dirty } = sanitizeJobPages(rawPages);
+          if (dirty) {
+            await drizzleDb.update(graphicLayoutJobs).set({ pages: fixedPages }).where(_eq(graphicLayoutJobs.id, job.id));
+            console.log(`[GraphicLayout] Auto-repaired duplicate textBlock ids for job ${job.id}`);
+            return { ...job, pages: fixedPages };
+          }
         }
       }
       return job;

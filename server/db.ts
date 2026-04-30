@@ -2402,3 +2402,64 @@ export async function upsertCaseStudyPrompt(
     return { id: Number((result as any).insertId), phase, label: data.label ?? defaultLabels[phase], prompt: data.prompt };
   }
 }
+
+// ─── Graphic Layout Job Raw Query ────────────────────────────────────────────
+/**
+ * Fetch a graphic layout job using raw SQL to bypass MySQL REPEATABLE READ
+ * isolation that can cause Drizzle ORM to return stale cached rows during polling.
+ */
+export async function getGraphicLayoutJobRaw(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.execute(
+    sql`SELECT id, userId, packId, docType, pageCount, aspectRatio, contentText, assetUrls, title, status, errorMessage, pages, htmlPages, createdAt, updatedAt
+        FROM graphic_layout_jobs
+        WHERE id = ${id} AND userId = ${userId}
+        LIMIT 1`
+  );
+  const rows = result[0] as unknown as any[];
+  if (!rows || rows.length === 0) return undefined;
+  const row = rows[0];
+  const parseJson = (v: any) => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "string") { try { return JSON.parse(v); } catch { return null; } }
+    return v;
+  };
+  return {
+    id: row.id as number,
+    userId: row.userId as number,
+    packId: row.packId as number | null,
+    docType: row.docType as string,
+    pageCount: row.pageCount as number,
+    aspectRatio: row.aspectRatio as string,
+    contentText: row.contentText as string,
+    assetUrls: parseJson(row.assetUrls),
+    title: row.title as string | null,
+    status: row.status as "pending" | "processing" | "done" | "failed",
+    errorMessage: row.errorMessage as string | null,
+    pages: parseJson(row.pages) as any[] | null,
+    htmlPages: parseJson(row.htmlPages) as any[] | null,
+    createdAt: row.createdAt ? new Date(row.createdAt as string) : new Date(),
+    updatedAt: row.updatedAt ? new Date(row.updatedAt as string) : new Date(),
+  };
+}
+
+/**
+ * Mark stale graphic layout jobs (stuck in pending/processing for > timeoutMs) as failed.
+ * Returns the number of jobs updated.
+ */
+export async function timeoutStaleGraphicLayoutJobs(timeoutMs = 15 * 60 * 1000) {
+  const db = await getDb();
+  if (!db) return 0;
+  const cutoff = new Date(Date.now() - timeoutMs);
+  const result = await db.execute(
+    sql`UPDATE graphic_layout_jobs
+        SET status = 'failed', errorMessage = 'Task timed out, please retry (server restart or instance shutdown interrupted the background task)'
+        WHERE status IN ('pending', 'processing') AND updatedAt < ${cutoff}`
+  );
+  const affectedRows = (result[0] as any)?.affectedRows ?? 0;
+  if (affectedRows > 0) {
+    console.log(`[GraphicLayout] Marked ${affectedRows} stale jobs as failed (timeout=${timeoutMs}ms)`);
+  }
+  return affectedRows;
+}
