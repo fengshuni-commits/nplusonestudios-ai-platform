@@ -314,7 +314,7 @@ export default function DesignPlanning() {
           <p className="text-sm text-muted-foreground mt-1">AI 生成对标案例分析报告</p>
         </div>
         <div className="flex items-center gap-2">
-          <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" />
+          <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
         </div>
       </div>
 
@@ -378,7 +378,7 @@ export default function DesignPlanning() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleGenerate} disabled={isGenerating} className="w-full">
+                <Button onClick={handleGenerate} disabled={isGenerating || !toolId} className="w-full">
                   {isGenerating ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中… {generateElapsed > 0 && <span className="ml-1 opacity-70">({generateElapsed}s)</span>}</>
                   ) : (

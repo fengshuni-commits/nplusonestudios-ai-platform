@@ -2044,3 +2044,13 @@
 ## 调用记录 UI：已删除工具标签 + 内置AI使用清单
 - [x] AiToolStats.tsx：getToolDisplayName 将 "工具#N" 改为 "已删除工具"
 - [x] 整理内置AI（toolId=0）在平台各模块的使用情况清单
+
+## 功能：四个模块关闭内置AI选项（强制选择外部工具）
+- [ ] Presentation.tsx：showBuiltIn=false，未选工具时禁用生成按钮
+- [ ] MediaLayout.tsx：showBuiltIn=false，未选工具时禁用生成按钮
+- [ ] DesignAnalysis.tsx：showBuiltIn=false，未选工具时禁用生成按钮
+- [ ] DesignPlanning.tsx：showBuiltIn=false，未选工具时禁用生成按钮
+
+## 功能：AI分析图和设计规划关闭内置AI选项
+- [x] DesignAnalysis.tsx：showBuiltIn=false，未选工具时禁用生成按鈕
+- [x] DesignPlanning.tsx：showBuiltIn=false，未选工具时禁用生成按鈕

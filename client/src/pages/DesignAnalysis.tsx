@@ -444,7 +444,7 @@ export default function DesignAnalysis() {
                 capability="rendering"
                 value={toolId}
                 onChange={setToolId}
-                showBuiltIn={true}
+                showBuiltIn={false}
               />
             </CardContent>
           </Card>
@@ -471,7 +471,7 @@ export default function DesignAnalysis() {
           {/* Generate button */}
           <Button
             onClick={handleGenerate}
-            disabled={isGenerating || isUploading || !referenceUrl}
+            disabled={isGenerating || isUploading || !referenceUrl || !toolId}
             className="w-full gap-2"
             size="lg"
           >
@@ -590,7 +590,7 @@ export default function DesignAnalysis() {
               <Button
                 variant="outline"
                 onClick={handleGenerate}
-                disabled={isGenerating || isUploading || !referenceUrl}
+                disabled={isGenerating || isUploading || !referenceUrl || !toolId}
                 className="gap-2 self-start"
               >
                 <RefreshCw className="h-4 w-4" />
