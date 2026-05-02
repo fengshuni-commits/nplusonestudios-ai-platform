@@ -1,25 +1,17 @@
 /**
- * 实时语音转写 WebSocket 服务
+ * Real-time speech transcription via Xfyun IAT WebSocket API.
  *
- * 架构：Browser WS → 本服务 → 讯飞 IAT WS
+ * Architecture:
+ * - One persistent client WS per recording session
+ * - Xfyun IAT sessions are limited to 60s; auto-reconnects on status=2
+ * - Audio frames are buffered in pendingFrames when xfyun is not ready
+ * - On reconnect, buffered frames are flushed to the new xfyun session
+ * - Connection failures are retried up to MAX_XFYUN_RETRIES times (exponential backoff)
  *
- * 协议（Browser → Server）：
- *   - 连接时 URL 携带 ?toolId=<number>
- *   - 二进制帧：原始 PCM 16kHz 16bit mono 音频数据（来自 AudioWorklet）
- *   - 文本帧 "END"：通知服务器录音结束，发送最后一帧给讯飞
- *
- * 协议（Server → Browser）：
- *   - { type: "partial", text: "..." }  识别中（可能被后续更新覆盖）
- *   - { type: "final",   text: "..." }  已确认的识别结果
- *   - { type: "error",   message: "..." }
- *   - { type: "ready" }  连接讯飞成功，可以开始发送音频
- *
- * 关键设计：
- *   - 讯飞 WS 连接可能需要 3-5 秒（服务器在境外），期间 PCM 帧缓存在 pendingFrames
- *   - 连接建立后，按 40ms 间隔 flush 缓存帧（模拟实时流速率）
- *   - flush 期间若收到 END 信号，等 flush 完成后再发结束帧
- *   - 讯飞单次会话约 60 秒后自动结束（status=2），自动开启新会话续接
- *   - 讯飞连接失败时，自动重试最多 3 次（指数退避：1.5s, 3s, 6s）
+ * Key design:
+ * - flushGeneration: incremented on every new xfyun connection to invalidate stale flush timers
+ * - xfyunRetryCount: reset to 0 on every successful connection (not just on open)
+ * - pendingFrames: never cleared on reconnect, only drained by flushPending
  */
 import crypto from "crypto";
 import WebSocket, { WebSocketServer } from "ws";
@@ -29,12 +21,11 @@ import type { XfyunCredentials } from "./_core/xfyunTranscription";
 
 const XFYUN_HOST = "iat-api.xfyun.cn";
 const XFYUN_PATH = "/v2/iat";
-const FRAME_SIZE = 1280; // 40ms @ 16kHz 16bit mono
-const FRAME_INTERVAL_MS = 40; // 40ms between frames
-// When flushing buffered frames, send multiple frames per tick to catch up faster.
-// Sending 4 frames per 40ms = 160ms of audio per tick = 4x real-time catch-up speed.
+const FRAME_SIZE = 1280;        // 40ms @ 16kHz 16bit mono
+const FRAME_INTERVAL_MS = 40;   // 40ms between frames
+// Send 4 frames per tick when flushing = 4x real-time catch-up speed
 const FLUSH_FRAMES_PER_TICK = 4;
-const MAX_XFYUN_RETRIES = 3; // max retries on connection failure
+const MAX_XFYUN_RETRIES = 5;    // max retries on connection failure (increased from 3)
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
   const date = new Date().toUTCString();
@@ -61,7 +52,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
     if (url.pathname !== "/api/transcribe-stream") return;
 
-    // ── Auth: validate session cookie / token ──────────────────────────────
     let user: any = null;
     try {
       user = await sdk.authenticateRequest(req as any);
@@ -75,7 +65,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       socket.destroy();
       return;
     }
-
     wss.handleUpgrade(req, socket, head, (clientWs) => {
       wss.emit("connection", clientWs, req, user, url);
     });
@@ -122,36 +111,117 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     }
 
     // ── Session state ─────────────────────────────────────────────────────
-    let ended = false;           // client sent END signal
-    let clientClosed = false;    // client WS closed
-    const pendingFrames: Buffer[] = [];  // frames buffered before xfyun ready
-    let xfyunRetryCount = 0;     // number of xfyun connection retries
+    let ended = false;
+    let clientClosed = false;
+    const pendingFrames: Buffer[] = [];   // frames buffered while xfyun is not ready
+    let xfyunRetryCount = 0;
 
-    // No hard session timeout - recording can run as long as needed.
-    // The client is responsible for calling stop() to end the session.
-    const sessionTimeout: ReturnType<typeof setTimeout> | undefined = undefined;
-
-    // ── Xfyun sub-session (auto-reconnects when status=2 or on error) ──────
+    // ── Xfyun sub-session state ───────────────────────────────────────────
     let xfWs: WebSocket | null = null;
     let xfReady = false;
     let frameIndex = 0;
+    let flushGeneration = 0;   // incremented on each new connection to invalidate stale timers
     let flushing = false;
     const partialTexts: Map<number, string> = new Map();
 
+    // ── Send PCM frame to Xfyun ───────────────────────────────────────────
+    function sendPcmFrame(ws: WebSocket, pcmChunk: Buffer, isLast = false) {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const audio = pcmChunk.toString("base64");
+      const status = isLast ? 2 : (frameIndex === 0 ? 0 : 1);
+      const payload: Record<string, unknown> = {
+        data: { status, format: "audio/L16;rate=16000", encoding: "raw", audio },
+      };
+      if (frameIndex === 0) {
+        payload.common = { app_id: creds!.appId };
+        payload.business = {
+          language: "zh_cn",
+          domain: "iat",
+          accent: "mandarin",
+          vad_eos: 5000,  // 5s silence to end session
+          dwa: "wpgs",    // dynamic correction mode
+        };
+      }
+      ws.send(JSON.stringify(payload));
+      frameIndex++;
+    }
+
+    // ── Flush pending frames with rate limiting ───────────────────────────
+    // Uses flushGeneration to ensure stale timers from previous connections
+    // don't interfere with the current flush.
+    function flushPending(ws: WebSocket) {
+      if (flushing) return;
+      const frames = [...pendingFrames];
+      pendingFrames.length = 0;
+      if (frames.length === 0) {
+        if (ended) {
+          console.log(`[streamTranscribe] no pending frames, sending final frame immediately`);
+          sendPcmFrame(ws, Buffer.alloc(0), true);
+        }
+        return;
+      }
+      flushing = true;
+      const myGeneration = flushGeneration;
+      let i = 0;
+      console.log(`[streamTranscribe] flushPending: ${frames.length} frames, generation=${myGeneration}`);
+
+      function sendNext() {
+        // If a new xfyun connection was established, this flush is stale - abort
+        if (myGeneration !== flushGeneration) {
+          console.log(`[streamTranscribe] flush gen ${myGeneration} superseded by gen ${flushGeneration}, aborting`);
+          flushing = false;
+          return;
+        }
+        if (clientClosed || ws.readyState !== WebSocket.OPEN) {
+          flushing = false;
+          return;
+        }
+        if (i >= frames.length) {
+          flushing = false;
+          // Drain any new frames that arrived during flush
+          if (pendingFrames.length > 0) {
+            const extra = [...pendingFrames];
+            pendingFrames.length = 0;
+            console.log(`[streamTranscribe] draining ${extra.length} extra frames after flush`);
+            for (const f of extra) sendPcmFrame(ws, f);
+          }
+          if (ended) {
+            console.log(`[streamTranscribe] flushPending done, sending final frame`);
+            sendPcmFrame(ws, Buffer.alloc(0), true);
+          }
+          return;
+        }
+        // Send multiple frames per tick to flush buffered audio faster
+        const batchEnd = Math.min(i + FLUSH_FRAMES_PER_TICK, frames.length);
+        while (i < batchEnd) {
+          sendPcmFrame(ws, frames[i++]);
+        }
+        setTimeout(sendNext, FRAME_INTERVAL_MS);
+      }
+      sendNext();
+    }
+
+    // ── Connect to Xfyun IAT ──────────────────────────────────────────────
     function connectXfyun(isRetry = false) {
       if (clientClosed) return;
+
+      // Invalidate any in-progress flush from the previous connection
+      flushGeneration++;
       xfReady = false;
       flushing = false;
       frameIndex = 0;
       partialTexts.clear();
 
+      const myGeneration = flushGeneration;
       const xfUrl = buildXfyunUrl(creds!);
       const ws = new WebSocket(xfUrl);
       xfWs = ws;
 
       ws.on("open", () => {
         if (clientClosed) { ws.close(); return; }
-        xfyunRetryCount = 0; // reset retry count on successful connection
+        // Verify this is still the current connection
+        if (myGeneration !== flushGeneration) { ws.close(); return; }
+        xfyunRetryCount = 0;  // reset on successful connection
         xfReady = true;
         send(clientWs, { type: "ready" });
         flushPending(ws);
@@ -159,6 +229,8 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
       ws.on("message", (data: WebSocket.RawData) => {
         if (clientClosed) return;
+        // Ignore messages from stale connections
+        if (myGeneration !== flushGeneration) return;
         try {
           const msg = JSON.parse(data.toString()) as {
             code: number;
@@ -177,18 +249,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
           if (msg.code !== 0) {
             console.error(`[streamTranscribe] xfyun error code ${msg.code}: ${msg.message}`);
-            // code 10008 = service instance invalid (concurrent limit)
-            // code 10160 = request timeout
-            // code 10165 = invalid handle (session frequency limit - wait and retry)
-            // code 10313 = app_id not found
-            // These are potentially recoverable - retry
+            // Recoverable error codes - retry with backoff
+            // 10008 = service instance invalid (concurrent limit)
+            // 10160 = request timeout
+            // 10165 = invalid handle (session frequency limit)
             const recoverableCodes = [10008, 10160, 10165];
             if (recoverableCodes.includes(msg.code) && xfyunRetryCount < MAX_XFYUN_RETRIES && !ended) {
               xfyunRetryCount++;
-              // Use longer delay for frequency limit errors (10165)
-              const baseDelay = msg.code === 10165 ? 3000 : 1000;
-              const delay = Math.pow(2, xfyunRetryCount - 1) * baseDelay; // 3s, 6s, 12s for 10165
-              console.log(`[streamTranscribe] retrying xfyun connection (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
+              const baseDelay = msg.code === 10165 ? 3000 : 1500;
+              const delay = Math.pow(2, xfyunRetryCount - 1) * baseDelay;
+              console.log(`[streamTranscribe] retrying xfyun (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
               send(clientWs, { type: "error", message: `讯飞连接重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
               ws.close();
               setTimeout(() => connectXfyun(true), delay);
@@ -224,8 +294,9 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             }
             ws.close();
             // Auto-reconnect if client hasn't ended recording
-            // Use 1.5s delay to avoid triggering xfyun frequency limits (10165)
             if (!ended && !clientClosed) {
+              // Reset retry count on normal session end (not an error)
+              xfyunRetryCount = 0;
               console.log(`[streamTranscribe] auto-reconnecting xfyun in 1500ms`);
               setTimeout(() => connectXfyun(), 1500);
             } else {
@@ -239,87 +310,25 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
       ws.on("error", (err) => {
         console.error(`[streamTranscribe] xfyun WS ERROR: ${err.message}`);
-        // Retry on connection failure
+        if (myGeneration !== flushGeneration) return; // stale connection
         if (xfyunRetryCount < MAX_XFYUN_RETRIES && !ended && !clientClosed) {
           xfyunRetryCount++;
-          const delay = Math.pow(2, xfyunRetryCount - 1) * 1500; // 1.5s, 3s, 6s
+          const delay = Math.pow(2, xfyunRetryCount - 1) * 1500; // 1.5s, 3s, 6s, 12s, 24s
           console.log(`[streamTranscribe] retrying xfyun WS (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
           send(clientWs, { type: "error", message: `讯飞连接失败，重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
           setTimeout(() => connectXfyun(true), delay);
         } else {
-          // All retries exhausted - notify client but DON'T close the client WS
-          // The client can still use Whisper fallback
           console.error(`[streamTranscribe] xfyun all retries exhausted`);
           send(clientWs, { type: "error", message: `讯飞连接失败（已重试 ${MAX_XFYUN_RETRIES} 次）: ${err.message}` });
-          // Don't call clientWs.close() here - let client decide what to do
         }
       });
 
       ws.on("close", () => {
         if (xfWs === ws) {
           xfWs = null;
-          xfReady = false; // reset so new frames go to pendingFrames until reconnect
+          xfReady = false;  // ensure new frames go to pendingFrames until reconnect
         }
       });
-    }
-
-    // ── Send PCM frame to Xfyun ───────────────────────────────────────────
-    function sendPcmFrame(ws: WebSocket, pcmChunk: Buffer, isLast = false) {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      const audio = pcmChunk.toString("base64");
-      const status = isLast ? 2 : (frameIndex === 0 ? 0 : 1);
-      const payload: Record<string, unknown> = {
-        data: { status, format: "audio/L16;rate=16000", encoding: "raw", audio },
-      };
-      if (frameIndex === 0) {
-        payload.common = { app_id: creds!.appId };
-        payload.business = {
-          language: "zh_cn",
-          domain: "iat",
-          accent: "mandarin",
-          vad_eos: 5000, // 5s silence to end session (reduces reconnect frequency)
-          dwa: "wpgs",
-        };
-      }
-      ws.send(JSON.stringify(payload));
-      frameIndex++;
-    }
-
-    // ── Flush pending frames with rate limiting ───────────────────────────
-    function flushPending(ws: WebSocket) {
-      if (flushing) return;
-      const frames = [...pendingFrames];
-      pendingFrames.length = 0;
-      if (frames.length === 0) {
-        if (ended) sendPcmFrame(ws, Buffer.alloc(0), true);
-        return;
-      }
-      flushing = true;
-      let i = 0;
-      function sendNext() {
-        if (clientClosed || ws.readyState !== WebSocket.OPEN) { flushing = false; return; }
-        if (i >= frames.length) {
-          flushing = false;
-          // Drain any new frames that arrived during flush
-          if (pendingFrames.length > 0) {
-            const extra = [...pendingFrames];
-            pendingFrames.length = 0;
-            for (const f of extra) sendPcmFrame(ws, f);
-          }
-          if (ended) {
-            console.log(`[streamTranscribe] flushPending done, sending final frame`);
-            sendPcmFrame(ws, Buffer.alloc(0), true);
-          }
-          return;
-        }
-        // Send multiple frames per tick to flush buffered audio faster
-        const batchEnd = Math.min(i + FLUSH_FRAMES_PER_TICK, frames.length);
-        while (i < batchEnd) {
-          sendPcmFrame(ws, frames[i++]);
-        }
-        setTimeout(sendNext, FRAME_INTERVAL_MS);
-      }
-      sendNext();
     }
 
     // ── Start first xfyun connection ──────────────────────────────────────
@@ -340,17 +349,19 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         console.log(`[streamTranscribe] END received: xfReady=${xfReady}, flushing=${flushing}, pending=${pendingFrames.length}`);
         if (xfReady && xfWs && !flushing) {
           if (pendingFrames.length > 0) {
-            // Flush buffered frames first, then send final frame when done
             console.log(`[streamTranscribe] flushing ${pendingFrames.length} pending frames before final`);
             flushPending(xfWs);
           } else {
             sendPcmFrame(xfWs, Buffer.alloc(0), true);
             console.log(`[streamTranscribe] sent final frame immediately`);
           }
+        } else if (xfReady && xfWs && flushing) {
+          // Already flushing - the flush will send the final frame when done
+          console.log(`[streamTranscribe] already flushing, final frame will be sent when flush completes`);
         } else {
+          // Not ready yet - the reconnect handler will send the final frame
           console.log(`[streamTranscribe] deferred final frame (xfReady=${xfReady}, flushing=${flushing}, xfWs=${xfWs ? 'set' : 'null'})`);
         }
-        // If still flushing or connecting, the flush/reconnect handler will send the final frame
         return;
       }
 
@@ -379,7 +390,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
     clientWs.on("close", () => {
       clientClosed = true;
-      clearTimeout(sessionTimeout);
+      flushGeneration++; // invalidate any in-progress flush
       if (xfWs && (xfWs.readyState === WebSocket.OPEN || xfWs.readyState === WebSocket.CONNECTING)) {
         xfWs.close();
       }
@@ -388,7 +399,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     clientWs.on("error", (err) => {
       console.error("[streamTranscribe] client WS error:", err.message);
       clientClosed = true;
-      clearTimeout(sessionTimeout);
+      flushGeneration++;
       if (xfWs) xfWs.close();
     });
   });
