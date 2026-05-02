@@ -2112,3 +2112,13 @@
 - [x] generateMinutes 过程支持传入 toolId（llmToolId）
 - [x] 使用选定 LLM 工具调用大模型生成纪要（invokeLLMWithUserTool 第三参数传入 toolId）
 - [x] 7 个 vitest 测试全部通过
+
+## Bug 修复：讯飞实时转写有调用记录但无文字（第二轮）
+- [x] 修复 AppID/APISecret 凭证填写错误（数据库 configJson 中 appId 和 apiSecret 字段值互换）
+- [x] 验证讯飞 WS 连接成功（code=0, message=success）
+- [x] 修复 AudioContext 强制 16000Hz 导致麦克风静音（改用系统默认采样率，AudioWorklet 内部重采样）
+- [x] 修复 getUserMedia sampleRate 约束导致静音流（移除 sampleRate 约束）
+- [x] 修复 source.connect 在 ws.onopen 内导致麦克风不采集（移到 ws.onopen 外立即执行）
+- [x] 修复 flush 速率过快导致讯飞关闭会话（按 40ms 间隔发送缓存帧）
+- [x] 修复 END 信号在 flush 期间丢失（flush 完成后自动发送结束帧）
+- [x] 实时转写成功验证（文字实时出现）

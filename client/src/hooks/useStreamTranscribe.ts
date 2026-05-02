@@ -102,8 +102,10 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     // 1. Get microphone access
     let stream: MediaStream;
     try {
+      // 不指定 sampleRate 约束，避免浏览器返回静音虚拟流
+      // 实际采样率将由 AudioWorklet 内部降采样处理
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
     } catch (e) {
       setIsConnecting(false);
@@ -113,7 +115,10 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     streamRef.current = stream;
 
     // 2. Create AudioContext + AudioWorklet
-    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    // 不强制 16000Hz，使用系统默认采样率（通常 48000Hz）
+    // 强制 16000Hz 会导致浏览器重采样 bug，使得 AudioWorklet 收到静音数据
+    // AudioWorklet 内部会根据实际采样率做降采样到 16kHz
+    const audioCtx = new AudioContext();
     audioContextRef.current = audioCtx;
 
     try {
@@ -125,11 +130,15 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       return;
     }
 
+    // 确保 AudioContext 处于运行状态（浏览器自动播放策略可能导致 suspended）
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+
     const source = audioCtx.createMediaStreamSource(stream);
     const workletNode = new AudioWorkletNode(audioCtx, "pcm-processor");
     workletNodeRef.current = workletNode;
-    // 将实际采样率发给 AudioWorklet（Chrome 可能忽略 AudioContext sampleRate 参数）
-    console.log("[streamTranscribe] AudioContext sampleRate:", audioCtx.sampleRate);
+    // 将实际采样率发给 AudioWorklet
     workletNode.port.postMessage({ type: 'init', sampleRate: audioCtx.sampleRate });
 
     // 3. Connect WebSocket
@@ -141,16 +150,20 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     // Sentence accumulator for wpgs dynamic correction
     const sentences = new Map<number, string>();
 
-    ws.onopen = () => {
-      // Start piping PCM frames from worklet to WS
-      workletNode.port.onmessage = (e: MessageEvent<ArrayBuffer>) => {
-        if (pausedRef.current) return;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(e.data);
-        }
-      };
-      source.connect(workletNode);
-      workletNode.connect(audioCtx.destination); // needed to keep worklet running (silent)
+    // 立即连接音频图，不等待 WS 连接成功
+    // 这样音频采集和 WS 连接并行，避免 WS 失败导致音频采集不工作
+    source.connect(workletNode);
+    workletNode.connect(audioCtx.destination); // needed to keep worklet running (silent)
+
+    // 处理 AudioWorklet 发来的消息（PCM 帧）
+    workletNode.port.onmessage = (e: MessageEvent) => {
+      // Ignore debug messages from worklet
+      if (e.data && typeof e.data === 'object' && e.data.type === 'debug') return;
+      // PCM ArrayBuffer frame
+      if (pausedRef.current) return;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(e.data as ArrayBuffer);
+      }
     };
 
     ws.onmessage = (e) => {

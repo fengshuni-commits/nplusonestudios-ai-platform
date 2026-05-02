@@ -4,7 +4,7 @@
  * 架构：Browser WS → 本服务 → 讯飞 IAT WS
  *
  * 协议（Browser → Server）：
- *   - 连接时 URL 携带 ?toolId=<number>&token=<jwt>
+ *   - 连接时 URL 携带 ?toolId=<number>
  *   - 二进制帧：原始 PCM 16kHz 16bit mono 音频数据（来自 AudioWorklet）
  *   - 文本帧 "END"：通知服务器录音结束，发送最后一帧给讯飞
  *
@@ -13,6 +13,11 @@
  *   - { type: "final",   text: "..." }  已确认的识别结果
  *   - { type: "error",   message: "..." }
  *   - { type: "ready" }  连接讯飞成功，可以开始发送音频
+ *
+ * 关键设计：
+ *   - 讯飞 WS 连接可能需要 3-5 秒（服务器在境外），期间 PCM 帧缓存在 pendingFrames
+ *   - 连接建立后，按 40ms 间隔 flush 缓存帧（模拟实时流速率）
+ *   - flush 期间若收到 END 信号，等 flush 完成后再发结束帧
  */
 
 import crypto from "crypto";
@@ -24,6 +29,7 @@ import type { XfyunCredentials } from "./_core/xfyunTranscription";
 const XFYUN_HOST = "iat-api.xfyun.cn";
 const XFYUN_PATH = "/v2/iat";
 const FRAME_SIZE = 1280; // 40ms @ 16kHz 16bit mono
+const FRAME_INTERVAL_MS = 40; // 40ms between frames
 const SESSION_TIMEOUT_MS = 120_000; // 2 minutes max
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
@@ -81,7 +87,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       const { getDb, getDefaultToolForCapability } = await import("./db");
       const { decryptApiKey } = await import("./_core/crypto");
       const db = await getDb();
-      // 优先使用 URL 参数中的 toolId，否则自动读取 speech_transcription 默认工具
       const toolId = toolIdFromParam ?? (db ? await getDefaultToolForCapability("speech_transcription") : null);
       if (db && toolId) {
         const { aiTools } = await import("../drizzle/schema");
@@ -89,8 +94,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         const rows = await db.select().from(aiTools).where(eq(aiTools.id, toolId)).limit(1);
         if (rows.length > 0) {
           const tool = rows[0];
-          // Drizzle ORM 的 json 类型字段会自动解析为对象，无需再次 JSON.parse
-          // 兼容旧数据（字符串格式）
           const rawConfig = tool.configJson;
           const configJson: Record<string, unknown> = rawConfig
             ? (typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig as Record<string, unknown>)
@@ -114,16 +117,13 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       return;
     }
 
-    // ── Connect to Xfyun ──────────────────────────────────────────────────
-    const xfUrl = buildXfyunUrl(creds);
-    const xfWs = new WebSocket(xfUrl);
-
+    // ── State ─────────────────────────────────────────────────────────────
     let xfReady = false;
     let frameIndex = 0;
-    let ended = false;
-    // Buffer PCM frames received before xfyun is ready
+    let ended = false;           // client sent END signal
+    let flushing = false;        // currently flushing pending frames
+    let flushDone = false;       // flush completed
     const pendingFrames: Buffer[] = [];
-    // Accumulate partial text for wpgs dynamic correction
     const partialTexts: Map<number, string> = new Map();
 
     const sessionTimeout = setTimeout(() => {
@@ -131,6 +131,11 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       clientWs.close();
       xfWs.close();
     }, SESSION_TIMEOUT_MS);
+
+    // ── Connect to Xfyun ──────────────────────────────────────────────────
+    const xfUrl = buildXfyunUrl(creds);
+    const xfWs = new WebSocket(xfUrl);
+
 
     // ── Send PCM frame to Xfyun ───────────────────────────────────────────
     function sendPcmFrame(pcmChunk: Buffer, isLast = false) {
@@ -150,7 +155,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           domain: "iat",
           accent: "mandarin",
           vad_eos: 5000,
-          dwa: "wpgs", // 动态修正，支持 partial 结果
+          dwa: "wpgs",
         };
       }
 
@@ -158,12 +163,34 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       frameIndex++;
     }
 
-    // ── Flush pending frames ──────────────────────────────────────────────
+    // ── Flush pending frames with rate limiting ───────────────────────────
+    // 按 40ms 间隔发送缓存帧，模拟实时流速率
+    // flush 完成后，若 END 信号已到达，自动发送结束帧
     function flushPending() {
-      for (const frame of pendingFrames) {
-        sendPcmFrame(frame);
-      }
+      if (flushing) return;
+      const frames = [...pendingFrames];
       pendingFrames.length = 0;
+      if (frames.length === 0) {
+        flushDone = true;
+        if (ended) sendPcmFrame(Buffer.alloc(0), true);
+        return;
+      }
+      flushing = true;
+      let i = 0;
+      function sendNext() {
+        if (i >= frames.length) {
+          flushing = false;
+          flushDone = true;
+          // If END arrived during flush, send final frame now
+          if (ended) {
+            sendPcmFrame(Buffer.alloc(0), true);
+          }
+          return;
+        }
+        sendPcmFrame(frames[i++]);
+        setTimeout(sendNext, FRAME_INTERVAL_MS);
+      }
+      sendNext();
     }
 
     // ── Xfyun events ──────────────────────────────────────────────────────
@@ -171,10 +198,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       xfReady = true;
       send(clientWs, { type: "ready" });
       flushPending();
-      // If client already sent END before xfyun was ready
-      if (ended) {
-        sendPcmFrame(Buffer.alloc(0), true);
-      }
     });
 
     xfWs.on("message", (data: WebSocket.RawData) => {
@@ -186,16 +209,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           data?: {
             result?: {
               ws?: Array<{ cw: Array<{ w: string; wp?: string }> }>;
-              pgs?: "apd" | "rpl"; // append or replace
-              rg?: [number, number]; // replace range
-              sn?: number; // sentence index
+              pgs?: "apd" | "rpl";
+              rg?: [number, number];
+              sn?: number;
             };
             status?: number;
           };
         };
 
         if (msg.code !== 0) {
-          send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
+            send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
           return;
         }
 
@@ -207,19 +230,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             .join("");
 
           if (result.pgs === "rpl" && result.rg) {
-            // Replace mode: remove sentences in range and replace with new text
             const [from, to] = result.rg;
             for (let i = from; i <= to; i++) partialTexts.delete(i);
             partialTexts.set(sn, text);
             send(clientWs, { type: "partial", text, sn, pgs: "rpl", rg: result.rg });
           } else {
-            // Append mode
             partialTexts.set(sn, text);
             send(clientWs, { type: "partial", text, sn, pgs: "apd" });
           }
-        }
+            }
 
-        // status=2 means recognition complete
         if (msg.data?.status === 2) {
           const finalText = Array.from(partialTexts.values()).join("");
           send(clientWs, { type: "final", text: finalText });
@@ -232,6 +252,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     });
 
     xfWs.on("error", (err) => {
+      console.error(`[streamTranscribe] xfyun WS ERROR: ${err.message}`);
       send(clientWs, { type: "error", message: `讯飞连接错误: ${err.message}` });
       clearTimeout(sessionTimeout);
       clientWs.close();
@@ -243,24 +264,44 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
     // ── Client events ─────────────────────────────────────────────────────
     clientWs.on("message", (data: WebSocket.RawData) => {
-      if (typeof data === "string" || (data instanceof Buffer && data.length < 20 && data.toString().trim() === "END")) {
-        // End signal
+      // Detect END signal
+      const isString = typeof data === "string";
+      const isBuffer = data instanceof Buffer;
+      const isSmall = isBuffer && (data as Buffer).length < 20;
+      const isEnd = isString
+        ? (data as string).trim() === "END"
+        : (isSmall && (data as Buffer).toString().trim() === "END");
+
+      if (isEnd) {
         ended = true;
-        if (xfReady) {
+        // Only send final frame if flush is already done (or never started)
+        if (xfReady && !flushing) {
           sendPcmFrame(Buffer.alloc(0), true);
         }
+        // If still flushing, the flush completion handler will send the final frame
         return;
       }
 
-      // Binary PCM data - split into FRAME_SIZE chunks
-      const pcm = data instanceof Buffer ? data : Buffer.from(data as ArrayBuffer);
+      // Binary PCM data
+      let pcm: Buffer;
+      if (isBuffer) {
+        pcm = data as Buffer;
+      } else if (data instanceof ArrayBuffer) {
+        pcm = Buffer.from(data);
+      } else {
+        pcm = Buffer.concat(data as Buffer[]);
+      }
+
+      // Split into FRAME_SIZE chunks and forward
       let offset = 0;
       while (offset < pcm.length) {
         const chunk = pcm.subarray(offset, offset + FRAME_SIZE);
         offset += FRAME_SIZE;
-        if (xfReady) {
+        if (xfReady && !flushing) {
+          // Flush done, send directly in real-time
           sendPcmFrame(chunk);
         } else {
+          // Still connecting or flushing, buffer the frame
           pendingFrames.push(chunk);
         }
       }
