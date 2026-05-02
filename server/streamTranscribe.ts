@@ -34,7 +34,6 @@ const FRAME_INTERVAL_MS = 40; // 40ms between frames
 // When flushing buffered frames, send multiple frames per tick to catch up faster.
 // Sending 4 frames per 40ms = 160ms of audio per tick = 4x real-time catch-up speed.
 const FLUSH_FRAMES_PER_TICK = 4;
-const SESSION_TIMEOUT_MS = 30 * 60_000; // 30 minutes max per overall session
 const MAX_XFYUN_RETRIES = 3; // max retries on connection failure
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
@@ -128,10 +127,9 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     const pendingFrames: Buffer[] = [];  // frames buffered before xfyun ready
     let xfyunRetryCount = 0;     // number of xfyun connection retries
 
-    const sessionTimeout = setTimeout(() => {
-      send(clientWs, { type: "error", message: "转写会话超时（最长 2 分钟）" });
-      clientWs.close();
-    }, SESSION_TIMEOUT_MS);
+    // No hard session timeout - recording can run as long as needed.
+    // The client is responsible for calling stop() to end the session.
+    const sessionTimeout: ReturnType<typeof setTimeout> | undefined = undefined;
 
     // ── Xfyun sub-session (auto-reconnects when status=2 or on error) ──────
     let xfWs: WebSocket | null = null;
