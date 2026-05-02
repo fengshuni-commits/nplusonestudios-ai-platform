@@ -109,7 +109,6 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     };
 
     ws.onmessage = (e) => {
-      if (!recordingActiveRef.current) return; // ignore messages before recording starts
       try {
         const msg = JSON.parse(e.data as string) as {
           type: "ready" | "partial" | "final" | "error";
@@ -121,10 +120,15 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
         };
 
         if (msg.type === "ready") {
-          setIsReady(true);
-          setIsConnecting(false);
-          onReadyRef.current?.();
+          // Always handle ready - even before recording starts (pre-connection)
+          preConnectedRef.current = true;
+          if (recordingActiveRef.current) {
+            setIsReady(true);
+            setIsConnecting(false);
+            onReadyRef.current?.();
+          }
         } else if (msg.type === "partial") {
+          if (!recordingActiveRef.current) return; // ignore data before recording starts
           const sn = msg.sn ?? 0;
           const text = msg.text ?? "";
           const pgs = msg.pgs ?? "apd";
@@ -272,10 +276,13 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     if (preConnectRef.current && preConnectRef.current.readyState === WebSocket.OPEN) {
       ws = preConnectRef.current;
       preConnectRef.current = null;
-      // Already connected - signal ready immediately
-      setIsReady(true);
-      setIsConnecting(false);
-      onReady?.();
+      // If xfyun is already ready (pre-connection received ready msg), signal immediately
+      if (preConnectedRef.current) {
+        setIsReady(true);
+        setIsConnecting(false);
+        onReady?.();
+      }
+      // Otherwise wait for the ready message from server
     } else if (preConnectRef.current && preConnectRef.current.readyState === WebSocket.CONNECTING) {
       // Still connecting - wait for it
       ws = preConnectRef.current;

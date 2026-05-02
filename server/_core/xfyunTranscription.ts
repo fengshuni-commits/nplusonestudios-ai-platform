@@ -159,7 +159,7 @@ export async function xfyunTranscribe(
     // 超时保护：60 秒
     const timeout = setTimeout(() => {
       finish({ error: "讯飞转写超时", code: "TIMEOUT" });
-    }, 60_000);
+    }, 120_000); // 120s timeout for file transcription
 
     ws.on("open", () => {
       // 发送第一帧（包含业务参数）

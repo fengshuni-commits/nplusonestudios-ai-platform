@@ -1,5 +1,5 @@
 /**
- * 实时流式转写 WebSocket 服务
+ * 实时语音转写 WebSocket 服务
  *
  * 架构：Browser WS → 本服务 → 讯飞 IAT WS
  *
@@ -19,8 +19,8 @@
  *   - 连接建立后，按 40ms 间隔 flush 缓存帧（模拟实时流速率）
  *   - flush 期间若收到 END 信号，等 flush 完成后再发结束帧
  *   - 讯飞单次会话约 60 秒后自动结束（status=2），自动开启新会话续接
+ *   - 讯飞连接失败时，自动重试最多 3 次（指数退避：1.5s, 3s, 6s）
  */
-
 import crypto from "crypto";
 import WebSocket, { WebSocketServer } from "ws";
 import type { Server as HttpServer } from "http";
@@ -32,6 +32,7 @@ const XFYUN_PATH = "/v2/iat";
 const FRAME_SIZE = 1280; // 40ms @ 16kHz 16bit mono
 const FRAME_INTERVAL_MS = 40; // 40ms between frames
 const SESSION_TIMEOUT_MS = 120_000; // 2 minutes max per overall session
+const MAX_XFYUN_RETRIES = 3; // max retries on connection failure
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
   const date = new Date().toUTCString();
@@ -122,20 +123,21 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     let ended = false;           // client sent END signal
     let clientClosed = false;    // client WS closed
     const pendingFrames: Buffer[] = [];  // frames buffered before xfyun ready
+    let xfyunRetryCount = 0;     // number of xfyun connection retries
 
     const sessionTimeout = setTimeout(() => {
       send(clientWs, { type: "error", message: "转写会话超时（最长 2 分钟）" });
       clientWs.close();
     }, SESSION_TIMEOUT_MS);
 
-    // ── Xfyun sub-session (auto-reconnects when status=2) ─────────────────
+    // ── Xfyun sub-session (auto-reconnects when status=2 or on error) ──────
     let xfWs: WebSocket | null = null;
     let xfReady = false;
     let frameIndex = 0;
     let flushing = false;
     const partialTexts: Map<number, string> = new Map();
 
-    function connectXfyun() {
+    function connectXfyun(isRetry = false) {
       if (clientClosed) return;
       xfReady = false;
       flushing = false;
@@ -148,6 +150,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
       ws.on("open", () => {
         if (clientClosed) { ws.close(); return; }
+        xfyunRetryCount = 0; // reset retry count on successful connection
         xfReady = true;
         send(clientWs, { type: "ready" });
         flushPending(ws);
@@ -172,7 +175,22 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           };
 
           if (msg.code !== 0) {
-            send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
+            console.error(`[streamTranscribe] xfyun error code ${msg.code}: ${msg.message}`);
+            // code 10008 = service instance invalid (concurrent limit)
+            // code 10160 = request timeout
+            // code 10313 = app_id not found
+            // These are potentially recoverable - retry
+            const recoverableCodes = [10008, 10160];
+            if (recoverableCodes.includes(msg.code) && xfyunRetryCount < MAX_XFYUN_RETRIES && !ended) {
+              xfyunRetryCount++;
+              const delay = Math.pow(2, xfyunRetryCount - 1) * 1000; // 1s, 2s, 4s
+              console.log(`[streamTranscribe] retrying xfyun connection (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
+              send(clientWs, { type: "error", message: `讯飞连接重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
+              ws.close();
+              setTimeout(() => connectXfyun(true), delay);
+            } else {
+              send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
+            }
             return;
           }
 
@@ -182,7 +200,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             const text = (result.ws || [])
               .flatMap((item) => item.cw.map((cw) => cw.w))
               .join("");
-
             if (result.pgs === "rpl" && result.rg) {
               const [from, to] = result.rg;
               for (let i = from; i <= to; i++) partialTexts.delete(i);
@@ -201,7 +218,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
               send(clientWs, { type: "final", text: finalText });
             }
             ws.close();
-
             // Auto-reconnect if client hasn't ended recording
             if (!ended && !clientClosed) {
               setTimeout(() => connectXfyun(), 100);
@@ -214,9 +230,20 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
       ws.on("error", (err) => {
         console.error(`[streamTranscribe] xfyun WS ERROR: ${err.message}`);
-        send(clientWs, { type: "error", message: `讯飞连接错误: ${err.message}` });
-        clearTimeout(sessionTimeout);
-        clientWs.close();
+        // Retry on connection failure
+        if (xfyunRetryCount < MAX_XFYUN_RETRIES && !ended && !clientClosed) {
+          xfyunRetryCount++;
+          const delay = Math.pow(2, xfyunRetryCount - 1) * 1500; // 1.5s, 3s, 6s
+          console.log(`[streamTranscribe] retrying xfyun WS (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
+          send(clientWs, { type: "error", message: `讯飞连接失败，重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
+          setTimeout(() => connectXfyun(true), delay);
+        } else {
+          // All retries exhausted - notify client but DON'T close the client WS
+          // The client can still use Whisper fallback
+          console.error(`[streamTranscribe] xfyun all retries exhausted`);
+          send(clientWs, { type: "error", message: `讯飞连接失败（已重试 ${MAX_XFYUN_RETRIES} 次）: ${err.message}` });
+          // Don't call clientWs.close() here - let client decide what to do
+        }
       });
 
       ws.on("close", () => {
@@ -227,14 +254,11 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     // ── Send PCM frame to Xfyun ───────────────────────────────────────────
     function sendPcmFrame(ws: WebSocket, pcmChunk: Buffer, isLast = false) {
       if (ws.readyState !== WebSocket.OPEN) return;
-
       const audio = pcmChunk.toString("base64");
       const status = isLast ? 2 : (frameIndex === 0 ? 0 : 1);
-
       const payload: Record<string, unknown> = {
         data: { status, format: "audio/L16;rate=16000", encoding: "raw", audio },
       };
-
       if (frameIndex === 0) {
         payload.common = { app_id: creds!.appId };
         payload.business = {
@@ -245,7 +269,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           dwa: "wpgs",
         };
       }
-
       ws.send(JSON.stringify(payload));
       frameIndex++;
     }

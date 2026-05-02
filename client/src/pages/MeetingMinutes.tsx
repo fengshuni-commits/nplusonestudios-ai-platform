@@ -79,7 +79,14 @@ export default function MeetingMinutes() {
     },
     onError: (msg) => {
       console.warn("[streamTranscribe] error:", msg);
-      // Fall back silently - the old 15s segment method continues in parallel
+      // Show retry messages to user; final failure shows warning
+      if (msg.includes("重试中")) {
+        // Transient retry - show brief info (don't spam)
+        toast.info(msg, { id: "xfyun-retry", duration: 2000 });
+      } else if (msg.includes("已重试") || msg.includes("连接失败")) {
+        // All retries exhausted - warn user, fallback to 15s Whisper segments
+        toast.warning("讯飞连接失败，已切换为 Whisper 转写（每 15 秒更新一次）", { id: "xfyun-fail", duration: 5000 });
+      }
     },
     onReady: () => {
       console.log("[streamTranscribe] ready");
@@ -139,6 +146,31 @@ export default function MeetingMinutes() {
     });
   }, []);
 
+  // Known Whisper hallucination strings to filter out
+  const WHISPER_HALLUCINATIONS = [
+    "请大家记得点赞",
+    "感谢观看",
+    "订阅频道",
+    "下期再见",
+    "谢谢观看",
+    "欢迎关注",
+    "记得点赞",
+    "请订阅",
+    "拜拜",
+    "Thank you for watching",
+    "Please subscribe",
+    "Don't forget to like",
+    "See you next time",
+  ];
+  const filterHallucinations = useCallback((text: string): string => {
+    const trimmed = text.trim();
+    if (!trimmed) return "";
+    // Filter if the text is ONLY hallucination content (not mixed with real content)
+    const isHallucination = WHISPER_HALLUCINATIONS.some(h => trimmed.includes(h));
+    if (isHallucination && trimmed.length < 50) return ""; // short hallucination-only text
+    return trimmed;
+  }, []);
+
   // Process a chunk of audio: upload → transcribe → append
   const processAudioChunk = useCallback(async (chunks: Blob[], rawMimeType: string) => {
     if (chunks.length === 0) return;
@@ -174,7 +206,8 @@ export default function MeetingMinutes() {
         language: "zh",
         toolId: speechToolId,
       });
-      const fullText = transcribeResult.text?.trim() ?? "";
+      const rawText = transcribeResult.text?.trim() ?? "";
+      const fullText = filterHallucinations(rawText);
       if (fullText) {
         // When sending full accumulated audio (fallback mode), Whisper returns the
         // entire transcript from the beginning. Only append the NEW portion that
@@ -204,7 +237,7 @@ export default function MeetingMinutes() {
       setIsProcessingSegment(false);
       setPendingSegments(c => Math.max(0, c - 1));
     }
-  }, [uploadAudio, transcribeMutation, blobToBase64]);
+  }, [uploadAudio, transcribeMutation, blobToBase64, filterHallucinations]);
 
   const startSegmentTimer = useCallback((recorder: MediaRecorder, mimeType: string) => {
     segmentTimerRef.current = setInterval(() => {
@@ -336,7 +369,7 @@ export default function MeetingMinutes() {
     streamTranscribe.stop();
     setStreamingPartial("");
     setRecordingState("idle");
-    toast.success("录音已停止，正在转录最后一段音频…");
+    toast.success("录音已停止");
   }, [clearTimers]);
 
   // Cleanup on unmount: stop timers, release mic, revoke Blob URL
