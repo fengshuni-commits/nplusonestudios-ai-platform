@@ -26,6 +26,7 @@ const FRAME_INTERVAL_MS = 40;   // 40ms between frames
 // Send 4 frames per tick when flushing = 4x real-time catch-up speed
 const FLUSH_FRAMES_PER_TICK = 4;
 const MAX_XFYUN_RETRIES = 5;    // max retries on connection failure (increased from 3)
+const MAX_PENDING_FRAMES = 500;  // max buffered frames (~20s audio); older frames dropped to prevent OOM
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
   const date = new Date().toUTCString();
@@ -319,7 +320,20 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           setTimeout(() => connectXfyun(true), delay);
         } else {
           console.error(`[streamTranscribe] xfyun all retries exhausted`);
-          send(clientWs, { type: "error", message: `讯飞连接失败（已重试 ${MAX_XFYUN_RETRIES} 次）: ${err.message}` });
+          send(clientWs, { type: "error", message: `讯飞连接暂时不可用，将在30秒后自动重试...` });
+          // Clear pending buffer to prevent OOM
+          pendingFrames.length = 0;
+          // Schedule a full reconnect attempt after 30s cooldown
+          if (!ended && !clientClosed) {
+            xfyunRetryCount = 0; // reset for fresh retry sequence
+            console.log(`[streamTranscribe] scheduling reconnect after 30s cooldown`);
+            setTimeout(() => {
+              if (!ended && !clientClosed) {
+                console.log(`[streamTranscribe] attempting reconnect after cooldown`);
+                connectXfyun();
+              }
+            }, 30000);
+          }
         }
       });
 
@@ -358,8 +372,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         } else if (xfReady && xfWs && flushing) {
           // Already flushing - the flush will send the final frame when done
           console.log(`[streamTranscribe] already flushing, final frame will be sent when flush completes`);
+        } else if (!xfWs) {
+          // xfWs is null - connection is down, can't send final frame
+          // Send empty final to let client know recording has ended
+          console.log(`[streamTranscribe] deferred final frame (xfReady=${xfReady}, flushing=${flushing}, xfWs=null) - sending empty final`);
+          pendingFrames.length = 0; // clear buffer since we can't send it
+          if (!clientClosed) {
+            send(clientWs, { type: "final", text: Array.from(partialTexts.values()).join("") });
+          }
         } else {
-          // Not ready yet - the reconnect handler will send the final frame
+          // Not ready yet (connecting) - the reconnect handler will send the final frame
           console.log(`[streamTranscribe] deferred final frame (xfReady=${xfReady}, flushing=${flushing}, xfWs=${xfWs ? 'set' : 'null'})`);
         }
         return;
@@ -384,6 +406,10 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           sendPcmFrame(xfWs, chunk);
         } else {
           pendingFrames.push(chunk);
+          // Cap buffer to prevent OOM when xfyun is down for extended period
+          if (pendingFrames.length > MAX_PENDING_FRAMES) {
+            pendingFrames.shift(); // drop oldest frame
+          }
         }
       }
     });
