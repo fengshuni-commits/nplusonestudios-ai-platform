@@ -181,12 +181,15 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             console.error(`[streamTranscribe] xfyun error code ${msg.code}: ${msg.message}`);
             // code 10008 = service instance invalid (concurrent limit)
             // code 10160 = request timeout
+            // code 10165 = invalid handle (session frequency limit - wait and retry)
             // code 10313 = app_id not found
             // These are potentially recoverable - retry
-            const recoverableCodes = [10008, 10160];
+            const recoverableCodes = [10008, 10160, 10165];
             if (recoverableCodes.includes(msg.code) && xfyunRetryCount < MAX_XFYUN_RETRIES && !ended) {
               xfyunRetryCount++;
-              const delay = Math.pow(2, xfyunRetryCount - 1) * 1000; // 1s, 2s, 4s
+              // Use longer delay for frequency limit errors (10165)
+              const baseDelay = msg.code === 10165 ? 3000 : 1000;
+              const delay = Math.pow(2, xfyunRetryCount - 1) * baseDelay; // 3s, 6s, 12s for 10165
               console.log(`[streamTranscribe] retrying xfyun connection (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
               send(clientWs, { type: "error", message: `讯飞连接重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
               ws.close();
@@ -217,13 +220,18 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           if (msg.data?.status === 2) {
             // Session ended by xfyun (60s limit or silence)
             const finalText = Array.from(partialTexts.values()).join("");
+            console.log(`[streamTranscribe] xfyun status=2, ended=${ended}, textLen=${finalText.length}`);
             if (finalText.trim()) {
               send(clientWs, { type: "final", text: finalText });
             }
             ws.close();
             // Auto-reconnect if client hasn't ended recording
+            // Use 1.5s delay to avoid triggering xfyun frequency limits (10165)
             if (!ended && !clientClosed) {
-              setTimeout(() => connectXfyun(), 100);
+              console.log(`[streamTranscribe] auto-reconnecting xfyun in 1500ms`);
+              setTimeout(() => connectXfyun(), 1500);
+            } else {
+              console.log(`[streamTranscribe] session ended, not reconnecting (ended=${ended})`);
             }
           }
         } catch (e) {
@@ -268,7 +276,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           language: "zh_cn",
           domain: "iat",
           accent: "mandarin",
-          vad_eos: 3000, // 3s silence to end session (was 5s)
+          vad_eos: 5000, // 5s silence to end session (reduces reconnect frequency)
           dwa: "wpgs",
         };
       }
@@ -297,7 +305,10 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             pendingFrames.length = 0;
             for (const f of extra) sendPcmFrame(ws, f);
           }
-          if (ended) sendPcmFrame(ws, Buffer.alloc(0), true);
+          if (ended) {
+            console.log(`[streamTranscribe] flushPending done, sending final frame`);
+            sendPcmFrame(ws, Buffer.alloc(0), true);
+          }
           return;
         }
         // Send multiple frames per tick to flush buffered audio faster
@@ -325,8 +336,12 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
       if (isEnd) {
         ended = true;
+        console.log(`[streamTranscribe] END received: xfReady=${xfReady}, flushing=${flushing}, pending=${pendingFrames.length}`);
         if (xfReady && xfWs && !flushing) {
           sendPcmFrame(xfWs, Buffer.alloc(0), true);
+          console.log(`[streamTranscribe] sent final frame immediately`);
+        } else {
+          console.log(`[streamTranscribe] deferred final frame (xfReady=${xfReady}, flushing=${flushing})`);
         }
         // If still flushing or connecting, the flush/reconnect handler will send the final frame
         return;
