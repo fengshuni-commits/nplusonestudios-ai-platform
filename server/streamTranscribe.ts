@@ -256,7 +256,10 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       });
 
       ws.on("close", () => {
-        if (xfWs === ws) xfWs = null;
+        if (xfWs === ws) {
+          xfWs = null;
+          xfReady = false; // reset so new frames go to pendingFrames until reconnect
+        }
       });
     }
 
@@ -336,10 +339,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         ended = true;
         console.log(`[streamTranscribe] END received: xfReady=${xfReady}, flushing=${flushing}, pending=${pendingFrames.length}`);
         if (xfReady && xfWs && !flushing) {
-          sendPcmFrame(xfWs, Buffer.alloc(0), true);
-          console.log(`[streamTranscribe] sent final frame immediately`);
+          if (pendingFrames.length > 0) {
+            // Flush buffered frames first, then send final frame when done
+            console.log(`[streamTranscribe] flushing ${pendingFrames.length} pending frames before final`);
+            flushPending(xfWs);
+          } else {
+            sendPcmFrame(xfWs, Buffer.alloc(0), true);
+            console.log(`[streamTranscribe] sent final frame immediately`);
+          }
         } else {
-          console.log(`[streamTranscribe] deferred final frame (xfReady=${xfReady}, flushing=${flushing})`);
+          console.log(`[streamTranscribe] deferred final frame (xfReady=${xfReady}, flushing=${flushing}, xfWs=${xfWs ? 'set' : 'null'})`);
         }
         // If still flushing or connecting, the flush/reconnect handler will send the final frame
         return;
