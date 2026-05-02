@@ -128,6 +128,9 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     const source = audioCtx.createMediaStreamSource(stream);
     const workletNode = new AudioWorkletNode(audioCtx, "pcm-processor");
     workletNodeRef.current = workletNode;
+    // 将实际采样率发给 AudioWorklet（Chrome 可能忽略 AudioContext sampleRate 参数）
+    console.log("[streamTranscribe] AudioContext sampleRate:", audioCtx.sampleRate);
+    workletNode.port.postMessage({ type: 'init', sampleRate: audioCtx.sampleRate });
 
     // 3. Connect WebSocket
     const wsUrl = buildWsUrl();
