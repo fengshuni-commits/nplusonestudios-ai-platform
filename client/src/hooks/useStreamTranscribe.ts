@@ -5,6 +5,7 @@
  * - 通过 AudioWorklet 采集麦克风 PCM 帧
  * - 通过 WebSocket 发送到后端 /api/transcribe-stream
  * - 实时接收识别结果并回调
+ * - 支持预连接（toolId 设置后提前建立 WS 连接，减少录音开始时的延迟）
  *
  * 使用方式：
  *   const { start, stop, pause, resume, isReady, streamingText } = useStreamTranscribe({
@@ -15,7 +16,7 @@
  *   });
  */
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 
 export interface StreamTranscribeOptions {
   toolId?: number;
@@ -47,21 +48,142 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pausedRef = useRef(false);
+  const preConnectedRef = useRef(false);  // WS pre-connected before recording starts
+  const recordingActiveRef = useRef(false); // recording is active
+
+  // Callbacks refs to avoid stale closures in pre-connected WS handlers
+  const onPartialRef = useRef(onPartial);
+  const onFinalRef = useRef(onFinal);
+  const onErrorRef = useRef(onError);
+  const onReadyRef = useRef(onReady);
+  useEffect(() => { onPartialRef.current = onPartial; }, [onPartial]);
+  useEffect(() => { onFinalRef.current = onFinal; }, [onFinal]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   // Build WebSocket URL
-  const buildWsUrl = useCallback(() => {
+  const buildWsUrl = useCallback((tid?: number) => {
     const loc = window.location;
     const proto = loc.protocol === "https:" ? "wss:" : "ws:";
     const params = new URLSearchParams();
-    if (toolId) params.set("toolId", String(toolId));
+    const id = tid ?? toolId;
+    if (id) params.set("toolId", String(id));
     return `${proto}//${loc.host}/api/transcribe-stream?${params.toString()}`;
   }, [toolId]);
 
-  const stop = useCallback(() => {
-    // Send END signal to server
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send("END");
+  // ── Pre-connect WS when toolId is set ─────────────────────────────────
+  // This reduces the initial delay when user clicks record
+  const preConnectRef = useRef<WebSocket | null>(null);
+  const preConnectToolIdRef = useRef<number | undefined>(undefined);
+  const preConnectSentencesRef = useRef<Map<number, string>>(new Map());
+
+  const closePreConnect = useCallback(() => {
+    if (preConnectRef.current) {
+      preConnectRef.current.close();
+      preConnectRef.current = null;
     }
+    preConnectedRef.current = false;
+    preConnectSentencesRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    if (!toolId) {
+      closePreConnect();
+      return;
+    }
+    // Don't pre-connect if already recording
+    if (recordingActiveRef.current) return;
+    // Don't re-connect if same toolId
+    if (preConnectToolIdRef.current === toolId && preConnectRef.current?.readyState === WebSocket.OPEN) return;
+
+    closePreConnect();
+    preConnectToolIdRef.current = toolId;
+
+    const wsUrl = buildWsUrl(toolId);
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = "arraybuffer";
+    preConnectRef.current = ws;
+
+    ws.onopen = () => {
+      // WS connected but not yet recording - wait for start() to attach audio
+    };
+
+    ws.onmessage = (e) => {
+      if (!recordingActiveRef.current) return; // ignore messages before recording starts
+      try {
+        const msg = JSON.parse(e.data as string) as {
+          type: "ready" | "partial" | "final" | "error";
+          text?: string;
+          message?: string;
+          sn?: number;
+          pgs?: "apd" | "rpl";
+          rg?: [number, number];
+        };
+
+        if (msg.type === "ready") {
+          setIsReady(true);
+          setIsConnecting(false);
+          onReadyRef.current?.();
+        } else if (msg.type === "partial") {
+          const sn = msg.sn ?? 0;
+          const text = msg.text ?? "";
+          const pgs = msg.pgs ?? "apd";
+          const sentences = preConnectSentencesRef.current;
+
+          if (pgs === "rpl" && msg.rg) {
+            const [from, to] = msg.rg;
+            for (let i = from; i <= to; i++) sentences.delete(i);
+          }
+          sentences.set(sn, text);
+          setStreamingText(text);
+          onPartialRef.current?.(text, sn, pgs, msg.rg);
+        } else if (msg.type === "final") {
+          const finalText = msg.text ?? Array.from(preConnectSentencesRef.current.values()).join("");
+          preConnectSentencesRef.current.clear();
+          setStreamingText("");
+          onFinalRef.current?.(finalText);
+        } else if (msg.type === "error") {
+          onErrorRef.current?.(msg.message ?? "转写错误");
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    ws.onerror = () => {
+      preConnectedRef.current = false;
+    };
+
+    ws.onclose = () => {
+      if (preConnectRef.current === ws) {
+        preConnectRef.current = null;
+        preConnectedRef.current = false;
+      }
+      if (recordingActiveRef.current) {
+        setIsReady(false);
+        setIsConnecting(false);
+      }
+    };
+
+    preConnectedRef.current = true;
+
+    return () => {
+      if (!recordingActiveRef.current) {
+        ws.close();
+        if (preConnectRef.current === ws) preConnectRef.current = null;
+      }
+    };
+  }, [toolId, buildWsUrl, closePreConnect]);
+
+  const stop = useCallback(() => {
+    recordingActiveRef.current = false;
+
+    // Send END signal to server
+    const ws = wsRef.current ?? preConnectRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send("END");
+    }
+
     // Stop AudioWorklet
     if (workletNodeRef.current) {
       workletNodeRef.current.disconnect();
@@ -77,6 +199,13 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+
+    // Move the pre-connected WS to wsRef so it can finish receiving results
+    if (wsRef.current === null && preConnectRef.current) {
+      wsRef.current = preConnectRef.current;
+      preConnectRef.current = null;
+    }
+
     setIsReady(false);
     setIsConnecting(false);
     setStreamingText("");
@@ -91,33 +220,31 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   }, []);
 
   const start = useCallback(async () => {
+    // Clean up any previous session
     if (wsRef.current) {
-      // Already running, clean up first
-      stop();
+      wsRef.current.close();
+      wsRef.current = null;
     }
 
+    recordingActiveRef.current = true;
     setIsConnecting(true);
     setStreamingText("");
 
     // 1. Get microphone access
     let stream: MediaStream;
     try {
-      // 不指定 sampleRate 约束，避免浏览器返回静音虚拟流
-      // 实际采样率将由 AudioWorklet 内部降采样处理
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
     } catch (e) {
       setIsConnecting(false);
+      recordingActiveRef.current = false;
       onError?.("无法访问麦克风，请检查浏览器权限");
       return;
     }
     streamRef.current = stream;
 
     // 2. Create AudioContext + AudioWorklet
-    // 不强制 16000Hz，使用系统默认采样率（通常 48000Hz）
-    // 强制 16000Hz 会导致浏览器重采样 bug，使得 AudioWorklet 收到静音数据
-    // AudioWorklet 内部会根据实际采样率做降采样到 16kHz
     const audioCtx = new AudioContext();
     audioContextRef.current = audioCtx;
 
@@ -125,12 +252,12 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       await audioCtx.audioWorklet.addModule("/pcm-processor.js");
     } catch (e) {
       setIsConnecting(false);
+      recordingActiveRef.current = false;
       onError?.("AudioWorklet 加载失败，请刷新页面重试");
       stream.getTracks().forEach((t) => t.stop());
       return;
     }
 
-    // 确保 AudioContext 处于运行状态（浏览器自动播放策略可能导致 suspended）
     if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
     }
@@ -138,34 +265,36 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     const source = audioCtx.createMediaStreamSource(stream);
     const workletNode = new AudioWorkletNode(audioCtx, "pcm-processor");
     workletNodeRef.current = workletNode;
-    // 将实际采样率发给 AudioWorklet
     workletNode.port.postMessage({ type: 'init', sampleRate: audioCtx.sampleRate });
 
-    // 3. Connect WebSocket
-    const wsUrl = buildWsUrl();
-    const ws = new WebSocket(wsUrl);
+    // 3. Use pre-connected WS if available, otherwise create new one
+    let ws: WebSocket;
+    if (preConnectRef.current && preConnectRef.current.readyState === WebSocket.OPEN) {
+      ws = preConnectRef.current;
+      preConnectRef.current = null;
+      // Already connected - signal ready immediately
+      setIsReady(true);
+      setIsConnecting(false);
+      onReady?.();
+    } else if (preConnectRef.current && preConnectRef.current.readyState === WebSocket.CONNECTING) {
+      // Still connecting - wait for it
+      ws = preConnectRef.current;
+      preConnectRef.current = null;
+      ws.onopen = () => {
+        // ready will come from server's "ready" message
+      };
+    } else {
+      // No pre-connection - create fresh WS
+      closePreConnect();
+      const wsUrl = buildWsUrl();
+      ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+    }
+
     wsRef.current = ws;
-    ws.binaryType = "arraybuffer";
 
-    // Sentence accumulator for wpgs dynamic correction
-    const sentences = new Map<number, string>();
-
-    // 立即连接音频图，不等待 WS 连接成功
-    // 这样音频采集和 WS 连接并行，避免 WS 失败导致音频采集不工作
-    source.connect(workletNode);
-    workletNode.connect(audioCtx.destination); // needed to keep worklet running (silent)
-
-    // 处理 AudioWorklet 发来的消息（PCM 帧）
-    workletNode.port.onmessage = (e: MessageEvent) => {
-      // Ignore debug messages from worklet
-      if (e.data && typeof e.data === 'object' && e.data.type === 'debug') return;
-      // PCM ArrayBuffer frame
-      if (pausedRef.current) return;
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(e.data as ArrayBuffer);
-      }
-    };
-
+    // Re-attach message handler to use current callbacks
+    const sentences = preConnectSentencesRef.current;
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data as string) as {
@@ -191,8 +320,6 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
             for (let i = from; i <= to; i++) sentences.delete(i);
           }
           sentences.set(sn, text);
-
-          // Show current streaming sentence
           setStreamingText(text);
           onPartial?.(text, sn, pgs, msg.rg);
         } else if (msg.type === "final") {
@@ -218,7 +345,19 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       setIsReady(false);
       setIsConnecting(false);
     };
-  }, [toolId, buildWsUrl, stop, onPartial, onFinal, onError, onReady]);
+
+    // 4. Connect audio graph immediately (parallel with WS connection)
+    source.connect(workletNode);
+    workletNode.connect(audioCtx.destination);
+
+    workletNode.port.onmessage = (e: MessageEvent) => {
+      if (e.data && typeof e.data === 'object' && e.data.type === 'debug') return;
+      if (pausedRef.current) return;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(e.data as ArrayBuffer);
+      }
+    };
+  }, [toolId, buildWsUrl, stop, closePreConnect, onPartial, onFinal, onError, onReady]);
 
   return { start, stop, pause, resume, isReady, isConnecting, streamingText };
 }

@@ -58,6 +58,12 @@ export default function MeetingMinutes() {
       }
       sentenceMapRef.current.set(sn, text);
       setStreamingPartial(text);
+      // 实时更新会议内容文本框：已确认文字 + 当前正在识别的内容
+      const allSentences = Array.from(sentenceMapRef.current.values()).join("");
+      const liveText = confirmedTranscriptRef.current
+        ? `${confirmedTranscriptRef.current}${allSentences ? " " + allSentences : ""}`
+        : allSentences;
+      if (liveText) setTranscript(liveText);
     },
     onFinal: (text) => {
       if (text.trim()) {

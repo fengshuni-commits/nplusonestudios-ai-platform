@@ -18,6 +18,7 @@
  *   - 讯飞 WS 连接可能需要 3-5 秒（服务器在境外），期间 PCM 帧缓存在 pendingFrames
  *   - 连接建立后，按 40ms 间隔 flush 缓存帧（模拟实时流速率）
  *   - flush 期间若收到 END 信号，等 flush 完成后再发结束帧
+ *   - 讯飞单次会话约 60 秒后自动结束（status=2），自动开启新会话续接
  */
 
 import crypto from "crypto";
@@ -30,7 +31,7 @@ const XFYUN_HOST = "iat-api.xfyun.cn";
 const XFYUN_PATH = "/v2/iat";
 const FRAME_SIZE = 1280; // 40ms @ 16kHz 16bit mono
 const FRAME_INTERVAL_MS = 40; // 40ms between frames
-const SESSION_TIMEOUT_MS = 120_000; // 2 minutes max
+const SESSION_TIMEOUT_MS = 120_000; // 2 minutes max per overall session
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
   const date = new Date().toUTCString();
@@ -117,29 +118,115 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       return;
     }
 
-    // ── State ─────────────────────────────────────────────────────────────
-    let xfReady = false;
-    let frameIndex = 0;
+    // ── Session state ─────────────────────────────────────────────────────
     let ended = false;           // client sent END signal
-    let flushing = false;        // currently flushing pending frames
-    let flushDone = false;       // flush completed
-    const pendingFrames: Buffer[] = [];
-    const partialTexts: Map<number, string> = new Map();
+    let clientClosed = false;    // client WS closed
+    const pendingFrames: Buffer[] = [];  // frames buffered before xfyun ready
 
     const sessionTimeout = setTimeout(() => {
       send(clientWs, { type: "error", message: "转写会话超时（最长 2 分钟）" });
       clientWs.close();
-      xfWs.close();
     }, SESSION_TIMEOUT_MS);
 
-    // ── Connect to Xfyun ──────────────────────────────────────────────────
-    const xfUrl = buildXfyunUrl(creds);
-    const xfWs = new WebSocket(xfUrl);
+    // ── Xfyun sub-session (auto-reconnects when status=2) ─────────────────
+    let xfWs: WebSocket | null = null;
+    let xfReady = false;
+    let frameIndex = 0;
+    let flushing = false;
+    const partialTexts: Map<number, string> = new Map();
 
+    function connectXfyun() {
+      if (clientClosed) return;
+      xfReady = false;
+      flushing = false;
+      frameIndex = 0;
+      partialTexts.clear();
+
+      const xfUrl = buildXfyunUrl(creds!);
+      const ws = new WebSocket(xfUrl);
+      xfWs = ws;
+
+      ws.on("open", () => {
+        if (clientClosed) { ws.close(); return; }
+        xfReady = true;
+        send(clientWs, { type: "ready" });
+        flushPending(ws);
+      });
+
+      ws.on("message", (data: WebSocket.RawData) => {
+        if (clientClosed) return;
+        try {
+          const msg = JSON.parse(data.toString()) as {
+            code: number;
+            message: string;
+            sid?: string;
+            data?: {
+              result?: {
+                ws?: Array<{ cw: Array<{ w: string; wp?: string }> }>;
+                pgs?: "apd" | "rpl";
+                rg?: [number, number];
+                sn?: number;
+              };
+              status?: number;
+            };
+          };
+
+          if (msg.code !== 0) {
+            send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
+            return;
+          }
+
+          const result = msg.data?.result;
+          if (result) {
+            const sn = result.sn ?? frameIndex;
+            const text = (result.ws || [])
+              .flatMap((item) => item.cw.map((cw) => cw.w))
+              .join("");
+
+            if (result.pgs === "rpl" && result.rg) {
+              const [from, to] = result.rg;
+              for (let i = from; i <= to; i++) partialTexts.delete(i);
+              partialTexts.set(sn, text);
+              send(clientWs, { type: "partial", text, sn, pgs: "rpl", rg: result.rg });
+            } else {
+              partialTexts.set(sn, text);
+              send(clientWs, { type: "partial", text, sn, pgs: "apd" });
+            }
+          }
+
+          if (msg.data?.status === 2) {
+            // Session ended by xfyun (60s limit or silence)
+            const finalText = Array.from(partialTexts.values()).join("");
+            if (finalText.trim()) {
+              send(clientWs, { type: "final", text: finalText });
+            }
+            ws.close();
+
+            // Auto-reconnect if client hasn't ended recording
+            if (!ended && !clientClosed) {
+              setTimeout(() => connectXfyun(), 100);
+            }
+          }
+        } catch (e) {
+          console.error("[streamTranscribe] xfyun message parse error:", e);
+        }
+      });
+
+      ws.on("error", (err) => {
+        console.error(`[streamTranscribe] xfyun WS ERROR: ${err.message}`);
+        send(clientWs, { type: "error", message: `讯飞连接错误: ${err.message}` });
+        clearTimeout(sessionTimeout);
+        clientWs.close();
+      });
+
+      ws.on("close", () => {
+        if (xfWs === ws) xfWs = null;
+      });
+    }
 
     // ── Send PCM frame to Xfyun ───────────────────────────────────────────
-    function sendPcmFrame(pcmChunk: Buffer, isLast = false) {
-      if (xfWs.readyState !== WebSocket.OPEN) return;
+    function sendPcmFrame(ws: WebSocket, pcmChunk: Buffer, isLast = false) {
+      if (ws.readyState !== WebSocket.OPEN) return;
 
       const audio = pcmChunk.toString("base64");
       const status = isLast ? 2 : (frameIndex === 0 ? 0 : 1);
@@ -159,108 +246,42 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         };
       }
 
-      xfWs.send(JSON.stringify(payload));
+      ws.send(JSON.stringify(payload));
       frameIndex++;
     }
 
     // ── Flush pending frames with rate limiting ───────────────────────────
-    // 按 40ms 间隔发送缓存帧，模拟实时流速率
-    // flush 完成后，若 END 信号已到达，自动发送结束帧
-    function flushPending() {
+    function flushPending(ws: WebSocket) {
       if (flushing) return;
       const frames = [...pendingFrames];
       pendingFrames.length = 0;
       if (frames.length === 0) {
-        flushDone = true;
-        if (ended) sendPcmFrame(Buffer.alloc(0), true);
+        if (ended) sendPcmFrame(ws, Buffer.alloc(0), true);
         return;
       }
       flushing = true;
       let i = 0;
       function sendNext() {
+        if (clientClosed || ws.readyState !== WebSocket.OPEN) { flushing = false; return; }
         if (i >= frames.length) {
           flushing = false;
-          flushDone = true;
-          // If END arrived during flush, send final frame now
-          if (ended) {
-            sendPcmFrame(Buffer.alloc(0), true);
+          // Drain any new frames that arrived during flush
+          if (pendingFrames.length > 0) {
+            const extra = [...pendingFrames];
+            pendingFrames.length = 0;
+            for (const f of extra) sendPcmFrame(ws, f);
           }
+          if (ended) sendPcmFrame(ws, Buffer.alloc(0), true);
           return;
         }
-        sendPcmFrame(frames[i++]);
+        sendPcmFrame(ws, frames[i++]);
         setTimeout(sendNext, FRAME_INTERVAL_MS);
       }
       sendNext();
     }
 
-    // ── Xfyun events ──────────────────────────────────────────────────────
-    xfWs.on("open", () => {
-      xfReady = true;
-      send(clientWs, { type: "ready" });
-      flushPending();
-    });
-
-    xfWs.on("message", (data: WebSocket.RawData) => {
-      try {
-        const msg = JSON.parse(data.toString()) as {
-          code: number;
-          message: string;
-          sid?: string;
-          data?: {
-            result?: {
-              ws?: Array<{ cw: Array<{ w: string; wp?: string }> }>;
-              pgs?: "apd" | "rpl";
-              rg?: [number, number];
-              sn?: number;
-            };
-            status?: number;
-          };
-        };
-
-        if (msg.code !== 0) {
-            send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
-          return;
-        }
-
-        const result = msg.data?.result;
-        if (result) {
-          const sn = result.sn ?? frameIndex;
-          const text = (result.ws || [])
-            .flatMap((item) => item.cw.map((cw) => cw.w))
-            .join("");
-
-          if (result.pgs === "rpl" && result.rg) {
-            const [from, to] = result.rg;
-            for (let i = from; i <= to; i++) partialTexts.delete(i);
-            partialTexts.set(sn, text);
-            send(clientWs, { type: "partial", text, sn, pgs: "rpl", rg: result.rg });
-          } else {
-            partialTexts.set(sn, text);
-            send(clientWs, { type: "partial", text, sn, pgs: "apd" });
-          }
-            }
-
-        if (msg.data?.status === 2) {
-          const finalText = Array.from(partialTexts.values()).join("");
-          send(clientWs, { type: "final", text: finalText });
-          clearTimeout(sessionTimeout);
-          xfWs.close();
-        }
-      } catch (e) {
-        console.error("[streamTranscribe] xfyun message parse error:", e);
-      }
-    });
-
-    xfWs.on("error", (err) => {
-      console.error(`[streamTranscribe] xfyun WS ERROR: ${err.message}`);
-      send(clientWs, { type: "error", message: `讯飞连接错误: ${err.message}` });
-      clearTimeout(sessionTimeout);
-      clientWs.close();
-    });
-
-    xfWs.on("close", () => {
-      clearTimeout(sessionTimeout);
-    });
+    // ── Start first xfyun connection ──────────────────────────────────────
+    connectXfyun();
 
     // ── Client events ─────────────────────────────────────────────────────
     clientWs.on("message", (data: WebSocket.RawData) => {
@@ -274,11 +295,10 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
       if (isEnd) {
         ended = true;
-        // Only send final frame if flush is already done (or never started)
-        if (xfReady && !flushing) {
-          sendPcmFrame(Buffer.alloc(0), true);
+        if (xfReady && xfWs && !flushing) {
+          sendPcmFrame(xfWs, Buffer.alloc(0), true);
         }
-        // If still flushing, the flush completion handler will send the final frame
+        // If still flushing or connecting, the flush/reconnect handler will send the final frame
         return;
       }
 
@@ -297,27 +317,27 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       while (offset < pcm.length) {
         const chunk = pcm.subarray(offset, offset + FRAME_SIZE);
         offset += FRAME_SIZE;
-        if (xfReady && !flushing) {
-          // Flush done, send directly in real-time
-          sendPcmFrame(chunk);
+        if (xfReady && xfWs && !flushing) {
+          sendPcmFrame(xfWs, chunk);
         } else {
-          // Still connecting or flushing, buffer the frame
           pendingFrames.push(chunk);
         }
       }
     });
 
     clientWs.on("close", () => {
+      clientClosed = true;
       clearTimeout(sessionTimeout);
-      if (xfWs.readyState === WebSocket.OPEN || xfWs.readyState === WebSocket.CONNECTING) {
+      if (xfWs && (xfWs.readyState === WebSocket.OPEN || xfWs.readyState === WebSocket.CONNECTING)) {
         xfWs.close();
       }
     });
 
     clientWs.on("error", (err) => {
       console.error("[streamTranscribe] client WS error:", err.message);
+      clientClosed = true;
       clearTimeout(sessionTimeout);
-      xfWs.close();
+      if (xfWs) xfWs.close();
     });
   });
 
