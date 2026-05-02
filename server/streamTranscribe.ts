@@ -89,13 +89,18 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         const rows = await db.select().from(aiTools).where(eq(aiTools.id, toolId)).limit(1);
         if (rows.length > 0) {
           const tool = rows[0];
-          const configJson = tool.configJson ? JSON.parse(tool.configJson as string) : {};
+          // Drizzle ORM 的 json 类型字段会自动解析为对象，无需再次 JSON.parse
+          // 兼容旧数据（字符串格式）
+          const rawConfig = tool.configJson;
+          const configJson: Record<string, unknown> = rawConfig
+            ? (typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig as Record<string, unknown>)
+            : {};
           const apiKeyEncrypted = (tool as any).apiKeyEncrypted;
           const apiKey = apiKeyEncrypted ? (decryptApiKey(apiKeyEncrypted) || "") : "";
           creds = {
-            appId: configJson.appId || "",
+            appId: (configJson.appId as string) || "",
             apiKey,
-            apiSecret: configJson.apiSecret || "",
+            apiSecret: (configJson.apiSecret as string) || "",
           };
         }
       }

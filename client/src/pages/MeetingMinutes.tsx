@@ -17,7 +17,7 @@ import AttendeeSelector, { type Attendee } from "@/components/AttendeeSelector";
 type RecordingState = "idle" | "recording" | "paused" | "processing";
 
 export default function MeetingMinutes() {
-  const [toolId, setToolId] = useState<number | undefined>(undefined);
+  const [llmToolId, setLlmToolId] = useState<number | undefined>(undefined);
   const [speechToolId, setSpeechToolId] = useState<number | undefined>(undefined);
   const [transcript, setTranscript] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -454,7 +454,7 @@ export default function MeetingMinutes() {
 
     generateMutation.mutate({
       transcript, projectName, meetingDate, meetingTitle, meetingLocation,
-      meetingAttendees, toolId,
+      meetingAttendees, toolId: llmToolId,
       projectId: importedProjectId || undefined,
       audioUrl,
       audioKey,
@@ -477,7 +477,7 @@ export default function MeetingMinutes() {
         </div>
         <div className="flex items-center gap-3">
           <AiToolSelector capability="speech_transcription" value={speechToolId} onChange={setSpeechToolId} label="语音转写" showBuiltIn={false} />
-          <AiToolSelector category="document" value={toolId} onChange={setToolId} label="AI 工具" />
+          <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结 LLM" />
         </div>
       </div>
 

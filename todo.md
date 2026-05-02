@@ -2096,3 +2096,19 @@
 ## Bug：语音转录工具无法在会议纪要中选择
 - [x] 排查 AiToolSelector 过滤逻辑（根因：数据库存储旧值 speech_to_text，前端传旧值 speech_to_text，两者均与新值 speech_transcription 不匹配）
 - [x] 修复：数据库更新讯飞工具 capabilities 为 speech_transcription；前端 AiToolSelector capability 改为 speech_transcription
+
+## Bug：会议纪要生成无结果
+- [x] 排查 meeting.generateMinutes 过程失败原因（根因：configJson 已是对象，JSON.parse 导致解析失败；apiSecret base64 编码错误）
+- [x] 修复生成失败问题（修复 configJson 解析 + 修复数据库 apiSecret 编码 + 传入 toolId 到 invokeLLMWithUserTool）
+
+## Bug 修复：讯飞实时转写有调用记录但无文字输出
+- [x] 排查前端 AudioWorklet PCM 采集是否正确发送到 WS
+- [x] 检查后端 WS 是否正确接收并转发给讯飞（根因：configJson JSON.parse 错误 + apiSecret base64 编码）
+- [x] 修复：streamTranscribe.ts 防御性 JSON 解析 + 数据库 apiSecret 还原为原始值
+- [x] AI 工具管理页面新增讯飞专用 AppID/APISecret 输入框
+
+## 功能：会议纪要双模型选择
+- [x] 会议纪要页面新增 LLM 总结工具选择器（独立于语音转写工具，标签"纪要总结 LLM"）
+- [x] generateMinutes 过程支持传入 toolId（llmToolId）
+- [x] 使用选定 LLM 工具调用大模型生成纪要（invokeLLMWithUserTool 第三参数传入 toolId）
+- [x] 7 个 vitest 测试全部通过

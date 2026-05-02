@@ -3309,7 +3309,7 @@ const meetingRouter = router({
               ].filter(Boolean).join("\n")
             }
           ],
-        }, ctx.user.id);
+        }, ctx.user.id, input.toolId);
 
         const content = typeof response.choices[0]?.message?.content === 'string'
           ? response.choices[0].message.content

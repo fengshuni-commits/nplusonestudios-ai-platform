@@ -264,11 +264,14 @@ export default function AdminApiKeys() {
     apiKey: "",
     description: "",
     accessKeyId: "", // 即梦 AI 专用
+    xfyunAppId: "",  // 讯飞专用
+    xfyunApiSecret: "", // 讯飞专用
   });
   const [showFormKey, setShowFormKey] = useState(false);
 
   // 检测是否为即梦工具
   const isJimengTool = toolForm.name.toLowerCase().includes("即梦") || toolForm.name.toLowerCase().includes("jimeng") || toolForm.apiEndpoint.includes("volcengine");
+  const isXfyunTool = toolForm.name.toLowerCase().includes("讯飞") || toolForm.name.toLowerCase().includes("xfyun") || toolForm.apiEndpoint.includes("xfyun");
 
   // 实时预览推断能力
   const previewCapabilities = toolForm.name.trim()
@@ -279,7 +282,7 @@ export default function AdminApiKeys() {
     onSuccess: () => {
       utils.aiTools.list.invalidate();
       setToolDialogOpen(false);
-      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "" });
+      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "", xfyunAppId: "", xfyunApiSecret: "" });
       setShowFormKey(false);
       toast.success("AI 工具添加成功");
     },
@@ -439,6 +442,38 @@ export default function AdminApiKeys() {
                   />
                 </div>
               )}
+              {isXfyunTool && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <KeyRound className="h-3.5 w-3.5" />
+                      AppID
+                      <span className="text-xs text-muted-foreground font-normal ml-1">（讯飞专用）</span>
+                    </Label>
+                    <Input
+                      type="text"
+                      value={toolForm.xfyunAppId}
+                      onChange={(e) => setToolForm({ ...toolForm, xfyunAppId: e.target.value })}
+                      placeholder="讯飞 AppID"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <KeyRound className="h-3.5 w-3.5" />
+                      APISecret
+                      <span className="text-xs text-muted-foreground font-normal ml-1">（讯飞专用）</span>
+                    </Label>
+                    <Input
+                      type="password"
+                      value={toolForm.xfyunApiSecret}
+                      onChange={(e) => setToolForm({ ...toolForm, xfyunApiSecret: e.target.value })}
+                      placeholder="讯飞 APISecret"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </>
+              )}
               <div className="space-y-2">
                 <Label>备注名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Input
@@ -459,7 +494,17 @@ export default function AdminApiKeys() {
               <Button
                 onClick={() => {
                   if (!toolForm.name.trim()) { toast.error("请输入模型名称"); return; }
-                  createTool.mutate(toolForm);
+                  const formData: any = { ...toolForm };
+                  if (isXfyunTool && (toolForm.xfyunAppId || toolForm.xfyunApiSecret)) {
+                    formData.configJson = {
+                      ...(formData.configJson || {}),
+                      appId: toolForm.xfyunAppId,
+                      apiSecret: toolForm.xfyunApiSecret,
+                    };
+                  }
+                  delete formData.xfyunAppId;
+                  delete formData.xfyunApiSecret;
+                  createTool.mutate(formData);
                 }}
                 disabled={createTool.isPending}
                 className="w-full"
