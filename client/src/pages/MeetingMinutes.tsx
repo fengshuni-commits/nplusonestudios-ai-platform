@@ -168,9 +168,26 @@ export default function MeetingMinutes() {
         language: "zh",
         toolId: speechToolId,
       });
-      if (transcribeResult.text?.trim()) {
-        const newText = transcribeResult.text.trim();
-        setTranscript(prev => prev ? `${prev} ${newText}` : newText);
+      const fullText = transcribeResult.text?.trim() ?? "";
+      if (fullText) {
+        // When sending full accumulated audio (fallback mode), Whisper returns the
+        // entire transcript from the beginning. Only append the NEW portion that
+        // comes after what we already have confirmed.
+        // Use confirmedTranscriptRef as the baseline (shared with WebSocket streaming).
+        const prevConfirmed = confirmedTranscriptRef.current.trim();
+        let newText: string;
+        if (!prevConfirmed) {
+          newText = fullText;
+        } else if (fullText.startsWith(prevConfirmed)) {
+          // Take only the suffix after already-confirmed text
+          const suffix = fullText.slice(prevConfirmed.length).trim();
+          newText = suffix ? `${prevConfirmed} ${suffix}` : prevConfirmed;
+        } else {
+          // Whisper returned a corrected full transcript
+          newText = fullText;
+        }
+        confirmedTranscriptRef.current = newText;
+        setTranscript(newText);
         setLiveSegmentCount(c => c + 1);
       }
     } catch (err) {
@@ -232,10 +249,15 @@ export default function MeetingMinutes() {
         if (e.data.size > 0) {
           // Accumulate for full download
           fullRecordingChunksRef.current.push(e.data);
-          // Also process this segment for real-time transcription
-          const chunks = [e.data];
           audioChunksRef.current = [];
-          processAudioChunk(chunks, mimeType);
+          // Only use 15s Whisper fallback when WebSocket streaming is NOT active.
+          // When WebSocket is active, it handles transcription in real-time.
+          // When falling back, send ALL accumulated chunks (full webm with header)
+          // so Whisper can parse the file format correctly.
+          if (!streamTranscribe.isReady) {
+            const allChunks = [...fullRecordingChunksRef.current];
+            processAudioChunk(allChunks, mimeType);
+          }
         }
       };
 

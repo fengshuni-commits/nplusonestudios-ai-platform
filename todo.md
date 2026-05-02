@@ -2071,3 +2071,8 @@
 - [x] 前端：项目详情页编辑对话框状态下拉新增"已暂停"选项，项目看板筛选改为多选
 - [x] 前端：项目看板筛选栏状态筛选改为多选（Checkbox 下拉）
 - [x] 验证：6 个 vitest 测试全部通过
+
+## Bug：会议纪要录音格式不被转写服务支持
+- [x] 排查前端录音使用的 MIME 类型（根因：timeslice 模式第 2+ 个 chunk 不含 webm 文件头，Whisper 无法识别格式）
+- [x] 修复：WebSocket 流式转写活跃时跳过 Whisper fallback；fallback 时发送全量累积 chunks（含文件头），并做去重只追加新增部分
+- [x] 验证：6 个 vitest 测试全部通过
