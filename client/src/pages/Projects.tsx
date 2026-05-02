@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Search, FolderKanban, Calendar, Users, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp, LayoutGrid, GanttChart } from "lucide-react";
+import { Plus, Search, FolderKanban, Calendar, Users, Trash2, Sparkles, Check, X, ChevronDown, ChevronUp, LayoutGrid, GanttChart, Filter } from "lucide-react";
 import GanttView from "@/components/GanttView";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useState, useRef } from "react";
@@ -22,11 +24,27 @@ interface FieldEntry {
 export default function Projects() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "gantt">("grid");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { data: projects, isLoading } = trpc.projects.list.useQuery({ search, status: statusFilter === "all" ? undefined : statusFilter });
-  const { data: ganttData, isLoading: ganttLoading } = trpc.projects.ganttData.useQuery({ search, status: statusFilter === "all" ? undefined : statusFilter });
+  const { data: projects, isLoading } = trpc.projects.list.useQuery({ search, status: statusFilters.length > 0 ? statusFilters : undefined });
+  const { data: ganttData, isLoading: ganttLoading } = trpc.projects.ganttData.useQuery({ search, status: statusFilters.length > 0 ? statusFilters : undefined });
+
+  const STATUS_OPTIONS = [
+    { value: "planning",     label: "待启动" },
+    { value: "design",       label: "设计中" },
+    { value: "construction", label: "施工中" },
+    { value: "paused",       label: "已暂停" },
+    { value: "completed",    label: "已完成" },
+    { value: "archived",     label: "已归档" },
+  ];
+
+  const toggleStatusFilter = (value: string) => {
+    setStatusFilters(prev =>
+      prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]
+    );
+  };
   const { data: fieldTemplates } = trpc.fieldTemplates.list.useQuery();
   const utils = trpc.useUtils();
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
@@ -340,17 +358,49 @@ export default function Projects() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索项目..." className="pl-9" />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部状态</SelectItem>
-            <SelectItem value="planning">待启动</SelectItem>
-            <SelectItem value="design">设计中</SelectItem>
-            <SelectItem value="construction">施工中</SelectItem>
-            <SelectItem value="completed">已完成</SelectItem>
-            <SelectItem value="archived">已归档</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 min-w-[90px]">
+              <Filter className="h-3.5 w-3.5" />
+              {statusFilters.length === 0 ? "全部状态" : `已选 ${statusFilters.length} 项`}
+              {statusFilters.length > 0 && (
+                <span
+                  className="ml-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); setStatusFilters([]); }}
+                >
+                  ×
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-44 p-2" align="start">
+            <p className="text-xs text-muted-foreground px-2 pb-1.5">筛选状态（可多选）</p>
+            {STATUS_OPTIONS.map(opt => (
+              <div
+                key={opt.value}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer"
+                onClick={() => toggleStatusFilter(opt.value)}
+              >
+                <Checkbox
+                  checked={statusFilters.includes(opt.value)}
+                  onCheckedChange={() => toggleStatusFilter(opt.value)}
+                  className="pointer-events-none"
+                />
+                <span className="text-sm">{opt.label}</span>
+              </div>
+            ))}
+            {statusFilters.length > 0 && (
+              <div className="border-t mt-1 pt-1">
+                <button
+                  className="w-full text-xs text-muted-foreground hover:text-foreground px-2 py-1 text-left"
+                  onClick={() => setStatusFilters([])}
+                >
+                  清除筛选
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
         <div className="flex border rounded-md overflow-hidden">
           <Button
             variant={viewMode === "grid" ? "default" : "ghost"}
@@ -469,6 +519,7 @@ function statusBadgeProps(status: string): { label: string; className: string } 
     planning:     { label: "待启动",   className: "border-slate-300 text-slate-500 bg-slate-50 dark:bg-slate-900/30 dark:text-slate-400" },
     design:       { label: "设计中",   className: "border-blue-400 text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
     construction: { label: "施工中",   className: "border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+    paused:       { label: "已暂停",   className: "border-yellow-400 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400" },
     completed:    { label: "已完成",   className: "border-green-400 text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400" },
     archived:     { label: "已归档",   className: "border-gray-300 text-gray-400 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500" },
   };

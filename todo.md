@@ -2064,3 +2064,10 @@
 - [x] 排查 API 调用次数统计为零的原因（根因：apiTokens.list 过程返回对象中漏写了 callCount 字段）
 - [x] 修复：在 routers.ts 的 apiTokens.list 返回对象中加入 callCount，同时移除前端的 (token as any) 强转
 - [x] 验证修复后调用次数显示正确（2 个 vitest 测试通过）
+
+## 项目看板功能改进
+- [x] 数据库：projects.status enum 新增 'paused'（已暂停）选项
+- [x] 后端：updateProject 支持 status='paused'，listProjects 筛选支持多个 status 値（字符串或数组）
+- [x] 前端：项目详情页编辑对话框状态下拉新增"已暂停"选项，项目看板筛选改为多选
+- [x] 前端：项目看板筛选栏状态筛选改为多选（Checkbox 下拉）
+- [x] 验证：6 个 vitest 测试全部通过

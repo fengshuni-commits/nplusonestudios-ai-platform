@@ -446,6 +446,7 @@ function ProjectInfoTab({
                   <SelectItem value="planning">待启动</SelectItem>
                   <SelectItem value="design">设计中</SelectItem>
                   <SelectItem value="construction">施工中</SelectItem>
+                  <SelectItem value="paused">已暂停</SelectItem>
                   <SelectItem value="completed">已完成</SelectItem>
                   <SelectItem value="archived">已归档</SelectItem>
                 </SelectContent>
@@ -2630,6 +2631,7 @@ function statusBadgeProps(status: string): { label: string; className: string } 
     planning:     { label: "待启动",   className: "border-slate-300 text-slate-500 bg-slate-50 dark:bg-slate-900/30 dark:text-slate-400" },
     design:       { label: "设计中",   className: "border-blue-400 text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
     construction: { label: "施工中",   className: "border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+    paused:       { label: "已暂停",   className: "border-yellow-400 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400" },
     completed:    { label: "已完成",   className: "border-green-400 text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400" },
     archived:     { label: "已归档",   className: "border-gray-300 text-gray-400 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500" },
   };

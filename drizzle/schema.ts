@@ -26,7 +26,7 @@ export const projects = mysqlTable("projects", {
   code: varchar("code", { length: 64 }),
   description: text("description"),
   clientName: varchar("clientName", { length: 256 }),
-  status: mysqlEnum("status", ["planning", "design", "construction", "completed", "archived"]).default("planning").notNull(),
+  status: mysqlEnum("status", ["planning", "design", "construction", "paused", "completed", "archived"]).default("planning").notNull(),
   phase: mysqlEnum("phase", ["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"]).default("concept").notNull(),
   companyProfile: text("companyProfile"),
   businessGoal: text("businessGoal"),

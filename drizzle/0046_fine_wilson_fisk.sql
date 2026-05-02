@@ -1,0 +1,1 @@
+ALTER TABLE `projects` MODIFY COLUMN `status` enum('planning','design','construction','paused','completed','archived') NOT NULL DEFAULT 'planning';

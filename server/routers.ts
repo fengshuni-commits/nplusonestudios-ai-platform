@@ -713,7 +713,7 @@ const dashboardRouter = router({
 
 const projectsRouter = router({
   list: protectedProcedure
-    .input(z.object({ search: z.string().optional(), status: z.string().optional() }).optional())
+    .input(z.object({ search: z.string().optional(), status: z.union([z.string(), z.array(z.string())]).optional() }).optional())
     .query(async ({ input }) => {
       return db.listProjects(input);
     }),
@@ -851,7 +851,7 @@ const projectsRouter = router({
 
   // ─── Gantt Chart Data ────────────────────────────
   ganttData: protectedProcedure
-    .input(z.object({ search: z.string().optional(), status: z.string().optional() }).optional())
+    .input(z.object({ search: z.string().optional(), status: z.union([z.string(), z.array(z.string())]).optional() }).optional())
     .query(async ({ input }) => {
       const projects = await db.listProjects(input);
       const result = [];

@@ -238,12 +238,19 @@ export async function updateUserRole(userId: number, role: "user" | "admin") {
 
 // ─── Projects ────────────────────────────────────────────
 
-export async function listProjects(opts?: { search?: string; status?: string }) {
+export async function listProjects(opts?: { search?: string; status?: string | string[] }) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
   if (opts?.search) conditions.push(or(like(projects.name, `%${opts.search}%`), like(projects.code, `%${opts.search}%`)));
-  if (opts?.status) conditions.push(eq(projects.status, opts.status as any));
+  if (opts?.status) {
+    const statuses = Array.isArray(opts.status) ? opts.status : [opts.status];
+    if (statuses.length === 1) {
+      conditions.push(eq(projects.status, statuses[0] as any));
+    } else if (statuses.length > 1) {
+      conditions.push(inArray(projects.status, statuses as any[]));
+    }
+  }
   const rows = await db.select().from(projects).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(projects.updatedAt));
   if (rows.length === 0) return [];
   // Attach clientName and summary from project_custom_fields for each project
