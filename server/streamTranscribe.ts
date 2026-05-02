@@ -31,6 +31,9 @@ const XFYUN_HOST = "iat-api.xfyun.cn";
 const XFYUN_PATH = "/v2/iat";
 const FRAME_SIZE = 1280; // 40ms @ 16kHz 16bit mono
 const FRAME_INTERVAL_MS = 40; // 40ms between frames
+// When flushing buffered frames, send multiple frames per tick to catch up faster.
+// Sending 4 frames per 40ms = 160ms of audio per tick = 4x real-time catch-up speed.
+const FLUSH_FRAMES_PER_TICK = 4;
 const SESSION_TIMEOUT_MS = 120_000; // 2 minutes max per overall session
 const MAX_XFYUN_RETRIES = 3; // max retries on connection failure
 
@@ -265,7 +268,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           language: "zh_cn",
           domain: "iat",
           accent: "mandarin",
-          vad_eos: 5000,
+          vad_eos: 3000, // 3s silence to end session (was 5s)
           dwa: "wpgs",
         };
       }
@@ -297,7 +300,11 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           if (ended) sendPcmFrame(ws, Buffer.alloc(0), true);
           return;
         }
-        sendPcmFrame(ws, frames[i++]);
+        // Send multiple frames per tick to flush buffered audio faster
+        const batchEnd = Math.min(i + FLUSH_FRAMES_PER_TICK, frames.length);
+        while (i < batchEnd) {
+          sendPcmFrame(ws, frames[i++]);
+        }
         setTimeout(sendNext, FRAME_INTERVAL_MS);
       }
       sendNext();

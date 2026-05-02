@@ -34,6 +34,7 @@ export default function MeetingMinutes() {
 
   // Live recording state
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
+  const recordingStateRef = useRef<RecordingState>("idle"); // ref for use inside callbacks
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -72,6 +73,10 @@ export default function MeetingMinutes() {
       }
       sentenceMapRef.current.clear();
       setStreamingPartial("");
+      // If recording has already stopped, show a toast to confirm final result arrived
+      if (recordingStateRef.current === "idle") {
+        toast.success("转写完成！");
+      }
     },
     onError: (msg) => {
       console.warn("[streamTranscribe] error:", msg);
@@ -191,6 +196,7 @@ export default function MeetingMinutes() {
       };
 
       recorder.start(15000); // timeslice: collect data every 15s for download accumulation
+      recordingStateRef.current = "recording";
       setRecordingState("recording");
       setRecordingDuration(0);
       confirmedTranscriptRef.current = "";
@@ -214,6 +220,7 @@ export default function MeetingMinutes() {
       mediaRecorderRef.current.pause();
       clearTimers();
       streamTranscribe.pause();
+      recordingStateRef.current = "paused";
       setRecordingState("paused");
     }
   }, [clearTimers, streamTranscribe]);
@@ -223,6 +230,7 @@ export default function MeetingMinutes() {
       mediaRecorderRef.current.resume();
       startDurationTimer();
       streamTranscribe.resume();
+      recordingStateRef.current = "recording";
       setRecordingState("recording");
     }
   }, [startDurationTimer, streamTranscribe]);
@@ -252,11 +260,13 @@ export default function MeetingMinutes() {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-    // Stop streaming transcription
+    // Stop streaming transcription (keeps WS alive to receive final result)
     streamTranscribe.stop();
-    setStreamingPartial("");
+    // Don't clear streamingPartial here - wait for onFinal callback
+    // so the last few seconds of transcription are not lost
+    recordingStateRef.current = "idle";
     setRecordingState("idle");
-    toast.success("录音已停止");
+    toast.success("录音已停止，等待最后识别结果…");
   }, [clearTimers]);
   // Keep ref in sync so onError can call stopRecording
   useEffect(() => {

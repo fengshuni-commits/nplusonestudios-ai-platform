@@ -188,7 +188,7 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       ws.send("END");
     }
 
-    // Stop AudioWorklet
+    // Stop AudioWorklet immediately (no more audio to send)
     if (workletNodeRef.current) {
       workletNodeRef.current.disconnect();
       workletNodeRef.current = null;
@@ -212,7 +212,18 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
 
     setIsReady(false);
     setIsConnecting(false);
-    setStreamingText("");
+    // NOTE: Do NOT clear streamingText here.
+    // Keep the WS alive so the server can send the final transcription result.
+    // The WS will be closed by the server after sending the final message.
+    // Safety timeout: force-close WS after 15s if no final message arrives.
+    const finalWs = wsRef.current;
+    if (finalWs) {
+      setTimeout(() => {
+        if (finalWs.readyState === WebSocket.OPEN || finalWs.readyState === WebSocket.CONNECTING) {
+          finalWs.close();
+        }
+      }, 15000);
+    }
   }, []);
 
   const pause = useCallback(() => {
