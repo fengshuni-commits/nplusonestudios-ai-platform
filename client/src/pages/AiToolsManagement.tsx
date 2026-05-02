@@ -257,6 +257,9 @@ export default function AdminApiKeys() {
   const [showNewKey, setShowNewKey] = useState(false);
   const [editModelNameId, setEditModelNameId] = useState<number | null>(null);
   const [editModelNameValue, setEditModelNameValue] = useState("");
+  const [editXfyunId, setEditXfyunId] = useState<number | null>(null);
+  const [editXfyunAppId, setEditXfyunAppId] = useState("");
+  const [editXfyunApiSecret, setEditXfyunApiSecret] = useState("");
   const [toolForm, setToolForm] = useState({
     name: "",
     apiEndpoint: "",
@@ -861,6 +864,84 @@ export default function AdminApiKeys() {
                           </div>
                         )}
 
+                        {/* 讯飞专用：AppID + APISecret 编辑 */}
+                        {(tool.provider === "xfyun" || tool.name.toLowerCase().includes("讯飞") || tool.name.toLowerCase().includes("xfyun")) && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <KeyRound className="h-3 w-3" />讯飞凭证
+                            </p>
+                            {editXfyunId === tool.id ? (
+                              <div className="space-y-2">
+                                <Input
+                                  type="text"
+                                  value={editXfyunAppId}
+                                  onChange={(e) => setEditXfyunAppId(e.target.value)}
+                                  placeholder="AppID（8位）"
+                                  className="font-mono text-xs h-8"
+                                />
+                                <Input
+                                  type="password"
+                                  value={editXfyunApiSecret}
+                                  onChange={(e) => setEditXfyunApiSecret(e.target.value)}
+                                  placeholder="APISecret（32位）"
+                                  className="font-mono text-xs h-8"
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => {
+                                      const newConfig: any = { ...(tool.configJson || {}) };
+                                      if (editXfyunAppId.trim()) newConfig.appId = editXfyunAppId.trim();
+                                      if (editXfyunApiSecret.trim()) newConfig.apiSecret = editXfyunApiSecret.trim();
+                                      updateTool.mutate({ id: tool.id, configJson: newConfig });
+                                      setEditXfyunId(null);
+                                      setEditXfyunAppId("");
+                                      setEditXfyunApiSecret("");
+                                    }}
+                                    disabled={updateTool.isPending}
+                                  >
+                                    保存
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs"
+                                    onClick={() => { setEditXfyunId(null); setEditXfyunAppId(""); setEditXfyunApiSecret(""); }}
+                                  >
+                                    取消
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-muted-foreground">
+                                    AppID: {tool.configJson?.appId || <span className="italic">未配置</span>}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-muted-foreground">
+                                    APISecret: {tool.configJson?.apiSecret ? "••••••••" + tool.configJson.apiSecret.slice(-4) : <span className="italic">未配置</span>}
+                                  </p>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditXfyunId(tool.id);
+                                      setEditXfyunAppId(tool.configJson?.appId || "");
+                                      setEditXfyunApiSecret("");
+                                    }}
+                                  >
+                                    修改
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {/* 模型名称：仅 Gemini 工具显示 */}
                         {(tool.name.toLowerCase().includes("gemini") || tool.apiEndpoint?.includes("generativelanguage.googleapis.com")) && (
                           <div>
