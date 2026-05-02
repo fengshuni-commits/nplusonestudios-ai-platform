@@ -73,14 +73,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
   wss.on("connection", async (clientWs: WebSocket, req: any, user: any, url: URL) => {
     const toolIdParam = url.searchParams.get("toolId");
-    const toolId = toolIdParam ? parseInt(toolIdParam, 10) : null;
+    const toolIdFromParam = toolIdParam ? parseInt(toolIdParam, 10) : null;
 
     // ── Load Xfyun credentials ─────────────────────────────────────────────
     let creds: XfyunCredentials | null = null;
     try {
-      const { getDb } = await import("./db");
+      const { getDb, getDefaultToolForCapability } = await import("./db");
       const { decryptApiKey } = await import("./_core/crypto");
       const db = await getDb();
+      // 优先使用 URL 参数中的 toolId，否则自动读取 speech_transcription 默认工具
+      const toolId = toolIdFromParam ?? (db ? await getDefaultToolForCapability("speech_transcription") : null);
       if (db && toolId) {
         const { aiTools } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");

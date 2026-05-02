@@ -3223,10 +3223,11 @@ const meetingRouter = router({
       toolId: z.number().optional(), // 指定讯飞工具 ID
     }))
     .mutation(async ({ input }) => {
-      // 如果传入了 toolId，尝试从 AI 工具管理读取讯飞凭证
-      if (input.toolId) {
+      // 优先使用传入的 toolId，否则自动读取 speech_transcription 默认工具
+      const resolvedToolId = input.toolId ?? await db.getDefaultToolForCapability("speech_transcription");
+      if (resolvedToolId) {
         try {
-          const tool = await db.getAiToolById(input.toolId);
+          const tool = await db.getAiToolById(resolvedToolId);
           if (tool && tool.provider === "xfyun" && tool.apiKeyEncrypted && tool.configJson) {
             const config = tool.configJson as { appId?: string; apiSecret?: string };
             const apiKey = decryptApiKey(tool.apiKeyEncrypted);

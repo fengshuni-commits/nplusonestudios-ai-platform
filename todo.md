@@ -2076,3 +2076,19 @@
 - [x] 排查前端录音使用的 MIME 类型（根因：timeslice 模式第 2+ 个 chunk 不含 webm 文件头，Whisper 无法识别格式）
 - [x] 修复：WebSocket 流式转写活跃时跳过 Whisper fallback；fallback 时发送全量累积 chunks（含文件头），并做去重只追加新增部分
 - [x] 验证：6 个 vitest 测试全部通过
+
+## Bug：会议转写返回幻觉文字（非真实录音内容）
+- [ ] 服务端过滤已知 Whisper 幻觉字符串（如"请大家记得点赞..."）
+- [ ] 服务端检测音频是否有效（文件大小阈值），跳过静音片段
+- [ ] 前端在 fallback 模式下增加音频能量检测，跳过静音 chunk
+
+## 功能：会议纪要允许手动添加外部参会人员
+- [x] AttendeeSelector 组件已支持手动输入外部人员姓名+身份备注（功能已存在）
+- [x] 外部参会人员与内部成员在显示上已区分（黄色标识区分）
+- [x] 手动添加的外部人员已参与会议纪要生成
+
+## 功能：AI工具管理增加语音转录工具默认设置
+- [x] AI工具类型增加 'speech_transcription' 类型（toolCapabilities.ts）
+- [x] AI工具管理页面新增"语音转录"分类，可配置讯飞/Whisper 工具
+- [x] meeting.transcribe 和 streamTranscribe 自动读取 speech_transcription 默认工具凭证
+- [x] 8 个 vitest 测试全部通过

@@ -9,6 +9,7 @@
  *   "layout"      - 版式/排版辅助
  *   "analysis"    - 分析/理解（多模态理解、数据分析）
  *   "media"       - 媒体内容生成（小红书/公众号/Instagram 文案）
+ *   "speech_transcription" - 语音转录（讯飞 IAT、Whisper 等）
  *
  * 多模态大模型（如 GPT-4o、Gemini、Claude 3）会同时具备多个能力，
  * 因此会出现在多个功能模块的模型选择列表中。
@@ -21,7 +22,8 @@ export type ToolCapability =
   | "video"
   | "layout"
   | "analysis"
-  | "media";
+  | "media"
+  | "speech_transcription";
 
 export const ALL_CAPABILITIES: ToolCapability[] = [
   "rendering",
@@ -31,6 +33,7 @@ export const ALL_CAPABILITIES: ToolCapability[] = [
   "layout",
   "analysis",
   "media",
+  "speech_transcription",
 ];
 
 /** 能力标签的中文显示名 */
@@ -42,6 +45,7 @@ export const CAPABILITY_LABELS: Record<ToolCapability, string> = {
   layout: "版式辅助",
   analysis: "分析理解",
   media: "媒体内容",
+  speech_transcription: "语音转录",
 };
 
 interface CapabilityRule {
@@ -51,6 +55,15 @@ interface CapabilityRule {
 }
 
 const CAPABILITY_RULES: CapabilityRule[] = [
+  // ── 语音转录服务 ──
+  {
+    keywords: ["xfyun", "讯飞", "iflytek", "iat", "paraformer", "funasr"],
+    capabilities: ["speech_transcription"],
+  },
+  {
+    keywords: ["whisper"],
+    capabilities: ["speech_transcription"],
+  },
   // ── 多模态大模型（文本 + 图像理解 + 文档生成 + 分析 + 媒体） ──
   {
     keywords: ["gpt-4o", "gpt4o", "o1", "o3", "o4"],
