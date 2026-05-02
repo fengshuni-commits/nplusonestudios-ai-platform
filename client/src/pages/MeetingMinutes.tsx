@@ -42,6 +42,16 @@ export default function MeetingMinutes() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [archivedDocId, setArchivedDocId] = useState<number | undefined>(undefined);
 
+  // Auto-save draft state
+  const [draftId, setDraftId] = useState<number | undefined>(undefined);
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const draftIdRef = useRef<number | undefined>(undefined);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const meetingTitleRef = useRef(meetingTitle);
+  const meetingDateRef = useRef(meetingDate);
+  const importedProjectIdRef = useRef(importedProjectId);
+
   // Streaming transcription state
   const [streamingPartial, setStreamingPartial] = useState(""); // current partial text being recognized
   const confirmedTranscriptRef = useRef(""); // confirmed transcript text
@@ -112,8 +122,14 @@ export default function MeetingMinutes() {
     transcriptRef.current = transcript;
   }, [transcript]);
 
+  useEffect(() => { meetingTitleRef.current = meetingTitle; }, [meetingTitle]);
+  useEffect(() => { meetingDateRef.current = meetingDate; }, [meetingDate]);
+  useEffect(() => { importedProjectIdRef.current = importedProjectId; }, [importedProjectId]);
+  useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+
   const uploadAudio = trpc.meeting.uploadAudio.useMutation();
   const transcribeMutation = trpc.meeting.transcribe.useMutation();
+  const saveDraftMutation = trpc.meeting.saveDraft.useMutation();
   const generateMutation = trpc.meeting.generateMinutes.useMutation({
     onSuccess: (data) => {
       setMinutes(data.content);
@@ -159,9 +175,34 @@ export default function MeetingMinutes() {
   const clearTimers = useCallback(() => {
     if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
     if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current);
     segmentTimerRef.current = null;
     durationTimerRef.current = null;
+    autoSaveTimerRef.current = null;
   }, []);
+
+  // Perform one auto-save: create draft on first save, update on subsequent saves
+  const performAutoSave = useCallback(async () => {
+    const currentTranscript = transcriptRef.current.trim();
+    if (!currentTranscript) return; // nothing to save
+    setIsAutoSaving(true);
+    try {
+      const result = await saveDraftMutation.mutateAsync({
+        transcript: currentTranscript,
+        meetingTitle: meetingTitleRef.current || undefined,
+        meetingDate: meetingDateRef.current || undefined,
+        projectId: importedProjectIdRef.current ?? undefined,
+        draftId: draftIdRef.current,
+      });
+      draftIdRef.current = result.draftId;
+      setDraftId(result.draftId);
+      setLastAutoSavedAt(new Date());
+    } catch (err) {
+      console.warn("[autoSave] failed:", err);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  }, [saveDraftMutation]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -202,7 +243,15 @@ export default function MeetingMinutes() {
       confirmedTranscriptRef.current = "";
       sentenceMapRef.current.clear();
       setStreamingPartial("");
+      // Reset draft state for new recording session
+      draftIdRef.current = undefined;
+      setDraftId(undefined);
+      setLastAutoSavedAt(null);
       startDurationTimer();
+      // Start auto-save timer: save every 5 minutes
+      autoSaveTimerRef.current = setInterval(() => {
+        performAutoSave();
+      }, 5 * 60 * 1000);
       // Start streaming transcription via WebSocket (required - no fallback)
       streamTranscribe.start().catch(err => {
         console.warn("[streamTranscribe] start failed:", err);
@@ -213,7 +262,7 @@ export default function MeetingMinutes() {
     } catch {
       toast.error("无法访问麦克风，请检查浏览器权限");
     }
-  }, [startDurationTimer, streamTranscribe]);
+  }, [startDurationTimer, streamTranscribe, performAutoSave]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
@@ -267,7 +316,9 @@ export default function MeetingMinutes() {
     recordingStateRef.current = "idle";
     setRecordingState("idle");
     toast.success("录音已停止，等待最后识别结果…");
-  }, [clearTimers]);
+    // Save draft immediately on stop
+    setTimeout(() => performAutoSave(), 2000); // slight delay to let onFinal arrive first
+  }, [clearTimers, performAutoSave]);
   // Keep ref in sync so onError can call stopRecording
   useEffect(() => {
     stopRecordingRef.current = stopRecording;
@@ -581,6 +632,23 @@ export default function MeetingMinutes() {
                       )}
                     </div>
                   </div>
+
+                  {/* Auto-save status indicator */}
+                  {isRecordingActive && (lastAutoSavedAt || isAutoSaving) && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {isAutoSaving ? (
+                        <>
+                          <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                          <span>自动保存中…</span>
+                        </>
+                      ) : lastAutoSavedAt ? (
+                        <>
+                          <svg className="h-3 w-3 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6 9 17l-5-5"/></svg>
+                          <span>草稿已保存 {lastAutoSavedAt.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
 
                   {/* Live transcript preview */}
                   {isRecordingActive && (

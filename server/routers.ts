@@ -3383,9 +3383,36 @@ const meetingRouter = router({
       const { url } = await storagePut(key, buffer, input.contentType);
       return { url, key };
     }),
+  // Auto-save transcript as a draft document during recording
+  saveDraft: protectedProcedure
+    .input(z.object({
+      transcript: z.string(),
+      meetingTitle: z.string().optional(),
+      meetingDate: z.string().optional(),
+      projectId: z.number().optional(),
+      draftId: z.number().optional(), // if set, update existing draft
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const title = `[草稿] ${input.meetingTitle || "会议纪要"} · ${input.meetingDate || new Date().toLocaleDateString("zh-CN")}`;
+      if (input.draftId) {
+        // Update existing draft
+        await db.updateDocument(input.draftId, { content: input.transcript, title });
+        return { draftId: input.draftId };
+      } else {
+        // Create new draft document
+        const doc = await db.createDocument({
+          projectId: input.projectId ?? null,
+          title,
+          content: input.transcript,
+          type: "minutes",
+          category: "management",
+          createdBy: ctx.user.id,
+        });
+        return { draftId: doc.id };
+      }
+    }),
 });
-
-// ─── Admin ───────────────────────────────────────────────
+// ─── Admin ────────────────────────────────────────────────
 
 const adminRouter = router({
   listUsers: adminProcedure.query(async () => {
