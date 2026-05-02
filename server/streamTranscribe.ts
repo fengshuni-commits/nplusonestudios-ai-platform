@@ -34,7 +34,7 @@ const FRAME_INTERVAL_MS = 40; // 40ms between frames
 // When flushing buffered frames, send multiple frames per tick to catch up faster.
 // Sending 4 frames per 40ms = 160ms of audio per tick = 4x real-time catch-up speed.
 const FLUSH_FRAMES_PER_TICK = 4;
-const SESSION_TIMEOUT_MS = 120_000; // 2 minutes max per overall session
+const SESSION_TIMEOUT_MS = 30 * 60_000; // 30 minutes max per overall session
 const MAX_XFYUN_RETRIES = 3; // max retries on connection failure
 
 function buildXfyunUrl(creds: XfyunCredentials): string {
