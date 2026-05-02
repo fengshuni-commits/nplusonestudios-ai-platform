@@ -2092,3 +2092,7 @@
 - [x] AI工具管理页面新增"语音转录"分类，可配置讯飞/Whisper 工具
 - [x] meeting.transcribe 和 streamTranscribe 自动读取 speech_transcription 默认工具凭证
 - [x] 8 个 vitest 测试全部通过
+
+## Bug：语音转录工具无法在会议纪要中选择
+- [x] 排查 AiToolSelector 过滤逻辑（根因：数据库存储旧值 speech_to_text，前端传旧值 speech_to_text，两者均与新值 speech_transcription 不匹配）
+- [x] 修复：数据库更新讯飞工具 capabilities 为 speech_transcription；前端 AiToolSelector capability 改为 speech_transcription

@@ -476,7 +476,7 @@ export default function MeetingMinutes() {
           <p className="text-sm text-muted-foreground mt-1">实时录音转录，或上传录音文件，AI 自动生成结构化会议纪要</p>
         </div>
         <div className="flex items-center gap-3">
-          <AiToolSelector capability="speech_to_text" value={speechToolId} onChange={setSpeechToolId} label="语音转写" showBuiltIn={false} />
+          <AiToolSelector capability="speech_transcription" value={speechToolId} onChange={setSpeechToolId} label="语音转写" showBuiltIn={false} />
           <AiToolSelector category="document" value={toolId} onChange={setToolId} label="AI 工具" />
         </div>
       </div>
