@@ -390,7 +390,10 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
 
     clientWs.on("close", () => {
       clientClosed = true;
-      flushGeneration++; // invalidate any in-progress flush
+      // NOTE: Do NOT increment flushGeneration here.
+      // If the client closes while xfyun is still processing the final frames,
+      // we still want to receive and log the final status=2 message.
+      // The clientClosed flag prevents sending results back to the closed WS.
       if (xfWs && (xfWs.readyState === WebSocket.OPEN || xfWs.readyState === WebSocket.CONNECTING)) {
         xfWs.close();
       }
@@ -399,7 +402,6 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     clientWs.on("error", (err) => {
       console.error("[streamTranscribe] client WS error:", err.message);
       clientClosed = true;
-      flushGeneration++;
       if (xfWs) xfWs.close();
     });
   });
