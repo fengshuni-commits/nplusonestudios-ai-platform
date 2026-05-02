@@ -87,6 +87,9 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       };
 
       if (msg.type === "ready") {
+        // New xfyun session started - clear any stale sentence state from previous session
+        sentencesRef.current.clear();
+        setStreamingText("");
         setIsReady(true);
         setIsConnecting(false);
         onReadyRef.current?.();

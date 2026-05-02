@@ -139,7 +139,7 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           language: "zh_cn",
           domain: "iat",
           accent: "mandarin",
-          vad_eos: 5000,  // 5s silence to end session
+          vad_eos: 10000, // 10s silence to end session (longer = fewer reconnects, better transcription)
           dwa: "wpgs",    // dynamic correction mode
         };
       }
@@ -211,6 +211,16 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       xfReady = false;
       flushing = false;
       frameIndex = 0;
+      // IMPORTANT: Before clearing partialTexts, rescue any accumulated text
+      // from the previous session that was interrupted (WS error / forced reconnect).
+      // Without this, any text recognised before the interruption is silently discarded.
+      if (partialTexts.size > 0) {
+        const rescuedText = Array.from(partialTexts.values()).join("");
+        if (rescuedText.trim()) {
+          console.log(`[streamTranscribe] rescuing ${rescuedText.length} chars from interrupted session`);
+          send(clientWs, { type: "final", text: rescuedText });
+        }
+      }
       partialTexts.clear();
 
       const myGeneration = flushGeneration;
@@ -279,9 +289,11 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
               const [from, to] = result.rg;
               for (let i = from; i <= to; i++) partialTexts.delete(i);
               partialTexts.set(sn, text);
+              console.log(`[streamTranscribe] partial sn=${sn} pgs=rpl: "${text}"`);
               send(clientWs, { type: "partial", text, sn, pgs: "rpl", rg: result.rg });
             } else {
               partialTexts.set(sn, text);
+              console.log(`[streamTranscribe] partial sn=${sn} pgs=apd: "${text}"`);
               send(clientWs, { type: "partial", text, sn, pgs: "apd" });
             }
           }
@@ -290,9 +302,9 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             // Session ended by xfyun (60s limit or silence)
             const finalText = Array.from(partialTexts.values()).join("");
             console.log(`[streamTranscribe] xfyun status=2, ended=${ended}, textLen=${finalText.length}`);
-            if (finalText.trim()) {
-              send(clientWs, { type: "final", text: finalText });
-            }
+            // ALWAYS send final message so client can clear its sentence map
+            // Even if empty, client needs to know the session ended cleanly
+            send(clientWs, { type: "final", text: finalText });
             ws.close();
             // Auto-reconnect if client hasn't ended recording
             if (!ended && !clientClosed) {

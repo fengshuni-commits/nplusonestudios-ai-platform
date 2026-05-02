@@ -79,10 +79,12 @@ export default function MeetingMinutes() {
           ? `${confirmedTranscriptRef.current} ${text.trim()}`
           : text.trim();
         confirmedTranscriptRef.current = newConfirmed;
-        setTranscript(newConfirmed);
       }
       sentenceMapRef.current.clear();
       setStreamingPartial("");
+      // Always sync transcript state after clearing sentenceMap
+      // so the display stays consistent with confirmedTranscriptRef
+      setTranscript(confirmedTranscriptRef.current);
       // If recording has already stopped, show a toast to confirm final result arrived
       if (recordingStateRef.current === "idle") {
         toast.success("转写完成！");
@@ -101,6 +103,11 @@ export default function MeetingMinutes() {
     },
     onReady: () => {
       console.log("[streamTranscribe] ready");
+      // New xfyun session started - clear stale sentence state from previous session
+      sentenceMapRef.current.clear();
+      setStreamingPartial("");
+      // Sync transcript to confirmed-only text (remove any stale partial display)
+      setTranscript(confirmedTranscriptRef.current);
     },
   });
 

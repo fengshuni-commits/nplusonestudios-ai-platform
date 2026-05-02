@@ -2166,3 +2166,12 @@
 - [x] 客户端 useStreamTranscribe：添加 onWarning 回调接口，warning 消息不触发 onError/stopRecording
 - [x] MeetingMinutes.tsx：添加 onWarning 回调，只显示 toast 提示，不调用 stopRecording()
 - [x] onError 仅用于真正致命的错误（凭证缺失、麦克风权限拒绝等），才触发 stopRecording
+
+## Bug 修复：讯飞转写内容严重缺失（根本原因）
+- [x] 服务端：connectXfyun() 清空 partialTexts 前先救援已积累文字（发 final 消息），防止 WS 错误时文字丢失
+- [x] 服务端：session 结束时无论 textLen 是否为 0 都发送 final 消息，确保客户端 sentenceMap 始终被清空
+- [x] 服务端：添加 partial 日志（sn/pgs/text），便于后续调试
+- [x] 服务端：vad_eos 从 5000ms 提高到 10000ms，减少 session 碎片化
+- [x] 客户端 useStreamTranscribe：onReady 时清空 sentencesRef，防止跨 session 的 sn 冲突
+- [x] 客户端 MeetingMinutes：onReady 时清空 sentenceMapRef 并同步 transcript 状态
+- [x] 客户端 MeetingMinutes：onFinal 后始终调用 setTranscript(confirmedTranscriptRef)，保持显示状态一致
