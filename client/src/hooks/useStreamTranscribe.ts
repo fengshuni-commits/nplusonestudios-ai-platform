@@ -7,13 +7,10 @@
  * - 实时接收识别结果并回调
  * - 支持预连接（toolId 设置后提前建立 WS 连接，减少录音开始时的延迟）
  *
- * 使用方式：
- *   const { start, stop, pause, resume, isReady, streamingText } = useStreamTranscribe({
- *     toolId,
- *     onPartial: (text) => ...,
- *     onFinal: (text) => ...,
- *     onError: (msg) => ...,
- *   });
+ * 关键设计原则：
+ * - 所有回调（onPartial/onFinal/onError/onReady）通过 ref 访问，避免闭包过期问题
+ * - 只有一套 WS 消息处理函数（handleWsMessage），同时用于预连接和活跃连接
+ * - recordingActiveRef 仅控制是否向 WS 发送音频数据，不控制是否接收消息
  */
 
 import { useRef, useState, useCallback, useEffect } from "react";
@@ -37,7 +34,7 @@ export interface StreamTranscribeHandle {
 }
 
 export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTranscribeHandle {
-  const { toolId, onPartial, onFinal, onError, onReady } = options;
+  const { toolId } = options;
 
   const [isReady, setIsReady] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -48,18 +45,20 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pausedRef = useRef(false);
-  const preConnectedRef = useRef(false);  // WS pre-connected before recording starts
-  const recordingActiveRef = useRef(false); // recording is active
+  const recordingActiveRef = useRef(false); // true when recording is in progress
 
-  // Callbacks refs to avoid stale closures in pre-connected WS handlers
-  const onPartialRef = useRef(onPartial);
-  const onFinalRef = useRef(onFinal);
-  const onErrorRef = useRef(onError);
-  const onReadyRef = useRef(onReady);
-  useEffect(() => { onPartialRef.current = onPartial; }, [onPartial]);
-  useEffect(() => { onFinalRef.current = onFinal; }, [onFinal]);
-  useEffect(() => { onErrorRef.current = onError; }, [onError]);
-  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+  // Sentence accumulator for wpgs (dynamic correction) mode
+  const sentencesRef = useRef<Map<number, string>>(new Map());
+
+  // Always-fresh callback refs — never stale in closures
+  const onPartialRef = useRef(options.onPartial);
+  const onFinalRef = useRef(options.onFinal);
+  const onErrorRef = useRef(options.onError);
+  const onReadyRef = useRef(options.onReady);
+  useEffect(() => { onPartialRef.current = options.onPartial; }, [options.onPartial]);
+  useEffect(() => { onFinalRef.current = options.onFinal; }, [options.onFinal]);
+  useEffect(() => { onErrorRef.current = options.onError; }, [options.onError]);
+  useEffect(() => { onReadyRef.current = options.onReady; }, [options.onReady]);
 
   // Build WebSocket URL
   const buildWsUrl = useCallback((tid?: number) => {
@@ -71,19 +70,60 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     return `${proto}//${loc.host}/api/transcribe-stream?${params.toString()}`;
   }, [toolId]);
 
+  // ── Unified WS message handler (used for both pre-connect and active WS) ──
+  // Uses refs for all callbacks to avoid stale closure issues.
+  const handleWsMessage = useCallback((e: MessageEvent) => {
+    try {
+      const msg = JSON.parse(e.data as string) as {
+        type: "ready" | "partial" | "final" | "error";
+        text?: string;
+        message?: string;
+        sn?: number;
+        pgs?: "apd" | "rpl";
+        rg?: [number, number];
+      };
+
+      if (msg.type === "ready") {
+        setIsReady(true);
+        setIsConnecting(false);
+        onReadyRef.current?.();
+      } else if (msg.type === "partial") {
+        const sn = msg.sn ?? 0;
+        const text = msg.text ?? "";
+        const pgs = msg.pgs ?? "apd";
+
+        if (pgs === "rpl" && msg.rg) {
+          const [from, to] = msg.rg;
+          for (let i = from; i <= to; i++) sentencesRef.current.delete(i);
+        }
+        sentencesRef.current.set(sn, text);
+        setStreamingText(text);
+        onPartialRef.current?.(text, sn, pgs, msg.rg);
+      } else if (msg.type === "final") {
+        const finalText = msg.text ?? Array.from(sentencesRef.current.values()).join("");
+        sentencesRef.current.clear();
+        setStreamingText("");
+        onFinalRef.current?.(finalText);
+      } else if (msg.type === "error") {
+        onErrorRef.current?.(msg.message ?? "转写错误");
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []); // no deps needed - all callbacks accessed via refs
+
   // ── Pre-connect WS when toolId is set ─────────────────────────────────
-  // This reduces the initial delay when user clicks record
   const preConnectRef = useRef<WebSocket | null>(null);
   const preConnectToolIdRef = useRef<number | undefined>(undefined);
-  const preConnectSentencesRef = useRef<Map<number, string>>(new Map());
 
   const closePreConnect = useCallback(() => {
     if (preConnectRef.current) {
+      preConnectRef.current.onmessage = null;
+      preConnectRef.current.onerror = null;
+      preConnectRef.current.onclose = null;
       preConnectRef.current.close();
       preConnectRef.current = null;
     }
-    preConnectedRef.current = false;
-    preConnectSentencesRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -93,7 +133,7 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     }
     // Don't pre-connect if already recording
     if (recordingActiveRef.current) return;
-    // Don't re-connect if same toolId
+    // Don't re-connect if same toolId and already open
     if (preConnectToolIdRef.current === toolId && preConnectRef.current?.readyState === WebSocket.OPEN) return;
 
     closePreConnect();
@@ -104,64 +144,16 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     ws.binaryType = "arraybuffer";
     preConnectRef.current = ws;
 
-    ws.onopen = () => {
-      // WS connected but not yet recording - wait for start() to attach audio
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data as string) as {
-          type: "ready" | "partial" | "final" | "error";
-          text?: string;
-          message?: string;
-          sn?: number;
-          pgs?: "apd" | "rpl";
-          rg?: [number, number];
-        };
-
-        if (msg.type === "ready") {
-          // Always handle ready - even before recording starts (pre-connection)
-          preConnectedRef.current = true;
-          if (recordingActiveRef.current) {
-            setIsReady(true);
-            setIsConnecting(false);
-            onReadyRef.current?.();
-          }
-        } else if (msg.type === "partial") {
-          if (!recordingActiveRef.current) return; // ignore data before recording starts
-          const sn = msg.sn ?? 0;
-          const text = msg.text ?? "";
-          const pgs = msg.pgs ?? "apd";
-          const sentences = preConnectSentencesRef.current;
-
-          if (pgs === "rpl" && msg.rg) {
-            const [from, to] = msg.rg;
-            for (let i = from; i <= to; i++) sentences.delete(i);
-          }
-          sentences.set(sn, text);
-          setStreamingText(text);
-          onPartialRef.current?.(text, sn, pgs, msg.rg);
-        } else if (msg.type === "final") {
-          const finalText = msg.text ?? Array.from(preConnectSentencesRef.current.values()).join("");
-          preConnectSentencesRef.current.clear();
-          setStreamingText("");
-          onFinalRef.current?.(finalText);
-        } else if (msg.type === "error") {
-          onErrorRef.current?.(msg.message ?? "转写错误");
-        }
-      } catch {
-        // ignore parse errors
-      }
-    };
+    // Use the unified handler - it will call onReady/onPartial/etc. via refs
+    ws.onmessage = handleWsMessage;
 
     ws.onerror = () => {
-      preConnectedRef.current = false;
+      // Pre-connect error is non-fatal; start() will create a fresh WS if needed
     };
 
     ws.onclose = () => {
       if (preConnectRef.current === ws) {
         preConnectRef.current = null;
-        preConnectedRef.current = false;
       }
       if (recordingActiveRef.current) {
         setIsReady(false);
@@ -169,15 +161,16 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       }
     };
 
-    preConnectedRef.current = true;
-
     return () => {
       if (!recordingActiveRef.current) {
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
         ws.close();
         if (preConnectRef.current === ws) preConnectRef.current = null;
       }
     };
-  }, [toolId, buildWsUrl, closePreConnect]);
+  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage]);
 
   const stop = useCallback(() => {
     recordingActiveRef.current = false;
@@ -235,13 +228,17 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   }, []);
 
   const start = useCallback(async () => {
-    // Clean up any previous session
+    // Clean up any previous active session WS
     if (wsRef.current) {
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
       wsRef.current.close();
       wsRef.current = null;
     }
 
     recordingActiveRef.current = true;
+    sentencesRef.current.clear();
     setIsConnecting(true);
     setStreamingText("");
 
@@ -251,10 +248,10 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
-    } catch (e) {
+    } catch {
       setIsConnecting(false);
       recordingActiveRef.current = false;
-      onError?.("无法访问麦克风，请检查浏览器权限");
+      onErrorRef.current?.("无法访问麦克风，请检查浏览器权限");
       return;
     }
     streamRef.current = stream;
@@ -265,10 +262,10 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
 
     try {
       await audioCtx.audioWorklet.addModule("/pcm-processor.js");
-    } catch (e) {
+    } catch {
       setIsConnecting(false);
       recordingActiveRef.current = false;
-      onError?.("AudioWorklet 加载失败，请刷新页面重试");
+      onErrorRef.current?.("AudioWorklet 加载失败，请刷新页面重试");
       stream.getTracks().forEach((t) => t.stop());
       return;
     }
@@ -284,79 +281,32 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
 
     // 3. Use pre-connected WS if available, otherwise create new one
     let ws: WebSocket;
-    if (preConnectRef.current && preConnectRef.current.readyState === WebSocket.OPEN) {
+    if (preConnectRef.current &&
+        (preConnectRef.current.readyState === WebSocket.OPEN ||
+         preConnectRef.current.readyState === WebSocket.CONNECTING)) {
+      // Reuse the pre-connected WS - it already has handleWsMessage attached
       ws = preConnectRef.current;
       preConnectRef.current = null;
-      // If xfyun is already ready (pre-connection received ready msg), signal immediately
-      if (preConnectedRef.current) {
-        setIsReady(true);
-        setIsConnecting(false);
-        onReady?.();
+      // If xfyun already sent "ready" before recording started, signal now
+      if (isReady) {
+        // already set, no-op
       }
-      // Otherwise wait for the ready message from server
-    } else if (preConnectRef.current && preConnectRef.current.readyState === WebSocket.CONNECTING) {
-      // Still connecting - wait for it
-      ws = preConnectRef.current;
-      preConnectRef.current = null;
-      ws.onopen = () => {
-        // ready will come from server's "ready" message
-      };
     } else {
-      // No pre-connection - create fresh WS
+      // No usable pre-connection - create fresh WS
       closePreConnect();
       const wsUrl = buildWsUrl();
       ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";
+      // Attach the unified handler
+      ws.onmessage = handleWsMessage;
     }
 
     wsRef.current = ws;
 
-    // Re-attach message handler to use current callbacks
-    const sentences = preConnectSentencesRef.current;
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data as string) as {
-          type: "ready" | "partial" | "final" | "error";
-          text?: string;
-          message?: string;
-          sn?: number;
-          pgs?: "apd" | "rpl";
-          rg?: [number, number];
-        };
-
-        if (msg.type === "ready") {
-          setIsReady(true);
-          setIsConnecting(false);
-          onReady?.();
-        } else if (msg.type === "partial") {
-          const sn = msg.sn ?? 0;
-          const text = msg.text ?? "";
-          const pgs = msg.pgs ?? "apd";
-
-          if (pgs === "rpl" && msg.rg) {
-            const [from, to] = msg.rg;
-            for (let i = from; i <= to; i++) sentences.delete(i);
-          }
-          sentences.set(sn, text);
-          setStreamingText(text);
-          onPartial?.(text, sn, pgs, msg.rg);
-        } else if (msg.type === "final") {
-          const finalText = msg.text ?? Array.from(sentences.values()).join("");
-          sentences.clear();
-          setStreamingText("");
-          onFinal?.(finalText);
-        } else if (msg.type === "error") {
-          onError?.(msg.message ?? "转写错误");
-        }
-      } catch {
-        // ignore parse errors
-      }
-    };
-
     ws.onerror = () => {
       setIsConnecting(false);
       setIsReady(false);
-      onError?.("WebSocket 连接失败，请检查网络");
+      onErrorRef.current?.("WebSocket 连接失败，请检查网络");
     };
 
     ws.onclose = () => {
@@ -375,7 +325,7 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
         ws.send(e.data as ArrayBuffer);
       }
     };
-  }, [toolId, buildWsUrl, stop, closePreConnect, onPartial, onFinal, onError, onReady]);
+  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage, isReady]);
 
   return { start, stop, pause, resume, isReady, isConnecting, streamingText };
 }
