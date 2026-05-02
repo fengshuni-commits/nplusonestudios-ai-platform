@@ -20,6 +20,7 @@ export interface StreamTranscribeOptions {
   onPartial?: (text: string, sn: number, pgs: "apd" | "rpl", rg?: [number, number]) => void;
   onFinal?: (text: string) => void;
   onError?: (message: string) => void;
+  onWarning?: (message: string) => void;
   onReady?: () => void;
 }
 
@@ -54,10 +55,12 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   const onPartialRef = useRef(options.onPartial);
   const onFinalRef = useRef(options.onFinal);
   const onErrorRef = useRef(options.onError);
+  const onWarningRef = useRef(options.onWarning);
   const onReadyRef = useRef(options.onReady);
   useEffect(() => { onPartialRef.current = options.onPartial; }, [options.onPartial]);
   useEffect(() => { onFinalRef.current = options.onFinal; }, [options.onFinal]);
   useEffect(() => { onErrorRef.current = options.onError; }, [options.onError]);
+  useEffect(() => { onWarningRef.current = options.onWarning; }, [options.onWarning]);
   useEffect(() => { onReadyRef.current = options.onReady; }, [options.onReady]);
 
   // Build WebSocket URL
@@ -75,7 +78,7 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   const handleWsMessage = useCallback((e: MessageEvent) => {
     try {
       const msg = JSON.parse(e.data as string) as {
-        type: "ready" | "partial" | "final" | "error";
+        type: "ready" | "partial" | "final" | "error" | "warning";
         text?: string;
         message?: string;
         sn?: number;
@@ -104,6 +107,9 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
         sentencesRef.current.clear();
         setStreamingText("");
         onFinalRef.current?.(finalText);
+      } else if (msg.type === "warning") {
+        // Transient warning — do NOT stop recording, just notify
+        onWarningRef.current?.(msg.message ?? "转写警告");
       } else if (msg.type === "error") {
         onErrorRef.current?.(msg.message ?? "转写错误");
       }

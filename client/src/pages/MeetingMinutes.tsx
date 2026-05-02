@@ -88,17 +88,16 @@ export default function MeetingMinutes() {
         toast.success("转写完成！");
       }
     },
+    onWarning: (msg) => {
+      // Transient warning (e.g. 10165/10008 retry) — show brief toast, do NOT stop recording
+      console.warn("[streamTranscribe] warning:", msg);
+      toast.warning(msg, { id: "xfyun-warn", duration: 3000 });
+    },
     onError: (msg) => {
-      console.warn("[streamTranscribe] error:", msg);
-      if (msg.includes("重试中")) {
-        // Transient retry - show brief info
-        toast.info(msg, { id: "xfyun-retry", duration: 2000 });
-      } else {
-        // All retries exhausted - show error and stop recording
-        toast.error(`讯飞实时转写失败：${msg}。请检查讯飞配置后重试。`, { id: "xfyun-fail", duration: 8000 });
-        // Auto-stop recording since transcription is unavailable
-        stopRecordingRef.current?.();
-      }
+      // Fatal error — stop recording
+      console.error("[streamTranscribe] fatal error:", msg);
+      toast.error(`讯飞实时转写失败：${msg}。请检查讯飞配置后重试。`, { id: "xfyun-fail", duration: 8000 });
+      stopRecordingRef.current?.();
     },
     onReady: () => {
       console.log("[streamTranscribe] ready");

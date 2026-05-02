@@ -2160,3 +2160,9 @@
 - [x] 前端：录音中每5分钟自动保存转写草稿
 - [x] 前端：停止录音后2秒自动保存一次（等待onFinal到来）
 - [x] 前端：录音界面显示"草稿已保存 HH:MM"状态指示器
+
+## Bug 修复：讯飞可恢复错误导致录音自动停止
+- [x] 服务端：将可恢复错误（10165/10008/重试中/冷却重连）改为发送 type:"warning" 而非 type:"error"
+- [x] 客户端 useStreamTranscribe：添加 onWarning 回调接口，warning 消息不触发 onError/stopRecording
+- [x] MeetingMinutes.tsx：添加 onWarning 回调，只显示 toast 提示，不调用 stopRecording()
+- [x] onError 仅用于真正致命的错误（凭证缺失、麦克风权限拒绝等），才触发 stopRecording

@@ -260,11 +260,11 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
               const baseDelay = msg.code === 10165 ? 3000 : 1500;
               const delay = Math.pow(2, xfyunRetryCount - 1) * baseDelay;
               console.log(`[streamTranscribe] retrying xfyun (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
-              send(clientWs, { type: "error", message: `讯飞连接重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
+              send(clientWs, { type: "warning", message: `讯飞连接重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
               ws.close();
               setTimeout(() => connectXfyun(true), delay);
             } else {
-              send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` });
+              send(clientWs, { type: "error", message: `讯飞识别错误 (${msg.code}): ${msg.message}` }); // fatal - not recoverable
             }
             return;
           }
@@ -316,11 +316,11 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
           xfyunRetryCount++;
           const delay = Math.pow(2, xfyunRetryCount - 1) * 1500; // 1.5s, 3s, 6s, 12s, 24s
           console.log(`[streamTranscribe] retrying xfyun WS (attempt ${xfyunRetryCount}/${MAX_XFYUN_RETRIES}) in ${delay}ms`);
-          send(clientWs, { type: "error", message: `讯飞连接失败，重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
+          send(clientWs, { type: "warning", message: `讯飞连接失败，重试中 (${xfyunRetryCount}/${MAX_XFYUN_RETRIES})...` });
           setTimeout(() => connectXfyun(true), delay);
         } else {
           console.error(`[streamTranscribe] xfyun all retries exhausted`);
-          send(clientWs, { type: "error", message: `讯飞连接暂时不可用，将在30秒后自动重试...` });
+          send(clientWs, { type: "warning", message: `讯飞连接暂时不可用，将在30秒后自动重试...` });
           // Clear pending buffer to prevent OOM
           pendingFrames.length = 0;
           // Schedule a full reconnect attempt after 30s cooldown
