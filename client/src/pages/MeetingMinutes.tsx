@@ -35,9 +35,6 @@ export default function MeetingMinutes() {
   // Live recording state
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [liveSegmentCount, setLiveSegmentCount] = useState(0);
-  const [isProcessingSegment, setIsProcessingSegment] = useState(false);
-  const [pendingSegments, setPendingSegments] = useState(0);
   const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadMime, setDownloadMime] = useState<string>("audio/webm");
@@ -72,20 +69,20 @@ export default function MeetingMinutes() {
           : text.trim();
         confirmedTranscriptRef.current = newConfirmed;
         setTranscript(newConfirmed);
-        setLiveSegmentCount(c => c + 1);
       }
       sentenceMapRef.current.clear();
       setStreamingPartial("");
     },
     onError: (msg) => {
       console.warn("[streamTranscribe] error:", msg);
-      // Show retry messages to user; final failure shows warning
       if (msg.includes("重试中")) {
-        // Transient retry - show brief info (don't spam)
+        // Transient retry - show brief info
         toast.info(msg, { id: "xfyun-retry", duration: 2000 });
-      } else if (msg.includes("已重试") || msg.includes("连接失败")) {
-        // All retries exhausted - warn user, fallback to 15s Whisper segments
-        toast.warning("讯飞连接失败，已切换为 Whisper 转写（每 15 秒更新一次）", { id: "xfyun-fail", duration: 5000 });
+      } else {
+        // All retries exhausted - show error and stop recording
+        toast.error(`讯飞实时转写失败：${msg}。请检查讯飞配置后重试。`, { id: "xfyun-fail", duration: 8000 });
+        // Auto-stop recording since transcription is unavailable
+        stopRecordingRef.current?.();
       }
     },
     onReady: () => {
@@ -103,6 +100,8 @@ export default function MeetingMinutes() {
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const transcriptRef = useRef(transcript);
+  // Ref to stopRecording so onError callback (defined before stopRecording) can call it
+  const stopRecordingRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -146,107 +145,6 @@ export default function MeetingMinutes() {
     });
   }, []);
 
-  // Known Whisper hallucination strings to filter out
-  const WHISPER_HALLUCINATIONS = [
-    "请大家记得点赞",
-    "感谢观看",
-    "订阅频道",
-    "下期再见",
-    "谢谢观看",
-    "欢迎关注",
-    "记得点赞",
-    "请订阅",
-    "拜拜",
-    "Thank you for watching",
-    "Please subscribe",
-    "Don't forget to like",
-    "See you next time",
-  ];
-  const filterHallucinations = useCallback((text: string): string => {
-    const trimmed = text.trim();
-    if (!trimmed) return "";
-    // Filter if the text is ONLY hallucination content (not mixed with real content)
-    const isHallucination = WHISPER_HALLUCINATIONS.some(h => trimmed.includes(h));
-    if (isHallucination && trimmed.length < 50) return ""; // short hallucination-only text
-    return trimmed;
-  }, []);
-
-  // Process a chunk of audio: upload → transcribe → append
-  const processAudioChunk = useCallback(async (chunks: Blob[], rawMimeType: string) => {
-    if (chunks.length === 0) return;
-    // Normalize mimeType: strip codec params (e.g. "audio/webm;codecs=opus" → "audio/webm")
-    const mimeType = rawMimeType.split(";")[0].trim();
-    const extMap: Record<string, string> = {
-      "audio/webm": "webm",
-      "audio/ogg": "ogg",
-      "audio/mp4": "mp4",
-      "audio/mpeg": "mp3",
-      "audio/wav": "wav",
-    };
-    const ext = extMap[mimeType] ?? "webm";
-
-    setIsProcessingSegment(true);
-    setPendingSegments(c => c + 1);
-    try {
-      const blob = new Blob(chunks, { type: mimeType });
-      if (blob.size < 1000) {
-        // Too small to be meaningful audio, skip silently
-        setPendingSegments(c => Math.max(0, c - 1));
-        setIsProcessingSegment(false);
-        return;
-      }
-      const base64 = await blobToBase64(blob);
-      const uploadResult = await uploadAudio.mutateAsync({
-        fileName: `live-segment-${Date.now()}.${ext}`,
-        fileData: base64,
-        contentType: mimeType,
-      });
-      const transcribeResult = await transcribeMutation.mutateAsync({
-        audioUrl: uploadResult.url,
-        language: "zh",
-        toolId: speechToolId,
-      });
-      const rawText = transcribeResult.text?.trim() ?? "";
-      const fullText = filterHallucinations(rawText);
-      if (fullText) {
-        // When sending full accumulated audio (fallback mode), Whisper returns the
-        // entire transcript from the beginning. Only append the NEW portion that
-        // comes after what we already have confirmed.
-        // Use confirmedTranscriptRef as the baseline (shared with WebSocket streaming).
-        const prevConfirmed = confirmedTranscriptRef.current.trim();
-        let newText: string;
-        if (!prevConfirmed) {
-          newText = fullText;
-        } else if (fullText.startsWith(prevConfirmed)) {
-          // Take only the suffix after already-confirmed text
-          const suffix = fullText.slice(prevConfirmed.length).trim();
-          newText = suffix ? `${prevConfirmed} ${suffix}` : prevConfirmed;
-        } else {
-          // Whisper returned a corrected full transcript
-          newText = fullText;
-        }
-        confirmedTranscriptRef.current = newText;
-        setTranscript(newText);
-        setLiveSegmentCount(c => c + 1);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "转录失败";
-      toast.error(`音频转录失败：${msg}`);
-      console.error("[processAudioChunk] error:", err);
-    } finally {
-      setIsProcessingSegment(false);
-      setPendingSegments(c => Math.max(0, c - 1));
-    }
-  }, [uploadAudio, transcribeMutation, blobToBase64, filterHallucinations]);
-
-  const startSegmentTimer = useCallback((recorder: MediaRecorder, mimeType: string) => {
-    segmentTimerRef.current = setInterval(() => {
-      if (recorder.state === "recording") {
-        recorder.requestData(); // triggers ondataavailable
-      }
-    }, 15000); // every 15s
-  }, []);
-
   const startDurationTimer = useCallback(() => {
     durationTimerRef.current = setInterval(() => {
       setRecordingDuration(d => d + 1);
@@ -284,41 +182,32 @@ export default function MeetingMinutes() {
       setDownloadUrl(null);
       setDownloadMime(mimeType.split(";")[0].trim());
 
-      recorder.ondataavailable = async (e) => {
+      recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          // Accumulate for full download
+          // Accumulate for full download only (no Whisper fallback)
           fullRecordingChunksRef.current.push(e.data);
           audioChunksRef.current = [];
-          // Only use 15s Whisper fallback when WebSocket streaming is NOT active.
-          // When WebSocket is active, it handles transcription in real-time.
-          // When falling back, send ALL accumulated chunks (full webm with header)
-          // so Whisper can parse the file format correctly.
-          if (!streamTranscribe.isReady) {
-            const allChunks = [...fullRecordingChunksRef.current];
-            processAudioChunk(allChunks, mimeType);
-          }
         }
       };
 
-      recorder.start(15000); // timeslice: collect data every 15s
+      recorder.start(15000); // timeslice: collect data every 15s for download accumulation
       setRecordingState("recording");
       setRecordingDuration(0);
-      setLiveSegmentCount(0);
       confirmedTranscriptRef.current = "";
       sentenceMapRef.current.clear();
       setStreamingPartial("");
       startDurationTimer();
-      startSegmentTimer(recorder, mimeType);
-      // Start streaming transcription via WebSocket
+      // Start streaming transcription via WebSocket (required - no fallback)
       streamTranscribe.start().catch(err => {
         console.warn("[streamTranscribe] start failed:", err);
-        // Non-fatal: fall back to 15s segment method
+        toast.error(`讯飞实时转写启动失败：${err instanceof Error ? err.message : err}。请检查讯飞配置。`, { duration: 8000 });
+        stopRecordingRef.current?.();
       });
-      toast.success("开始录音");
+      toast.success("开始录音，实时转写连接中…");
     } catch {
       toast.error("无法访问麦克风，请检查浏览器权限");
     }
-  }, [processAudioChunk, startDurationTimer, startSegmentTimer, streamTranscribe]);
+  }, [startDurationTimer, streamTranscribe]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
@@ -333,12 +222,10 @@ export default function MeetingMinutes() {
     if (mediaRecorderRef.current?.state === "paused") {
       mediaRecorderRef.current.resume();
       startDurationTimer();
-      const mimeType = mediaRecorderRef.current.mimeType;
-      startSegmentTimer(mediaRecorderRef.current, mimeType);
       streamTranscribe.resume();
       setRecordingState("recording");
     }
-  }, [startDurationTimer, startSegmentTimer, streamTranscribe]);
+  }, [startDurationTimer, streamTranscribe]);
 
   const stopRecording = useCallback(() => {
     clearTimers();
@@ -371,6 +258,10 @@ export default function MeetingMinutes() {
     setRecordingState("idle");
     toast.success("录音已停止");
   }, [clearTimers]);
+  // Keep ref in sync so onError can call stopRecording
+  useEffect(() => {
+    stopRecordingRef.current = stopRecording;
+  }, [stopRecording]);
 
   // Cleanup on unmount: stop timers, release mic, revoke Blob URL
   useEffect(() => {
@@ -642,9 +533,8 @@ export default function MeetingMinutes() {
                           </div>
                           <div className="text-xs text-muted-foreground mt-1">
                             {recordingState === "recording" ? "录音中" : "已暂停"}
-                            {streamTranscribe.isConnecting && " · 连接中…"}
-                            {streamTranscribe.isReady && " · 实时转写"}
-                            {!streamTranscribe.isReady && !streamTranscribe.isConnecting && liveSegmentCount > 0 && ` · 已转录 ${liveSegmentCount} 段`}
+                            {streamTranscribe.isConnecting && " · 实时转写连接中…"}
+                            {streamTranscribe.isReady && " · 实时转写追录中"}
                           </div>
                         </>
                       ) : (
@@ -765,15 +655,13 @@ export default function MeetingMinutes() {
                 placeholder="录音转写结果将实时显示在此处，您也可以手动输入或编辑会议内容…"
                 rows={10}
               />
-              <Button onClick={handleGenerate} disabled={isGenerating || !transcript.trim() || isRecordingActive || pendingSegments > 0} className="w-full">
+              <Button onClick={handleGenerate} disabled={isGenerating || !transcript.trim() || isRecordingActive} className="w-full">
                 {isArchiving ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />上传录音文件…</>
                 ) : isGenerating ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中…</>
                 ) : isRecordingActive ? (
                   <><Mic className="h-4 w-4 mr-2" />录音结束后可生成纪要</>
-                ) : pendingSegments > 0 ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />正在转录最后一段音频…</>
                 ) : (
                   <><Sparkles className="h-4 w-4 mr-2" />{importedProjectId ? "生成并存入文档库" : "生成会议纪要"}</>
                 )}

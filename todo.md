@@ -2140,3 +2140,10 @@
 - [x] 改善用户体验：讯飞连接失败时显示明确提示（重试中/已切换 Whisper）
 - [x] 添加 Whisper 幻觉文字过滤（过滤"请大家记得点赞"等已知幻觉字符串）
 - [x] 改善停止录音后的提示文字
+
+## 移除 Whisper Fallback
+- [x] 移除 ondataavailable 中的 Whisper 15s 分段转写逻辑
+- [x] 移除 processAudioChunk、startSegmentTimer、filterHallucinations 等 Whisper 相关函数
+- [x] 讯飞连接失败时直接显示错误并自动停止录音（不再静默切换）
+- [x] 开始录音提示改为"实时转写连接中…"
+- [x] 状态栏显示"实时转写连接中…"和"实时转写追录中"
