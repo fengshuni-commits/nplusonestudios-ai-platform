@@ -3241,25 +3241,19 @@ const meetingRouter = router({
               if (!('error' in xfResult)) {
                 return xfResult;
               }
-              console.warn("[meeting.transcribe] xfyun failed, falling back to whisper:", xfResult);
+              console.error("[meeting.transcribe] xfyun failed:", xfResult);
+              const xfErr = xfResult as { error: string; code?: string | number; details?: string };
+              const detail = xfErr.details ? ` (${xfErr.details})` : "";
+              throw new TRPCError({ code: "BAD_REQUEST", message: `讲飞语音识别失败: ${xfErr.error}${detail}` });
             }
           }
         } catch (e) {
-          console.warn("[meeting.transcribe] xfyun error, falling back to whisper:", e);
+          if (e instanceof TRPCError) throw e;
+          console.error("[meeting.transcribe] xfyun error:", e);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "讲飞语音识别服务异常" });
         }
       }
-      // 回退到 Whisper
-      const result = await transcribeAudio({
-        audioUrl: input.audioUrl,
-        language: input.language || "zh",
-        prompt: "会议录音转写",
-      });
-      if ('error' in result) {
-        console.error("[meeting.transcribe] error:", result.code, result.error, result.details);
-        const detail = result.details ? ` (${result.details})` : "";
-        throw new TRPCError({ code: "BAD_REQUEST", message: `${result.error}${detail}` });
-      }
-      return result;
+      throw new TRPCError({ code: "BAD_REQUEST", message: "未配置讲飞语音识别工具，请在设置中配置讲飞 API" });
     }),
 
   generateMinutes: protectedProcedure

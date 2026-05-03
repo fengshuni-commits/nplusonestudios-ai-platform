@@ -195,8 +195,11 @@ export async function xfyunTranscribe(
     let resolved = false;
     let frameIndex = 0;
     const FRAME_SIZE = 1280; // 每帧 1280 字节（40ms @ 16kHz 16bit mono）
-    const FRAME_INTERVAL_MS = 40;
+    // For file transcription, send frames as fast as possible (10ms intervals)
+    // Real-time rate would be 40ms, but for files we can go faster
+    const FRAME_INTERVAL_MS = 10;
     let sendTimer: ReturnType<typeof setInterval> | null = null;
+    let allFramesSent = false;
 
     const finish = (result: XfyunResult) => {
       if (resolved) return;
@@ -223,9 +226,13 @@ export async function xfyunTranscribe(
           // 所有帧已发完，发送结束帧
           if (sendTimer) clearInterval(sendTimer);
           sendTimer = null;
-          ws.send(JSON.stringify({
-            data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", audio: "" },
-          }));
+          if (!allFramesSent) {
+            allFramesSent = true;
+            console.log(`[xfyunTranscribe] all ${frameIndex} frames sent, waiting for result...`);
+            ws.send(JSON.stringify({
+              data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", audio: "" },
+            }));
+          }
           return;
         }
 
