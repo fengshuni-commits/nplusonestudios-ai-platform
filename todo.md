@@ -2313,3 +2313,10 @@
 - [x] 前端：所有文字块均有透明热区，点击弹出编辑框（不再切换背景图，inpainting 基于 compositeImageUrl）
 - [x] 前端：inpainting 完成后重新合成 compositeImageUrl 并更新显示
 - [x] 导出 PDF/图片改用 compositeImageUrl
+
+## 图文排版大模型选择功能
+- [x] toolCapabilities.ts 增加 layout_plan capability
+- [x] AiToolsManagement.tsx 增加图文排版规划工具选项
+- [x] graphicLayoutService.ts 增加 planToolId 参数，传给 invokeLLMWithUserTool
+- [x] routers.ts generate procedure 增加 planToolId 字段
+- [x] MediaLayout.tsx 增加排版规划模型选择栏（在图像生成工具上方）

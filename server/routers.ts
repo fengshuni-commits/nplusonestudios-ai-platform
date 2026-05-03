@@ -5756,6 +5756,7 @@ const graphicLayoutRouter = router({
       assetUrls: z.array(z.string()).optional(),
       title: z.string().optional(),
       imageToolId: z.number().optional(),
+      planToolId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const drizzleDb = await db.getDb();
@@ -5771,7 +5772,7 @@ const graphicLayoutRouter = router({
       });
       const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
       if (!newJob) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建排版任务失败" });
-      generateGraphicLayoutAsync(newJob.id, ctx.user.id, input.imageToolId, input.stylePrompt).catch(console.error);
+      generateGraphicLayoutAsync(newJob.id, ctx.user.id, input.imageToolId, input.stylePrompt, input.planToolId).catch(console.error);
       return { id: newJob.id, status: "pending" as const };
     }),
 

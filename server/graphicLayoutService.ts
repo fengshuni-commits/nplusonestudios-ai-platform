@@ -4,7 +4,7 @@
  */
 
 import * as db from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, invokeLLMWithUserTool } from "./_core/llm";
 import { generateImageWithTool } from "./_core/generateImageWithTool";
 import { compositeTextOnImage } from "./compositeTextOnImage";
 
@@ -66,7 +66,8 @@ export async function generateGraphicLayoutAsync(
   jobId: number,
   userId: number,
   imageToolId?: number,
-  stylePrompt?: string
+  stylePrompt?: string,
+  planToolId?: number
 ) {
   const drizzleDb = await db.getDb();
   if (!drizzleDb) return;
@@ -189,11 +190,10 @@ export async function generateGraphicLayoutAsync(
           : "";
 
         // Step 1: Layout planning with retry on timeout
-        const planResponse = await withRetryOnTimeout(
-          () => invokeLLM({
-            messages: [
+        const layoutPlanParams = {
+          messages: [
               {
-                role: "system",
+                role: "system" as const,
                 content: `${layoutPlanSystemPrompt}
 页面尺寸：${imgW}x${imgH}px
 ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
@@ -201,14 +201,14 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
 ⚠️ 优先级规则：如果用户的内容描述中包含配色、版式、风格等具体要求，必须以用户描述为准，覆盖上方参考风格中的对应设置。用户描述的优先级高于一切参考风格。${byTypeInstruction ? "\n" + byTypeInstruction : ""}`
               },
               {
-                role: "user",
+                role: "user" as const,
                 content: `文档类型：${docTypeName}，第 ${pageIdx + 1} 页 / 共 ${job.pageCount} 页
 内容描述（最高优先级，其中的配色/版式/风格要求必须覆盖参考风格）：${job.contentText}
 请规划这一页的排版结构，输出文字块列表。`
               }
             ],
             response_format: {
-              type: "json_schema",
+              type: "json_schema" as const,
               json_schema: {
                 name: "layout_plan",
                 strict: true,
@@ -244,7 +244,11 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
                 }
               }
             }
-          }),
+          };
+        const planResponse = await withRetryOnTimeout(
+          () => planToolId
+            ? invokeLLMWithUserTool(layoutPlanParams, undefined, planToolId)
+            : invokeLLM(layoutPlanParams),
           2,
           `page ${pageIdx + 1} layout planning`
         );

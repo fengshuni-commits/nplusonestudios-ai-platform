@@ -12,6 +12,7 @@
  *   "speech_transcription" - 语音转录（通用，向后兼容）
  *   "stream_transcription" - 实时流式录音识别（讯飞 IAT、火山引擎流式等）
  *   "file_transcription"   - 录音文件转写（火山引擎豆包、Whisper 等）
+ *   "layout_plan"          - 图文排版规划（LLM 规划文字块布局，支持多模态大模型）
  *
  * 多模态大模型（如 GPT-4o、Gemini、Claude 3）会同时具备多个能力，
  * 因此会出现在多个功能模块的模型选择列表中。
@@ -27,7 +28,8 @@ export type ToolCapability =
   | "media"
   | "speech_transcription"
   | "stream_transcription"
-  | "file_transcription";
+  | "file_transcription"
+  | "layout_plan";
 
 export const ALL_CAPABILITIES: ToolCapability[] = [
   "rendering",
@@ -40,6 +42,7 @@ export const ALL_CAPABILITIES: ToolCapability[] = [
   "speech_transcription",
   "stream_transcription",
   "file_transcription",
+  "layout_plan",
 ];
 
 /** 能力标签的中文显示名 */
@@ -54,6 +57,7 @@ export const CAPABILITY_LABELS: Record<ToolCapability, string> = {
   speech_transcription: "语音转录",
   stream_transcription: "实时录音识别",
   file_transcription: "文件转写",
+  layout_plan: "图文排版规划",
 };
 
 interface CapabilityRule {
@@ -82,39 +86,39 @@ const CAPABILITY_RULES: CapabilityRule[] = [
   // ── 多模态大模型（文本 + 图像理解 + 文档生成 + 分析 + 媒体） ──
   {
     keywords: ["gpt-4o", "gpt4o", "o1", "o3", "o4"],
-    capabilities: ["rendering", "document", "analysis", "media"],
+    capabilities: ["rendering", "document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["gpt-4", "gpt4", "gpt-3.5", "gpt3.5", "openai"],
-    capabilities: ["document", "analysis", "media"],
+    capabilities: ["document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["gemini", "gemini-pro", "gemini-flash", "gemini-ultra", "gemini-2.0", "gemini-3", "imagen", "image-generation"],
-    capabilities: ["rendering", "image", "document", "analysis", "media"],
+    capabilities: ["rendering", "image", "document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["claude-3", "claude3", "claude-sonnet", "claude-opus", "claude-haiku", "anthropic"],
-    capabilities: ["document", "analysis", "media"],
+    capabilities: ["document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["qwen", "qwen-vl", "qwen2", "tongyi", "aliyun"],
-    capabilities: ["rendering", "document", "analysis", "media"],
+    capabilities: ["rendering", "document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["doubao", "豆包"],
-    capabilities: ["document", "analysis", "media"],
+    capabilities: ["document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["deepseek"],
-    capabilities: ["document", "analysis", "media"],
+    capabilities: ["document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["kimi", "moonshot"],
-    capabilities: ["document", "analysis", "media"],
+    capabilities: ["document", "analysis", "media", "layout_plan"],
   },
   {
     keywords: ["glm", "chatglm", "zhipu"],
-    capabilities: ["document", "analysis", "media"],
+    capabilities: ["document", "analysis", "media", "layout_plan"],
   },
   // ── 专用图像生成模型 ──
   {

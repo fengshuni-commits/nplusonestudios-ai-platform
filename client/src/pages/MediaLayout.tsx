@@ -502,6 +502,7 @@ export default function MediaLayout() {
   // 当前选中的按页上传的页码
   const [assetPageTab, setAssetPageTab] = useState(0);
   const [imageToolId, setImageToolId] = useState<number | undefined>(undefined);
+  const [planToolId, setPlanToolId] = useState<number | undefined>(undefined);
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingTypeName, setUploadingTypeName] = useState<string | null>(null);
@@ -906,6 +907,7 @@ export default function MediaLayout() {
       assetConfig,
       title: titleInput.trim() || undefined,
       imageToolId: imageToolId ?? undefined,
+      planToolId: planToolId ?? undefined,
     });
   };
 
@@ -1372,6 +1374,18 @@ export default function MediaLayout() {
                     onChange={(e) => { if (e.target.files?.length) handleByTypeFiles(e.target.files, newTypeName.trim() || "未分类"); e.target.value = ""; }} />
                 </div>
               )}
+            </div>
+
+            {/* Layout Plan LLM Selector */}
+            <div>
+              <Label className="text-xs text-white/50 mb-1.5 block">排版规划模型</Label>
+              <AiToolSelector
+                capability="layout_plan"
+                value={planToolId}
+                onChange={(id) => setPlanToolId(id ?? undefined)}
+                label="排版规划模型"
+                showBuiltIn={true}
+              />
             </div>
 
             {/* AI Tool Selector */}

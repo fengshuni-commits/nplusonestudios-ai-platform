@@ -245,6 +245,7 @@ const DISPLAY_CAPABILITIES: { key: ToolCapability; label: string; desc: string }
   { key: "media",                label: "媒体内容",             desc: "小红书、公众号、Instagram 文案" },
   { key: "stream_transcription", label: "实时录音识别",         desc: "会议纪要实时录音（讯飞 IAT、火山引擎流式识别）" },
   { key: "file_transcription",   label: "录音文件转写",         desc: "上传录音文件转写（火山引擎豆包、Whisper 等）" },
+  { key: "layout_plan",          label: "图文排版规划",         desc: "图文排版布局规划（排版结构、文字块位置、配色方案）" },
 ];
 
 export default function AdminApiKeys() {
