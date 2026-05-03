@@ -183,8 +183,13 @@ export async function xfyunTranscribe(
     return { error: "音频太短，无法识别", code: "AUDIO_TOO_SHORT" };
   }
 
-  // 3. WebSocket 连接讯飞
-  return new Promise((resolve) => {
+  // 3. WebSocket 连接讲飞（自动重试，最多 3 次）
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 2000;
+
+  async function attemptConnect(attempt: number): Promise<XfyunResult> {
+    console.log(`[xfyunTranscribe] attempt ${attempt}/${MAX_RETRIES}...`);
+    const result = await new Promise<XfyunResult>((resolve) => {
     const url = buildXfyunUrl(credentials);
     const ws = new WebSocket(url);
     // Use a Map keyed by sn to handle wpgs dynamic correction:
@@ -329,5 +334,18 @@ export async function xfyunTranscribe(
         finish({ text: fallbackText, language: "zh" });
       }
     });
-  });
+    }); // end inner Promise
+
+    // 如果是可重试的错误（WS 连接失败或超时），自动重试
+    const isRetryable = 'error' in result && 
+      (result.code === 'WS_ERROR' || result.code === 'TIMEOUT');
+    if (isRetryable && attempt < MAX_RETRIES) {
+      console.log(`[xfyunTranscribe] retrying in ${RETRY_DELAY_MS}ms (${result.error})...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+      return attemptConnect(attempt + 1);
+    }
+    return result;
+  }
+
+  return attemptConnect(1);
 }
