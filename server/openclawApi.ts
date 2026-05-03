@@ -722,8 +722,13 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
     const block = (page.textBlocks ?? []).find((b: any) => b.id === blockId);
     if (!block) return res.status(404).json({ error: "Text block not found", code: "NOT_FOUND" });
 
-    const originalImageUrl: string = page.imageUrl ?? "";
+    // Use compositeImageUrl (full image with all text rendered) as the base for inpainting,
+    // so the AI can see all existing text and only modify the target block.
+    // Fall back to imageUrl (raw background) if compositeImageUrl is not available.
+    const originalImageUrl: string = page.compositeImageUrl ?? page.imageUrl ?? "";
     if (!originalImageUrl) return res.status(400).json({ error: "Original image not available", code: "BAD_REQUEST" });
+    // Auto-resolve imageToolId from AI tools management defaults if not provided
+    const resolvedImageToolId = imageToolId ?? (await db.getDefaultToolForCapability("image_generation")) ?? null;
 
     const imgW: number = page.imageSize?.width ?? 1024;
     const imgH: number = page.imageSize?.height ?? 1365;
@@ -785,26 +790,46 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
       prompt: inpaintPrompt,
       originalImages: [{ b64Json: compositeB64, mimeType: compositeMimeType }],
       size: `${imgW}x${imgH}`,
-      toolId: imageToolId ?? null,
+      toolId: resolvedImageToolId,
     });
 
     const newImageUrl = result.url ?? "";
     if (!newImageUrl) return res.status(500).json({ error: "Inpainting returned empty image", code: "INTERNAL_ERROR" });
 
-    // Update pages in DB
+    // Update textBlocks with new text
+    const updatedTextBlocks = (page.textBlocks ?? []).map((b: any) =>
+      b.id === blockId ? { ...b, text: newText } : b
+    );
+    // Re-composite the new inpainted image with remaining text blocks using server-side canvas
+    // to ensure Chinese text accuracy. imageUrl (raw background) stays unchanged for future inpainting.
+    let newCompositeImageUrl: string = newImageUrl;
+    try {
+      const { compositeTextOnImage } = await import("./compositeTextOnImage");
+      const recomposite = await compositeTextOnImage({
+        backgroundImageUrl: page.imageUrl ?? newImageUrl,
+        textBlocks: updatedTextBlocks,
+        imageWidth: actualWidth,
+        imageHeight: actualHeight,
+        outputKeyPrefix: `graphic-layout/composite-job${jobId}-p${pageIndex}`,
+      });
+      if (recomposite) newCompositeImageUrl = recomposite;
+    } catch (compositeErr) {
+      console.warn("[API inpaint] Re-composite failed, using inpainted image directly:", compositeErr);
+    }
+
+    // Update pages in DB: imageUrl stays as raw background, compositeImageUrl updated
     const updatedPages = pages.map((p: any) => {
       if (p.pageIndex !== pageIndex) return p;
       return {
         ...p,
-        imageUrl: newImageUrl,
-        textBlocks: (p.textBlocks ?? []).map((b: any) =>
-          b.id === blockId ? { ...b, text: newText } : b
-        ),
+        // imageUrl stays as the raw background (no text) — used as base for future inpainting
+        compositeImageUrl: newCompositeImageUrl,
+        textBlocks: updatedTextBlocks,
       };
     });
     await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, jobId));
 
-    res.json({ data: { imageUrl: newImageUrl, pageIndex, blockId, newText, actualWidth, actualHeight } });
+    res.json({ data: { imageUrl: newCompositeImageUrl, pageIndex, blockId, newText, actualWidth, actualHeight } });
 
     // Fire webhook if callbackUrl provided
     if (callbackUrl) {
@@ -814,7 +839,7 @@ router.post("/graphic-layout/inpaint/:jobId/:pageIndex/:blockId", async (req: Re
         pageIndex,
         blockId,
         newText,
-        imageUrl: newImageUrl,
+        imageUrl: newCompositeImageUrl,
       }).catch(console.error);
     }
   } catch (error) {
