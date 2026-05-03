@@ -6426,6 +6426,33 @@ Then extract the specific color values you actually see in the screenshots (read
       styleGuide: { description: analysis.description, colorPalette: analysis.colorPalette, typography: analysis.typography, layoutPatterns: analysis.layoutPatterns, styleKeywords: analysis.styleKeywords, tone: analysis.tone, density: analysis.density },
       thumbnails: [],
     }).where(_eq(graphicStylePacks.id, packId));
+    // 自动同步到素材库：版式包处理完成后写入 assets 表（category='layout_pack'）
+    try {
+      const [updatedPack] = await drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.id, packId)).limit(1);
+      if (updatedPack?.sourceFileUrl) {
+        const { assets } = await import("../drizzle/schema");
+        const { and: _and2, eq: _eq2 } = await import("drizzle-orm");
+        // Check if already synced (same fileUrl + layout_pack category)
+        const existing = await drizzleDb.select({ id: assets.id }).from(assets)
+          .where(_and2(_eq2(assets.fileUrl, updatedPack.sourceFileUrl), _eq2(assets.category, "layout_pack"))).limit(1);
+        if (existing.length === 0) {
+          await drizzleDb.insert(assets).values({
+            name: updatedPack.name,
+            description: "图文排版版式包参考图",
+            category: "layout_pack",
+            tags: "版式包,图文排版",
+            fileUrl: updatedPack.sourceFileUrl,
+            fileKey: updatedPack.sourceFileKey ?? "",
+            fileType: "image/png",
+            thumbnailUrl: updatedPack.sourceFileUrl,
+            uploadedBy: updatedPack.userId,
+          });
+          console.log(`[GraphicStylePack] Auto-synced pack ${packId} to assets table`);
+        }
+      }
+    } catch (syncErr: any) {
+      console.error(`[GraphicStylePack] Failed to sync pack ${packId} to assets:`, syncErr.message);
+    }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "未知错误";
     console.error(`[GraphicStylePack] Extraction failed for pack ${packId}:`, msg);

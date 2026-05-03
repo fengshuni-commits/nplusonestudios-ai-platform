@@ -47,6 +47,7 @@ import {
   Megaphone,
   Camera,
   Archive,
+  LayoutTemplate,
 } from "lucide-react";
 
 // ─── Category Config ──────────────────────────────────────
@@ -57,6 +58,7 @@ export const ASSET_CATEGORIES = [
   { value: "material",    label: "材料样板",  icon: Palette,    color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400" },
   { value: "brand",       label: "品牌物料",  icon: Megaphone,  color: "text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400" },
   { value: "photo",       label: "项目照片",  icon: Camera,     color: "text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400" },
+  { value: "layout_pack", label: "版式包",    icon: LayoutTemplate, color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-400" },
   { value: "other",       label: "其他",      icon: Archive,    color: "text-muted-foreground bg-muted" },
 ] as const;
 

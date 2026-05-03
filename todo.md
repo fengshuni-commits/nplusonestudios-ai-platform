@@ -2326,3 +2326,11 @@
 - [x] 修复字体注册别名：改为 "Noto Sans CJK SC"，与 getFontSpec 中的字体名保持一致
 - [x] 修复 ai_tool_defaults 中 image_generation 默认工具：510007 已被删除，更新为 Gemini 3（id=240008）
 - [x] 为 Gemini 3 补充 image_generation capability 到数据库
+
+## 素材库去重
+- [x] 清除素材库中所有重复图片：136 条记录中删除 92 条重复，保留 44 条（每组保留最早上传的一张）
+
+## 版式包导入素材库
+- [x] 将现有版式包图片（Blueprint Minimalist）写入 assets 表，category='layout_pack'
+- [x] 素材库前端新增"版式包"分类（LayoutTemplate 图标，靛蓝色）
+- [x] 版式包处理完成后自动同步到素材库（extractGraphicStylePackAsync 末尾写入 assets）
