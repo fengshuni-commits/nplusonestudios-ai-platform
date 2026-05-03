@@ -1801,7 +1801,7 @@ const aiToolsRouter = router({
       });
       if (!input?.capability && !input?.category) return sanitized;
       const { inferCapabilities } = await import("../shared/toolCapabilities");
-      return sanitized.filter((t: any) => {
+      const filtered = sanitized.filter((t: any) => {
         if (input.capability) {
           // Merge stored capabilities with dynamically inferred ones so that
           // tools created before a new capability was added are still matched.
@@ -1812,6 +1812,7 @@ const aiToolsRouter = router({
         }
         return t.category === input.category;
       });
+      return filtered;
     }),
 
   getById: protectedProcedure
