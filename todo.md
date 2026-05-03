@@ -2285,3 +2285,9 @@
 - [x] 更新 routers.ts history.delete/batchDelete/getById：删除所有 100000000 偏移量逻辑，增加级联删除 video_history
 - [x] 更新视频生成完成后的状态同步：通过 syncVideoProxyEntry 同步更新 generation_history 代理条目
 - [x] 前端 History.tsx：无需修改（不依赖 ID 偏移量）
+## 性能优化：历史记录删除响应速度
+- [x] 分析删除慢的根本原因：前端无乐观更新 + 服务端删除前多一次全行 SELECT + 递归串行删除子记录
+- [x] 前端乐观更新：点击删除立即从列表移除，异步后台完成，失败时回滚（onMutate/onError/onSettled 模式）
+- [x] 服务端查询精简：新增 getGenerationHistoryModuleById（只取 module + inputParams），替代全行 SELECT
+- [x] 子记录批量删除：改用 BFS + inArray 一次性删除所有后代，替代递归串行 await
+- [x] 批量删除并行化：Promise.all 并行处理所有 ID，替代 for 循环串行

@@ -3830,8 +3830,8 @@ const historyRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const isAdmin = ctx.user.role === "admin";
-      // If this is an ai_video proxy entry, also cascade-delete the video_history record
-      const item = await db.getGenerationHistoryById(input.id, ctx.user.id);
+      // Lightweight check: only fetch module + inputParams (avoids full row SELECT)
+      const item = await db.getGenerationHistoryModuleById(input.id, ctx.user.id);
       if (item?.module === "ai_video") {
         const params = typeof item.inputParams === "string" ? JSON.parse(item.inputParams) : item.inputParams;
         const videoHistoryId = (params as any)?.videoHistoryId;
@@ -3846,16 +3846,22 @@ const historyRouter = router({
     .input(z.object({ ids: z.array(z.number()) }))
     .mutation(async ({ ctx, input }) => {
       const isAdmin = ctx.user.role === "admin";
-      for (const id of input.ids) {
-        // If this is an ai_video proxy entry, cascade-delete the video_history record too
-        const item = await db.getGenerationHistoryById(id, ctx.user.id);
-        if (item?.module === "ai_video") {
-          const params = typeof item.inputParams === "string" ? JSON.parse(item.inputParams) : item.inputParams;
-          const videoHistoryId = (params as any)?.videoHistoryId;
-          if (videoHistoryId) await db.deleteVideoHistory(videoHistoryId);
-        }
-        await db.deleteGenerationHistory(id, ctx.user.id, isAdmin);
-      }
+      // Fetch module info for all ids in parallel (lightweight: only module + inputParams)
+      const itemInfos = await Promise.all(
+        input.ids.map((id) => db.getGenerationHistoryModuleById(id, ctx.user.id))
+      );
+      // Cascade-delete video_history records in parallel
+      const videoCascades = itemInfos
+        .map((item, i) => ({ item, id: input.ids[i] }))
+        .filter(({ item }) => item?.module === "ai_video")
+        .map(({ item }) => {
+          const params = typeof item!.inputParams === "string" ? JSON.parse(item!.inputParams) : item!.inputParams;
+          return (params as any)?.videoHistoryId as number | undefined;
+        })
+        .filter(Boolean) as number[];
+      await Promise.all(videoCascades.map((vid) => db.deleteVideoHistory(vid)));
+      // Delete all generation_history records in parallel
+      await Promise.all(input.ids.map((id) => db.deleteGenerationHistory(id, ctx.user.id, isAdmin)));
       return { success: true, deleted: input.ids.length };
     }),
   /** Admin delete a generation history item by project (for project document management) */

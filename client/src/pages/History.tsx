@@ -1017,17 +1017,45 @@ export default function HistoryPage() {
     });
   }, [refineFeedback, currentReportContent, displayContentItem, selectedItem, chainQuery.data, refineMutation, isRefining, selectedRootId]);
   const deleteMutation = trpc.history.delete.useMutation({
-    onSuccess: () => { utils.history.listGrouped.invalidate(); toast.success("已删除记录"); },
-    onError: (e) => toast.error(e.message || "删除失败"),
+    onMutate: async ({ id }) => {
+      // Optimistic update: immediately remove from cache
+      await utils.history.listGrouped.cancel();
+      const prev = utils.history.listGrouped.getData(queryInput);
+      utils.history.listGrouped.setData(queryInput, (old) => {
+        if (!old) return old;
+        return { ...old, items: old.items.filter((item: any) => item.id !== id) };
+      });
+      return { prev };
+    },
+    onSuccess: () => { toast.success("已删除记录"); },
+    onError: (e, _vars, ctx) => {
+      // Rollback on error
+      if (ctx?.prev) utils.history.listGrouped.setData(queryInput, ctx.prev);
+      toast.error(e.message || "删除失败");
+    },
+    onSettled: () => { utils.history.listGrouped.invalidate(); },
   });
   const batchDeleteMutation = trpc.history.batchDelete.useMutation({
+    onMutate: async ({ ids }) => {
+      await utils.history.listGrouped.cancel();
+      const prev = utils.history.listGrouped.getData(queryInput);
+      const idSet = new Set(ids);
+      utils.history.listGrouped.setData(queryInput, (old) => {
+        if (!old) return old;
+        return { ...old, items: old.items.filter((item: any) => !idSet.has(item.id)) };
+      });
+      return { prev };
+    },
     onSuccess: (data) => {
-      utils.history.listGrouped.invalidate();
       toast.success(`已删除 ${data.deleted} 条记录`);
       setSelectedIds(new Set());
       setIsSelectMode(false);
     },
-    onError: (e) => toast.error(e.message || "批量删除失败"),
+    onError: (e, _vars, ctx) => {
+      if (ctx?.prev) utils.history.listGrouped.setData(queryInput, ctx.prev);
+      toast.error(e.message || "批量删除失败");
+    },
+    onSettled: () => { utils.history.listGrouped.invalidate(); },
   });
   const handleToggleSelect = useCallback((id: number) => {
     setSelectedIds(prev => {

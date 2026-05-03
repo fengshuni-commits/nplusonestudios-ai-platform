@@ -472,13 +472,39 @@ export async function deleteGenerationHistory(id: number, userId: number, isAdmi
   const conditions = isAdmin
     ? [eq(generationHistory.id, id)]
     : [eq(generationHistory.id, id), eq(generationHistory.userId, userId)];
-  // Also delete children in the edit chain
-  const children = await db.select({ id: generationHistory.id }).from(generationHistory)
-    .where(eq(generationHistory.parentId, id));
-  for (const child of children) {
-    await deleteGenerationHistory(child.id, userId, isAdmin);
+  // Collect all descendant IDs via iterative BFS (avoids recursive serial awaits)
+  const allIds: number[] = [id];
+  let frontier = [id];
+  while (frontier.length > 0) {
+    const children = await db
+      .select({ id: generationHistory.id })
+      .from(generationHistory)
+      .where(inArray(generationHistory.parentId, frontier));
+    const childIds = children.map((c) => c.id);
+    allIds.push(...childIds);
+    frontier = childIds;
   }
-  await db.delete(generationHistory).where(and(...conditions));
+  // Batch delete all descendants + the item itself in one query
+  if (allIds.length > 1) {
+    const deleteConditions = isAdmin
+      ? inArray(generationHistory.id, allIds)
+      : and(inArray(generationHistory.id, allIds), eq(generationHistory.userId, userId));
+    await db.delete(generationHistory).where(deleteConditions!);
+  } else {
+    await db.delete(generationHistory).where(and(...conditions));
+  }
+}
+
+/** Lightweight helper: fetch only module + inputParams for a history item (used by delete cascade check) */
+export async function getGenerationHistoryModuleById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select({ module: generationHistory.module, inputParams: generationHistory.inputParams })
+    .from(generationHistory)
+    .where(and(eq(generationHistory.id, id), eq(generationHistory.userId, userId)))
+    .limit(1);
+  return result[0];
 }
 
 /// ─── Tasks ───────────────────────────────────────────────
