@@ -61,6 +61,7 @@ interface TextBlock {
 interface PageData {
   pageIndex: number;
   imageUrl: string;
+  compositeImageUrl?: string; // Full image with all text rendered (server-side canvas)
   backgroundColor: string;
   textBlocks?: TextBlock[];
   imageSize?: { width: number; height: number };
@@ -349,7 +350,10 @@ function PageImageViewer({
   }, []);
 
   const scale = containerW > 0 ? containerW / imgW : 1;
-  const containerH = imgH * scale;
+
+  // Display the composite image (with all text rendered) by default.
+  // Fall back to raw imageUrl if composite is not yet available.
+  const displayImageUrl = page.compositeImageUrl ?? page.imageUrl;
 
   return (
     <div
@@ -357,32 +361,25 @@ function PageImageViewer({
       className="relative w-full rounded-xl overflow-hidden shadow-2xl"
       style={{ aspectRatio: cssRatio }}
     >
-      {/* 整页图片 */}
-      {page.imageUrl ? (
+      {/* 整页图片 — 默认显示 compositeImageUrl（带文字），无则退化为纯背景图 */}
+      {displayImageUrl ? (
         <img
-          src={page.imageUrl}
+          src={displayImageUrl}
           alt={`第 ${page.pageIndex + 1} 页`}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-fill"
           draggable={false}
         />
       ) : (
         <div className="absolute inset-0" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
       )}
 
-      {/* 文字块热区叠加 */}
+      {/* 文字块热区——透明可点击区域，不显示 HTML 文字（文字已在图片中） */}
       {containerW > 0 && (page.textBlocks ?? []).map((block, blockIdx) => {
         const left = block.x * scale;
         const top = block.y * scale;
         const width = block.width * scale;
         const height = block.height * scale;
         const isInpainting = inpaintingBlockId === block.id;
-
-        // Scale font size proportionally to the container
-        const scaledFontSize = Math.round((block.fontSize ?? 16) * scale);
-        const textAlignMap: Record<string, React.CSSProperties["textAlign"]> = {
-          left: "left", center: "center", right: "right",
-        };
-        const textAlign = textAlignMap[block.align ?? "left"] ?? "left";
 
         return (
           <div
@@ -391,35 +388,14 @@ function PageImageViewer({
             title={`点击编辑：${block.text}`}
             className={`absolute group cursor-pointer transition-all ${
               isInpainting
-                ? "ring-2 ring-[#B87333] animate-pulse"
-                : "hover:ring-2 hover:ring-white/40"
-            } rounded overflow-hidden`}
+                ? "ring-2 ring-[#B87333] animate-pulse bg-[#B87333]/10"
+                : "hover:ring-2 hover:ring-white/50 hover:bg-white/5"
+            } rounded`}
             style={{ left, top, width, height }}
           >
-            {/* 实际文字内容——解决图像生成模型无法正确渲染中文的问题 */}
-            {!isInpainting && (
-              <div
-                className="absolute inset-0 flex items-start justify-start pointer-events-none select-none"
-                style={{
-                  fontSize: scaledFontSize,
-                  color: block.color ?? "#ffffff",
-                  textAlign,
-                  lineHeight: 1.3,
-                  padding: `${Math.max(2, Math.round(4 * scale))}px`,
-                  fontWeight: block.role === "title" ? 700 : block.role === "subtitle" ? 600 : 400,
-                  letterSpacing: block.role === "title" ? "0.02em" : "normal",
-                  wordBreak: "break-word",
-                  whiteSpace: "pre-wrap",
-                  overflow: "hidden",
-                }}
-              >
-                {block.text}
-              </div>
-            )}
-
             {/* 加载中图标 */}
             {isInpainting && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#B87333]/20">
+              <div className="absolute inset-0 flex items-center justify-center">
                 <Loader2 className="w-4 h-4 text-[#B87333] animate-spin" />
               </div>
             )}
@@ -449,9 +425,11 @@ function PageImageViewer({
             )}
 
             {/* 角色标签（悬停时显示） */}
-            <div className="absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-              {block.role} · {block.text.slice(0, 20)}{block.text.length > 20 ? "…" : ""}
-            </div>
+            {!isInpainting && (
+              <div className="absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                {block.role} · {block.text.slice(0, 20)}{block.text.length > 20 ? "…" : ""}
+              </div>
+            )}
           </div>
         );
       })}
@@ -1544,8 +1522,8 @@ export default function MediaLayout() {
                         i === currentPage ? "border-[#B87333]" : "border-transparent hover:border-white/20"
                       }`}
                       style={{ width: "56px", aspectRatio: thumbRatio }}>
-                      {page.imageUrl ? (
-                        <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
+                      {(page.compositeImageUrl ?? page.imageUrl) ? (
+                        <img src={page.compositeImageUrl ?? page.imageUrl} alt="" className="w-full h-full object-fill" />
                       ) : (
                         <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
                       )}
@@ -1642,8 +1620,8 @@ export default function MediaLayout() {
                           <div className="flex gap-1 flex-wrap">
                             {jobPages.map((page) => (
                               <div key={page.pageIndex} className="relative w-10 rounded overflow-hidden" style={{ aspectRatio: RATIO_CSS[job.aspectRatio || "3:4"] || "3/4" }}>
-                                {page.imageUrl ? (
-                                  <img src={page.imageUrl} alt="" className="w-full h-full object-cover" />
+                                {(page.compositeImageUrl ?? page.imageUrl) ? (
+                                  <img src={page.compositeImageUrl ?? page.imageUrl} alt="" className="w-full h-full object-fill" />
                                 ) : (
                                   <div className="w-full h-full bg-white/5" />
                                 )}

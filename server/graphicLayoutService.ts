@@ -112,7 +112,7 @@ export async function generateGraphicLayoutAsync(
 - 最多 6 个文字块
 - 严格使用版式包中提取的配色方案，不得使用默认黑白配色
 - 排版结构应忠实还原参考版式的视觉层次和空间分布`;
-    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. Clean layout with precise typography placement. No watermarks, no gray bars, no placeholder rectangles, no decorative strips, no solid color overlays in text areas. Background must flow seamlessly across the entire image. Photorealistic quality.";
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. Render ALL specified text blocks with correct Chinese characters at the exact positions and sizes specified. Text must be crisp, legible, and correctly positioned. No watermarks, no extra text beyond what is specified, no gray bars, no placeholder rectangles. Photorealistic quality.";
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
@@ -270,9 +270,11 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          // Do NOT include actual text content in the prompt — it causes AI to render the text in the image.
-          // Only describe the zone role and position so AI leaves clean background space.
-          return `${b.role} zone (${b.fontSize}px, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — LEAVE THIS AREA AS CLEAN SEAMLESS BACKGROUND, absolutely NO text rendering, NO letters, NO characters, NO words, NO solid color bars, NO rectangles, NO placeholder shapes, NO gray strips, background must flow through naturally`;
+          // Include text content so AI renders it correctly in the image.
+          // The compositeImageUrl (server-side canvas render) is the fallback for Chinese accuracy,
+          // but we want the AI image to contain all text for visual completeness.
+          const textHint = b.text ? ` [text: "${b.text}"]` : "";
+          return `${b.role} zone${textHint} (${b.fontSize}px, ${b.color ?? "#fff"}, ${b.align ?? "left"}-aligned, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — RENDER this text clearly and legibly in the correct position, correct Chinese characters, correct font size, correct color`;
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);

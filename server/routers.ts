@@ -5886,7 +5886,10 @@ const graphicLayoutRouter = router({
       const block = (page.textBlocks ?? []).find((b: any) => b.id === input.blockId);
       if (!block) throw new TRPCError({ code: "NOT_FOUND", message: "文字块不存在" });
 
-      const originalImageUrl: string = page.imageUrl ?? "";
+      // Use compositeImageUrl (full image with all text rendered) as the base for inpainting,
+      // so AI can see all existing text and correctly modify only the target block.
+      // Fall back to imageUrl (raw background) if compositeImageUrl is not available.
+      const originalImageUrl: string = page.compositeImageUrl ?? page.imageUrl ?? "";
       if (!originalImageUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "原始图片不存在" });
 
       const imgW: number = page.imageSize?.width ?? 1024;
@@ -5969,19 +5972,40 @@ const graphicLayoutRouter = router({
       const newImageUrl = result.url ?? "";
       if (!newImageUrl) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Inpainting 返回空图片" });
 
-      // 更新 pages 中的 imageUrl 和 textBlocks
+      // Update textBlocks with new text, keep imageUrl (raw background) unchanged,
+      // update compositeImageUrl to the new inpainted result (which already has all text rendered).
+      const updatedTextBlocks = (page.textBlocks ?? []).map((b: any) =>
+        b.id === input.blockId ? { ...b, text: input.newText } : b
+      );
+
+      // Re-composite the new inpainted image with remaining text blocks using server-side canvas
+      // to ensure Chinese text accuracy for all blocks.
+      let newCompositeImageUrl: string | undefined = newImageUrl;
+      try {
+        const { compositeTextOnImage } = await import("./compositeTextOnImage");
+        const recomposite = await compositeTextOnImage({
+          backgroundImageUrl: page.imageUrl ?? newImageUrl,
+          textBlocks: updatedTextBlocks,
+          imageWidth: actualWidth,
+          imageHeight: actualHeight,
+          outputKeyPrefix: `graphic-layout/composite-job${input.jobId}-p${input.pageIndex}`,
+        });
+        if (recomposite) newCompositeImageUrl = recomposite;
+      } catch (compositeErr) {
+        console.warn("[inpaintTextBlock] Re-composite failed, using inpainted image directly:", compositeErr);
+      }
+
       const updatedPages = pages.map((p: any) => {
         if (p.pageIndex !== input.pageIndex) return p;
         return {
           ...p,
-          imageUrl: newImageUrl,
-          textBlocks: (p.textBlocks ?? []).map((b: any) =>
-            b.id === input.blockId ? { ...b, text: input.newText } : b
-          ),
+          // imageUrl stays as the raw background (no text) — used as base for future inpainting
+          compositeImageUrl: newCompositeImageUrl,
+          textBlocks: updatedTextBlocks,
         };
       });
       await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, input.jobId));
-       return { success: true, newImageUrl, actualWidth, actualHeight };
+      return { success: true, newImageUrl: newCompositeImageUrl ?? newImageUrl, actualWidth, actualHeight };
     }),
 
   // ─── 导出 PDF ──────────────────────────────────────────────────────────────
@@ -6017,9 +6041,11 @@ const graphicLayoutRouter = router({
       const imageBuffers: Array<{ buf: Buffer; idx: number }> = [];
       const sortedPages = [...pages].sort((a: any, b: any) => a.pageIndex - b.pageIndex);
       for (const page of sortedPages) {
-        if (!page.imageUrl) continue;
+        // Prefer compositeImageUrl (full image with text rendered) for export
+        const exportUrl = page.compositeImageUrl ?? page.imageUrl;
+        if (!exportUrl) continue;
         try {
-          const res = await fetch(page.imageUrl);
+          const res = await fetch(exportUrl);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const buf = Buffer.from(await res.arrayBuffer());
           imageBuffers.push({ buf, idx: page.pageIndex });
@@ -6075,13 +6101,15 @@ const graphicLayoutRouter = router({
       const sortedPages = [...pages].sort((a: any, b: any) => a.pageIndex - b.pageIndex);
       const imageEntries: Array<{ buf: Buffer; filename: string }> = [];
       for (const page of sortedPages) {
-        if (!page.imageUrl) continue;
+        // Prefer compositeImageUrl (full image with text rendered) for export
+        const exportUrl = page.compositeImageUrl ?? page.imageUrl;
+        if (!exportUrl) continue;
         try {
-          const res = await fetch(page.imageUrl);
+          const res = await fetch(exportUrl);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const buf = Buffer.from(await res.arrayBuffer());
           // 尝试从 URL 提取扩展名，默认 jpg
-          const urlPath = new URL(page.imageUrl).pathname;
+          const urlPath = new URL(exportUrl).pathname;
           const ext = urlPath.match(/\.(png|jpg|jpeg|webp)$/i)?.[1] ?? "jpg";
           const paddedIdx = String(page.pageIndex + 1).padStart(2, "0");
           imageEntries.push({ buf, filename: `page-${paddedIdx}.${ext}` });

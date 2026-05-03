@@ -2305,3 +2305,11 @@
 ## Bug 修复：图文排版可编辑状态下出现错位中文标题叠加
 - [x] 排查可编辑视图中背景图含文字的根因：AI prompt 包含实际文字内容导致模型渲染文字
 - [x] 修复：从 textDescriptions 中移除 [content: "..."] 文字内容，只保留区域位置描述，加强 NO text rendering 指令
+
+## 重构：AI 生图带文字，编辑时才叠加 HTML
+- [x] 服务端：prompt 恢复包含文字内容，改为强化"正确渲染中文文字"指令（而非禁止）
+- [x] 服务端：compositeImageUrl 生成后作为主显示图（存入 displayImageUrl 或直接覆盖 imageUrl 逻辑）
+- [x] 前端：PageImageViewer 默认显示 compositeImageUrl（完整带文字图），不显示 HTML 文字叠加层
+- [x] 前端：所有文字块均有透明热区，点击弹出编辑框（不再切换背景图，inpainting 基于 compositeImageUrl）
+- [x] 前端：inpainting 完成后重新合成 compositeImageUrl 并更新显示
+- [x] 导出 PDF/图片改用 compositeImageUrl
