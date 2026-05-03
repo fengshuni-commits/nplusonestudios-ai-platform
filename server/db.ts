@@ -1287,7 +1287,7 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
 
   // Helper: convert videoHistory rows to unified history format
   const toHistoryItem = (v: typeof videoHistory.$inferSelect) => ({
-    id: v.id + 1000000,
+    id: v.id + 100000000,
     userId: v.userId,
     projectId: v.projectId || null,
     module: "ai_video" as const,

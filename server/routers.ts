@@ -3801,13 +3801,13 @@ const historyRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
-      // ai_video items use offset id (>1000000); resolve to videoHistory
-      if (input.id > 1000000) {
-        const realId = input.id - 1000000;
+      // ai_video items use offset id (>100000000); resolve to videoHistory
+      if (input.id > 100000000) {
+        const realId = input.id - 100000000;
         const v = await db.getVideoHistoryById(realId, ctx.user.id);
         if (!v) return null;
         return {
-          id: v.id + 1000000,
+          id: v.id + 100000000,
           userId: v.userId,
           projectId: v.projectId || null,
           module: "ai_video" as const,
@@ -3860,9 +3860,9 @@ const historyRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      // AI video records use offset IDs (> 1000000); route to video_history table
-      if (input.id > 1000000) {
-        const realId = input.id - 1000000;
+      // AI video records use offset IDs (> 100000000); route to video_history table
+      if (input.id > 100000000) {
+        const realId = input.id - 100000000;
         // Verify ownership before deleting
         const records = await db.listVideoHistory(ctx.user.id);
         const record = records.find((r: any) => r.id === realId);
@@ -3880,9 +3880,9 @@ const historyRouter = router({
     .input(z.object({ ids: z.array(z.number()) }))
     .mutation(async ({ ctx, input }) => {
       const isAdmin = ctx.user.role === "admin";
-      // Separate video IDs (> 1000000) from regular generation history IDs
-      const videoIds = input.ids.filter(id => id > 1000000).map(id => id - 1000000);
-      const regularIds = input.ids.filter(id => id <= 1000000);
+      // Separate video IDs (> 100000000) from regular generation history IDs
+      const videoIds = input.ids.filter(id => id > 100000000).map(id => id - 100000000);
+      const regularIds = input.ids.filter(id => id <= 100000000);
       // Delete video records (verify ownership)
       if (videoIds.length > 0) {
         const videoRecords = await db.listVideoHistory(ctx.user.id);

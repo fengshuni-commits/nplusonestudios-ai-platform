@@ -2274,3 +2274,7 @@
 - [x] graphicLayoutService.ts 生成每页后调用合成，存储 compositeImageUrl
 - [x] REST API 返回 compositeImageUrl 作为最终图片，网页端继续使用 HTML 叠加层
 - [x] 修复 CloudRun 部署环境中文字体缺失：将 NotoSansCJKsc 字体文件打包到 server/assets/fonts/，使用内嵌 family name "Noto Sans CJK SC" 注册
+## Bug 修复：图文排版生成记录无法删除（提示“记录不存在”）
+- [x] 定位删除逻辑代码路径（tRPC router + History 页面）
+- [x] 找到根本原因：generation_history.id 已达 4,230,006，超过视频 ID 偏移量 1,000,000，导致 layout_design 记录被误判为视频记录
+- [x] 修复：将视频 ID 偏移量从 1,000,000 改为 100,000,000（db.ts + routers.ts 全部同步更新）
