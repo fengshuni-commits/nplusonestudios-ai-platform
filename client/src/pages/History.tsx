@@ -1830,7 +1830,9 @@ export default function HistoryPage() {
                             onClick={() => {
                               setContentItem(null);
                               setContentItemId(null);
-                              navigate(`/media/layout?jobId=${layoutJobId}`);
+                              // Use window.location.href to force a full navigation so MediaLayout
+                              // mounts fresh and picks up the jobId query param reliably
+                              window.location.href = `/media/layout?jobId=${layoutJobId}`;
                             }}>
                             <Edit className="h-3.5 w-3.5 mr-1.5" />
                             继续编辑
