@@ -89,16 +89,16 @@ export function AiToolSelector({ category, capability, value, onChange, label, s
   };
 
   return (
-    <div className="flex items-center gap-2">
-      {label && <span className="text-xs text-muted-foreground whitespace-nowrap">{label}</span>}
+    <div className="flex items-center gap-2 min-w-0">
+      {label && <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{label}</span>}
       <Select value={currentValue} onValueChange={handleChange}>
-        <SelectTrigger className="h-8 w-[180px] text-xs">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="h-3 w-3 text-primary" />
-            <SelectValue placeholder="选择 AI 工具" />
+        <SelectTrigger className="h-8 w-[200px] max-w-[260px] text-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Sparkles className="h-3 w-3 text-primary shrink-0" />
+            <SelectValue placeholder="选择 AI 工具" className="truncate" />
           </div>
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="min-w-[220px]">
           {showBuiltIn && (
             <SelectItem value={BUILTIN_TOOL_ID.toString()}>
               <div className="flex items-center gap-2">
