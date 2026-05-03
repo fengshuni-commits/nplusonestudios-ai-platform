@@ -55,7 +55,6 @@
     "@types/ws": "^8.18.1",
     "archiver": "^7.0.1",
     "axios": "^1.12.0",
-    "canvas": "^3.2.3",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -132,7 +131,7 @@
       "tailwindcss>nanoid": "3.3.7"
     },
     "onlyBuiltDependencies": [
-      "canvas"
+      "@napi-rs/canvas"
     ]
   }
 }
