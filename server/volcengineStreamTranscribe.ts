@@ -21,17 +21,26 @@
  * - { type: "final", text: string }    (confirmed sentence)
  * - { type: "warning", message: string }
  * - { type: "error", message: string }
+ *
+ * Production fix (45000081 timeout):
+ * - After WS open, immediately send fullClientRequest + all pending frames without waiting for volcReady
+ * - Send silence keepalive frames every KEEPALIVE_INTERVAL_MS to prevent server-side timeout
+ * - Reduced retry backoff to recover faster
  */
 import zlib from "zlib";
 import WebSocket from "ws";
 
 const VOLC_HOST = "openspeech.bytedance.com";
 const VOLC_PATH = "/api/v3/sauc/bigmodel";
-const FRAME_SIZE = 1280;        // 40ms @ 16kHz 16bit mono
-const FRAME_INTERVAL_MS = 40;   // 40ms between frames
+const FRAME_SIZE = 1280;          // 40ms @ 16kHz 16bit mono
+const FRAME_INTERVAL_MS = 40;     // 40ms between frames when flushing
 const FLUSH_FRAMES_PER_TICK = 4;
 const MAX_RETRIES = 5;
 const MAX_PENDING_FRAMES = 500;
+const KEEPALIVE_INTERVAL_MS = 2000; // send silence every 2s to prevent server timeout
+
+// Silence frame: 1280 bytes of zeros (40ms of silence)
+const SILENCE_FRAME = Buffer.alloc(FRAME_SIZE, 0);
 
 // ── Binary protocol helpers ───────────────────────────────────────────────────
 // Header byte layout (4 bytes total):
@@ -162,9 +171,32 @@ export function createVolcengineStreamSession(
   let confirmedText = "";  // accumulates all definite sentences
   let sentDefiniteCount = 0;  // how many definite utterances have already been sent (to avoid re-sending on reconnect)
   let currentPartialText = ""; // current non-definite sentence
+  let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   function send(msg: object) {
     if (!clientClosed) onMessage(msg);
+  }
+
+  function stopKeepalive() {
+    if (keepaliveTimer) {
+      clearInterval(keepaliveTimer);
+      keepaliveTimer = null;
+    }
+  }
+
+  function startKeepalive(ws: WebSocket) {
+    stopKeepalive();
+    // Send silence frames periodically to prevent server-side timeout (45000081)
+    // This is especially important in production where network latency is higher
+    keepaliveTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN && !volcReady && !clientClosed && !ended) {
+        // Only send keepalive silence while waiting for volcReady (before first response)
+        ws.send(buildAudioOnlyRequest(SILENCE_FRAME));
+      } else {
+        // Once ready or session ended, stop keepalive
+        stopKeepalive();
+      }
+    }, KEEPALIVE_INTERVAL_MS);
   }
 
   function flushPending(ws: WebSocket) {
@@ -219,6 +251,7 @@ export function createVolcengineStreamSession(
     flushGeneration++;
     volcReady = false;
     flushing = false;
+    stopKeepalive();
 
     // Rescue any partial text from interrupted session
     if (currentPartialText.trim()) {
@@ -245,7 +278,23 @@ export function createVolcengineStreamSession(
       if (myGeneration !== flushGeneration) { ws.close(); return; }
       console.log(`[volcStreamTranscribe] WS open, sending full client request`);
       retryCount = 0;
+      // Send the full client request immediately
       ws.send(buildFullClientRequest(creds.appId));
+
+      // PRODUCTION FIX: Send pending frames immediately after fullClientRequest
+      // without waiting for volcReady. Volcengine accepts audio before the first
+      // response arrives, and waiting causes 45000081 timeout in high-latency environments.
+      if (pendingFrames.length > 0) {
+        console.log(`[volcStreamTranscribe] sending ${pendingFrames.length} pending frames immediately after open`);
+        const frames = [...pendingFrames];
+        pendingFrames.length = 0;
+        for (const f of frames) {
+          ws.send(buildAudioOnlyRequest(f));
+        }
+      }
+
+      // Start keepalive silence to prevent server timeout while waiting for first response
+      startKeepalive(ws);
     });
 
     ws.on("message", (data: WebSocket.RawData) => {
@@ -265,9 +314,11 @@ export function createVolcengineStreamSession(
 
       if (parsed.error && parsed.error.code && parsed.error.code !== 0) {
         console.error(`[volcStreamTranscribe] server error ${parsed.error.code}: ${parsed.error.message}`);
+        stopKeepalive();
         if (retryCount < MAX_RETRIES && !ended && !clientClosed) {
           retryCount++;
-          const delay = Math.pow(2, retryCount - 1) * 1500;
+          // Faster retry: 500ms, 1s, 2s, 4s, 8s
+          const delay = Math.pow(2, retryCount - 1) * 500;
           send({ type: "warning", message: `火山引擎连接重试中 (${retryCount}/${MAX_RETRIES})...` });
           ws.close();
           setTimeout(() => connectVolcengine(true), delay);
@@ -280,9 +331,15 @@ export function createVolcengineStreamSession(
       // First response after full client request = ready signal
       if (!volcReady) {
         volcReady = true;
+        stopKeepalive(); // no longer need keepalive once session is established
         console.log(`[volcStreamTranscribe] received first response, session ready`);
         send({ type: "ready" });
-        flushPending(ws);
+        // Flush any frames that arrived between open and ready
+        if (pendingFrames.length > 0) {
+          flushPending(ws);
+        } else if (ended) {
+          ws.send(buildAudioLastRequest(Buffer.alloc(0)));
+        }
         return;
       }
 
@@ -319,10 +376,11 @@ export function createVolcengineStreamSession(
 
     ws.on("error", (err) => {
       console.error(`[volcStreamTranscribe] WS ERROR: ${err.message}`);
+      stopKeepalive();
       if (myGeneration !== flushGeneration) return;
       if (retryCount < MAX_RETRIES && !ended && !clientClosed) {
         retryCount++;
-        const delay = Math.pow(2, retryCount - 1) * 1500;
+        const delay = Math.pow(2, retryCount - 1) * 500;
         send({ type: "warning", message: `火山引擎连接失败，重试中 (${retryCount}/${MAX_RETRIES})...` });
         setTimeout(() => connectVolcengine(true), delay);
       } else {
@@ -339,6 +397,7 @@ export function createVolcengineStreamSession(
 
     ws.on("close", (code, reason) => {
       console.log(`[volcStreamTranscribe] WS closed: code=${code} reason=${reason?.toString()}`);
+      stopKeepalive();
       if (volcWs === ws) {
         volcWs = null;
         volcReady = false;
@@ -377,6 +436,10 @@ export function createVolcengineStreamSession(
         offset += FRAME_SIZE;
         if (volcReady && volcWs && !flushing) {
           volcWs.send(buildAudioOnlyRequest(chunk));
+        } else if (volcWs && volcWs.readyState === WebSocket.OPEN && !volcReady) {
+          // PRODUCTION FIX: WS is open but not yet ready (waiting for first response).
+          // Send audio directly instead of buffering to avoid server-side timeout.
+          volcWs.send(buildAudioOnlyRequest(chunk));
         } else {
           pendingFrames.push(chunk);
           if (pendingFrames.length > MAX_PENDING_FRAMES) {
@@ -388,15 +451,15 @@ export function createVolcengineStreamSession(
 
     end() {
       ended = true;
+      stopKeepalive();
       console.log(`[volcStreamTranscribe] END: volcReady=${volcReady}, flushing=${flushing}, pending=${pendingFrames.length}`);
-      if (volcReady && volcWs && !flushing) {
+      if (volcWs && volcWs.readyState === WebSocket.OPEN) {
         if (pendingFrames.length > 0) {
           flushPending(volcWs);
-        } else {
+        } else if (!flushing) {
           volcWs.send(buildAudioLastRequest(Buffer.alloc(0)));
         }
-      } else if (volcReady && volcWs && flushing) {
-        // flush will send last frame when done
+        // else: flushing will send last frame when done
       } else if (!volcWs) {
         pendingFrames.length = 0;
         if (!clientClosed) {
@@ -409,6 +472,7 @@ export function createVolcengineStreamSession(
 
     close() {
       clientClosed = true;
+      stopKeepalive();
       if (volcWs && (volcWs.readyState === WebSocket.OPEN || volcWs.readyState === WebSocket.CONNECTING)) {
         volcWs.close();
       }

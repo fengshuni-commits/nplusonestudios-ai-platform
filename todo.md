@@ -2233,3 +2233,7 @@
 - [x] 更新前端 AiToolsManagement 页面的默认工具配置 UI（DISPLAY_CAPABILITIES 拆分为 stream_transcription 和 file_transcription）
 - [x] 更新 toolCapabilities.ts 添加 stream_transcription 和 file_transcription 类型及对应语音工具的能力映射
 - [x] 更新 MeetingMinutes.tsx 中 AiToolSelector 的 capability 参数为新 key
+
+## Bug 修复：生产环境火山引擎实时录音超时 (45000081)
+- [x] 分析 flushPending 逻辑，找出生产环境延迟导致超时的根本原因
+- [x] 修复：提前发送音频帧，减少等待 session_id 的时间，增加心跳保活
