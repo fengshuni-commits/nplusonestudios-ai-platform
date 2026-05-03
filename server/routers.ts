@@ -11,7 +11,7 @@ import { generateImageWithTool } from "./_core/generateImageWithTool";
 import { generateGraphicLayoutAsync } from "./graphicLayoutService";
 import { generateVideoWithTool, queryVideoTaskStatus } from "./_core/generateVideoWithTool";
 import { transcribeAudio } from "./_core/voiceTranscription";
-import { xfyunTranscribe } from "./_core/xfyunTranscription";
+import { transcribeFileWithVolcengine } from "./_core/volcengineTranscription";
 import { decryptApiKey } from "./_core/crypto";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
@@ -3220,40 +3220,23 @@ const meetingRouter = router({
     .input(z.object({
       audioUrl: z.string(),
       language: z.string().optional(),
-      toolId: z.number().optional(), // 指定讯飞工具 ID
+      toolId: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
-      // 优先使用传入的 toolId，否则自动读取 speech_transcription 默认工具
-      const resolvedToolId = input.toolId ?? await db.getDefaultToolForCapability("speech_transcription");
-      if (resolvedToolId) {
-        try {
-          const tool = await db.getAiToolById(resolvedToolId);
-          if (tool && tool.provider === "xfyun" && tool.apiKeyEncrypted && tool.configJson) {
-            const config = tool.configJson as { appId?: string; apiSecret?: string };
-            const apiKey = decryptApiKey(tool.apiKeyEncrypted);
-            if (config.appId && config.apiSecret && apiKey) {
-              console.log("[meeting.transcribe] using xfyun tool:", tool.name);
-              const xfResult = await xfyunTranscribe(input.audioUrl, {
-                appId: config.appId,
-                apiKey,
-                apiSecret: config.apiSecret,
-              }, "zh_cn");
-              if (!('error' in xfResult)) {
-                return xfResult;
-              }
-              console.error("[meeting.transcribe] xfyun failed:", xfResult);
-              const xfErr = xfResult as { error: string; code?: string | number; details?: string };
-              const detail = xfErr.details ? ` (${xfErr.details})` : "";
-              throw new TRPCError({ code: "BAD_REQUEST", message: `讲飞语音识别失败: ${xfErr.error}${detail}` });
-            }
-          }
-        } catch (e) {
-          if (e instanceof TRPCError) throw e;
-          console.error("[meeting.transcribe] xfyun error:", e);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "讲飞语音识别服务异常" });
+      // Use Volcengine BigASR for file transcription (no ffmpeg required)
+      try {
+        console.log("[meeting.transcribe] using volcengine bigasr for:", input.audioUrl);
+        const text = await transcribeFileWithVolcengine(input.audioUrl);
+        if (!text || text.trim().length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "音频转写完成但未识别到有效内容，请检查音频质量" });
         }
+        return { text };
+      } catch (e) {
+        if (e instanceof TRPCError) throw e;
+        console.error("[meeting.transcribe] volcengine error:", e);
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `音频识别失败: ${msg}` });
       }
-      throw new TRPCError({ code: "BAD_REQUEST", message: "未配置讲飞语音识别工具，请在设置中配置讲飞 API" });
     }),
 
   generateMinutes: protectedProcedure

@@ -2180,3 +2180,14 @@
 - [x] 修复 xfyunTranscription.ts：m4a/mp4 格式需要先写入临时文件再用 ffmpeg 转换（因 moov atom 在文件末尾，无法从 pipe 读取）
 - [x] 补充 audio/mp4、audio/m4a、audio/flac 等 MIME 类型映射
 - [x] 添加转写日志（下载字节数、PCM 字节数）便于调试
+
+## 功能改进：文件转写改用火山引擎豆包语音大模型
+- [x] 实现 volcengineTranscription.ts（REST API，直接提交 S3 URL，无需 ffmpeg）
+- [x] routers.ts 中文件转写改用火山引擎，移除讯飞 WebSocket 方案
+- [x] 配置 VOLCENGINE_ASR_APP_ID 和 VOLCENGINE_ASR_ACCESS_TOKEN 环境变量
+
+## 功能改进：文件转写改用火山引擎豆包语音大模型
+- [x] 实现 volcengineTranscription.ts（REST API，直接提交 S3 URL，无需 ffmpeg）
+- [x] routers.ts 中文件转写改用火山引擎，移除讯飞 WebSocket 方案
+- [x] 配置 VOLCENGINE_ASR_APP_ID 和 VOLCENGINE_ASR_ACCESS_TOKEN 环境变量
+- [x] 验证凭证连通性（状态码 20000000）
