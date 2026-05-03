@@ -2248,3 +2248,7 @@
 - [x] 查看 AI 视频生成代码，了解视频 URL 保存逻辑
 - [x] 在视频生成完成后自动生成缩略图（图生视频用输入图，文生视频用 AI 生成预览图）
 - [x] 更新 video_history 表添加 thumbnailUrl 字段，更新 toHistoryItem 映射函数
+
+## Bug 修复：AI 视频生成记录无法删除
+- [x] 查找删除逻辑 bug 原因：history.delete 过程只操作 generation_history 表，未处理 id > 1000000 的视频记录
+- [x] 修复删除逻辑：在 history.delete 过程中加入 id > 1000000 判断，路由到 deleteVideoHistory

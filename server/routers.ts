@@ -3860,6 +3860,16 @@ const historyRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
+      // AI video records use offset IDs (> 1000000); route to video_history table
+      if (input.id > 1000000) {
+        const realId = input.id - 1000000;
+        // Verify ownership before deleting
+        const records = await db.listVideoHistory(ctx.user.id);
+        const record = records.find((r: any) => r.id === realId);
+        if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "记录不存在" });
+        await db.deleteVideoHistory(realId);
+        return { success: true };
+      }
       const isAdmin = ctx.user.role === "admin";
       await db.deleteGenerationHistory(input.id, ctx.user.id, isAdmin);
       return { success: true };
