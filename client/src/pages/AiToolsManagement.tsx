@@ -366,12 +366,14 @@ export default function AdminApiKeys() {
     onError: (err) => toast.error(err.message),
   });
 
-  // 获取某 capability 下有哪些工具
+  // 获取某 capability 下有哪些工具（合并数据库存储值与动态推断值，兼容新增 capability）
   const getToolsForCapability = (capKey: string) => {
     if (!tools) return [];
     return tools.filter((t: any) => {
-      const caps: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
-      return caps.includes(capKey) && t.isActive;
+      const stored: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
+      const inferred: string[] = inferCapabilities(t.name ?? "", t.apiEndpoint ?? "");
+      const merged = Array.from(new Set([...stored, ...inferred]));
+      return merged.includes(capKey) && t.isActive;
     });
   };
 
