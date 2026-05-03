@@ -2221,3 +2221,8 @@
 ## Bug 修复：火山引擎实时转写停止后会议内容全是重复文字
 - [x] 根本原因：火山引擎每次响应的 utterances 数组是累积的（包含从会话开始到当前所有已确认句子），代码每次都把所有 definite utterances 重新发一遍 final 消息
 - [x] 修复 volcengineStreamTranscribe.ts：添加 sentDefiniteCount 计数器，用 newDefinite.slice(sentDefiniteCount) 只发送新增的 definite 句子，跳过已发过的
+
+## 会议纪要工具选择区域布局调整
+- [x] 将大模型选择和语音转写选择从并列改为上下排列
+- [x] 在大模型选择和语音转写选择之间增加录音识别引擎选择（AiToolSelector，capability="speech_transcription"）
+- [x] 拆分 speechToolId 为 streamToolId（实时录音识别）和 fileToolId（文件转写），两者独立选择

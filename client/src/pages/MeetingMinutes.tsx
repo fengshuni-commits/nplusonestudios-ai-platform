@@ -18,7 +18,8 @@ type RecordingState = "idle" | "recording" | "paused" | "processing";
 
 export default function MeetingMinutes() {
   const [llmToolId, setLlmToolId] = useState<number | undefined>(undefined);
-  const [speechToolId, setSpeechToolId] = useState<number | undefined>(undefined);
+  const [streamToolId, setStreamToolId] = useState<number | undefined>(undefined);  // 实时录音识别引擎
+  const [fileToolId, setFileToolId] = useState<number | undefined>(undefined);    // 录音文件转写引擎
   const [transcript, setTranscript] = useState("");
   const [projectName, setProjectName] = useState("");
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split("T")[0]);
@@ -58,7 +59,7 @@ export default function MeetingMinutes() {
   const sentenceMapRef = useRef<Map<number, string>>(new Map()); // sentence accumulator for wpgs
 
   const streamTranscribe = useStreamTranscribe({
-    toolId: speechToolId,
+    toolId: streamToolId,
     onPartial: (text, sn, pgs, rg) => {
       if (pgs === "rpl" && rg) {
         const [from, to] = rg;
@@ -393,7 +394,7 @@ export default function MeetingMinutes() {
       const transcribeResult = await transcribeMutation.mutateAsync({
         audioUrl: uploadResult.url,
         language: "zh",
-        toolId: speechToolId,
+        toolId: fileToolId,
       });
       if (transcribeResult.text) {
         setTranscript(transcribeResult.text);
@@ -472,9 +473,10 @@ export default function MeetingMinutes() {
           <h1 className="text-2xl font-semibold tracking-tight">会议纪要</h1>
           <p className="text-sm text-muted-foreground mt-1">实时录音转录，或上传录音文件，AI 自动生成结构化会议纪要</p>
         </div>
-        <div className="flex items-center gap-3">
-          <AiToolSelector capability="speech_transcription" value={speechToolId} onChange={setSpeechToolId} label="语音转写" showBuiltIn={false} />
+        <div className="flex flex-col gap-2 items-end">
           <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结 LLM" />
+          <AiToolSelector capability="speech_transcription" value={streamToolId} onChange={setStreamToolId} label="实时录音识别" showBuiltIn={false} />
+          <AiToolSelector capability="speech_transcription" value={fileToolId} onChange={setFileToolId} label="文件转写" showBuiltIn={false} />
         </div>
       </div>
 
