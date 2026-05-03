@@ -10,7 +10,12 @@
 
 import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
 import path from "path";
+import { fileURLToPath } from "url";
 import { storagePut } from "./storage";
+
+// Resolve the fonts directory bundled alongside this module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FONTS_DIR = path.join(__dirname, "assets", "fonts");
 
 // ── Font registration (idempotent) ──────────────────────────────────────────
 
@@ -18,23 +23,38 @@ let fontsRegistered = false;
 
 function ensureFonts() {
   if (fontsRegistered) return;
-  const notoDir = "/usr/share/fonts/opentype/noto";
-  try {
-    GlobalFonts.registerFromPath(
-      path.join(notoDir, "NotoSansCJKsc-Regular.otf"),
-      "NotoSansCJKsc"
-    );
-    GlobalFonts.registerFromPath(
-      path.join(notoDir, "NotoSansCJKsc-Bold.otf"),
-      "NotoSansCJKsc-Bold"
-    );
-    GlobalFonts.registerFromPath(
-      path.join(notoDir, "NotoSansCJKsc-Medium.otf"),
-      "NotoSansCJKsc-Medium"
-    );
+  // Try bundled fonts first (works in both dev sandbox and CloudRun container)
+  const candidates = [
+    { path: path.join(FONTS_DIR, "NotoSansCJKsc-Regular.otf"), family: "NotoSansCJKsc" },
+    { path: path.join(FONTS_DIR, "NotoSansCJKsc-Bold.otf"), family: "NotoSansCJKsc-Bold" },
+    { path: path.join(FONTS_DIR, "NotoSansCJKsc-Medium.otf"), family: "NotoSansCJKsc-Medium" },
+  ];
+  // Fallback: system font path (dev sandbox)
+  const systemDir = "/usr/share/fonts/opentype/noto";
+  const fallbacks = [
+    { path: path.join(systemDir, "NotoSansCJKsc-Regular.otf"), family: "NotoSansCJKsc" },
+    { path: path.join(systemDir, "NotoSansCJKsc-Bold.otf"), family: "NotoSansCJKsc-Bold" },
+    { path: path.join(systemDir, "NotoSansCJKsc-Medium.otf"), family: "NotoSansCJKsc-Medium" },
+  ];
+  let registered = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const sources = [candidates[i], fallbacks[i]];
+    for (const src of sources) {
+      try {
+        GlobalFonts.registerFromPath(src.path, src.family);
+        console.log(`[compositeText] Registered font: ${src.family} from ${src.path}`);
+        registered++;
+        break;
+      } catch (_) {
+        // try next source
+      }
+    }
+  }
+  if (registered > 0) {
     fontsRegistered = true;
-  } catch (e) {
-    console.warn("[compositeText] Font registration failed:", e);
+    console.log(`[compositeText] ${registered}/3 fonts registered successfully`);
+  } else {
+    console.warn("[compositeText] WARNING: No CJK fonts registered — Chinese text will not render");
   }
 }
 
@@ -69,13 +89,15 @@ export interface CompositeOptions {
 
 /** Pick font family and weight based on role */
 function getFontSpec(role: TextBlock["role"], fontSize: number): string {
+  // Use the font's embedded family name "Noto Sans CJK SC" which is what @napi-rs/canvas
+  // actually registers regardless of the alias we pass to registerFromPath.
   switch (role) {
     case "title":
-      return `bold ${fontSize}px NotoSansCJKsc-Bold, NotoSansCJKsc`;
+      return `bold ${fontSize}px "Noto Sans CJK SC"`;
     case "subtitle":
-      return `600 ${fontSize}px NotoSansCJKsc-Medium, NotoSansCJKsc`;
+      return `600 ${fontSize}px "Noto Sans CJK SC"`;
     default:
-      return `${fontSize}px NotoSansCJKsc`;
+      return `${fontSize}px "Noto Sans CJK SC"`;
   }
 }
 

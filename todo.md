@@ -2273,3 +2273,4 @@
 - [x] 实现 compositeTextOnImage 工具函数（服务端将 textBlocks 绘制到背景图上）
 - [x] graphicLayoutService.ts 生成每页后调用合成，存储 compositeImageUrl
 - [x] REST API 返回 compositeImageUrl 作为最终图片，网页端继续使用 HTML 叠加层
+- [x] 修复 CloudRun 部署环境中文字体缺失：将 NotoSansCJKsc 字体文件打包到 server/assets/fonts/，使用内嵌 family name "Noto Sans CJK SC" 注册
