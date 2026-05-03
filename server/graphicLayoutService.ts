@@ -262,15 +262,17 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
           : undefined;
 
-        // Build text layout description WITHOUT actual text content.
-        // Chinese characters cannot be reliably rendered by image generation models.
-        // Actual text is rendered as an HTML overlay layer in the frontend (and returned in textBlocks for API callers).
+        // Build text layout description WITH text content for composition guidance.
+        // Including the actual text helps AI understand the semantic weight and leave appropriate visual space.
+        // CRITICAL: DO NOT render any text in the image — text is rendered as HTML overlay in the frontend.
         const textDescriptions = textBlocks.map((b: any) => {
           const left = Math.round(b.x / imgW * 100);
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          return `${b.role} text area (${b.fontSize}px, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — keep this zone as seamless background continuation, NO solid color bars, NO rectangles, NO placeholder shapes, NO gray strips, background texture and image must flow through naturally, DO NOT render any text in image`;
+          // Include text content for composition reference, but strictly forbid rendering it
+          const textHint = b.text ? ` [content: "${b.text}"]` : "";
+          return `${b.role} zone${textHint} (${b.fontSize}px, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — this area MUST remain as clean seamless background, NO text rendering, NO solid color bars, NO rectangles, NO placeholder shapes, NO gray strips, background must flow through naturally`;
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);

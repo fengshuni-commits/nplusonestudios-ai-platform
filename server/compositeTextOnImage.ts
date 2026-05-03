@@ -13,9 +13,19 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { storagePut } from "./storage";
 
-// Resolve the fonts directory bundled alongside this module
+// Resolve the fonts directory — works in both dev (tsx, __dirname = server/) and
+// prod (esbuild bundle, __dirname = dist/). We try multiple candidate paths.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FONTS_DIR = path.join(__dirname, "assets", "fonts");
+// In dev: __dirname = .../server, fonts at .../server/assets/fonts
+// In prod: __dirname = .../dist, fonts at .../dist/assets/fonts (copied by build script)
+// Also try process.cwd() + server/assets/fonts as ultimate fallback
+const FONTS_DIR_CANDIDATES = [
+  path.join(__dirname, "assets", "fonts"),           // prod: dist/assets/fonts
+  path.join(__dirname, "..", "server", "assets", "fonts"), // prod fallback: dist/../server/assets/fonts
+  path.join(process.cwd(), "server", "assets", "fonts"),  // cwd fallback
+  "/usr/share/fonts/opentype/noto",                       // system fallback
+];
+const FONTS_DIR = FONTS_DIR_CANDIDATES[0]; // used only for logging; actual loading tries all candidates
 
 // ── Font registration (idempotent) ──────────────────────────────────────────
 
@@ -23,31 +33,29 @@ let fontsRegistered = false;
 
 function ensureFonts() {
   if (fontsRegistered) return;
-  // Try bundled fonts first (works in both dev sandbox and CloudRun container)
-  const candidates = [
-    { path: path.join(FONTS_DIR, "NotoSansCJKsc-Regular.otf"), family: "NotoSansCJKsc" },
-    { path: path.join(FONTS_DIR, "NotoSansCJKsc-Bold.otf"), family: "NotoSansCJKsc-Bold" },
-    { path: path.join(FONTS_DIR, "NotoSansCJKsc-Medium.otf"), family: "NotoSansCJKsc-Medium" },
-  ];
-  // Fallback: system font path (dev sandbox)
-  const systemDir = "/usr/share/fonts/opentype/noto";
-  const fallbacks = [
-    { path: path.join(systemDir, "NotoSansCJKsc-Regular.otf"), family: "NotoSansCJKsc" },
-    { path: path.join(systemDir, "NotoSansCJKsc-Bold.otf"), family: "NotoSansCJKsc-Bold" },
-    { path: path.join(systemDir, "NotoSansCJKsc-Medium.otf"), family: "NotoSansCJKsc-Medium" },
+  // Font files to register: [filename, family alias]
+  const fontFiles: [string, string][] = [
+    ["NotoSansCJKsc-Regular.otf", "NotoSansCJKsc"],
+    ["NotoSansCJKsc-Bold.otf", "NotoSansCJKsc-Bold"],
+    ["NotoSansCJKsc-Medium.otf", "NotoSansCJKsc-Medium"],
   ];
   let registered = 0;
-  for (let i = 0; i < candidates.length; i++) {
-    const sources = [candidates[i], fallbacks[i]];
-    for (const src of sources) {
+  for (const [filename, family] of fontFiles) {
+    let found = false;
+    for (const dir of FONTS_DIR_CANDIDATES) {
+      const fontPath = path.join(dir, filename);
       try {
-        GlobalFonts.registerFromPath(src.path, src.family);
-        console.log(`[compositeText] Registered font: ${src.family} from ${src.path}`);
+        GlobalFonts.registerFromPath(fontPath, family);
+        console.log(`[compositeText] Registered font: ${family} from ${fontPath}`);
         registered++;
+        found = true;
         break;
       } catch (_) {
-        // try next source
+        // try next candidate directory
       }
+    }
+    if (!found) {
+      console.warn(`[compositeText] WARNING: Could not find font file: ${filename} in any of: ${FONTS_DIR_CANDIDATES.join(", ")}`);
     }
   }
   if (registered > 0) {
