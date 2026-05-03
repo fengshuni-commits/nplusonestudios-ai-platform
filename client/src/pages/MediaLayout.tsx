@@ -554,19 +554,17 @@ export default function MediaLayout() {
   const [currentPage, setCurrentPage] = useState(0);
   const [generating, setGenerating] = useState(false);
 
-  // URL 参数恢复：jobs 加载后自动跳转到对应记录
+  // URL 参数恢复：直接设置 activeJobId，不需要在 list 中找到
   const urlJobIdAppliedRef = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!urlJobId || jobs.length === 0) return;
+    if (!urlJobId) return;
     // Reset when urlJobId changes so navigating to a different job always works
     if (urlJobIdAppliedRef.current === urlJobId) return;
-    const target = jobs.find((j: any) => j.id === urlJobId);
-    if (target) {
-      setActiveJobId(urlJobId);
-      setCurrentPage(0);
-      urlJobIdAppliedRef.current = urlJobId;
-    }
-  }, [urlJobId, jobs]);
+    // Directly activate the job by ID - graphicLayout.status will fetch it regardless of list
+    setActiveJobId(urlJobId);
+    setCurrentPage(0);
+    urlJobIdAppliedRef.current = urlJobId;
+  }, [urlJobId]);
 
   // 历史记录详情面板
   const [selectedHistoryJobId, setSelectedHistoryJobId] = useState<number | undefined>(); // 当前展开详情的 job
