@@ -2266,3 +2266,5 @@
 ## Bug 修复：图文排版生成图片出现灰色横条装饰元素
 - [x] 分析 graphicLayoutService.ts prompt 构建逻辑：文字区域描述中的 SOLID COLOR RECTANGLE 说法导致 AI 生成灰色横条
 - [x] 修复：将文字区域描述改为 seamless background continuation，明确禁止 gray bars/rectangles/placeholder shapes，同时在 imageGenStyleSuffix 中加入禁止语句
+## 数据库同步：图文排版 image_generation 提示词
+- [x] 将数据库 graphic_layout_prompts 表中 type='image_generation' 的 prompt 字段同步更新为修复后版本（禁止灰色横条）
