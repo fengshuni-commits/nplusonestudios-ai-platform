@@ -258,6 +258,9 @@ export default function AdminApiKeys() {
   const [editModelNameId, setEditModelNameId] = useState<number | null>(null);
   const [editModelNameValue, setEditModelNameValue] = useState("");
   const [editXfyunId, setEditXfyunId] = useState<number | null>(null);
+  const [editVolcengineId, setEditVolcengineId] = useState<number | null>(null);
+  const [editVolcengineAppId, setEditVolcengineAppId] = useState("");
+  const [editVolcengineAccessToken, setEditVolcengineAccessToken] = useState("");
   const [editXfyunAppId, setEditXfyunAppId] = useState("");
   const [editXfyunApiSecret, setEditXfyunApiSecret] = useState("");
   const [toolForm, setToolForm] = useState({
@@ -269,12 +272,16 @@ export default function AdminApiKeys() {
     accessKeyId: "", // 即梦 AI 专用
     xfyunAppId: "",  // 讯飞专用
     xfyunApiSecret: "", // 讯飞专用
+    volcengineAppId: "", // 火山引擎专用
+    volcengineAccessToken: "", // 火山引擎专用
   });
   const [showFormKey, setShowFormKey] = useState(false);
 
   // 检测是否为即梦工具
-  const isJimengTool = toolForm.name.toLowerCase().includes("即梦") || toolForm.name.toLowerCase().includes("jimeng") || toolForm.apiEndpoint.includes("volcengine");
+  const isJimengTool = (toolForm.name.toLowerCase().includes("即梦") || toolForm.name.toLowerCase().includes("jimeng")) && !toolForm.name.toLowerCase().includes("语音") && !toolForm.name.toLowerCase().includes("转写") && !toolForm.name.toLowerCase().includes("识别");
   const isXfyunTool = toolForm.name.toLowerCase().includes("讯飞") || toolForm.name.toLowerCase().includes("xfyun") || toolForm.apiEndpoint.includes("xfyun");
+  // 检测是否为火山引擎语音工具（豆包语音）
+  const isVolcengineSpeechTool = toolForm.name.toLowerCase().includes("豆包") || (toolForm.name.toLowerCase().includes("火山") && (toolForm.name.toLowerCase().includes("语音") || toolForm.name.toLowerCase().includes("asr") || toolForm.name.toLowerCase().includes("转写")));
 
   // 实时预览推断能力
   const previewCapabilities = toolForm.name.trim()
@@ -285,7 +292,7 @@ export default function AdminApiKeys() {
     onSuccess: () => {
       utils.aiTools.list.invalidate();
       setToolDialogOpen(false);
-      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "", xfyunAppId: "", xfyunApiSecret: "" });
+      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "", xfyunAppId: "", xfyunApiSecret: "", volcengineAppId: "", volcengineAccessToken: "" });
       setShowFormKey(false);
       toast.success("AI 工具添加成功");
     },
@@ -477,6 +484,38 @@ export default function AdminApiKeys() {
                   </div>
                 </>
               )}
+              {isVolcengineSpeechTool && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <KeyRound className="h-3.5 w-3.5" />
+                      App ID
+                      <span className="text-xs text-muted-foreground font-normal ml-1">（火山引擎豆包语音专用）</span>
+                    </Label>
+                    <Input
+                      type="text"
+                      value={toolForm.volcengineAppId}
+                      onChange={(e) => setToolForm({ ...toolForm, volcengineAppId: e.target.value })}
+                      placeholder="火山引擎 App ID（如 7710237677）"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <KeyRound className="h-3.5 w-3.5" />
+                      Access Token
+                      <span className="text-xs text-muted-foreground font-normal ml-1">（火山引擎豆包语音专用）</span>
+                    </Label>
+                    <Input
+                      type="password"
+                      value={toolForm.volcengineAccessToken}
+                      onChange={(e) => setToolForm({ ...toolForm, volcengineAccessToken: e.target.value })}
+                      placeholder="火山引擎 Access Token"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </>
+              )}
               <div className="space-y-2">
                 <Label>备注名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
                 <Input
@@ -505,8 +544,18 @@ export default function AdminApiKeys() {
                       apiSecret: toolForm.xfyunApiSecret,
                     };
                   }
+                  if (isVolcengineSpeechTool && (toolForm.volcengineAppId || toolForm.volcengineAccessToken)) {
+                    formData.configJson = {
+                      ...(formData.configJson || {}),
+                      appId: toolForm.volcengineAppId,
+                      accessToken: toolForm.volcengineAccessToken,
+                    };
+                    formData.provider = "volcengine_speech";
+                  }
                   delete formData.xfyunAppId;
                   delete formData.xfyunApiSecret;
+                  delete formData.volcengineAppId;
+                  delete formData.volcengineAccessToken;
                   createTool.mutate(formData);
                 }}
                 disabled={createTool.isPending}
@@ -933,6 +982,84 @@ export default function AdminApiKeys() {
                                       setEditXfyunId(tool.id);
                                       setEditXfyunAppId(tool.configJson?.appId || "");
                                       setEditXfyunApiSecret("");
+                                    }}
+                                  >
+                                    修改
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* 火山引擎豆包语音专用：AppID + AccessToken 编辑 */}
+                        {tool.provider === "volcengine_speech" && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <KeyRound className="h-3 w-3" />豆包语音凭证
+                            </p>
+                            {editVolcengineId === tool.id ? (
+                              <div className="space-y-2">
+                                <Input
+                                  type="text"
+                                  value={editVolcengineAppId}
+                                  onChange={(e) => setEditVolcengineAppId(e.target.value)}
+                                  placeholder="App ID"
+                                  className="font-mono text-xs h-8"
+                                />
+                                <Input
+                                  type="password"
+                                  value={editVolcengineAccessToken}
+                                  onChange={(e) => setEditVolcengineAccessToken(e.target.value)}
+                                  placeholder="Access Token"
+                                  className="font-mono text-xs h-8"
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => {
+                                      const newConfig: any = { ...(tool.configJson || {}) };
+                                      if (editVolcengineAppId.trim()) newConfig.appId = editVolcengineAppId.trim();
+                                      if (editVolcengineAccessToken.trim()) newConfig.accessToken = editVolcengineAccessToken.trim();
+                                      updateTool.mutate({ id: tool.id, configJson: newConfig });
+                                      setEditVolcengineId(null);
+                                      setEditVolcengineAppId("");
+                                      setEditVolcengineAccessToken("");
+                                    }}
+                                    disabled={updateTool.isPending}
+                                  >
+                                    保存
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs"
+                                    onClick={() => { setEditVolcengineId(null); setEditVolcengineAppId(""); setEditVolcengineAccessToken(""); }}
+                                  >
+                                    取消
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-muted-foreground">
+                                    App ID: {tool.configJson?.appId || <span className="italic">未配置</span>}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-muted-foreground">
+                                    Access Token: {tool.configJson?.accessToken ? "••••••••" + tool.configJson.accessToken.slice(-4) : <span className="italic">未配置</span>}
+                                  </p>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditVolcengineId(tool.id);
+                                      setEditVolcengineAppId(tool.configJson?.appId || "");
+                                      setEditVolcengineAccessToken("");
                                     }}
                                   >
                                     修改

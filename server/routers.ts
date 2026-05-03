@@ -3224,9 +3224,23 @@ const meetingRouter = router({
     }))
     .mutation(async ({ input }) => {
       // Use Volcengine BigASR for file transcription (no ffmpeg required)
+      // If toolId is provided, use the tool's configJson credentials; otherwise fall back to env vars
       try {
+        let creds: { appId: string; accessToken: string } | undefined;
+        if (input.toolId) {
+          try {
+            const tool = await db.getAiToolById(input.toolId);
+            if (tool?.configJson && typeof tool.configJson === "object") {
+              const cfg = tool.configJson as Record<string, unknown>;
+              if (cfg.appId && cfg.accessToken) {
+                creds = { appId: String(cfg.appId), accessToken: String(cfg.accessToken) };
+                console.log("[meeting.transcribe] using tool credentials from toolId:", input.toolId);
+              }
+            }
+          } catch { /* ignore, fall back to env */ }
+        }
         console.log("[meeting.transcribe] using volcengine bigasr for:", input.audioUrl);
-        const text = await transcribeFileWithVolcengine(input.audioUrl);
+        const text = await transcribeFileWithVolcengine(input.audioUrl, { creds });
         if (!text || text.trim().length === 0) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "音频转写完成但未识别到有效内容，请检查音频质量" });
         }

@@ -2191,3 +2191,17 @@
 - [x] routers.ts 中文件转写改用火山引擎，移除讯飞 WebSocket 方案
 - [x] 配置 VOLCENGINE_ASR_APP_ID 和 VOLCENGINE_ASR_ACCESS_TOKEN 环境变量
 - [x] 验证凭证连通性（状态码 20000000）
+
+## 功能：AI 工具管理支持火山引擎语音识别
+- [ ] 扩展 ai_tools 表支持 volcengine provider 和 speech_transcription 能力
+- [ ] AI 工具管理页面支持添加火山引擎语音识别工具（App ID + Access Token）
+- [ ] 会议纪要模块文件上传转写支持工具选择（火山引擎 / 讯飞）
+- [ ] 根据选择的工具调用对应的转写服务
+
+## 功能：AI 工具管理支持火山引擎豆包语音识别
+- [x] AiToolsManagement 添加豆包语音工具类型检测（isVolcengineSpeechTool）
+- [x] 添加 App ID + Access Token 表单字段（存入 configJson）
+- [x] 添加工具卡片显示和凭证编辑功能
+- [x] inferCapabilities 添加豆包语音 → speech_transcription 能力映射
+- [x] transcribe 过程支持读取 toolId 对应工具的 configJson 凭证
+- [x] volcengineTranscription.ts 支持传入自定义凭证（覆盖环境变量）

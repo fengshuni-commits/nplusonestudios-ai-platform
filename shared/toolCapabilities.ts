@@ -64,6 +64,10 @@ const CAPABILITY_RULES: CapabilityRule[] = [
     keywords: ["whisper"],
     capabilities: ["speech_transcription"],
   },
+  {
+    keywords: ["volcengine_speech", "豆包语音", "火山语音", "bigasr", "录音文件识别"],
+    capabilities: ["speech_transcription"],
+  },
   // ── 多模态大模型（文本 + 图像理解 + 文档生成 + 分析 + 媒体） ──
   {
     keywords: ["gpt-4o", "gpt4o", "o1", "o3", "o4"],
@@ -86,7 +90,7 @@ const CAPABILITY_RULES: CapabilityRule[] = [
     capabilities: ["rendering", "document", "analysis", "media"],
   },
   {
-    keywords: ["doubao", "豆包", "volcengine", "volc"],
+    keywords: ["doubao", "豆包"],
     capabilities: ["document", "analysis", "media"],
   },
   {

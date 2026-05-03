@@ -26,9 +26,9 @@ function detectFormat(fileNameOrUrl: string): string {
   return "mp3"; // safe default
 }
 
-function buildHeaders(taskId: string): Record<string, string> {
-  const appId = process.env.VOLCENGINE_ASR_APP_ID!;
-  const accessToken = process.env.VOLCENGINE_ASR_ACCESS_TOKEN!;
+function buildHeaders(taskId: string, creds?: { appId: string; accessToken: string }): Record<string, string> {
+  const appId = creds?.appId || process.env.VOLCENGINE_ASR_APP_ID!;
+  const accessToken = creds?.accessToken || process.env.VOLCENGINE_ASR_ACCESS_TOKEN!;
   return {
     "Content-Type": "application/json",
     "X-Api-App-Key": appId,
@@ -43,7 +43,7 @@ function buildHeaders(taskId: string): Record<string, string> {
  * Submit a transcription task.
  * Returns the task_id (same UUID we generated and passed in the header).
  */
-async function submitTask(audioUrl: string, taskId: string): Promise<void> {
+async function submitTask(audioUrl: string, taskId: string, creds?: { appId: string; accessToken: string }): Promise<void> {
   const format = detectFormat(audioUrl);
   const body = {
     user: { uid: "nplus1-platform" },
@@ -62,7 +62,7 @@ async function submitTask(audioUrl: string, taskId: string): Promise<void> {
 
   const res = await fetch(`${BASE_URL}${SUBMIT_PATH}`, {
     method: "POST",
-    headers: buildHeaders(taskId),
+    headers: buildHeaders(taskId, creds),
     body: JSON.stringify(body),
   });
 
@@ -94,10 +94,10 @@ interface QueryResult {
 /**
  * Query the task status once.
  */
-async function queryTask(taskId: string): Promise<QueryResult> {
+async function queryTask(taskId: string, creds?: { appId: string; accessToken: string }): Promise<QueryResult> {
   const res = await fetch(`${BASE_URL}${QUERY_PATH}`, {
     method: "POST",
-    headers: buildHeaders(taskId),
+    headers: buildHeaders(taskId, creds),
     body: JSON.stringify({}),
   });
 
@@ -132,21 +132,17 @@ async function queryTask(taskId: string): Promise<QueryResult> {
  */
 export async function transcribeFileWithVolcengine(
   audioUrl: string,
-  options: { timeoutMs?: number; pollIntervalMs?: number } = {}
+  options: { timeoutMs?: number; pollIntervalMs?: number; creds?: { appId: string; accessToken: string } } = {}
 ): Promise<string> {
-  const { timeoutMs = 10 * 60 * 1000, pollIntervalMs = 5000 } = options;
-
+  const { timeoutMs = 10 * 60 * 1000, pollIntervalMs = 5000, creds } = options;
   const taskId = randomUUID();
   console.log(`[VolcASR] Submitting task ${taskId} for ${audioUrl}`);
-
-  await submitTask(audioUrl, taskId);
+  await submitTask(audioUrl, taskId, creds);
   console.log(`[VolcASR] Task ${taskId} submitted, polling...`);
-
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, pollIntervalMs));
-
-    const result = await queryTask(taskId);
+    const result = await queryTask(taskId, creds);
     if (!result.done) {
       console.log(`[VolcASR] Task ${taskId} still processing...`);
       continue;
