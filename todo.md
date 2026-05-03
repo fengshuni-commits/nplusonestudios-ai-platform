@@ -2205,3 +2205,10 @@
 - [x] inferCapabilities 添加豆包语音 → speech_transcription 能力映射
 - [x] transcribe 过程支持读取 toolId 对应工具的 configJson 凭证
 - [x] volcengineTranscription.ts 支持传入自定义凭证（覆盖环境变量）
+
+## 功能：实时录音支持火山引擎流式语音识别
+- [ ] 实现 volcengineStreamTranscribe.ts（火山引擎 sauc WebSocket 服务端）
+- [ ] streamTranscribe.ts 支持根据 toolProvider 切换讯飞/火山引擎
+- [ ] AiToolsManagement 添加火山引擎流式识别工具类型（isVolcengineSpeechTool 复用）
+- [ ] 会议纪要实时录音工具选择器支持切换引擎
+- [ ] inferCapabilities 确保流式识别工具也映射到 speech_transcription

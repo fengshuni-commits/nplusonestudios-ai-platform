@@ -18,6 +18,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import type { Server as HttpServer } from "http";
 import { sdk } from "./_core/sdk";
 import type { XfyunCredentials } from "./_core/xfyunTranscription";
+import { createVolcengineStreamSession } from "./volcengineStreamTranscribe";
 
 const XFYUN_HOST = "iat-api.xfyun.cn";
 const XFYUN_PATH = "/v2/iat";
@@ -75,8 +76,10 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
     const toolIdParam = url.searchParams.get("toolId");
     const toolIdFromParam = toolIdParam ? parseInt(toolIdParam, 10) : null;
 
-    // ── Load Xfyun credentials ─────────────────────────────────────────────
+    // ── Load tool credentials ─────────────────────────────────────────────
     let creds: XfyunCredentials | null = null;
+    let volcCreds: { appId: string; accessToken: string } | null = null;
+    let providerType: "xfyun" | "volcengine_speech" = "xfyun";
     try {
       const { getDb, getDefaultToolForCapability } = await import("./db");
       const { decryptApiKey } = await import("./_core/crypto");
@@ -94,15 +97,65 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
             : {};
           const apiKeyEncrypted = (tool as any).apiKeyEncrypted;
           const apiKey = apiKeyEncrypted ? (decryptApiKey(apiKeyEncrypted) || "") : "";
-          creds = {
-            appId: (configJson.appId as string) || "",
-            apiKey,
-            apiSecret: (configJson.apiSecret as string) || "",
-          };
+          // Detect provider type from tool config
+          const provider = (configJson.provider as string) || "xfyun";
+          if (provider === "volcengine_speech" || provider === "volcengine") {
+            providerType = "volcengine_speech";
+            volcCreds = {
+              appId: (configJson.appId as string) || "",
+              accessToken: apiKey,
+            };
+          } else {
+            providerType = "xfyun";
+            creds = {
+              appId: (configJson.appId as string) || "",
+              apiKey,
+              apiSecret: (configJson.apiSecret as string) || "",
+            };
+          }
         }
       }
     } catch (e) {
       console.error("[streamTranscribe] Failed to load credentials:", e);
+    }
+
+    // ── Route to Volcengine if provider is volcengine_speech ─────────────────
+    if (providerType === "volcengine_speech") {
+      if (!volcCreds || !volcCreds.appId || !volcCreds.accessToken) {
+        send(clientWs, { type: "error", message: "未找到火山引擎凭证，请在 AI 工具管理中配置火山引擎语音工具" });
+        clientWs.close();
+        return;
+      }
+      console.log(`[streamTranscribe] using Volcengine BigASR for user ${user.id}`);
+      const session = createVolcengineStreamSession(
+        volcCreds,
+        (msg) => send(clientWs, msg),
+        () => { /* session closed */ }
+      );
+      clientWs.on("message", (data: WebSocket.RawData) => {
+        const isString = typeof data === "string";
+        const isBuffer = data instanceof Buffer;
+        const isSmall = isBuffer && (data as Buffer).length < 20;
+        const isEnd = isString
+          ? (data as string).trim() === "END"
+          : (isSmall && (data as Buffer).toString().trim() === "END");
+        if (isEnd) {
+          session.end();
+          return;
+        }
+        let pcm: Buffer;
+        if (isBuffer) {
+          pcm = data as Buffer;
+        } else if (data instanceof ArrayBuffer) {
+          pcm = Buffer.from(data);
+        } else {
+          pcm = Buffer.concat(data as Buffer[]);
+        }
+        session.sendPcm(pcm);
+      });
+      clientWs.on("close", () => session.close());
+      clientWs.on("error", () => session.close());
+      return;
     }
 
     if (!creds || !creds.appId || !creds.apiKey || !creds.apiSecret) {

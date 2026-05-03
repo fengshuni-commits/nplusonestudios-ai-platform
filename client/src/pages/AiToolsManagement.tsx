@@ -548,9 +548,11 @@ export default function AdminApiKeys() {
                     formData.configJson = {
                       ...(formData.configJson || {}),
                       appId: toolForm.volcengineAppId,
-                      accessToken: toolForm.volcengineAccessToken,
+                      provider: "volcengine_speech",
                     };
                     formData.provider = "volcengine_speech";
+                    // Store accessToken as apiKey so it gets encrypted
+                    formData.apiKey = toolForm.volcengineAccessToken;
                   }
                   delete formData.xfyunAppId;
                   delete formData.xfyunApiSecret;
@@ -1018,10 +1020,13 @@ export default function AdminApiKeys() {
                                     size="sm"
                                     className="h-7 text-xs"
                                     onClick={() => {
-                                      const newConfig: any = { ...(tool.configJson || {}) };
+                                      const newConfig: any = { ...(tool.configJson || {}), provider: "volcengine_speech" };
                                       if (editVolcengineAppId.trim()) newConfig.appId = editVolcengineAppId.trim();
-                                      if (editVolcengineAccessToken.trim()) newConfig.accessToken = editVolcengineAccessToken.trim();
-                                      updateTool.mutate({ id: tool.id, configJson: newConfig });
+                                      // Remove accessToken from configJson (store as encrypted apiKey instead)
+                                      delete newConfig.accessToken;
+                                      const updatePayload: any = { id: tool.id, configJson: newConfig };
+                                      if (editVolcengineAccessToken.trim()) updatePayload.apiKey = editVolcengineAccessToken.trim();
+                                      updateTool.mutate(updatePayload);
                                       setEditVolcengineId(null);
                                       setEditVolcengineAppId("");
                                       setEditVolcengineAccessToken("");
@@ -1049,7 +1054,7 @@ export default function AdminApiKeys() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <p className="text-xs font-mono bg-background rounded px-2 py-1 border flex-1 text-muted-foreground">
-                                    Access Token: {tool.configJson?.accessToken ? "••••••••" + tool.configJson.accessToken.slice(-4) : <span className="italic">未配置</span>}
+                                    Access Token: {tool.hasApiKey ? "••••••••" : <span className="italic">未配置</span>}
                                   </p>
                                   <Button
                                     variant="ghost"
