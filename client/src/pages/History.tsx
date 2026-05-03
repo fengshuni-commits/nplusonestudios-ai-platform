@@ -34,6 +34,8 @@ import {
   Trash2,
   Sparkles,
   ChevronDown,
+  CheckSquare2,
+  Square,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -408,6 +410,9 @@ interface TileCardProps {
   onImport?: (id: number) => void;
   onAssociateProject?: (historyId: number, projectId: number | null) => void;
   allProjects?: any[];
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: number) => void;
 }
 
 /** Expandable content preview for benchmark report chain items */
@@ -433,7 +438,7 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
   );
 }
 
-function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects = [] }: TileCardProps) {
+function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects = [], isSelectMode = false, isSelected = false, onToggleSelect }: TileCardProps) {
   const cfg = MODULE_MAP[item.module] || {
     label: item.module,
     icon: FileText,
@@ -484,9 +489,25 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (isSelectMode) {
+      e.stopPropagation();
+      onToggleSelect?.(item.id);
+      return;
+    }
+    handleClick();
+  };
   return (
-    <div className="group relative aspect-square rounded-xl overflow-hidden cursor-pointer border border-white/5 hover:border-white/20 transition-all hover:shadow-lg hover:shadow-black/30 hover:-translate-y-0.5"
-      onClick={handleClick}>
+    <div className={`group relative aspect-square rounded-xl overflow-hidden cursor-pointer border transition-all hover:shadow-lg hover:shadow-black/30 hover:-translate-y-0.5 ${isSelectMode && isSelected ? 'border-primary ring-2 ring-primary/50' : 'border-white/5 hover:border-white/20'}`}
+      onClick={handleCardClick}>
+      {/* Select mode checkbox overlay */}
+      {isSelectMode && (
+        <div className="absolute top-1.5 left-1.5 z-20">
+          <div className={`h-5 w-5 rounded flex items-center justify-center transition-colors ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-black/50 text-white/70 hover:bg-black/70'}`}>
+            {isSelected ? <CheckSquare2 className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+          </div>
+        </div>
+      )}
 
       {/* Background: image or gradient */}
       {isRender && displayUrl ? (
@@ -710,9 +731,13 @@ interface ModuleSectionProps {
   onImport: (id: number) => void;
   onAssociateProject: (id: number, projectId: number | null) => void;
   allProjects: any[];
+  isSelectMode?: boolean;
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
+  onSelectAll?: (ids: number[]) => void;
 }
 
-function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects }: ModuleSectionProps) {
+function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects, isSelectMode = false, selectedIds, onToggleSelect, onSelectAll }: ModuleSectionProps) {
   const [expanded, setExpanded] = useState(false);
   const ModuleIcon = cfg.icon;
   // Two rows: grid is responsive (3-6 cols), use CSS max-height trick
@@ -728,7 +753,22 @@ function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox,
         <ModuleIcon className={`h-4 w-4 ${cfg.iconColor}`} />
         <h2 className="text-sm font-medium text-foreground">{cfg.label}</h2>
         <span className="text-xs text-muted-foreground">{items.length} 条</span>
-        <span className="text-xs text-muted-foreground/50">· 最近使用 {formatTime(items[0]?.createdAt)}</span>
+        {!isSelectMode && <span className="text-xs text-muted-foreground/50">· 最近使用 {formatTime(items[0]?.createdAt)}</span>}
+        {isSelectMode && onSelectAll && (
+          <button
+            className="ml-auto text-xs text-primary hover:text-primary/80 transition-colors"
+            onClick={() => {
+              const allSelected = items.every(i => selectedIds?.has(i.id));
+              if (allSelected) {
+                items.forEach(i => selectedIds?.has(i.id) && onToggleSelect?.(i.id));
+              } else {
+                onSelectAll(items.map((i: any) => i.id));
+              }
+            }}
+          >
+            {items.every(i => selectedIds?.has(i.id)) ? "取消全选" : "全选此类"}
+          </button>
+        )}
       </div>
       {/* Tile grid with collapse */}
       <div
@@ -747,6 +787,9 @@ function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox,
               onImport={onImport}
               onAssociateProject={onAssociateProject}
               allProjects={allProjects}
+              isSelectMode={isSelectMode}
+              isSelected={selectedIds?.has(item.id) ?? false}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>
@@ -769,6 +812,9 @@ function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox,
 export default function HistoryPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
+  // Batch select mode
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [isDetailFullscreen, setIsDetailFullscreen] = useState(false);
@@ -974,6 +1020,33 @@ export default function HistoryPage() {
     onSuccess: () => { utils.history.listGrouped.invalidate(); toast.success("已删除记录"); },
     onError: (e) => toast.error(e.message || "删除失败"),
   });
+  const batchDeleteMutation = trpc.history.batchDelete.useMutation({
+    onSuccess: (data) => {
+      utils.history.listGrouped.invalidate();
+      toast.success(`已删除 ${data.deleted} 条记录`);
+      setSelectedIds(new Set());
+      setIsSelectMode(false);
+    },
+    onError: (e) => toast.error(e.message || "批量删除失败"),
+  });
+  const handleToggleSelect = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const handleSelectAll = useCallback((ids: number[]) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.add(id));
+      return next;
+    });
+  }, []);
+  const handleExitSelectMode = useCallback(() => {
+    setIsSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
   const importMutation = trpc.assets.importFromHistory.useMutation({
     onSuccess: (data) => {
       if (data.alreadyExists) {
@@ -1015,8 +1088,46 @@ export default function HistoryPage() {
           <p className="text-sm text-muted-foreground mt-1">所有 AI 生成记录，按类别分组展示</p>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={moduleFilter} onValueChange={handleModuleFilterChange}>
+          {isSelectMode ? (
+            <>
+              <span className="text-sm text-muted-foreground">已选 {selectedIds.size} 条</span>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={selectedIds.size === 0 || batchDeleteMutation.isPending}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    删除选中
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>确认批量删除</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      将删除选中的 {selectedIds.size} 条生成记录，不可恢复。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => batchDeleteMutation.mutate({ ids: Array.from(selectedIds) })}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      确认删除
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button variant="outline" size="sm" onClick={handleExitSelectMode}>
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                取消
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setIsSelectMode(true)}>
+                <CheckSquare2 className="h-3.5 w-3.5 mr-1.5" />
+                选择
+              </Button>
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={moduleFilter} onValueChange={handleModuleFilterChange}>
             <SelectTrigger className="w-[160px] h-9 text-sm">
               <SelectValue placeholder="筛选模块" />
             </SelectTrigger>
@@ -1034,7 +1145,9 @@ export default function HistoryPage() {
               <SelectItem value="media_wechat">公众号</SelectItem>
               <SelectItem value="media_instagram">Instagram</SelectItem>
             </SelectContent>
-          </Select>
+              </Select>
+            </>
+          )}
         </div>
       </div>
 
@@ -1067,6 +1180,10 @@ export default function HistoryPage() {
                 onImport={handleImport}
                 onAssociateProject={handleAssociateProject}
                 allProjects={allProjects}
+                isSelectMode={isSelectMode}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onSelectAll={handleSelectAll}
               />
             );
           })}

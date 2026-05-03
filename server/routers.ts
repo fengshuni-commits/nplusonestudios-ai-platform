@@ -3875,6 +3875,28 @@ const historyRouter = router({
       return { success: true };
     }),
 
+  /** Batch delete generation history items (own records for members, any record for admin) */
+  batchDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.number()) }))
+    .mutation(async ({ ctx, input }) => {
+      const isAdmin = ctx.user.role === "admin";
+      // Separate video IDs (> 1000000) from regular generation history IDs
+      const videoIds = input.ids.filter(id => id > 1000000).map(id => id - 1000000);
+      const regularIds = input.ids.filter(id => id <= 1000000);
+      // Delete video records (verify ownership)
+      if (videoIds.length > 0) {
+        const videoRecords = await db.listVideoHistory(ctx.user.id);
+        for (const realId of videoIds) {
+          const record = videoRecords.find((r: any) => r.id === realId);
+          if (record) await db.deleteVideoHistory(realId);
+        }
+      }
+      // Delete regular generation history records
+      for (const id of regularIds) {
+        await db.deleteGenerationHistory(id, ctx.user.id, isAdmin);
+      }
+      return { success: true, deleted: input.ids.length };
+    }),
   /** Admin delete a generation history item by project (for project document management) */
   adminDelete: adminProcedure
     .input(z.object({ id: z.number() }))
