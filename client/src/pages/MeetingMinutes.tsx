@@ -473,9 +473,9 @@ export default function MeetingMinutes() {
           <h1 className="text-2xl font-semibold tracking-tight">会议纪要</h1>
           <p className="text-sm text-muted-foreground mt-1">实时录音转录，或上传录音文件，AI 自动生成结构化会议纪要</p>
         </div>
-        <div className="flex flex-col gap-2 items-end">
-          <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结 LLM" />
-          <AiToolSelector capability="stream_transcription" value={streamToolId} onChange={setStreamToolId} label="实时录音识别" showBuiltIn={false} />
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结" />
+          <AiToolSelector capability="stream_transcription" value={streamToolId} onChange={setStreamToolId} label="实时识别" showBuiltIn={false} />
           <AiToolSelector capability="file_transcription" value={fileToolId} onChange={setFileToolId} label="文件转写" showBuiltIn={false} />
         </div>
       </div>
