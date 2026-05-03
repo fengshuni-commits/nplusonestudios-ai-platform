@@ -1830,6 +1830,7 @@ const aiToolsRouter = router({
     .input(z.object({
       name: z.string().min(1),
       description: z.string().optional(),
+      provider: z.string().optional(), // 工具提供商，如 xfyun, volcengine_speech
       apiEndpoint: z.string().optional(),
       apiKeyName: z.string().optional(),
       apiKey: z.string().optional(), // plaintext API key, will be encrypted before storage

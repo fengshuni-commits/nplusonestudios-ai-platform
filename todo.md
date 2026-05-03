@@ -2212,3 +2212,8 @@
 - [ ] AiToolsManagement 添加火山引擎流式识别工具类型（isVolcengineSpeechTool 复用）
 - [ ] 会议纪要实时录音工具选择器支持切换引擎
 - [ ] inferCapabilities 确保流式识别工具也映射到 speech_transcription
+
+## Bug 修复：火山引擎实时流式语音识别 provider 字段为 null
+- [x] 修复 routers.ts：create 过程 input schema 缺少 provider 字段，导致前端传的 provider="volcengine_speech" 被 zod 过滤掉
+- [x] 修复数据库中已有的错误记录（id=1500001）：设置 provider="volcengine_speech"，将 accessToken 从 configJson 移到 apiKeyEncrypted（加密存储），configJson 只保留 appId 和 provider
+- [x] 验证 streamTranscribe.ts 路由逻辑：读取 configJson.provider，正确路由到火山引擎
