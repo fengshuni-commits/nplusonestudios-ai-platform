@@ -48,6 +48,9 @@ import {
   Link2Off,
   Film,
   LayoutTemplate,
+  Edit,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -455,8 +458,8 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
 
   const handleClick = () => {
     if (item.module === "layout_design") {
-      // 图文排版：跳转到图文排版页面，并带上 jobId 以自动恢复对应记录
-      if (onNavigate) onNavigate(`/media/layout?jobId=${item.id}`);
+      // 图文排版：打开历史记录详情窗口（与其他模块一致）
+      if (onOpenDetail) onOpenDetail(item);
       return;
     }
     if (item.module === "analysis_image") {
@@ -822,6 +825,8 @@ export default function HistoryPage() {
   const [contentItemId, setContentItemId] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
   const [, navigate] = useLocation();
+  // Layout design page carousel state
+  const [layoutPageIndex, setLayoutPageIndex] = useState(0);
 
   // Benchmark report refine state
   const [refineFeedback, setRefineFeedback] = useState("");
@@ -904,6 +909,17 @@ export default function HistoryPage() {
     { enabled: !!contentItemId }
   );
 
+  // For layout_design: fetch job pages via graphicLayout.status
+  const layoutJobId = useMemo(() => {
+    if (contentItem?.module !== 'layout_design') return null;
+    const params = contentItem?.inputParams as any;
+    return params?.jobId ?? null;
+  }, [contentItem]);
+  const layoutJobQuery = trpc.graphicLayout.status.useQuery(
+    { id: layoutJobId! },
+    { enabled: !!layoutJobId }
+  );
+
   const handleOpenDetail = useCallback((item: any) => {
     if (item.module === "ai_render" || item.module === "benchmark_report" || item.module === "color_plan") {
       setSelectedRootId(item.id);
@@ -911,6 +927,11 @@ export default function HistoryPage() {
       setDetailOpen(true);
     } else if (item.module === "ai_video") {
       // Open video viewer for ai_video
+      setContentItem(item);
+      setContentItemId(item.id);
+    } else if (item.module === "layout_design") {
+      // 图文排版：打开内容查看对话框，展示多页图片、提载图片、复制提示词、继续编辑
+      setLayoutPageIndex(0);
       setContentItem(item);
       setContentItemId(item.id);
     } else {
@@ -1707,6 +1728,125 @@ export default function HistoryPage() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 加载中…
+              </div>
+            ) : displayContentItem?.module === "layout_design" ? (
+              <div className="space-y-4">
+                {/* Page carousel */}
+                {layoutJobQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    加载页面数据…
+                  </div>
+                ) : (() => {
+                  const pages: any[] = (layoutJobQuery.data?.pages as any[]) ?? [];
+                  const currentPage = pages[layoutPageIndex];
+                  const imgUrl = currentPage?.compositeImageUrl || currentPage?.imageUrl || displayContentItem?.outputUrl;
+                  return (
+                    <div className="space-y-3">
+                      {/* Image with navigation */}
+                      <div className="relative group">
+                        {imgUrl ? (
+                          <img
+                            src={imgUrl}
+                            alt={`第 ${layoutPageIndex + 1} 页`}
+                            className="w-full rounded-lg object-contain bg-muted cursor-zoom-in"
+                            onClick={() => setLightbox({ src: imgUrl, label: `${displayContentItem?.title} 第${layoutPageIndex + 1}页` })}
+                          />
+                        ) : (
+                          <div className="w-full aspect-[3/4] rounded-lg bg-muted flex items-center justify-center">
+                            <p className="text-sm text-muted-foreground">暂无预览图</p>
+                          </div>
+                        )}
+                        {/* Page nav arrows */}
+                        {pages.length > 1 && (
+                          <>
+                            <button
+                              className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+                              onClick={() => setLayoutPageIndex(i => Math.max(0, i - 1))}
+                              disabled={layoutPageIndex === 0}
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <button
+                              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+                              onClick={() => setLayoutPageIndex(i => Math.min(pages.length - 1, i + 1))}
+                              disabled={layoutPageIndex === pages.length - 1}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {/* Page dots */}
+                      {pages.length > 1 && (
+                        <div className="flex items-center justify-center gap-1.5">
+                          {pages.map((_: any, i: number) => (
+                            <button
+                              key={i}
+                              onClick={() => setLayoutPageIndex(i)}
+                              className={`h-1.5 rounded-full transition-all ${
+                                i === layoutPageIndex ? 'w-4 bg-primary' : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60'
+                              }`}
+                            />
+                          ))}
+                          <span className="text-xs text-muted-foreground ml-2">{layoutPageIndex + 1} / {pages.length}</span>
+                        </div>
+                      )}
+                      {/* Action buttons */}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {imgUrl && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs"
+                            onClick={() => window.open(imgUrl, '_blank')}>
+                            <Download className="h-3.5 w-3.5 mr-1.5" />
+                            下载第 {layoutPageIndex + 1} 页
+                          </Button>
+                        )}
+                        {pages.length > 1 && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs"
+                            onClick={() => {
+                              pages.forEach((_: any, i: number) => {
+                                const url = pages[i]?.compositeImageUrl || pages[i]?.imageUrl;
+                                if (url) {
+                                  setTimeout(() => window.open(url, '_blank'), i * 300);
+                                }
+                              });
+                            }}>
+                            <Download className="h-3.5 w-3.5 mr-1.5" />
+                            下载全部 {pages.length} 页
+                          </Button>
+                        )}
+                        {layoutJobQuery.data?.contentText && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs"
+                            onClick={() => {
+                              const text = layoutJobQuery.data?.contentText || '';
+                              navigator.clipboard.writeText(text).then(() => toast.success('内容文案已复制')).catch(() => toast.error('复制失败'));
+                            }}>
+                            <Copy className="h-3.5 w-3.5 mr-1.5" />
+                            复制文案
+                          </Button>
+                        )}
+                        {layoutJobId && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs"
+                            onClick={() => {
+                              setContentItem(null);
+                              setContentItemId(null);
+                              navigate(`/media/layout?jobId=${layoutJobId}`);
+                            }}>
+                            <Edit className="h-3.5 w-3.5 mr-1.5" />
+                            继续编辑
+                          </Button>
+                        )}
+                      </div>
+                      {/* Summary / content text */}
+                      {displayContentItem?.summary && (
+                        <div className="space-y-1 pt-2 border-t border-border/30">
+                          <p className="text-xs font-medium text-muted-foreground">内容摘要</p>
+                          <p className="text-sm text-foreground/80 leading-relaxed">{displayContentItem.summary}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ) : displayContentItem?.module === "ai_video" && displayContentItem?.outputUrl ? (
               <div className="space-y-4">

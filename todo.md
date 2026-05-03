@@ -2291,3 +2291,7 @@
 - [x] 服务端查询精简：新增 getGenerationHistoryModuleById（只取 module + inputParams），替代全行 SELECT
 - [x] 子记录批量删除：改用 BFS + inArray 一次性删除所有后代，替代递归串行 await
 - [x] 批量删除并行化：Promise.all 并行处理所有 ID，替代 for 循环串行
+## 修复：图文排版历史记录点击行为
+- [x] 修复 layout_design 点击缩略图直接跳转页面的问题，改为打开历史记录详情窗口
+- [x] 详情窗口展示多页图片轮播（左右箭头、圆点导航），优先使用 compositeImageUrl
+- [x] 详情窗口支持下载当前页/下载全部页、复制内容文案、继续编辑按鈕
