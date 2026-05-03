@@ -187,7 +187,11 @@ export async function xfyunTranscribe(
   return new Promise((resolve) => {
     const url = buildXfyunUrl(credentials);
     const ws = new WebSocket(url);
-    const resultParts: string[] = [];
+    // Use a Map keyed by sn to handle wpgs dynamic correction:
+    // pgs="apd" → append new sentence at sn
+    // pgs="rpl" → replace sentences in range [rg[0]..rg[1]] with new text at sn
+    // Final text = Map values joined in sn order
+    const sentenceMap = new Map<number, string>();
     let resolved = false;
     let frameIndex = 0;
     const FRAME_SIZE = 1280; // 每帧 1280 字节（40ms @ 16kHz 16bit mono）
@@ -271,19 +275,31 @@ export async function xfyunTranscribe(
           return;
         }
 
-        // 提取识别文字
-        const ws_result = msg.data?.result?.ws;
-        if (ws_result) {
-          const text = ws_result
+        // 提取识别文字（处理 wpgs 动态修正）
+        const result = msg.data?.result;
+        if (result) {
+          const sn: number = (result as { sn?: number }).sn ?? sentenceMap.size;
+          const pgs: string = (result as { pgs?: string }).pgs ?? "apd";
+          const rg: [number, number] | undefined = (result as { rg?: [number, number] }).rg;
+          const text = (result.ws || [])
             .flatMap((item) => item.cw.map((cw) => cw.w))
             .join("");
-          if (text) resultParts.push(text);
+          if (pgs === "rpl" && rg) {
+            // Replace range [rg[0]..rg[1]] with new text at sn
+            for (let i = rg[0]; i <= rg[1]; i++) sentenceMap.delete(i);
+          }
+          if (text) sentenceMap.set(sn, text);
         }
 
         // status=2 表示识别结束
         if (msg.data?.status === 2) {
           clearTimeout(timeout);
-          finish({ text: resultParts.join(""), language: "zh" });
+          // Sort by sn to get correct order
+          const finalText = Array.from(sentenceMap.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([, v]) => v)
+            .join("");
+          finish({ text: finalText, language: "zh" });
         }
       } catch (e) {
         console.error("[xfyunTranscribe] parse error:", e);
@@ -299,7 +315,11 @@ export async function xfyunTranscribe(
       clearTimeout(timeout);
       if (!resolved) {
         // 连接关闭但未收到 status=2，用已收集的结果
-        finish({ text: resultParts.join(""), language: "zh" });
+        const fallbackText = Array.from(sentenceMap.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([, v]) => v)
+          .join("");
+        finish({ text: fallbackText, language: "zh" });
       }
     });
   });
