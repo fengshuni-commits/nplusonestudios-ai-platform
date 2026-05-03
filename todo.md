@@ -2217,3 +2217,7 @@
 - [x] 修复 routers.ts：create 过程 input schema 缺少 provider 字段，导致前端传的 provider="volcengine_speech" 被 zod 过滤掉
 - [x] 修复数据库中已有的错误记录（id=1500001）：设置 provider="volcengine_speech"，将 accessToken 从 configJson 移到 apiKeyEncrypted（加密存储），configJson 只保留 appId 和 provider
 - [x] 验证 streamTranscribe.ts 路由逻辑：读取 configJson.provider，正确路由到火山引擎
+
+## Bug 修复：火山引擎实时转写停止后会议内容全是重复文字
+- [x] 根本原因：火山引擎每次响应的 utterances 数组是累积的（包含从会话开始到当前所有已确认句子），代码每次都把所有 definite utterances 重新发一遍 final 消息
+- [x] 修复 volcengineStreamTranscribe.ts：添加 sentDefiniteCount 计数器，用 newDefinite.slice(sentDefiniteCount) 只发送新增的 definite 句子，跳过已发过的

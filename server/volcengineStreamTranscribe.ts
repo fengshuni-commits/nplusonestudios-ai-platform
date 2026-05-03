@@ -160,6 +160,7 @@ export function createVolcengineStreamSession(
   let flushGeneration = 0;
   let flushing = false;
   let confirmedText = "";  // accumulates all definite sentences
+  let sentDefiniteCount = 0;  // how many definite utterances have already been sent (to avoid re-sending on reconnect)
   let currentPartialText = ""; // current non-definite sentence
 
   function send(msg: object) {
@@ -293,13 +294,16 @@ export function createVolcengineStreamSession(
       const newDefinite = utterances.filter(u => u.definite);
       const nonDefinite = utterances.filter(u => !u.definite);
 
-      // Send final for each newly confirmed sentence
-      for (const utt of newDefinite) {
+      // Send final for each NEWLY confirmed sentence (skip already-sent ones)
+      // Volcengine returns cumulative utterances, so we track how many we've already sent
+      const newlyDefinite = newDefinite.slice(sentDefiniteCount);
+      for (const utt of newlyDefinite) {
         if (utt.text && utt.text.trim()) {
           console.log(`[volcStreamTranscribe] definite: "${utt.text}"`);
           send({ type: "final", text: utt.text });
           confirmedText += utt.text;
         }
+        sentDefiniteCount++;
       }
 
       // Send partial for the current non-definite sentence
