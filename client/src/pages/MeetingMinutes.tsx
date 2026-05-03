@@ -475,8 +475,8 @@ export default function MeetingMinutes() {
         </div>
         <div className="flex flex-col gap-2 items-end">
           <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结 LLM" />
-          <AiToolSelector capability="speech_transcription" value={streamToolId} onChange={setStreamToolId} label="实时录音识别" showBuiltIn={false} />
-          <AiToolSelector capability="speech_transcription" value={fileToolId} onChange={setFileToolId} label="文件转写" showBuiltIn={false} />
+          <AiToolSelector capability="stream_transcription" value={streamToolId} onChange={setStreamToolId} label="实时录音识别" showBuiltIn={false} />
+          <AiToolSelector capability="file_transcription" value={fileToolId} onChange={setFileToolId} label="文件转写" showBuiltIn={false} />
         </div>
       </div>
 

@@ -9,7 +9,9 @@
  *   "layout"      - 版式/排版辅助
  *   "analysis"    - 分析/理解（多模态理解、数据分析）
  *   "media"       - 媒体内容生成（小红书/公众号/Instagram 文案）
- *   "speech_transcription" - 语音转录（讯飞 IAT、Whisper 等）
+ *   "speech_transcription" - 语音转录（通用，向后兼容）
+ *   "stream_transcription" - 实时流式录音识别（讯飞 IAT、火山引擎流式等）
+ *   "file_transcription"   - 录音文件转写（火山引擎豆包、Whisper 等）
  *
  * 多模态大模型（如 GPT-4o、Gemini、Claude 3）会同时具备多个能力，
  * 因此会出现在多个功能模块的模型选择列表中。
@@ -23,7 +25,9 @@ export type ToolCapability =
   | "layout"
   | "analysis"
   | "media"
-  | "speech_transcription";
+  | "speech_transcription"
+  | "stream_transcription"
+  | "file_transcription";
 
 export const ALL_CAPABILITIES: ToolCapability[] = [
   "rendering",
@@ -34,6 +38,8 @@ export const ALL_CAPABILITIES: ToolCapability[] = [
   "analysis",
   "media",
   "speech_transcription",
+  "stream_transcription",
+  "file_transcription",
 ];
 
 /** 能力标签的中文显示名 */
@@ -46,6 +52,8 @@ export const CAPABILITY_LABELS: Record<ToolCapability, string> = {
   analysis: "分析理解",
   media: "媒体内容",
   speech_transcription: "语音转录",
+  stream_transcription: "实时录音识别",
+  file_transcription: "文件转写",
 };
 
 interface CapabilityRule {
@@ -57,16 +65,19 @@ interface CapabilityRule {
 const CAPABILITY_RULES: CapabilityRule[] = [
   // ── 语音转录服务 ──
   {
+    // 讯飞：支持实时流式识别
     keywords: ["xfyun", "讯飞", "iflytek", "iat", "paraformer", "funasr"],
-    capabilities: ["speech_transcription"],
+    capabilities: ["speech_transcription", "stream_transcription"],
   },
   {
+    // Whisper：主要用于文件转写
     keywords: ["whisper"],
-    capabilities: ["speech_transcription"],
+    capabilities: ["speech_transcription", "file_transcription"],
   },
   {
+    // 火山引擎豆包：同时支持流式识别和文件转写
     keywords: ["volcengine_speech", "豆包语音", "火山语音", "bigasr", "录音文件识别"],
-    capabilities: ["speech_transcription"],
+    capabilities: ["speech_transcription", "stream_transcription", "file_transcription"],
   },
   // ── 多模态大模型（文本 + 图像理解 + 文档生成 + 分析 + 媒体） ──
   {

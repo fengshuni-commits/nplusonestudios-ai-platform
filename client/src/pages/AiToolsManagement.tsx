@@ -243,7 +243,8 @@ const DISPLAY_CAPABILITIES: { key: ToolCapability; label: string; desc: string }
   { key: "document",             label: "文档生成",             desc: "案例调研报告、演示文稿" },
   { key: "analysis",             label: "分析理解",             desc: "多模态理解、数据分析" },
   { key: "media",                label: "媒体内容",             desc: "小红书、公众号、Instagram 文案" },
-  { key: "speech_transcription", label: "语音转录",             desc: "会议纪要录音转写（讯飞 IAT、Whisper 等）" },
+  { key: "stream_transcription", label: "实时录音识别",         desc: "会议纪要实时录音（讯飞 IAT、火山引擎流式识别）" },
+  { key: "file_transcription",   label: "录音文件转写",         desc: "上传录音文件转写（火山引擎豆包、Whisper 等）" },
 ];
 
 export default function AdminApiKeys() {

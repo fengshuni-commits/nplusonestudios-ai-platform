@@ -2226,3 +2226,10 @@
 - [x] 将大模型选择和语音转写选择从并列改为上下排列
 - [x] 在大模型选择和语音转写选择之间增加录音识别引擎选择（AiToolSelector，capability="speech_transcription"）
 - [x] 拆分 speechToolId 为 streamToolId（实时录音识别）和 fileToolId（文件转写），两者独立选择
+
+## AI 工具管理默认工具配置拆分
+- [x] 查看默认工具配置的数据库结构（aiToolDefaults 表，capability 字符串为 key）
+- [x] 将语音转写默认工具拆分为“实时录音识别”和“文件转写”两个独立配置项
+- [x] 更新前端 AiToolsManagement 页面的默认工具配置 UI（DISPLAY_CAPABILITIES 拆分为 stream_transcription 和 file_transcription）
+- [x] 更新 toolCapabilities.ts 添加 stream_transcription 和 file_transcription 类型及对应语音工具的能力映射
+- [x] 更新 MeetingMinutes.tsx 中 AiToolSelector 的 capability 参数为新 key
