@@ -2268,3 +2268,8 @@
 - [x] 修复：将文字区域描述改为 seamless background continuation，明确禁止 gray bars/rectangles/placeholder shapes，同时在 imageGenStyleSuffix 中加入禁止语句
 ## 数据库同步：图文排版 image_generation 提示词
 - [x] 将数据库 graphic_layout_prompts 表中 type='image_generation' 的 prompt 字段同步更新为修复后版本（禁止灰色横条）
+## Bug 修复：图文排版 REST API 中文文字消失
+- [x] 安装 @napi-rs/canvas 并下载 Noto Sans CJK SC 中文字体到服务器（已预装）
+- [x] 实现 compositeTextOnImage 工具函数（服务端将 textBlocks 绘制到背景图上）
+- [x] graphicLayoutService.ts 生成每页后调用合成，存储 compositeImageUrl
+- [x] REST API 返回 compositeImageUrl 作为最终图片，网页端继续使用 HTML 叠加层

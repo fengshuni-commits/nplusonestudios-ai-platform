@@ -6,6 +6,7 @@
 import * as db from "./db";
 import { invokeLLM } from "./_core/llm";
 import { generateImageWithTool } from "./_core/generateImageWithTool";
+import { compositeTextOnImage } from "./compositeTextOnImage";
 
 /**
  * Sanitize all pages in a job: fix duplicate/empty textBlock ids.
@@ -307,9 +308,26 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
 
         const pageImageUrl = genResult.url ?? "";
 
+        // Step 3: Composite text onto the background image (for API callers who don't have the HTML overlay)
+        let compositeImageUrl: string | null = null;
+        if (pageImageUrl && textBlocks.length > 0) {
+          try {
+            compositeImageUrl = await compositeTextOnImage({
+              backgroundImageUrl: pageImageUrl,
+              textBlocks,
+              imageWidth: imgW,
+              imageHeight: imgH,
+              outputKeyPrefix: `graphic-layout/composite-job${jobId}-p${pageIdx}`,
+            });
+          } catch (compErr) {
+            console.warn(`[GraphicLayout] Job ${jobId} page ${pageIdx + 1} composite failed (non-fatal):`, compErr);
+          }
+        }
+
         generatedPages.push({
           pageIndex: pageIdx,
           imageUrl: pageImageUrl,
+          compositeImageUrl: compositeImageUrl ?? undefined,
           backgroundColor: bgColor,
           textBlocks: textBlocks,
           imageSize: { width: imgW, height: imgH },

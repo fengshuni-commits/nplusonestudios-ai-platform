@@ -618,7 +618,9 @@ router.get("/graphic-layout/status/:id", async (req: Request, res: Response) => 
         createdAt: job.createdAt,
         pages: job.status === "done" ? pages.map((p: any) => ({
           pageIndex: p.pageIndex,
-          imageUrl: p.imageUrl,
+          // compositeImageUrl has text rendered on top; fall back to raw imageUrl if not available
+          imageUrl: p.compositeImageUrl ?? p.imageUrl,
+          rawImageUrl: p.imageUrl,
           backgroundColor: p.backgroundColor,
           textBlocks: p.textBlocks ?? [],
           imageSize: p.imageSize,
