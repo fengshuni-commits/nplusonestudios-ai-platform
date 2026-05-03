@@ -488,7 +488,8 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
       { name: "packId", type: "number", required: false, description: "参考版式包 ID（从 graphicStylePacks.list 获取，可选）" },
       { name: "assetConfig", type: "object", required: false, description: "素材配置，支持 per_page（按页分配）或 by_type（按类型分组）两种模式（见 JSON 示例）" },
       { name: "title", type: "string", required: false, description: "文档标题（可选）" },
-      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（可选）" },
+      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（可选）。未传时自动使用 AI 工具管理中[图像生成]的默认工具" },
+      { name: "planToolId", type: "number", required: false, description: "指定排版规划 LLM 工具 ID（可选）。未传时自动使用 AI 工具管理中[图文排版规划]的默认工具" },
     ],
     responseFields: [
       { name: "id", type: "number", description: "排版任务 ID，用于后续查询状态" },
@@ -531,7 +532,7 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
     ],
     responseFields: [
       { name: "status", type: "string", description: "任务状态：pending / processing / done / failed" },
-      { name: "pages", type: "object[]", description: "页面数据数组（仅 status=done 时返回），每页含 pageIndex、imageUrl、textBlocks 等字段" },
+      { name: "pages", type: "object[]", description: "页面数据数组（仅 status=done 时返回），每页含 pageIndex、imageUrl（纯背景图）、compositeImageUrl（含文字合成图，推荐用于展示）、textBlocks 等字段" },
       { name: "errorMessage", type: "string", description: "错误信息（仅 status=failed 时返回）" },
     ],
     requestExample: { id: 1001 },
@@ -547,7 +548,8 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
             pages: [
               {
                 pageIndex: 0,
-                imageUrl: "https://cdn.../graphic-layout/page-0.jpg",
+                imageUrl: "https://cdn.../graphic-layout/page-0-bg.jpg",
+                compositeImageUrl: "https://cdn.../graphic-layout/page-0-composite.png",
                 textBlocks: [
                   { id: "tb_1", text: "百悦科技园", x: 80, y: 120, width: 400, height: 60, fontSize: 48, color: "#1a1a1a", align: "left" }
                 ],
@@ -572,10 +574,10 @@ const graphicLayoutSteps: GraphicLayoutStep[] = [
       { name: ":blockId（路径）", type: "string", required: true, description: "文字块 ID，从 status 接口的 textBlocks[].id 获取（路径参数）" },
       { name: "newText", type: "string", required: true, description: "替换后的新文案内容（请求体）" },
       { name: "callbackUrl", type: "string", required: false, description: "Webhook 回调 URL，重绘完成后 POST 结果（请求体，可选）" },
-      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（请求体，可选）" },
+      { name: "imageToolId", type: "number", required: false, description: "指定图像生成工具 ID（请求体，可选）。未传时自动使用 AI 工具管理中[图像生成]的默认工具" },
     ],
     responseFields: [
-      { name: "imageUrl", type: "string", description: "重绘后的新页面图片 URL" },
+      { name: "imageUrl", type: "string", description: "重绘后重新合成的完整带文字图片 URL（compositeImageUrl），可直接用于展示" },
       { name: "pageIndex", type: "number", description: "页面索引" },
       { name: "blockId", type: "string", description: "文字块 ID" },
       { name: "newText", type: "string", description: "已更新的文字内容" },
