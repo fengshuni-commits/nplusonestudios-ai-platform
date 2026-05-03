@@ -1800,10 +1800,15 @@ const aiToolsRouter = router({
         return { ...rest, apiKeyMasked, hasApiKey: !!apiKeyEncrypted || (!!t.apiKeyName && t.apiKeyName.startsWith('sk-')) };
       });
       if (!input?.capability && !input?.category) return sanitized;
+      const { inferCapabilities } = await import("../shared/toolCapabilities");
       return sanitized.filter((t: any) => {
         if (input.capability) {
-          const caps: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
-          return caps.includes(input.capability);
+          // Merge stored capabilities with dynamically inferred ones so that
+          // tools created before a new capability was added are still matched.
+          const stored: string[] = Array.isArray(t.capabilities) ? t.capabilities : [];
+          const inferred: string[] = inferCapabilities(t.name ?? "", t.apiEndpoint ?? "");
+          const merged = Array.from(new Set([...stored, ...inferred]));
+          return merged.includes(input.capability);
         }
         return t.category === input.category;
       });
