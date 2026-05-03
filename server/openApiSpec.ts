@@ -1141,20 +1141,24 @@ export function getOpenApiSpec(baseUrl: string) {
                     assetUrls: {
                       type: "array",
                       items: { type: "string" },
-                      description: "参考素材图片 URL 列表（可选）",
+                      description: "参考素材图片 URL 列表（可选，旧格式，所有页共用同一批素材）。推荐使用 assetConfig 新格式。",
+                    },
+                    assetConfig: {
+                      type: "object",
+                      description: "素材配置（可选，新格式，与 assetUrls 二选一，assetConfig 优先）。支持两种模式：\n\n**per_page 模式**（按页分配）：\n```json\n{\"mode\":\"per_page\",\"pages\":{\"0\":[\"url1\",\"url2\"],\"1\":[\"url3\"]}}\n```\n\n**by_type 模式**（按类型分配，AI 自动为每页选择最合适的类型）：\n```json\n{\"mode\":\"by_type\",\"groups\":{\"效果图\":[\"url1\",\"url2\"],\"平面图\":[\"url3\"]}}\n```",
                     },
                     stylePrompt: {
                       type: "string",
-                      description: "版式风格描述（可选），如「极简主义，黑白灰配色」",
+                      description: "版式风格描述（可选），如「极简主义，黑白灰配色」。与 packId 二选一，packId 优先级更高。",
                     },
                     imageToolId: {
                       type: "integer",
                       description: "指定使用的图像生成 AI 工具 ID（可选，不传则使用平台默认工具）",
                       example: 2,
                     },
-                    stylePackId: {
+                    packId: {
                       type: "integer",
-                      description: "指定版式包 ID（可选，版式包包含预设的排版风格和色彩方案）",
+                      description: "指定版式包 ID（可选，版式包包含预设的排版风格和色彩方案，优先级高于 stylePrompt）",
                       example: 5,
                     },
                   },

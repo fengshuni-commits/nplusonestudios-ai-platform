@@ -548,7 +548,7 @@ router.post("/graphic-layout/generate", async (req: Request, res: Response) => {
   try {
     const user = (req as any).apiUser;
     if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
-    const { docType, contentText, pageCount, aspectRatio, title, assetUrls, stylePrompt, imageToolId } = req.body;
+    const { docType, contentText, pageCount, aspectRatio, title, assetUrls, assetConfig, packId, stylePrompt, imageToolId } = req.body;
     if (!docType || !contentText) {
       return res.status(400).json({ error: "docType and contentText are required", code: "VALIDATION_ERROR" });
     }
@@ -558,12 +558,21 @@ router.post("/graphic-layout/generate", async (req: Request, res: Response) => {
     }
     const drizzleDb = await db.getDb();
     if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
-    const { graphicLayoutJobs } = await import("../drizzle/schema");
+    const { graphicLayoutJobs, graphicStylePacks } = await import("../drizzle/schema");
     const { eq: _eq, desc: _desc } = await import("drizzle-orm");
-    const storedAssets = assetUrls ? { mode: "legacy", urls: assetUrls } : { mode: "legacy", urls: [] };
+    // Resolve packId: support numeric id or null
+    const resolvedPackId: number | null = packId ? parseInt(packId) || null : null;
+    // Validate packId exists and belongs to this user (or is public)
+    if (resolvedPackId) {
+      const [pack] = await drizzleDb.select({ id: graphicStylePacks.id })
+        .from(graphicStylePacks).where(_eq(graphicStylePacks.id, resolvedPackId)).limit(1);
+      if (!pack) return res.status(400).json({ error: "packId not found", code: "VALIDATION_ERROR" });
+    }
+    // Support both new assetConfig format and legacy assetUrls
+    const storedAssets = assetConfig ?? (assetUrls ? { mode: "legacy", urls: assetUrls } : { mode: "legacy", urls: [] });
     await drizzleDb.insert(graphicLayoutJobs).values({
       userId: user.id,
-      packId: null,
+      packId: resolvedPackId,
       docType,
       pageCount: Math.min(Math.max(parseInt(pageCount) || 1, 1), 10),
       aspectRatio: aspectRatio ?? "3:4",

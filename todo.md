@@ -2258,3 +2258,7 @@
 - [x] 前端：添加"选择"按钮切换多选模式，卡片左上角显示复选框
 - [x] 前端：顶部工具栏显示已选数量、全选/取消全选、删除按钮
 - [x] 前端：批量删除确认弹窗，显示将删除的数量
+
+## Bug 排查：图文排版功能网页与 API 直接调用效果不一致
+- [x] 对比前端 tRPC 调用参数与 REST API 调用参数：REST API 缺少 packId 和 assetConfig 新格式支持
+- [x] 修复 REST API graphic-layout/generate：添加 packId 支持（验证存在性），assetConfig 新格式支持，更新 OpenAPI 文档
