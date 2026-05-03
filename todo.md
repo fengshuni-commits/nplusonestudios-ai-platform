@@ -2175,3 +2175,8 @@
 - [x] 客户端 useStreamTranscribe：onReady 时清空 sentencesRef，防止跨 session 的 sn 冲突
 - [x] 客户端 MeetingMinutes：onReady 时清空 sentenceMapRef 并同步 transcript 状态
 - [x] 客户端 MeetingMinutes：onFinal 后始终调用 setTranscript(confirmedTranscriptRef)，保持显示状态一致
+
+## Bug 修复：上传 m4a 音频文件转写失败
+- [x] 修复 xfyunTranscription.ts：m4a/mp4 格式需要先写入临时文件再用 ffmpeg 转换（因 moov atom 在文件末尾，无法从 pipe 读取）
+- [x] 补充 audio/mp4、audio/m4a、audio/flac 等 MIME 类型映射
+- [x] 添加转写日志（下载字节数、PCM 字节数）便于调试

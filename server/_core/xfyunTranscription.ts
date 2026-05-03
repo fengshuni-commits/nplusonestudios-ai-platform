@@ -12,6 +12,9 @@ import crypto from "crypto";
 import WebSocket from "ws";
 import { spawn } from "child_process";
 import { Readable } from "stream";
+import { writeFileSync, unlinkSync, readFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 export interface XfyunCredentials {
   appId: string;
@@ -53,25 +56,69 @@ function buildXfyunUrl(credentials: XfyunCredentials): string {
 
 // ─── 音频转换：任意格式 → 16kHz 单声道 PCM ────────────────────────────────
 
-async function convertToPcm(audioBuffer: Buffer, inputMime: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    // 推断输入格式
-    const mimeToFormat: Record<string, string> = {
-      "audio/webm": "webm",
-      "audio/ogg": "ogg",
-      "audio/mpeg": "mp3",
-      "audio/mp3": "mp3",
-      "audio/mp4": "mp4",
-      "audio/wav": "wav",
-      "audio/x-wav": "wav",
-      "audio/x-m4a": "m4a",
-    };
-    const inputFormat = mimeToFormat[inputMime] || "webm";
+// m4a/mp4 containers store the moov atom at the end of the file.
+// ffmpeg cannot seek when reading from stdin pipe, so these formats
+// must be written to a temp file first.
+const SEEKABLE_FORMATS = new Set(["m4a", "mp4", "3gp", "mov"]);
 
+async function convertToPcm(audioBuffer: Buffer, inputMime: string): Promise<Buffer> {
+  // 推断输入格式
+  const mimeToFormat: Record<string, string> = {
+    "audio/webm": "webm",
+    "audio/ogg": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/mp4": "m4a",    // audio/mp4 is m4a container
+    "audio/x-m4a": "m4a",
+    "audio/m4a": "m4a",
+    "video/mp4": "mp4",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/flac": "flac",
+  };
+  const inputFormat = mimeToFormat[inputMime] || "webm";
+  const needsTempFile = SEEKABLE_FORMATS.has(inputFormat);
+
+  if (needsTempFile) {
+    // Write to temp file so ffmpeg can seek for moov atom
+    const id = crypto.randomBytes(8).toString("hex");
+    const tmpIn = join(tmpdir(), `xfyun-in-${id}.${inputFormat}`);
+    const tmpOut = join(tmpdir(), `xfyun-out-${id}.pcm`);
+    try {
+      writeFileSync(tmpIn, audioBuffer);
+      await new Promise<void>((resolve, reject) => {
+        const ff = spawn("ffmpeg", [
+          "-y",
+          "-i", tmpIn,
+          "-ar", "16000",
+          "-ac", "1",
+          "-f", "s16le",
+          tmpOut,
+        ]);
+        const errChunks: Buffer[] = [];
+        ff.stderr.on("data", (c: Buffer) => errChunks.push(c));
+        ff.on("close", (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            const errMsg = Buffer.concat(errChunks).toString().slice(-300);
+            reject(new Error(`ffmpeg exited with code ${code}: ${errMsg}`));
+          }
+        });
+        ff.on("error", reject);
+      });
+      return readFileSync(tmpOut);
+    } finally {
+      try { unlinkSync(tmpIn); } catch { /* ignore */ }
+      try { unlinkSync(tmpOut); } catch { /* ignore */ }
+    }
+  }
+
+  // Streaming formats (webm, ogg, mp3, wav, flac) work fine with pipe
+  return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const inputStream = Readable.from(audioBuffer);
 
-    // 使用 ffmpeg 转换
     const ffmpeg = spawn("ffmpeg", [
       "-f", inputFormat,
       "-i", "pipe:0",
@@ -87,10 +134,7 @@ async function convertToPcm(audioBuffer: Buffer, inputMime: string): Promise<Buf
     ffmpeg.stderr.on("data", () => {}); // 忽略 ffmpeg 日志
 
     ffmpeg.on("close", (code) => {
-      if (code === 0 && chunks.length > 0) {
-        resolve(Buffer.concat(chunks));
-      } else if (chunks.length > 0) {
-        // 即使退出码非 0，只要有数据也尝试使用
+      if (chunks.length > 0) {
         resolve(Buffer.concat(chunks));
       } else {
         reject(new Error(`ffmpeg exited with code ${code}, no PCM output`));
@@ -121,6 +165,7 @@ export async function xfyunTranscribe(
     // 只取 MIME 主体，去掉 codec 参数
     contentType = contentType.split(";")[0].trim();
     audioBuffer = Buffer.from(await response.arrayBuffer());
+    console.log(`[xfyunTranscribe] downloaded ${audioBuffer.length} bytes, contentType=${contentType}`);
   } catch (e) {
     return { error: "下载音频失败", code: "DOWNLOAD_FAILED", details: String(e) };
   }
@@ -129,6 +174,7 @@ export async function xfyunTranscribe(
   let pcmBuffer: Buffer;
   try {
     pcmBuffer = await convertToPcm(audioBuffer, contentType);
+    console.log(`[xfyunTranscribe] converted to PCM: ${pcmBuffer.length} bytes`);
   } catch (e) {
     return { error: "音频格式转换失败", code: "CONVERT_FAILED", details: String(e) };
   }
@@ -156,13 +202,12 @@ export async function xfyunTranscribe(
       resolve(result);
     };
 
-    // 超时保护：60 秒
+    // 超时保护：120 秒（文件转写比实时流慢）
     const timeout = setTimeout(() => {
       finish({ error: "讯飞转写超时", code: "TIMEOUT" });
-    }, 120_000); // 120s timeout for file transcription
+    }, 120_000);
 
     ws.on("open", () => {
-      // 发送第一帧（包含业务参数）
       const sendFrame = () => {
         if (resolved) {
           if (sendTimer) clearInterval(sendTimer);
