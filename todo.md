@@ -2278,3 +2278,10 @@
 - [x] 定位删除逻辑代码路径（tRPC router + History 页面）
 - [x] 找到根本原因：generation_history.id 已达 4,230,006，超过视频 ID 偏移量 1,000,000，导致 layout_design 记录被误判为视频记录
 - [x] 修复：将视频 ID 偏移量从 1,000,000 改为 100,000,000（db.ts + routers.ts 全部同步更新）
+## 重构：彻底消除视频记录 ID 偏移量
+- [x] video_history 写入时同步在 generation_history 创建代理条目（module='ai_video', inputParams.videoHistoryId）
+- [x] 迁移存量 7 条 video_history 数据到 generation_history 代理条目
+- [x] 更新 db.ts listGroupedHistory：不再合并 videoHistory，直接从 generation_history 查询 ai_video
+- [x] 更新 routers.ts history.delete/batchDelete/getById：删除所有 100000000 偏移量逻辑，增加级联删除 video_history
+- [x] 更新视频生成完成后的状态同步：通过 syncVideoProxyEntry 同步更新 generation_history 代理条目
+- [x] 前端 History.tsx：无需修改（不依赖 ID 偏移量）

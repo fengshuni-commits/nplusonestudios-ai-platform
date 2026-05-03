@@ -3801,38 +3801,7 @@ const historyRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
-      // ai_video items use offset id (>100000000); resolve to videoHistory
-      if (input.id > 100000000) {
-        const realId = input.id - 100000000;
-        const v = await db.getVideoHistoryById(realId, ctx.user.id);
-        if (!v) return null;
-        return {
-          id: v.id + 100000000,
-          userId: v.userId,
-          projectId: v.projectId || null,
-          module: "ai_video" as const,
-          title: (v.prompt || "").slice(0, 60) || "AI 视频",
-          inputText: v.prompt || "",
-          inputImageUrl: v.inputImageUrl || null,
-          outputUrl: v.outputVideoUrl || null,
-          outputText: null,
-          outputContent: null,
-          summary: null,
-          inputParams: null,
-          thumbnailUrl: v.thumbnailUrl || (v.mode === "image-to-video" ? v.inputImageUrl : null) || null,
-          status: v.status,
-          errorMessage: v.errorMessage || null,
-          metadata: { ...(typeof v.metadata === 'object' && v.metadata ? v.metadata : {}), taskId: v.taskId, mode: v.mode, duration: v.duration, videoHistoryId: v.id },
-          parentId: null,
-          enhancedImageUrl: null,
-          chainLength: 1,
-          latestOutputUrl: v.outputVideoUrl || null,
-          latestTitle: (v.prompt || "").slice(0, 60) || "AI 视频",
-          latestEnhancedImageUrl: null,
-          createdAt: v.createdAt,
-          updatedAt: v.updatedAt,
-        };
-      }
+      // All records (including ai_video) are now in generation_history
       return db.getGenerationHistoryById(input.id, ctx.user.id);
     }),
   /** Get edit chain: all items sharing the same root ancestor */
@@ -3860,17 +3829,14 @@ const historyRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      // AI video records use offset IDs (> 100000000); route to video_history table
-      if (input.id > 100000000) {
-        const realId = input.id - 100000000;
-        // Verify ownership before deleting
-        const records = await db.listVideoHistory(ctx.user.id);
-        const record = records.find((r: any) => r.id === realId);
-        if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "记录不存在" });
-        await db.deleteVideoHistory(realId);
-        return { success: true };
-      }
       const isAdmin = ctx.user.role === "admin";
+      // If this is an ai_video proxy entry, also cascade-delete the video_history record
+      const item = await db.getGenerationHistoryById(input.id, ctx.user.id);
+      if (item?.module === "ai_video") {
+        const params = typeof item.inputParams === "string" ? JSON.parse(item.inputParams) : item.inputParams;
+        const videoHistoryId = (params as any)?.videoHistoryId;
+        if (videoHistoryId) await db.deleteVideoHistory(videoHistoryId);
+      }
       await db.deleteGenerationHistory(input.id, ctx.user.id, isAdmin);
       return { success: true };
     }),
@@ -3880,19 +3846,14 @@ const historyRouter = router({
     .input(z.object({ ids: z.array(z.number()) }))
     .mutation(async ({ ctx, input }) => {
       const isAdmin = ctx.user.role === "admin";
-      // Separate video IDs (> 100000000) from regular generation history IDs
-      const videoIds = input.ids.filter(id => id > 100000000).map(id => id - 100000000);
-      const regularIds = input.ids.filter(id => id <= 100000000);
-      // Delete video records (verify ownership)
-      if (videoIds.length > 0) {
-        const videoRecords = await db.listVideoHistory(ctx.user.id);
-        for (const realId of videoIds) {
-          const record = videoRecords.find((r: any) => r.id === realId);
-          if (record) await db.deleteVideoHistory(realId);
+      for (const id of input.ids) {
+        // If this is an ai_video proxy entry, cascade-delete the video_history record too
+        const item = await db.getGenerationHistoryById(id, ctx.user.id);
+        if (item?.module === "ai_video") {
+          const params = typeof item.inputParams === "string" ? JSON.parse(item.inputParams) : item.inputParams;
+          const videoHistoryId = (params as any)?.videoHistoryId;
+          if (videoHistoryId) await db.deleteVideoHistory(videoHistoryId);
         }
-      }
-      // Delete regular generation history records
-      for (const id of regularIds) {
         await db.deleteGenerationHistory(id, ctx.user.id, isAdmin);
       }
       return { success: true, deleted: input.ids.length };
@@ -6678,7 +6639,7 @@ export const appRouter = router({system: systemRouter,
           },
         });
 
-        await db.db.insert(db.videoHistory).values({
+        const videoInsert = await db.db.insert(db.videoHistory).values({
           userId: ctx.user.id,
           toolId: input.toolId,
           mode: input.mode,
@@ -6689,6 +6650,26 @@ export const appRouter = router({system: systemRouter,
           status: result.status,
           outputVideoUrl: result.videoUrl,
           errorMessage: result.errorMessage,
+        });
+        const videoId = videoInsert[0].insertId;
+
+        // Create a proxy entry in generation_history so video records share the same
+        // delete/list/query flow as all other modules — no ID offset tricks needed.
+        const ghStatus = result.status === "failed" ? "failed" : "processing";
+        await db.createGenerationHistory({
+          userId: ctx.user.id,
+          module: "ai_video",
+          title: (input.prompt || "AI 视频").slice(0, 60),
+          summary: input.prompt || null,
+          inputParams: {
+            videoHistoryId: videoId,
+            taskId: result.taskId,
+            mode: input.mode,
+            duration: input.duration,
+            toolId: input.toolId,
+          },
+          outputUrl: input.inputImageUrl || null, // thumbnail placeholder until video completes
+          status: ghStatus,
         });
 
         // 任务提交阶段即失败时发送通知
@@ -6770,6 +6751,16 @@ export const appRouter = router({system: systemRouter,
                 errorMessage: apiStatus.errorMessage,
                 ...(thumbnailUrl ? { thumbnailUrl } : {}),
               });
+              // Sync the generation_history proxy entry for this video
+              try {
+                const ghStatus = apiStatus.status === "completed" ? "success" : apiStatus.status === "failed" ? "failed" : "processing";
+                await db.syncVideoProxyEntry(record.id, ctx.user.id, {
+                  status: ghStatus,
+                  outputUrl: thumbnailUrl || undefined,
+                });
+              } catch (syncErr) {
+                console.warn("[video.getStatus] proxy sync failed:", syncErr);
+              }
               // 状态变为 failed 时发送通知（进入此分支时 record.status 必为 pending/processing）
               if (apiStatus.status === "failed") {
                 await notifyOwner({

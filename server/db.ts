@@ -1285,43 +1285,10 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   const limit = opts?.limit || 50;
   const offset = opts?.offset || 0;
 
-  // Helper: convert videoHistory rows to unified history format
-  const toHistoryItem = (v: typeof videoHistory.$inferSelect) => ({
-    id: v.id + 100000000,
-    userId: v.userId,
-    projectId: v.projectId || null,
-    module: "ai_video" as const,
-    title: (v.prompt || "").slice(0, 60) || "AI 视频",
-    inputText: v.prompt || "",
-    inputImageUrl: v.inputImageUrl || null,
-    outputUrl: v.outputVideoUrl || null,
-    outputText: null,
-    // thumbnailUrl: prefer stored thumbnail, fallback to inputImageUrl for image-to-video
-    thumbnailUrl: v.thumbnailUrl || (v.mode === "image-to-video" ? v.inputImageUrl : null) || null,
-    status: v.status,
-    errorMessage: v.errorMessage || null,
-    metadata: { ...(v.metadata as object || {}), taskId: v.taskId, mode: v.mode, duration: v.duration, videoHistoryId: v.id },
-    parentId: null,
-    enhancedImageUrl: null,
-    chainLength: 1,
-    latestOutputUrl: v.outputVideoUrl || null,
-    latestTitle: (v.prompt || "").slice(0, 60) || "AI 视频",
-    latestEnhancedImageUrl: null,
-    createdAt: v.createdAt,
-    updatedAt: v.updatedAt,
-  });
+  // ai_video records are now stored directly in generation_history (proxy entries).
+  // No more videoHistory merge needed.
 
-  // If filtering to ai_video, return only video history
-  if (opts?.module === "ai_video") {
-    const videoItems = await db.select().from(videoHistory)
-      .where(eq(videoHistory.userId, userId))
-      .orderBy(desc(videoHistory.createdAt))
-      .limit(limit)
-      .offset(offset);
-    return { items: videoItems.map(toHistoryItem), total: videoItems.length };
-  }
-
-  // If filtering to a specific non-render, non-benchmark_report module, use the simple list
+  // If filtering to a specific module (non-chain modules), use the simple list
   if (opts?.module && opts.module !== "ai_render" && opts.module !== "benchmark_report") {
     return listGenerationHistory(userId, opts);
   }
@@ -1393,19 +1360,7 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
     return { ...item, chainLength: 1, latestOutputUrl: item.outputUrl, latestTitle: item.title, latestEnhancedImageUrl: item.enhancedImageUrl || null };
   }));
 
-  // Merge videoHistory items into the "all" view
-  const videoItems = await db.select().from(videoHistory)
-    .where(eq(videoHistory.userId, userId))
-    .orderBy(desc(videoHistory.createdAt))
-    .limit(limit);
-  const videoAsHistory = videoItems.map(toHistoryItem);
-
-  // Merge and sort by createdAt, then apply limit
-  const allItems = [...enrichedItems, ...videoAsHistory]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, limit);
-
-  return { items: allItems, total: (countResult[0]?.count || 0) + videoItems.length };
+  return { items: enrichedItems, total: countResult[0]?.count || 0 };
 }
 
 
@@ -2471,4 +2426,31 @@ export async function timeoutStaleGraphicLayoutJobs(timeoutMs = 15 * 60 * 1000) 
     console.log(`[GraphicLayout] Marked ${affectedRows} stale jobs as failed (timeout=${timeoutMs}ms)`);
   }
   return affectedRows;
+}
+
+// ─── Video proxy sync helper ────────────────────────────────────────────────
+/**
+ * Update the generation_history proxy entry for a video record.
+ * Called when video status changes so the history list stays in sync.
+ */
+export async function syncVideoProxyEntry(
+  videoHistoryId: number,
+  userId: number,
+  updates: { status?: "success" | "failed" | "processing"; outputUrl?: string | null }
+) {
+  const db = await getDb();
+  if (!db) return;
+  // Find the proxy row by scanning ai_video entries for this user
+  const rows = await db.select().from(generationHistory)
+    .where(and(eq(generationHistory.userId, userId), eq(generationHistory.module, "ai_video")));
+  const proxy = rows.find((r) => {
+    const p = typeof r.inputParams === "string" ? JSON.parse(r.inputParams as string) : r.inputParams;
+    return (p as any)?.videoHistoryId === videoHistoryId;
+  });
+  if (!proxy) return;
+  const setValues: Record<string, unknown> = {};
+  if (updates.status !== undefined) setValues.status = updates.status;
+  if (updates.outputUrl !== undefined) setValues.outputUrl = updates.outputUrl;
+  if (Object.keys(setValues).length === 0) return;
+  await db.update(generationHistory).set(setValues).where(eq(generationHistory.id, proxy.id));
 }
