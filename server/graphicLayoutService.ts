@@ -73,6 +73,9 @@ export async function generateGraphicLayoutAsync(
   if (!drizzleDb) return;
   const { graphicLayoutJobs, graphicStylePacks } = await import("../drizzle/schema");
   const { eq: _eq } = await import("drizzle-orm");
+  // 若未指定工具，自动读取 AI 工具管理中设定的默认工具
+  const resolvedPlanToolId = planToolId ?? (await db.getDefaultToolForCapability("layout_plan"));
+  const resolvedImageToolId = imageToolId ?? (await db.getDefaultToolForCapability("image_generation"));
   await drizzleDb.update(graphicLayoutJobs).set({ status: "processing" }).where(_eq(graphicLayoutJobs.id, jobId));
   try {
     const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.id, jobId)).limit(1);
@@ -246,8 +249,8 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
             }
           };
         const planResponse = await withRetryOnTimeout(
-          () => planToolId
-            ? invokeLLMWithUserTool(layoutPlanParams, undefined, planToolId)
+          () => resolvedPlanToolId
+            ? invokeLLMWithUserTool(layoutPlanParams, undefined, resolvedPlanToolId)
             : invokeLLM(layoutPlanParams),
           2,
           `page ${pageIdx + 1} layout planning`
@@ -308,7 +311,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
             prompt: imagePrompt,
             originalImages: assetImagesForPage,
             size: imageSize,
-            toolId: imageToolId ?? null,
+            toolId: resolvedImageToolId ?? null,
           }),
           2,
           `page ${pageIdx + 1} image generation`
@@ -395,7 +398,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         durationMs: null,
       });
       // 写入调用统计日志（每页一条，记录实际调用次数）
-      const effectiveToolId = imageToolId ?? 0;
+      const effectiveToolId = resolvedImageToolId ?? 0;
       for (let pi = 0; pi < generatedPages.length; pi++) {
         const pg = generatedPages[pi];
         await db.createAiToolLog({
