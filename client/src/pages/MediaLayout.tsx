@@ -555,14 +555,16 @@ export default function MediaLayout() {
   const [generating, setGenerating] = useState(false);
 
   // URL 参数恢复：jobs 加载后自动跳转到对应记录
-  const urlJobIdAppliedRef = useRef(false);
+  const urlJobIdAppliedRef = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!urlJobId || urlJobIdAppliedRef.current || jobs.length === 0) return;
+    if (!urlJobId || jobs.length === 0) return;
+    // Reset when urlJobId changes so navigating to a different job always works
+    if (urlJobIdAppliedRef.current === urlJobId) return;
     const target = jobs.find((j: any) => j.id === urlJobId);
     if (target) {
       setActiveJobId(urlJobId);
       setCurrentPage(0);
-      urlJobIdAppliedRef.current = true;
+      urlJobIdAppliedRef.current = urlJobId;
     }
   }, [urlJobId, jobs]);
 
