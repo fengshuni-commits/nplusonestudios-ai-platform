@@ -698,8 +698,74 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
+/// ─── ModuleSection ──────────────────────────────────────────────────────────
+interface ModuleSectionProps {
+  module: string;
+  cfg: { label: string; icon: React.ComponentType<{ className?: string }>; gradient: string; iconColor: string; accentColor: string };
+  items: any[];
+  onDelete: (id: number) => void;
+  onOpenDetail: (item: any) => void;
+  onLightbox: (src: string, label: string) => void;
+  onNavigate: (path: string) => void;
+  onImport: (id: number) => void;
+  onAssociateProject: (id: number, projectId: number | null) => void;
+  allProjects: any[];
+}
 
+function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects }: ModuleSectionProps) {
+  const [expanded, setExpanded] = useState(false);
+  const ModuleIcon = cfg.icon;
+  // Two rows: grid is responsive (3-6 cols), use CSS max-height trick
+  // Each tile is roughly square with gap-2.5 (10px). Approximate 2-row height = 2 * tile + gap
+  // We use overflow-hidden + max-h to clip, then animate on expand
+  const TILE_ROW_HEIGHT = 120; // px per row (tile ~104px + gap ~16px)
+  const collapsedHeight = TILE_ROW_HEIGHT * 2;
+
+  return (
+    <div>
+      {/* Section header */}
+      <div className="flex items-center gap-2 mb-3">
+        <ModuleIcon className={`h-4 w-4 ${cfg.iconColor}`} />
+        <h2 className="text-sm font-medium text-foreground">{cfg.label}</h2>
+        <span className="text-xs text-muted-foreground">{items.length} 条</span>
+        <span className="text-xs text-muted-foreground/50">· 最近使用 {formatTime(items[0]?.createdAt)}</span>
+      </div>
+      {/* Tile grid with collapse */}
+      <div
+        className="overflow-hidden transition-all duration-300"
+        style={{ maxHeight: expanded ? `${TILE_ROW_HEIGHT * Math.ceil(items.length / 6) + 16}px` : `${collapsedHeight}px` }}
+      >
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+          {items.map((item: any) => (
+            <TileCard
+              key={item.id}
+              item={item}
+              onDelete={onDelete}
+              onOpenDetail={onOpenDetail}
+              onLightbox={onLightbox}
+              onNavigate={onNavigate}
+              onImport={onImport}
+              onAssociateProject={onAssociateProject}
+              allProjects={allProjects}
+            />
+          ))}
+        </div>
+      </div>
+      {/* Expand / collapse button — show when items exceed one row (6 cols) */}
+      {items.length > 6 && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+          {expanded ? '收起' : `展开全部 ${items.length} 条`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function HistoryPage() {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null);
@@ -988,33 +1054,20 @@ export default function HistoryPage() {
         <div className="space-y-8">
           {visibleGroupedModules.map(({ module, items }) => {
             const cfg = MODULE_MAP[module] || { label: module, icon: FileText, gradient: "from-zinc-900 to-zinc-700", iconColor: "text-zinc-300", accentColor: "" };
-            const ModuleIcon = cfg.icon;
             return (
-              <div key={module}>
-                {/* Section header */}
-                <div className="flex items-center gap-2 mb-3">
-                  <ModuleIcon className={`h-4 w-4 ${cfg.iconColor}`} />
-                  <h2 className="text-sm font-medium text-foreground">{cfg.label}</h2>
-                  <span className="text-xs text-muted-foreground">{items.length} 条</span>
-                  <span className="text-xs text-muted-foreground/50">· 最近使用 {formatTime(items[0]?.createdAt)}</span>
-                </div>
-                {/* Tile grid */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
-                  {items.map((item: any) => (
-                    <TileCard
-                      key={item.id}
-                      item={item}
-                      onDelete={(id) => deleteMutation.mutate({ id })}
-                      onOpenDetail={handleOpenDetail}
-                      onLightbox={(src, label) => setLightbox({ src, label })}
-                      onNavigate={(path) => navigate(path)}
-                      onImport={handleImport}
-                      onAssociateProject={handleAssociateProject}
-                      allProjects={allProjects}
-                    />
-                  ))}
-                </div>
-              </div>
+              <ModuleSection
+                key={module}
+                module={module}
+                cfg={cfg}
+                items={items}
+                onDelete={(id: number) => deleteMutation.mutate({ id })}
+                onOpenDetail={handleOpenDetail}
+                onLightbox={(src: string, label: string) => setLightbox({ src, label })}
+                onNavigate={(path: string) => navigate(path)}
+                onImport={handleImport}
+                onAssociateProject={handleAssociateProject}
+                allProjects={allProjects}
+              />
             );
           })}
 
