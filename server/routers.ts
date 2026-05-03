@@ -5883,6 +5883,8 @@ const graphicLayoutRouter = router({
     .mutation(async ({ input, ctx }) => {
       const drizzleDb = await db.getDb();
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      // 若未指定工具，自动读取 AI 工具管理中"图像生成"的默认工具
+      const resolvedImageToolId = input.imageToolId ?? (await db.getDefaultToolForCapability("image_generation")) ?? null;
       const { graphicLayoutJobs } = await import("../drizzle/schema");
       const { eq: _eq, and: _and } = await import("drizzle-orm");
       const [job] = await drizzleDb.select().from(graphicLayoutJobs).where(_and(_eq(graphicLayoutJobs.id, input.jobId), _eq(graphicLayoutJobs.userId, ctx.user.id))).limit(1);
@@ -5973,7 +5975,7 @@ const graphicLayoutRouter = router({
           { b64Json: compositeB64, mimeType: compositeMimeType },
         ],
         size: `${imgW}x${imgH}`,
-        toolId: input.imageToolId ?? null,
+        toolId: resolvedImageToolId,
       });
 
       const newImageUrl = result.url ?? "";
