@@ -2262,3 +2262,7 @@
 ## Bug 排查：图文排版功能网页与 API 直接调用效果不一致
 - [x] 对比前端 tRPC 调用参数与 REST API 调用参数：REST API 缺少 packId 和 assetConfig 新格式支持
 - [x] 修复 REST API graphic-layout/generate：添加 packId 支持（验证存在性），assetConfig 新格式支持，更新 OpenAPI 文档
+
+## Bug 修复：图文排版生成图片出现灰色横条装饰元素
+- [x] 分析 graphicLayoutService.ts prompt 构建逻辑：文字区域描述中的 SOLID COLOR RECTANGLE 说法导致 AI 生成灰色横条
+- [x] 修复：将文字区域描述改为 seamless background continuation，明确禁止 gray bars/rectangles/placeholder shapes，同时在 imageGenStyleSuffix 中加入禁止语句

@@ -111,7 +111,7 @@ export async function generateGraphicLayoutAsync(
 - 最多 6 个文字块
 - 严格使用版式包中提取的配色方案，不得使用默认黑白配色
 - 排版结构应忠实还原参考版式的视觉层次和空间分布`;
-    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. Clean layout with precise typography placement. No watermarks, no extra decorations, photorealistic quality.";
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. Clean layout with precise typography placement. No watermarks, no gray bars, no placeholder rectangles, no decorative strips, no solid color overlays in text areas. Background must flow seamlessly across the entire image. Photorealistic quality.";
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
@@ -269,7 +269,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          return `${b.role} text block (${b.fontSize}px, color ${b.color}, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — leave this area as a SOLID COLOR RECTANGLE matching the background or a subtle contrasting tone, NO text rendered in image`;
+          return `${b.role} text area (${b.fontSize}px, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — keep this zone as seamless background continuation, NO solid color bars, NO rectangles, NO placeholder shapes, NO gray strips, background texture and image must flow through naturally, DO NOT render any text in image`;
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
