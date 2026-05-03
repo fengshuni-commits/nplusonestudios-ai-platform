@@ -330,6 +330,13 @@
       "when": 1777711752164,
       "tag": "0046_fine_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1777795880048,
+      "tag": "0047_thankful_invaders",
+      "breakpoints": true
     }
   ]
 }

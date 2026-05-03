@@ -1,0 +1,1 @@
+ALTER TABLE `video_history` ADD `thumbnailUrl` text;

@@ -1296,6 +1296,8 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
     inputImageUrl: v.inputImageUrl || null,
     outputUrl: v.outputVideoUrl || null,
     outputText: null,
+    // thumbnailUrl: prefer stored thumbnail, fallback to inputImageUrl for image-to-video
+    thumbnailUrl: v.thumbnailUrl || (v.mode === "image-to-video" ? v.inputImageUrl : null) || null,
     status: v.status,
     errorMessage: v.errorMessage || null,
     metadata: { ...(v.metadata as object || {}), taskId: v.taskId, mode: v.mode, duration: v.duration, videoHistoryId: v.id },

@@ -506,6 +506,7 @@ export const videoHistory = mysqlTable("video_history", {
   duration: int("duration").notNull(), // 视频时长（秒），1-8
   inputImageUrl: text("inputImageUrl"), // 图生视频时的首帧图 URL
   outputVideoUrl: text("outputVideoUrl"), // 生成的视频 URL
+  thumbnailUrl: text("thumbnailUrl"), // 视频封面图 URL
   taskId: varchar("taskId", { length: 256 }), // 第三方 API 的任务 ID（用于查询状态）
   status: mysqlEnum("status", ["pending", "processing", "completed", "failed"]).default("pending").notNull(),
   errorMessage: text("errorMessage"), // 失败时的错误信息

@@ -3819,6 +3819,7 @@ const historyRouter = router({
           outputContent: null,
           summary: null,
           inputParams: null,
+          thumbnailUrl: v.thumbnailUrl || (v.mode === "image-to-video" ? v.inputImageUrl : null) || null,
           status: v.status,
           errorMessage: v.errorMessage || null,
           metadata: { ...(typeof v.metadata === 'object' && v.metadata ? v.metadata : {}), taskId: v.taskId, mode: v.mode, duration: v.duration, videoHistoryId: v.id },
@@ -6712,10 +6713,30 @@ export const appRouter = router({system: systemRouter,
                 }
               }
               // 更新数据库中的状态
+              // 生成缩略图：图生视频用首帧图，文生视频用 AI 生成预览图
+              let thumbnailUrl: string | undefined = undefined;
+              if (apiStatus.status === "completed") {
+                if (record.mode === "image-to-video" && record.inputImageUrl) {
+                  // 图生视频：直接用输入图片作为封面
+                  thumbnailUrl = record.inputImageUrl;
+                } else if (record.mode === "text-to-video") {
+                  // 文生视频：用 AI 生成一张预览图
+                  try {
+                    const { generateImage } = await import("./_core/imageGeneration");
+                    const { url: previewUrl } = await generateImage({
+                      prompt: (record.prompt || "architectural space").slice(0, 200),
+                    });
+                    if (previewUrl) thumbnailUrl = previewUrl;
+                  } catch (imgErr) {
+                    console.warn("[video.getStatus] 缩略图生成失败，跳过:", imgErr);
+                  }
+                }
+              }
               await db.updateVideoHistory(record.id, {
                 status: apiStatus.status,
                 outputVideoUrl: permanentVideoUrl,
                 errorMessage: apiStatus.errorMessage,
+                ...(thumbnailUrl ? { thumbnailUrl } : {}),
               });
               // 状态变为 failed 时发送通知（进入此分支时 record.status 必为 pending/processing）
               if (apiStatus.status === "failed") {
