@@ -2320,3 +2320,9 @@
 - [x] graphicLayoutService.ts 增加 planToolId 参数，传给 invokeLLMWithUserTool
 - [x] routers.ts generate procedure 增加 planToolId 字段
 - [x] MediaLayout.tsx 增加排版规划模型选择栏（在图像生成工具上方）
+
+## Bug 修复：生产环境中文乱码 + 默认图像生成工具失效
+- [x] 排查 compositeTextOnImage.ts 字体别名问题：registerFromPath 用了自定义别名（NotoSansCJKsc），但 getFontSpec 使用的是字体内嵌真实名称（"Noto Sans CJK SC"），生产容器无系统字体时匹配失败导致乱码
+- [x] 修复字体注册别名：改为 "Noto Sans CJK SC"，与 getFontSpec 中的字体名保持一致
+- [x] 修复 ai_tool_defaults 中 image_generation 默认工具：510007 已被删除，更新为 Gemini 3（id=240008）
+- [x] 为 Gemini 3 补充 image_generation capability 到数据库

@@ -34,10 +34,13 @@ let fontsRegistered = false;
 function ensureFonts() {
   if (fontsRegistered) return;
   // Font files to register: [filename, family alias]
+  // IMPORTANT: alias MUST match the font's embedded family name "Noto Sans CJK SC"
+  // so that getFontSpec()'s ctx.font = '... "Noto Sans CJK SC"' resolves correctly
+  // in production (Cloud Run) where system fonts are not pre-installed.
   const fontFiles: [string, string][] = [
-    ["NotoSansCJKsc-Regular.otf", "NotoSansCJKsc"],
-    ["NotoSansCJKsc-Bold.otf", "NotoSansCJKsc-Bold"],
-    ["NotoSansCJKsc-Medium.otf", "NotoSansCJKsc-Medium"],
+    ["NotoSansCJKsc-Regular.otf", "Noto Sans CJK SC"],
+    ["NotoSansCJKsc-Bold.otf", "Noto Sans CJK SC"],
+    ["NotoSansCJKsc-Medium.otf", "Noto Sans CJK SC"],
   ];
   let registered = 0;
   for (const [filename, family] of fontFiles) {
