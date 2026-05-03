@@ -718,7 +718,7 @@ function ModuleSection({ module, cfg, items, onDelete, onOpenDetail, onLightbox,
   // Two rows: grid is responsive (3-6 cols), use CSS max-height trick
   // Each tile is roughly square with gap-2.5 (10px). Approximate 2-row height = 2 * tile + gap
   // We use overflow-hidden + max-h to clip, then animate on expand
-  const TILE_ROW_HEIGHT = 120; // px per row (tile ~104px + gap ~16px)
+  const TILE_ROW_HEIGHT = 170; // px per row (aspect-square tile ~160px + gap ~10px)
   const collapsedHeight = TILE_ROW_HEIGHT * 2;
 
   return (
