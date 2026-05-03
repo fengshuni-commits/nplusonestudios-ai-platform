@@ -2298,3 +2298,10 @@
 
 ## Bug 修复：图文排版网页端文字位置与图片构图不对应
 - [x] 恢复 textDescriptions 中的文字内容（之前为修复中文乱码而删除），帮助 AI 理解构图意图，同时保留 DO NOT RENDER 指令防止 AI 渲染文字
+## Bug 修复：图文排版可编辑状态下出现错位中文标题叠加
+- [ ] 排查可编辑视图中背景图是否错误使用了 compositeImageUrl（含烧录文字），导致 HTML 文字层与图片内文字双重叠加且错位
+- [ ] 确保网页可编辑视图始终使用纯背景图（rawImageUrl），compositeImageUrl 仅用于导出/API
+
+## Bug 修复：图文排版可编辑状态下出现错位中文标题叠加
+- [x] 排查可编辑视图中背景图含文字的根因：AI prompt 包含实际文字内容导致模型渲染文字
+- [x] 修复：从 textDescriptions 中移除 [content: "..."] 文字内容，只保留区域位置描述，加强 NO text rendering 指令

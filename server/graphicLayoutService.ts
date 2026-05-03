@@ -270,9 +270,9 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          // Include text content for composition reference, but strictly forbid rendering it
-          const textHint = b.text ? ` [content: "${b.text}"]` : "";
-          return `${b.role} zone${textHint} (${b.fontSize}px, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — this area MUST remain as clean seamless background, NO text rendering, NO solid color bars, NO rectangles, NO placeholder shapes, NO gray strips, background must flow through naturally`;
+          // Do NOT include actual text content in the prompt — it causes AI to render the text in the image.
+          // Only describe the zone role and position so AI leaves clean background space.
+          return `${b.role} zone (${b.fontSize}px, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — LEAVE THIS AREA AS CLEAN SEAMLESS BACKGROUND, absolutely NO text rendering, NO letters, NO characters, NO words, NO solid color bars, NO rectangles, NO placeholder shapes, NO gray strips, background must flow through naturally`;
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
