@@ -2380,3 +2380,8 @@
 - [x] 版式包库弹窗缩略图同步修改为 object-contain
 - [x] 排查 graphicLayoutService.ts 中 image prompt 导致生成工程图/蓝图风格的原因
 - [x] 修复 prompt：禁止生成技术制图、标注线、百分比数字、工程图样式；确保生成中文排版图
+
+## Bug 修复：图文排版生成核心问题（第二轮）
+- [x] 修复文字合成失败：用 sharp+SVG 方案重写 compositeTextOnImage，解决 @napi-rs/canvas 中文渲染失败问题
+- [x] 修复风格传递：将版式包参考图（sourceFileUrls）加入 originalImages，让 AI 直接看到参考图学习视觉风格
+- [x] 修复 assetDesc prompt：明确区分「风格参考图」和「内容素材图」，避免 AI 混淆两类图片的用途

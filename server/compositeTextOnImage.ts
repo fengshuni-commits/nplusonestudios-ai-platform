@@ -1,76 +1,17 @@
 /**
  * compositeTextOnImage.ts
  *
- * Server-side utility: draws textBlocks onto a background image using @napi-rs/canvas.
+ * Server-side utility: draws textBlocks onto a background image using sharp + SVG.
+ * This approach is more reliable than @napi-rs/canvas for CJK text rendering
+ * because sharp bundles pango/harfbuzz/fontconfig which handle Chinese characters natively.
+ *
  * Used to produce a "composite" image for REST API callers who don't have the
  * frontend HTML overlay layer.
- *
- * Chinese characters are rendered using Noto Sans CJK SC (pre-installed on the server).
  */
-
-import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
-import path from "path";
-import { fileURLToPath } from "url";
+import sharp from "sharp";
 import { storagePut } from "./storage";
 
-// Resolve the fonts directory — works in both dev (tsx, __dirname = server/) and
-// prod (esbuild bundle, __dirname = dist/). We try multiple candidate paths.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// In dev: __dirname = .../server, fonts at .../server/assets/fonts
-// In prod: __dirname = .../dist, fonts at .../dist/assets/fonts (copied by build script)
-// Also try process.cwd() + server/assets/fonts as ultimate fallback
-const FONTS_DIR_CANDIDATES = [
-  path.join(__dirname, "assets", "fonts"),           // prod: dist/assets/fonts
-  path.join(__dirname, "..", "server", "assets", "fonts"), // prod fallback: dist/../server/assets/fonts
-  path.join(process.cwd(), "server", "assets", "fonts"),  // cwd fallback
-  "/usr/share/fonts/opentype/noto",                       // system fallback
-];
-const FONTS_DIR = FONTS_DIR_CANDIDATES[0]; // used only for logging; actual loading tries all candidates
-
-// ── Font registration (idempotent) ──────────────────────────────────────────
-
-let fontsRegistered = false;
-
-function ensureFonts() {
-  if (fontsRegistered) return;
-  // Font files to register: [filename, family alias]
-  // IMPORTANT: alias MUST match the font's embedded family name "Noto Sans CJK SC"
-  // so that getFontSpec()'s ctx.font = '... "Noto Sans CJK SC"' resolves correctly
-  // in production (Cloud Run) where system fonts are not pre-installed.
-  const fontFiles: [string, string][] = [
-    ["NotoSansCJKsc-Regular.otf", "Noto Sans CJK SC"],
-    ["NotoSansCJKsc-Bold.otf", "Noto Sans CJK SC"],
-    ["NotoSansCJKsc-Medium.otf", "Noto Sans CJK SC"],
-  ];
-  let registered = 0;
-  for (const [filename, family] of fontFiles) {
-    let found = false;
-    for (const dir of FONTS_DIR_CANDIDATES) {
-      const fontPath = path.join(dir, filename);
-      try {
-        GlobalFonts.registerFromPath(fontPath, family);
-        console.log(`[compositeText] Registered font: ${family} from ${fontPath}`);
-        registered++;
-        found = true;
-        break;
-      } catch (_) {
-        // try next candidate directory
-      }
-    }
-    if (!found) {
-      console.warn(`[compositeText] WARNING: Could not find font file: ${filename} in any of: ${FONTS_DIR_CANDIDATES.join(", ")}`);
-    }
-  }
-  if (registered > 0) {
-    fontsRegistered = true;
-    console.log(`[compositeText] ${registered}/3 fonts registered successfully`);
-  } else {
-    console.warn("[compositeText] WARNING: No CJK fonts registered — Chinese text will not render");
-  }
-}
-
 // ── Types ────────────────────────────────────────────────────────────────────
-
 export interface TextBlock {
   id: string;
   role: "title" | "subtitle" | "body" | "caption" | "label";
@@ -98,44 +39,72 @@ export interface CompositeOptions {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Pick font family and weight based on role */
-function getFontSpec(role: TextBlock["role"], fontSize: number): string {
-  // Use the font's embedded family name "Noto Sans CJK SC" which is what @napi-rs/canvas
-  // actually registers regardless of the alias we pass to registerFromPath.
+/** Escape XML special characters for SVG text content */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/** Get font-weight based on role */
+function getFontWeight(role: TextBlock["role"]): string {
   switch (role) {
-    case "title":
-      return `bold ${fontSize}px "Noto Sans CJK SC"`;
-    case "subtitle":
-      return `600 ${fontSize}px "Noto Sans CJK SC"`;
-    default:
-      return `${fontSize}px "Noto Sans CJK SC"`;
+    case "title": return "bold";
+    case "subtitle": return "600";
+    default: return "normal";
   }
 }
 
-/** Wrap text into lines that fit within maxWidth */
-function wrapText(
-  ctx: SKRSContext2D,
-  text: string,
-  maxWidth: number
-): string[] {
-  // Split on explicit newlines first
-  const paragraphs = text.split(/\n/);
+/** Get SVG text-anchor from align */
+function getTextAnchor(align: TextBlock["align"]): string {
+  switch (align) {
+    case "center": return "middle";
+    case "right": return "end";
+    default: return "start";
+  }
+}
+
+/** Compute x position for text based on alignment within block */
+function getTextX(block: TextBlock): number {
+  const padding = Math.max(2, Math.round(block.fontSize * 0.15));
+  switch (block.align) {
+    case "center": return block.x + block.width / 2;
+    case "right": return block.x + block.width - padding;
+    default: return block.x + padding;
+  }
+}
+
+/**
+ * Simple text wrapping: split text into lines that fit within maxWidth.
+ * Estimates character width: CJK ~1.0em, Latin ~0.6em.
+ */
+function wrapTextToLines(text: string, maxWidth: number, fontSize: number): string[] {
   const lines: string[] = [];
+  const paragraphs = text.split(/\n/);
 
   for (const para of paragraphs) {
     if (para.trim() === "") {
       lines.push("");
       continue;
     }
-    // For CJK text, try character-by-character wrapping
+
     let current = "";
+    let currentWidth = 0;
+
     for (const char of para) {
-      const test = current + char;
-      if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+      const isCJK = /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]/.test(char);
+      const charWidth = isCJK ? fontSize : fontSize * 0.6;
+
+      if (currentWidth + charWidth > maxWidth && current.length > 0) {
         lines.push(current);
         current = char;
+        currentWidth = charWidth;
       } else {
-        current = test;
+        current += char;
+        currentWidth += charWidth;
       }
     }
     if (current) lines.push(current);
@@ -144,10 +113,68 @@ function wrapText(
   return lines;
 }
 
-// ── Main export ──────────────────────────────────────────────────────────────
-
 /**
- * Downloads the background image, draws all textBlocks on top,
+ * Build an SVG overlay containing all text blocks.
+ * The SVG is transparent except for the text, so it can be composited over the background.
+ */
+function buildSvgOverlay(
+  textBlocks: TextBlock[],
+  canvasWidth: number,
+  canvasHeight: number
+): string {
+  const textElements: string[] = [];
+
+  for (const block of textBlocks) {
+    if (!block.text?.trim()) continue;
+
+    const fontSize = Math.max(8, block.fontSize ?? 16);
+    const lineHeight = fontSize * 1.35;
+    const padding = Math.max(2, Math.round(fontSize * 0.15));
+    const availableWidth = block.width - padding * 2;
+    const fontWeight = getFontWeight(block.role);
+    const textAnchor = getTextAnchor(block.align);
+    const textX = getTextX(block);
+    const color = escapeXml(block.color ?? "#ffffff");
+    // Font family: use system CJK fonts with fallbacks
+    const fontFamily = "Noto Sans CJK SC, Noto Sans SC, WenQuanYi Micro Hei, sans-serif";
+
+    const lines = wrapTextToLines(block.text, availableWidth, fontSize);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line && i > 0) continue; // skip empty lines except first
+      // SVG text y is the baseline; add fontSize to convert from top-based coords
+      const lineY = block.y + padding + i * lineHeight + fontSize;
+
+      // Stop drawing if we've exceeded the block height
+      if (lineY - fontSize > block.y + block.height) break;
+
+      textElements.push(
+        `<text ` +
+        `x="${textX}" ` +
+        `y="${lineY}" ` +
+        `font-family="${escapeXml(fontFamily)}" ` +
+        `font-size="${fontSize}" ` +
+        `font-weight="${fontWeight}" ` +
+        `fill="${color}" ` +
+        `text-anchor="${textAnchor}"` +
+        `>${escapeXml(line)}</text>`
+      );
+    }
+  }
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" ` +
+    `width="${canvasWidth}" height="${canvasHeight}" ` +
+    `viewBox="0 0 ${canvasWidth} ${canvasHeight}">` +
+    textElements.join("") +
+    `</svg>`
+  );
+}
+
+// ── Main export ──────────────────────────────────────────────────────────────
+/**
+ * Downloads the background image, draws all textBlocks on top using SVG + sharp,
  * uploads the result to S3, and returns the public URL.
  *
  * Returns null if compositing fails (caller should fall back to original imageUrl).
@@ -163,64 +190,51 @@ export async function compositeTextOnImage(
   }
 
   try {
-    ensureFonts();
-
-    // Load background image from URL
-    const bgImage = await loadImage(backgroundImageUrl);
-
-    // Create canvas at the original image resolution
-    const canvas = createCanvas(imageWidth, imageHeight);
-    const ctx = canvas.getContext("2d");
-
-    // Draw background
-    ctx.drawImage(bgImage, 0, 0, imageWidth, imageHeight);
-
-    // Draw each text block
-    for (const block of textBlocks) {
-      if (!block.text?.trim()) continue;
-
-      const fontSize = Math.max(8, block.fontSize ?? 16);
-      ctx.font = getFontSpec(block.role, fontSize);
-      ctx.fillStyle = block.color ?? "#ffffff";
-      ctx.textBaseline = "top";
-
-      const lineHeight = fontSize * 1.35;
-      const padding = Math.max(2, Math.round(fontSize * 0.15));
-      const availableWidth = block.width - padding * 2;
-
-      const lines = wrapText(ctx, block.text, availableWidth);
-
-      // Align: compute x offset per line
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lineY = block.y + padding + i * lineHeight;
-
-        // Stop drawing if we've exceeded the block height
-        if (lineY + lineHeight > block.y + block.height) break;
-
-        let lineX: number;
-        if (block.align === "center") {
-          const lineW = ctx.measureText(line).width;
-          lineX = block.x + padding + (availableWidth - lineW) / 2;
-        } else if (block.align === "right") {
-          const lineW = ctx.measureText(line).width;
-          lineX = block.x + block.width - padding - lineW;
-        } else {
-          lineX = block.x + padding;
-        }
-
-        ctx.fillText(line, lineX, lineY);
-      }
+    // Download background image
+    const bgResponse = await fetch(backgroundImageUrl);
+    if (!bgResponse.ok) {
+      throw new Error(`Failed to download background image: HTTP ${bgResponse.status}`);
     }
+    const bgBuffer = Buffer.from(await bgResponse.arrayBuffer());
 
-    // Export to PNG buffer
-    const pngBuffer = canvas.toBuffer("image/png");
+    // Get actual image dimensions from the downloaded image
+    const bgMeta = await sharp(bgBuffer).metadata();
+    const actualWidth = bgMeta.width ?? imageWidth;
+    const actualHeight = bgMeta.height ?? imageHeight;
+
+    // Scale text block coordinates if actual image size differs from expected
+    const scaleX = actualWidth / imageWidth;
+    const scaleY = actualHeight / imageHeight;
+
+    const scaledBlocks: TextBlock[] = textBlocks.map(block => ({
+      ...block,
+      x: Math.round(block.x * scaleX),
+      y: Math.round(block.y * scaleY),
+      width: Math.round(block.width * scaleX),
+      height: Math.round(block.height * scaleY),
+      fontSize: Math.round(block.fontSize * Math.min(scaleX, scaleY)),
+    }));
+
+    // Build SVG overlay
+    const svgOverlay = buildSvgOverlay(scaledBlocks, actualWidth, actualHeight);
+    const svgBuffer = Buffer.from(svgOverlay, "utf-8");
+
+    // Composite SVG text over background image using sharp
+    const resultBuffer = await sharp(bgBuffer)
+      .composite([{
+        input: svgBuffer,
+        top: 0,
+        left: 0,
+      }])
+      .png()
+      .toBuffer();
 
     // Upload to S3
     const suffix = Math.random().toString(36).slice(2, 8);
     const key = `${outputKeyPrefix ?? "graphic-layout/composite"}-${suffix}.png`;
-    const { url } = await storagePut(key, pngBuffer, "image/png");
+    const { url } = await storagePut(key, resultBuffer, "image/png");
 
+    console.log(`[compositeText] Successfully composited ${textBlocks.length} text blocks onto image (${actualWidth}x${actualHeight})`);
     return url;
   } catch (err) {
     console.error("[compositeText] Failed to composite text on image:", err);

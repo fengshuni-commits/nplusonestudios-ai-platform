@@ -83,10 +83,21 @@ export async function generateGraphicLayoutAsync(
 
     let styleGuideHint = "";
     let packStyleGuide: any = null;
+    let packReferenceImages: string[] = []; // Source images from the style pack for visual style transfer
     if (stylePrompt) {
       styleGuideHint = `【参考风格提示词】\n${stylePrompt}`;
     } else if (job.packId) {
       const [pack] = await drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.id, job.packId)).limit(1);
+      // Collect pack reference images for visual style transfer (max 2 to avoid overwhelming content)
+      if (pack) {
+        const urls: string[] = [];
+        if (pack.sourceFileUrls && Array.isArray(pack.sourceFileUrls)) {
+          urls.push(...(pack.sourceFileUrls as string[]).slice(0, 2));
+        } else if (pack.sourceFileUrl) {
+          urls.push(pack.sourceFileUrl);
+        }
+        packReferenceImages = urls.filter(Boolean);
+      }
       if (pack?.styleGuide) {
         packStyleGuide = pack.styleGuide as any;
         const sg = packStyleGuide;
@@ -265,8 +276,12 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         const bgColor: string = plan.backgroundColor ?? (sg?.colorPalette?.background ?? "#0f0f0f");
         const selectedGroup: string | undefined = plan.selectedAssetGroup || undefined;
         const pageAssets = getAssetsForPage(pageIdx, selectedGroup);
-        const assetImagesForPage = pageAssets.length > 0
-          ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
+        // Combine pack reference images (style transfer) + user asset images (content)
+        // Pack reference images come first so AI prioritizes their visual style
+        const packRefImageObjects = packReferenceImages.map((url: string) => ({ url, mimeType: "image/jpeg" as const }));
+        const assetImageObjects = pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }));
+        const assetImagesForPage = (packRefImageObjects.length > 0 || assetImageObjects.length > 0)
+          ? [...packRefImageObjects, ...assetImageObjects]
           : undefined;
 
         // Build text layout description for composition guidance ONLY.
@@ -281,10 +296,17 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
-        const assetDesc = pageAssets.length > 0
-          ? (byTypeDesc
-              ? `incorporate the provided reference images as visual elements; ${byTypeDesc}`
-              : `incorporate the provided reference images as visual elements`)
+        const assetDesc = (packReferenceImages.length > 0 || pageAssets.length > 0)
+          ? [
+              packReferenceImages.length > 0
+                ? `The FIRST ${packReferenceImages.length} image(s) are STYLE REFERENCE images — study their visual style, color palette, layout composition, and aesthetic to replicate the same design language`
+                : "",
+              pageAssets.length > 0
+                ? (byTypeDesc
+                    ? `The remaining images are CONTENT images to incorporate as visual elements; ${byTypeDesc}`
+                    : `The remaining images are CONTENT images to incorporate as visual elements`)
+                : "",
+            ].filter(Boolean).join(". ")
           : `use ${bgColor} as background with geometric shapes and abstract visual elements`;
 
         const styleHintEn = sg
