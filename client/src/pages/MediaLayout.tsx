@@ -1534,40 +1534,31 @@ export default function MediaLayout() {
                 </div>
               )}
             </div>
-
-            {/* Layout Plan LLM Selector */}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">排版规划模型</Label>
-              <AiToolSelector
-                capability="layout_plan"
-                value={planToolId}
-                onChange={(id) => setPlanToolId(id ?? undefined)}
-                label="排版规划模型"
-                showBuiltIn={true}
-              />
-            </div>
-
-            {/* AI Tool Selector */}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">图像生成工具</Label>
-              <AiToolSelector
-                capability="rendering"
-                value={imageToolId}
-                onChange={(id) => setImageToolId(id ?? undefined)}
-                label="图像生成工具"
-                showBuiltIn={true}
-              />
-            </div>
-
             <Button onClick={handleGenerate} disabled={generating || !contentText.trim()}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium">
               {generating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />生成中...</> : <><Sparkles className="w-4 h-4 mr-2" />生成排版</>}
             </Button>
           </div>
         </div>
-
         {/* Center Panel: Preview */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* Tool selectors - top right */}
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+            <AiToolSelector
+              capability="layout_plan"
+              value={planToolId}
+              onChange={(id) => setPlanToolId(id ?? undefined)}
+              label="排版规划模型"
+              showBuiltIn={true}
+            />
+            <AiToolSelector
+              capability="rendering"
+              value={imageToolId}
+              onChange={(id) => setImageToolId(id ?? undefined)}
+              label="图像生成工具"
+              showBuiltIn={true}
+            />
+          </div>
           {!activeJobId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
               <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
