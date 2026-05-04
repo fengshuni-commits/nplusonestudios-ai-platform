@@ -302,10 +302,9 @@ export default function VideoGeneration() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold">AI 视频生成</h1>
-        <p className="text-muted-foreground mt-2">使用 AI 快速生成 1-8 秒短视频</p>
+    <div className="px-6 pb-6 pt-3 space-y-4">
+      <div className="flex items-center justify-end">
+        <AiToolSelector capability="video" value={selectedToolId} onChange={(toolId) => setSelectedToolId(toolId)} label="AI 工具" showBuiltIn={false} />
       </div>
 
       <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)} className="w-full">
@@ -317,8 +316,7 @@ export default function VideoGeneration() {
         {/* ─── 文生视频 ─── */}
         <TabsContent value="text-to-video" className="space-y-6">
           <Card>
-            <CardHeader><CardTitle>文生视频</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="px-4 py-4 space-y-4">
               <div className="space-y-2">
                 <Label>视频描述 *</Label>
                 <Textarea
@@ -329,19 +327,12 @@ export default function VideoGeneration() {
                   className="resize-none"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>视频时长 *</Label>
-                  <div className="flex items-center gap-2">
-                    <input type="range" min="1" max="8" value={duration}
-                      onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
-                    <span className="text-sm font-medium w-12">{duration}秒</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>生成工具 *</Label>
-                  <AiToolSelector capability="video" value={selectedToolId}
-                    onChange={(toolId) => setSelectedToolId(toolId)} />
+              <div className="space-y-2">
+                <Label>视频时长 *</Label>
+                <div className="flex items-center gap-2">
+                  <input type="range" min="1" max="8" value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
+                  <span className="text-sm font-medium w-12">{duration}秒</span>
                 </div>
               </div>
             </CardContent>
@@ -351,8 +342,7 @@ export default function VideoGeneration() {
         {/* ─── 图生视频 ─── */}
         <TabsContent value="image-to-video" className="space-y-6">
           <Card>
-            <CardHeader><CardTitle>图生视频</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="px-4 py-4 space-y-4">
               <div className="space-y-2">
                 <Label>首帧图 *</Label>
                 {/* 已选图片预览 */}
@@ -436,19 +426,12 @@ export default function VideoGeneration() {
                   placeholder="补充描述视频的动作、效果等，例如：镜头缓慢推进，人物转身..."
                   rows={3} className="resize-none" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>视频时长 *</Label>
-                  <div className="flex items-center gap-2">
-                    <input type="range" min="1" max="8" value={duration}
-                      onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
-                    <span className="text-sm font-medium w-12">{duration}秒</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>生成工具 *</Label>
-                  <AiToolSelector capability="video" value={selectedToolId}
-                    onChange={(toolId) => setSelectedToolId(toolId)} />
+              <div className="space-y-2">
+                <Label>视频时长 *</Label>
+                <div className="flex items-center gap-2">
+                  <input type="range" min="1" max="8" value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
+                  <span className="text-sm font-medium w-12">{duration}秒</span>
                 </div>
               </div>
             </CardContent>
