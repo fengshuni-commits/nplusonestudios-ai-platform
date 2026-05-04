@@ -2429,3 +2429,6 @@
 ## AI效果图/AI平面图详情弹窗 UI 优化
 - [x] 提示词整体移到图片下方（ai_render 和 color_plan 均已调整）
 - [x] 顶部只保留标签行（初始生成/第N次修改 + 时间 + 模型 + 参数badges）和右侧操作按钮
+
+## 图文排版版式包「保存提示词」自动加载修复
+- [x] 修复版式包数据刷新后 savedStylePrompt 未自动填入 stylePrompt 输入框的问题（新增 useEffect 监听 selectedPackId + stylePacks 变化，当输入框为空时自动填入）

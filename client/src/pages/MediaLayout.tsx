@@ -515,6 +515,15 @@ export default function MediaLayout() {
     },
     onError: (err) => toast.error("保存失败：" + err.message),
   });
+
+  // 当版式包数据加载/刷新后，如果当前选中的版式包有 savedStylePrompt 且输入框为空，自动填入
+  useEffect(() => {
+    if (!selectedPackId || !stylePacks) return;
+    const pack = (stylePacks as StylePack[]).find(p => p.id === selectedPackId);
+    if (pack?.savedStylePrompt && !stylePrompt.trim()) {
+      setStylePrompt(pack.savedStylePrompt);
+    }
+  }, [selectedPackId, stylePacks]);
   const deletePackMutation = trpc.graphicStylePacks.delete.useMutation({
     onSuccess: () => { refetchPacks(); toast.success("版式包已删除"); },
   });
