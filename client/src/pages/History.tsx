@@ -464,8 +464,8 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
       return;
     }
     if (item.module === "analysis_image") {
-      // AI 分析图：灯笱查看大图
-      if (displayUrl && onLightbox) onLightbox(displayUrl, title);
+      // AI 分析图：打开详情弹窗（与 AI 平面图一致）
+      if (onOpenDetail) onOpenDetail(item);
       return;
     }
     if (item.module === "color_plan") {
@@ -1308,10 +1308,13 @@ export default function HistoryPage() {
                   const inputParams = chainItem.inputParams as any;
                   const isBenchmark = selectedItem?.module === 'benchmark_report';
                   const isColorPlan = selectedItem?.module === 'color_plan';
+                  const isAnalysisImage = selectedItem?.module === 'analysis_image';
                   const promptText = isBenchmark
                     ? chainItem.summary || ""
                     : isColorPlan
                     ? (inputParams?.extraPrompt || chainItem.summary || "")
+                    : isAnalysisImage
+                    ? (inputParams?.fullPrompt || chainItem.summary || "")
                     : (inputParams?.prompt || chainItem.summary || "");
                   const itemTitle = chainItem.title || `第 ${idx + 1} 次生成`;
 
@@ -1341,7 +1344,7 @@ export default function HistoryPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              {/* For benchmark: show all meta inline. For ai_render/color_plan: top row is empty (all meta moved below image) */}
+                              {/* For benchmark: show all meta inline. For ai_render/color_plan/analysis_image: top row is empty (all meta moved below image) */}
                               {isBenchmark && (
                                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
@@ -1385,7 +1388,26 @@ export default function HistoryPage() {
                                   </SelectContent>
                                 </Select>
                               </div>
-                              {isColorPlan ? (
+                              {isAnalysisImage ? (
+                                <>
+                                  {chainItem.outputUrl && (
+                                    <>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })} title="放大查看">
+                                        <Maximize2 className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                        onClick={() => downloadImage(chainItem.outputUrl!, itemTitle)} title="下载原图">
+                                        <Download className="h-3 w-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-emerald-500"
+                                        onClick={() => handleImport(chainItem.id)} title="导入到素材库">
+                                        <FolderPlus className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </>
+                              ) : isColorPlan ? (
                                 <>
                                   <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground"
                                     onClick={() => handleCopyPrompt(promptText || chainItem.summary || "")} title="复制提示词">
@@ -1533,8 +1555,43 @@ export default function HistoryPage() {
                             </div>
                           )}
 
+                          {/* Analysis image: image preview */}
+                          {isAnalysisImage && chainItem.outputUrl && (
+                            <div className="mt-2 space-y-2">
+                              <div className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
+                                onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}>
+                                <img src={chainItem.outputUrl} alt={chainItem.title} className="w-full h-auto max-h-[320px] object-contain" />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/20">
+                                  <div className="bg-black/60 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                                    <Maximize2 className="h-3 w-3" />
+                                    点击放大
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Prompt text below image */}
+                              {promptText && (
+                                <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
+                              )}
+                              {/* Meta row: generation order + type + time + model */}
+                              <div className="flex items-center gap-1.5 flex-wrap px-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
+                                </span>
+                                {inputParams?.type && (
+                                  <span className="inline-block text-[10px] text-muted-foreground/60 bg-muted/60 px-1.5 py-0.5 rounded">
+                                    {inputParams.type === 'material' ? '材质搜配图' : '软装搜配图'}
+                                  </span>
+                                )}
+                                <span className="text-[11px] text-muted-foreground/40">{formatFullTime(chainItem.createdAt)}</span>
+                                {chainItem.modelName && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/40 font-mono">{chainItem.modelName}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           {/* AI render: image preview */}
-                          {!isBenchmark && !isColorPlan && chainItem.outputUrl && (
+                          {!isBenchmark && !isColorPlan && !isAnalysisImage && chainItem.outputUrl && (
                             <div className="mt-2 space-y-2">
                               <div className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
                                 onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}>
