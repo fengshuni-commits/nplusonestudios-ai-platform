@@ -337,6 +337,13 @@
       "when": 1777795880048,
       "tag": "0047_thankful_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1777860995503,
+      "tag": "0048_pretty_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

@@ -597,6 +597,8 @@ export const graphicStylePacks = mysqlTable("graphic_style_packs", {
   // 原始文件 URL（S3）
   sourceFileUrl: text("sourceFileUrl"),
   sourceFileKey: text("sourceFileKey"),
+  // 多图 URL 数组（批量上传时使用，JSON 格式）
+  sourceFileUrls: json("sourceFileUrls").$type<string[]>(),
   // 提取状态
   status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
   errorMessage: text("errorMessage"),

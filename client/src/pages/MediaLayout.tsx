@@ -460,6 +460,7 @@ export default function MediaLayout() {
   const [uploadingPack, setUploadingPack] = useState(false);
   const [showPackUpload, setShowPackUpload] = useState(false);
   const [packNameInput, setPackNameInput] = useState("");
+  const [pendingPackFiles, setPendingPackFiles] = useState<{ file: File; preview: string }[]>([]);
   // 新增：风格提示词提取
   const [stylePrompt, setStylePrompt] = useState<string>("");
   const [extractingPrompt, setExtractingPrompt] = useState(false);
@@ -780,20 +781,39 @@ export default function MediaLayout() {
 
   const handlePackFilesUpload = async (files: FileList) => {
     if (files.length === 0) return;
+    // 生成本地预览 URL 并存入 pendingPackFiles
+    const fileArray = Array.from(files);
+    const previews = fileArray.map(f => ({ file: f, preview: URL.createObjectURL(f) }));
+    setPendingPackFiles(prev => {
+      // 释放旧预览 URL
+      prev.forEach(p => URL.revokeObjectURL(p.preview));
+      return previews;
+    });
+  };
+  const handleConfirmPackUpload = async () => {
+    if (pendingPackFiles.length === 0) return;
     setUploadingPack(true);
     try {
-      const file = files[0];
-      const { url, key } = await uploadFile(file);
-      const ext = file.name.split(".").pop()?.toLowerCase();
+      // 并行上传所有文件
+      const uploaded = await Promise.all(
+        pendingPackFiles.map(({ file }) => uploadFile(file))
+      );
+      const allUrls = uploaded.map(u => u.url);
+      const firstFile = pendingPackFiles[0].file;
+      const ext = firstFile.name.split(".").pop()?.toLowerCase();
       const sourceType = ext === "pdf" ? "pdf" : "images";
-      // 名称优先用用户输入，否则自动从文件名生成
-      const autoName = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").trim() || "版式包";
-      const name = packNameInput.trim() || autoName;
-      await createPackMutation.mutateAsync({ name, sourceType, sourceFileUrl: url, sourceFileKey: key });
-      const extra = files.length > 1 ? `（已选 ${files.length} 个文件，使用第一个作为版式参考）` : "";
-      toast.success(`版式包上传成功${extra}，AI 正在分析风格...`);
+      const autoName = firstFile.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").trim() || "版式包";
+      const name = packNameInput.trim() || (pendingPackFiles.length > 1 ? `版式包（${pendingPackFiles.length}张）` : autoName);
+      await createPackMutation.mutateAsync({
+        name, sourceType,
+        sourceFileUrl: allUrls[0],
+        sourceFileKey: uploaded[0].key,
+        sourceFileUrls: allUrls,
+      });
+      toast.success(`版式包创建成功（${allUrls.length} 张参考图），AI 正在综合分析风格...`);
       setShowPackUpload(false);
       setPackNameInput("");
+      setPendingPackFiles([]);
       refetchPacks();
     } catch (err: any) {
       toast.error("上传失败：" + err.message);
@@ -1824,8 +1844,42 @@ export default function MediaLayout() {
                 webkitdirectory="" directory="" multiple className="hidden"
                 onChange={(e) => { if (e.target.files?.length) handlePackFilesUpload(e.target.files); e.target.value = ""; }} />
             </div>
+            {pendingPackFiles.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs text-white/50">已选 {pendingPackFiles.length} 张参考图</Label>
+                <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+                  {pendingPackFiles.map((pf, idx) => (
+                    <div key={idx} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
+                      <img src={pf.preview} alt={pf.file.name} className="w-full h-full object-cover" />
+                      <button
+                        className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white/70 hover:text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setPendingPackFiles(prev => prev.filter((_, i) => i !== idx))}
+                      >×</button>
+                    </div>
+                  ))}
+                  <div
+                    role="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-16 h-16 rounded-lg border-2 border-dashed border-white/15 flex items-center justify-center cursor-pointer hover:border-[#B87333]/40 transition-colors flex-shrink-0"
+                  >
+                    <Plus className="w-4 h-4 text-white/30" />
+                  </div>
+                </div>
+                <button
+                  onClick={handleConfirmPackUpload}
+                  disabled={uploadingPack}
+                  className="w-full h-9 rounded-lg bg-[#B87333] hover:bg-[#a06628] disabled:opacity-50 text-white text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                >
+                  {uploadingPack ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" />上传并分析中...</>
+                  ) : (
+                    <>创建版式包（{pendingPackFiles.length} 张）</>
+                  )}
+                </button>
+              </div>
+            )}
             <p className="text-[11px] text-white/30">
-              AI 将分析文件的配色、字体、排版模式，生成可复用的版式风格包。
+              AI 将综合分析所有参考图的配色、字体、排版模式，生成一个版式风格包。
             </p>
           </div>
         </DialogContent>
@@ -1915,17 +1969,17 @@ export default function MediaLayout() {
           setUploadingPack(true);
           try {
             const first = items[0];
-            // 名称优先用用户输入，否则自动从素材名生成
+            const allUrls = items.map(i => i.fileUrl);
             const autoName = first.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").trim() || "版式包";
-            const name = packNameInput.trim() || autoName;
+            const name = packNameInput.trim() || (items.length > 1 ? `版式包（${items.length}张）` : autoName);
             await createPackMutation.mutateAsync({
               name,
               sourceType: "images",
               sourceFileUrl: first.fileUrl,
               sourceFileKey: first.fileKey,
+              sourceFileUrls: allUrls,
             });
-            const extra = items.length > 1 ? `（已选 ${items.length} 张，使用第一张作为版式参考）` : "";
-            toast.success(`版式包创建成功${extra}，AI 正在分析风格...`);
+            toast.success(`版式包创建成功（${allUrls.length} 张参考图），AI 正在综合分析风格...`);
             setPackNameInput("");
             refetchPacks();
           } catch (err: any) {

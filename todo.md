@@ -2340,3 +2340,9 @@
 - [x] 选中素材库中的 layout_pack 后，加载对应 graphic_style_packs 的 styleGuide 作为排版提示词
 - [x] 后端 tRPC 接口：graphicStylePacks.getByAssetUrl（按 fileUrl 查找版式包）
 - [x] 后端 tRPC 接口：assets.listByCategory（按分类查询素材）
+
+## 版式包批量上传
+- [x] 后端：graphic_style_packs 新增 sourceFileUrls JSON 字段，支持多图 URL 数组
+- [x] 后端：extractGraphicStylePackAsync 支持多图并行下载和处理
+- [x] 前端：上传对话框支持多选图片，展示已选缩略图预览，确认后并行上传
+- [x] 前端：素材库多选也支持传入所有 URL 创建版式包

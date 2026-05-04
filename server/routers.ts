@@ -5703,19 +5703,26 @@ const graphicStylePacksRouter = router({
       sourceType: z.enum(["images", "pdf"]),
       sourceFileUrl: z.string().url(),
       sourceFileKey: z.string(),
+      // 批量上传：多图 URL 数组（可选，不传则退化为单图）
+      sourceFileUrls: z.array(z.string().url()).min(1).max(20).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const drizzleDb = await db.getDb();
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const { graphicStylePacks } = await import("../drizzle/schema");
       const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+      // 多图模式：sourceFileUrls 包含所有图片 URL，sourceFileUrl 取第一张（向后兼容）
+      const allUrls = input.sourceFileUrls && input.sourceFileUrls.length > 0
+        ? input.sourceFileUrls
+        : [input.sourceFileUrl];
       await drizzleDb.insert(graphicStylePacks).values({
         userId: ctx.user.id, name: input.name, sourceType: input.sourceType,
-        sourceFileUrl: input.sourceFileUrl, sourceFileKey: input.sourceFileKey, status: "pending",
+        sourceFileUrl: allUrls[0], sourceFileKey: input.sourceFileKey, status: "pending",
+        sourceFileUrls: allUrls,
       });
       const [newPack] = await drizzleDb.select().from(graphicStylePacks).where(_eq(graphicStylePacks.userId, ctx.user.id)).orderBy(_desc(graphicStylePacks.createdAt)).limit(1);
       if (!newPack) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建版式包失败" });
-      extractGraphicStylePackAsync(newPack.id, input.sourceType, input.sourceFileUrl).catch(console.error);
+      extractGraphicStylePackAsync(newPack.id, input.sourceType, allUrls).catch(console.error);
       return { id: newPack.id, status: "pending" as const };
     }),
 
@@ -5741,7 +5748,8 @@ const graphicStylePacksRouter = router({
       if (!pack) throw new TRPCError({ code: "NOT_FOUND" });
       if (!pack.sourceFileUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "没有原始文件" });
       await drizzleDb.update(graphicStylePacks).set({ status: "pending", errorMessage: null }).where(_eq(graphicStylePacks.id, input.id));
-      extractGraphicStylePackAsync(pack.id, pack.sourceType, pack.sourceFileUrl).catch(console.error);
+      const retryUrls = (pack.sourceFileUrls as string[] | null) || [pack.sourceFileUrl];
+      extractGraphicStylePackAsync(pack.id, pack.sourceType, retryUrls).catch(console.error);
       return { success: true };
     }),
 
@@ -6349,12 +6357,14 @@ const graphicLayoutRouter = router({
 });
 // ─── Graphic Style Pack Async Extraction ──────────────────────────────────────
 
-async function extractGraphicStylePackAsync(packId: number, sourceType: string, fileUrl: string) {
+async function extractGraphicStylePackAsync(packId: number, sourceType: string, fileUrls: string | string[]) {
   const drizzleDb = await db.getDb();
   if (!drizzleDb) return;
   const { graphicStylePacks } = await import("../drizzle/schema");
   const { eq: _eq } = await import("drizzle-orm");
   await drizzleDb.update(graphicStylePacks).set({ status: "processing" }).where(_eq(graphicStylePacks.id, packId));
+  // 统一处理：单图或多图
+  const urlList = Array.isArray(fileUrls) ? fileUrls : [fileUrls];
   try {
     const { execSync } = await import("child_process");
     const { mkdtempSync, readFileSync, readdirSync } = await import("fs");
@@ -6363,43 +6373,49 @@ async function extractGraphicStylePackAsync(packId: number, sourceType: string, 
     const tmpDir = mkdtempSync(join(tmpdir(), "graphic-style-"));
     const imageContent: any[] = [];
     try {
-      const fileExt = fileUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? "pdf";
-      const localFile = join(tmpDir, `source.${fileExt}`);
-      // 使用 fetch 下载文件（自动跟随重定向，兼容 CloudFront CDN）
-      const fileResp = await fetch(fileUrl);
-      if (!fileResp.ok) throw new Error(`下载文件失败: HTTP ${fileResp.status}`);
-      const fileBuffer = Buffer.from(await fileResp.arrayBuffer());
       const { writeFileSync } = await import("fs");
-      writeFileSync(localFile, fileBuffer);
       const tmpImgDir = join(tmpDir, "imgs");
       execSync(`mkdir -p "${tmpImgDir}"`);
-      if (sourceType === "pdf") {
-        // Convert PDF pages to JPEG using pdfjs-dist (no system dependency)
-        const allPdfPages = await pdfToImages(localFile, tmpImgDir, "page", { dpi: 150, format: "jpeg" });
-        const totalPages = allPdfPages.length;
-        const maxSamples = Math.min(10, totalPages);
-        const step = Math.max(1, Math.floor(totalPages / maxSamples));
-        // Sampling is handled below via imgFiles loop
-      } else {
-        // 保留原始扩展名，避免 MIME 类型误判
-        const imgExt = ["jpg", "jpeg", "png", "webp"].includes(fileExt) ? fileExt : "jpg";
-        execSync(`cp "${localFile}" "${tmpImgDir}/page-1.${imgExt}"`);
-      }
-      const imgFiles = readdirSync(tmpImgDir).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f)).sort();
-      const maxImages = Math.min(10, imgFiles.length);
-      const stepImg = Math.max(1, Math.floor(imgFiles.length / maxImages));
-      const sampledFiles: string[] = [];
-      for (let i = 0; i < imgFiles.length && sampledFiles.length < maxImages; i += stepImg) sampledFiles.push(imgFiles[i]);
-      for (const imgFile of sampledFiles) {
-        const imgPath = join(tmpImgDir, imgFile);
-        const imgBase64 = readFileSync(imgPath).toString("base64");
-        const ext = imgFile.split(".").pop()?.toLowerCase();
-        const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
-        imageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${imgBase64}`, detail: "high" } });
+      // 处理每一个 URL（支持图片和 PDF）
+      for (let urlIdx = 0; urlIdx < urlList.length; urlIdx++) {
+        const fileUrl = urlList[urlIdx];
+        const fileExt = fileUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? "jpg";
+        const localFile = join(tmpDir, `source-${urlIdx}.${fileExt}`);
+        const fileResp = await fetch(fileUrl);
+        if (!fileResp.ok) {
+          console.warn(`[GraphicStylePack] Failed to download ${fileUrl}: HTTP ${fileResp.status}, skipping`);
+          continue;
+        }
+        const fileBuffer = Buffer.from(await fileResp.arrayBuffer());
+        writeFileSync(localFile, fileBuffer);
+        if (sourceType === "pdf" && fileExt === "pdf") {
+          // Convert PDF pages to JPEG
+          const pdfImgDir = join(tmpImgDir, `pdf-${urlIdx}`);
+          execSync(`mkdir -p "${pdfImgDir}"`);
+          const allPdfPages = await pdfToImages(localFile, pdfImgDir, "page", { dpi: 150, format: "jpeg" });
+          const pdfFiles = readdirSync(pdfImgDir).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f)).sort();
+          const maxPdfSamples = Math.min(6, pdfFiles.length);
+          const pdfStep = Math.max(1, Math.floor(pdfFiles.length / maxPdfSamples));
+          for (let i = 0; i < pdfFiles.length && imageContent.length < 12; i += pdfStep) {
+            const imgBase64 = readFileSync(join(pdfImgDir, pdfFiles[i])).toString("base64");
+            const ext = pdfFiles[i].split(".").pop()?.toLowerCase();
+            const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+            imageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${imgBase64}`, detail: "high" } });
+          }
+        } else {
+          // 图片文件：直接使用
+          const imgExt = ["jpg", "jpeg", "png", "webp"].includes(fileExt) ? fileExt : "jpg";
+          const destFile = join(tmpImgDir, `img-${urlIdx}.${imgExt}`);
+          execSync(`cp "${localFile}" "${destFile}"`);
+          if (imageContent.length < 12) {
+            const imgBase64 = readFileSync(destFile).toString("base64");
+            const mime = imgExt === "png" ? "image/png" : imgExt === "webp" ? "image/webp" : "image/jpeg";
+            imageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${imgBase64}`, detail: "high" } });
+          }
+        }
       }
       if (imageContent.length === 0) throw new Error("未能从文件中提取页面图片");
     } catch (convErr: any) {
-      // 图片转换失败时直接抛出，不再静默降级为无参考的 fallback
       try { execSync(`rm -rf "${tmpDir}"`); } catch {}
       throw new Error(`图片处理失败：${convErr.message}`);
     } finally {

@@ -1,0 +1,1 @@
+ALTER TABLE `graphic_style_packs` ADD `sourceFileUrls` json;
