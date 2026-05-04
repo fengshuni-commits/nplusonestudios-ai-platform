@@ -518,6 +518,13 @@ export default function MediaLayout() {
   const [packAssetPickerOpen, setPackAssetPickerOpen] = useState(false);
   const [packAssetSearch, setPackAssetSearch] = useState("");
   const [packAssetSelected, setPackAssetSelected] = useState<Array<{ id: number; name: string; fileUrl: string; fileKey: string; thumbnailUrl?: string | null }>>([]);
+  // 从素材库选择已有版式包（直接提取 styleGuide）
+  const [libraryPackPickerOpen, setLibraryPackPickerOpen] = useState(false);
+  const [libraryPackSearch, setLibraryPackSearch] = useState("");
+  const { data: libraryPackAssets = [] } = trpc.assets.listByCategory.useQuery(
+    { category: "layout_pack" },
+    { enabled: libraryPackPickerOpen }
+  );
 
   // 从 URL 参数读取 jobId（由生成记录模块跳转过来时自动恢复）
   const urlJobId = useMemo(() => {
@@ -1067,9 +1074,15 @@ export default function MediaLayout() {
                 <Palette className="w-3.5 h-3.5 text-[#B87333]" />
                 <span className="text-xs font-medium text-white/70">版式包</span>
               </div>
-              <div role="button" tabIndex={0} onClick={() => setShowPackUpload(true)}
-                className="flex items-center gap-1 text-[10px] text-[#B87333] hover:text-[#D4956B] cursor-pointer">
-                <Plus className="w-3 h-3" />上传学习
+              <div className="flex items-center gap-2">
+                <div role="button" tabIndex={0} onClick={() => setShowPackUpload(true)}
+                  className="flex items-center gap-1 text-[10px] text-[#B87333] hover:text-[#D4956B] cursor-pointer">
+                  <Plus className="w-3 h-3" />上传学习
+                </div>
+                <div role="button" tabIndex={0} onClick={() => setLibraryPackPickerOpen(true)}
+                  className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 cursor-pointer">
+                  <Library className="w-3 h-3" />素材库
+                </div>
               </div>
             </div>
             <div
@@ -1815,6 +1828,78 @@ export default function MediaLayout() {
               AI 将分析文件的配色、字体、排版模式，生成可复用的版式风格包。
             </p>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Library Pack Picker - 从素材库选择已有版式包 */}
+      <Dialog open={libraryPackPickerOpen} onOpenChange={(v) => { if (!v) { setLibraryPackPickerOpen(false); setLibraryPackSearch(""); } }}>
+        <DialogContent className="max-w-xl bg-[#1a1a1a] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Library className="w-4 h-4 text-[#B87333]" />
+              从素材库选择版式包
+            </DialogTitle>
+          </DialogHeader>
+          <div className="relative mb-3">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/30" />
+            <Input
+              placeholder="搜索版式包…"
+              value={libraryPackSearch}
+              onChange={(e) => setLibraryPackSearch(e.target.value)}
+              className="pl-8 h-8 text-sm bg-black/20 border-white/10 text-white placeholder:text-white/30"
+            />
+          </div>
+          {(libraryPackAssets as any[]).length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 text-white/30">
+              <LayoutTemplate className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">素材库中暂无版式包</p>
+              <p className="text-xs mt-1 opacity-60">请先上传版式包参考图片</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 max-h-72 overflow-y-auto">
+              {(libraryPackAssets as any[])
+                .filter((a: any) => a.name.toLowerCase().includes(libraryPackSearch.toLowerCase()))
+                .map((asset: any) => (
+                <button
+                  key={asset.id}
+                  className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-white/10 hover:border-[#B87333]/60 transition-colors bg-black/20"
+                  onClick={async () => {
+                    setLibraryPackPickerOpen(false);
+                    setLibraryPackSearch("");
+                    // Find the corresponding graphic_style_pack by fileUrl
+                    try {
+                      const pack = await trpcUtils.graphicStylePacks.getByAssetUrl.fetch({ fileUrl: asset.fileUrl });
+                      if (pack && pack.status === "done" && pack.id) {
+                        setSelectedPackId(pack.id);
+                        setExtractingPrompt(true);
+                        extractPromptMutation.mutate({ packId: pack.id });
+                        toast.info(`已选择版式包「${pack.name}」，正在提取风格提示词…`);
+                      } else if (pack && pack.status !== "done") {
+                        toast.error("该版式包尚未完成 AI 分析，请稍后再试");
+                      } else {
+                        // No matching pack found, use imageUrls directly
+                        setExtractingPrompt(true);
+                        extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
+                        toast.info(`正在从「${asset.name}」提取风格提示词…`);
+                      }
+                    } catch {
+                      setExtractingPrompt(true);
+                      extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
+                      toast.info(`正在从「${asset.name}」提取风格提示词…`);
+                    }
+                  }}
+                >
+                  <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
+                    <div className="w-full p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                      <p className="text-white text-xs truncate font-medium">{asset.name}</p>
+                      <p className="text-white/50 text-[10px] mt-0.5">点击提取风格提示词</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

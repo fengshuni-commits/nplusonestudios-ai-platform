@@ -2334,3 +2334,9 @@
 - [x] 将现有版式包图片（Blueprint Minimalist）写入 assets 表，category='layout_pack'
 - [x] 素材库前端新增"版式包"分类（LayoutTemplate 图标，靛蓝色）
 - [x] 版式包处理完成后自动同步到素材库（extractGraphicStylePackAsync 末尾写入 assets）
+
+## 图文排版：从素材库选择版式包
+- [x] 图文排版页面版式包区域增加"从素材库选择"入口
+- [x] 选中素材库中的 layout_pack 后，加载对应 graphic_style_packs 的 styleGuide 作为排版提示词
+- [x] 后端 tRPC 接口：graphicStylePacks.getByAssetUrl（按 fileUrl 查找版式包）
+- [x] 后端 tRPC 接口：assets.listByCategory（按分类查询素材）

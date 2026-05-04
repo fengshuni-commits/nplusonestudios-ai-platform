@@ -1661,6 +1661,18 @@ const assetsRouter = router({
     .query(async ({ input }) => {
       return db.getAssetsByParent(input.parentId ?? null);
     }),
+
+  listByCategory: protectedProcedure
+    .input(z.object({ category: z.string() }))
+    .query(async ({ input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return [];
+      const { assets } = await import("../drizzle/schema");
+      const { eq: _eq } = await import("drizzle-orm");
+      return drizzleDb.select().from(assets)
+        .where(_eq(assets.category, input.category))
+        .orderBy(assets.createdAt);
+    }),
   moveAsset: protectedProcedure
     .input(z.object({
       assetId: z.number(),
@@ -5731,6 +5743,20 @@ const graphicStylePacksRouter = router({
       await drizzleDb.update(graphicStylePacks).set({ status: "pending", errorMessage: null }).where(_eq(graphicStylePacks.id, input.id));
       extractGraphicStylePackAsync(pack.id, pack.sourceType, pack.sourceFileUrl).catch(console.error);
       return { success: true };
+    }),
+
+  // 根据素材库图片 URL 查找对应的版式包（用于从素材库选择版式包）
+  getByAssetUrl: protectedProcedure
+    .input(z.object({ fileUrl: z.string().url() }))
+    .query(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return null;
+      const { graphicStylePacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      const [pack] = await drizzleDb.select().from(graphicStylePacks)
+        .where(_and(_eq(graphicStylePacks.sourceFileUrl, input.fileUrl), _eq(graphicStylePacks.userId, ctx.user.id)))
+        .limit(1);
+      return pack ?? null;
     }),
 });
 
