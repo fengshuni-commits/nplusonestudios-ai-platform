@@ -790,12 +790,7 @@ export default function ColorPlan() {
     <div className="flex flex-col">
       {/* Header */}
       <div className="px-6 pt-2 pb-2 border-b border-border/40">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              上传平面底图，标注功能分区，一键生成彩色平面图
-            </p>
-          </div>
+        <div className="flex items-center justify-end">
           <AiToolSelector
             capability="rendering"
             value={toolId}
