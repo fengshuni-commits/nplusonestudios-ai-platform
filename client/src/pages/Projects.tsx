@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -193,9 +193,6 @@ export default function Projects() {
         <div>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-          <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />新建项目</Button>
-          </DialogTrigger>
           <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>新建项目</DialogTitle></DialogHeader>
             <div className="space-y-5 pt-2">
@@ -466,17 +463,34 @@ export default function Projects() {
                 </CardContent>
               </Card>
             ))}
+            {/* New project card */}
+            <Card
+              className="hover:shadow-md transition-shadow cursor-pointer border-dashed border-border/60 hover:border-primary/50 bg-transparent hover:bg-primary/5"
+              onClick={() => setDialogOpen(true)}
+            >
+              <CardContent className="p-4 flex flex-col items-center justify-center h-full min-h-[120px] gap-2 text-muted-foreground hover:text-primary transition-colors">
+                <div className="h-8 w-8 rounded-lg border border-dashed border-current flex items-center justify-center">
+                  <Plus className="h-4 w-4" />
+                </div>
+                <span className="text-xs font-medium">新建项目</span>
+              </CardContent>
+            </Card>
           </div>
         ) : (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <FolderKanban className="h-12 w-12 text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">暂无项目</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" />创建第一个项目
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* New project card (empty state) */}
+            <Card
+              className="hover:shadow-md transition-shadow cursor-pointer border-dashed border-border/60 hover:border-primary/50 bg-transparent hover:bg-primary/5"
+              onClick={() => setDialogOpen(true)}
+            >
+              <CardContent className="p-4 flex flex-col items-center justify-center h-full min-h-[120px] gap-2 text-muted-foreground hover:text-primary transition-colors">
+                <div className="h-8 w-8 rounded-lg border border-dashed border-current flex items-center justify-center">
+                  <Plus className="h-4 w-4" />
+                </div>
+                <span className="text-xs font-medium">新建项目</span>
+              </CardContent>
+            </Card>
+          </div>
         )
       ) : (
         /* 甘特图视图 */
