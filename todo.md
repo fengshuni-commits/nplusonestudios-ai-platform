@@ -2432,3 +2432,9 @@
 
 ## 图文排版版式包「保存提示词」自动加载修复
 - [x] 修复版式包数据刷新后 savedStylePrompt 未自动填入 stylePrompt 输入框的问题（新增 useEffect 监听 selectedPackId + stylePacks 变化，当输入框为空时自动填入）
+
+## 关联项目时自动同步图片到素材库
+- [x] 在 history.updateProject 中，关联项目时自动将 ai_render/color_plan/analysis_image 的 outputUrl 同步到素材库
+- [x] layout_design 通过 inputParams.jobId 找到 graphicLayoutJob，逐页同步所有页面图片
+- [x] 已有去重检查（findAssetByUrl），已存在但未关联项目的素材自动补充 projectId
+- [x] 同步失败不阻断关联项目主流程（try/catch）

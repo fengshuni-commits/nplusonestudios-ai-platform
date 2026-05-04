@@ -3916,7 +3916,170 @@ const historyRouter = router({
         if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "项目不存在" });
       }
       await db.updateGenerationHistoryProject(input.historyId, input.projectId);
+
+      // 关联项目时，自动将图片类记录同步到素材库
+      if (input.projectId !== null) {
+        const IMAGE_MODULES = ["ai_render", "color_plan", "analysis_image", "layout_design"];
+        if (IMAGE_MODULES.includes(item.module)) {
+          try {
+            const drizzleDb = await db.getDb();
+            if (drizzleDb) {
+              const { assets, graphicLayoutJobs } = await import("../drizzle/schema");
+              const { eq: _eq, and: _and } = await import("drizzle-orm");
+
+              if (item.module === "layout_design") {
+                // layout_design: 通过 inputParams.jobId 找到 graphicLayoutJob，逐页同步
+                const jobId = (item.inputParams as any)?.jobId;
+                if (jobId) {
+                  const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+                    .where(_and(_eq(graphicLayoutJobs.id, jobId), _eq(graphicLayoutJobs.userId, ctx.user.id)))
+                    .limit(1);
+                  if (job && job.status === "done") {
+                    const pages = (job.pages as any[]) ?? [];
+                    for (const page of pages) {
+                      const imageUrl: string = page.imageUrl ?? "";
+                      if (!imageUrl) continue;
+                      const existing = await db.findAssetByUrl(imageUrl);
+                      if (!existing) {
+                        await db.createAsset({
+                          name: `${job.title || "排版"} - 第${page.pageIndex + 1}页`,
+                          fileUrl: imageUrl,
+                          fileKey: imageUrl,
+                          fileType: "image/png",
+                          category: "graphic_layout",
+                          thumbnailUrl: imageUrl,
+                          uploadedBy: ctx.user.id,
+                          projectId: input.projectId,
+                        });
+                      } else if (!existing.projectId) {
+                        // 已存在但未关联项目，补充关联
+                        await drizzleDb.update(assets).set({ projectId: input.projectId }).where(_eq(assets.id, existing.id));
+                      }
+                    }
+                  }
+                }
+              } else {
+                // ai_render / color_plan / analysis_image: 用 outputUrl 同步
+                const imageUrl = item.outputUrl;
+                if (imageUrl) {
+                  const existing = await db.findAssetByUrl(imageUrl);
+                  if (!existing) {
+                    await db.createAsset({
+                      name: item.title || "未命名素材",
+                      fileUrl: imageUrl,
+                      fileKey: imageUrl,
+                      fileType: "image/png",
+                      category: item.module,
+                      thumbnailUrl: imageUrl,
+                      uploadedBy: ctx.user.id,
+                      historyId: item.id,
+                      projectId: input.projectId,
+                    });
+                  } else if (!existing.projectId) {
+                    await drizzleDb.update(assets).set({ projectId: input.projectId }).where(_eq(assets.id, existing.id));
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // 同步失败不阻断主流程
+            console.error("[AutoSync] Failed to sync history to assets:", e);
+          }
+        }
+      }
+
       return { success: true };
+    }),
+
+  /** Backfill: sync all existing project-linked image history records to assets library */
+  backfillProjectedToAssets: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { assets, graphicLayoutJobs, generationHistory } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and, isNotNull, inArray } = await import("drizzle-orm");
+
+      const IMAGE_MODULES = ["ai_render", "color_plan", "analysis_image", "layout_design"];
+
+      // Fetch all project-linked image history records for this user
+      const records = await drizzleDb.select().from(generationHistory)
+        .where(_and(
+          _eq(generationHistory.userId, ctx.user.id),
+          isNotNull(generationHistory.projectId),
+          inArray(generationHistory.module, IMAGE_MODULES),
+        ));
+
+      let synced = 0;
+      let skipped = 0;
+
+      for (const item of records) {
+        if (!item.projectId) continue;
+        try {
+          if (item.module === "layout_design") {
+            const jobId = (item.inputParams as any)?.jobId;
+            if (!jobId) continue;
+            const [job] = await drizzleDb.select().from(graphicLayoutJobs)
+              .where(_and(_eq(graphicLayoutJobs.id, jobId), _eq(graphicLayoutJobs.userId, ctx.user.id)))
+              .limit(1);
+            if (!job || job.status !== "done") continue;
+            const pages = (job.pages as any[]) ?? [];
+            for (const page of pages) {
+              const imageUrl: string = page.imageUrl ?? "";
+              if (!imageUrl) continue;
+              const existing = await db.findAssetByUrl(imageUrl);
+              if (!existing) {
+                await db.createAsset({
+                  name: `${job.title || "排版"} - 第${page.pageIndex + 1}页`,
+                  fileUrl: imageUrl,
+                  fileKey: imageUrl,
+                  fileType: "image/png",
+                  category: "graphic_layout",
+                  thumbnailUrl: imageUrl,
+                  uploadedBy: ctx.user.id,
+                  projectId: item.projectId,
+                });
+                synced++;
+              } else {
+                if (!existing.projectId) {
+                  await drizzleDb.update(assets).set({ projectId: item.projectId }).where(_eq(assets.id, existing.id));
+                  synced++;
+                } else {
+                  skipped++;
+                }
+              }
+            }
+          } else {
+            const imageUrl = item.outputUrl;
+            if (!imageUrl) continue;
+            const existing = await db.findAssetByUrl(imageUrl);
+            if (!existing) {
+              await db.createAsset({
+                name: item.title || "未命名素材",
+                fileUrl: imageUrl,
+                fileKey: imageUrl,
+                fileType: "image/png",
+                category: item.module,
+                thumbnailUrl: imageUrl,
+                uploadedBy: ctx.user.id,
+                historyId: item.id,
+                projectId: item.projectId,
+              });
+              synced++;
+            } else {
+              if (!existing.projectId) {
+                await drizzleDb.update(assets).set({ projectId: item.projectId }).where(_eq(assets.id, existing.id));
+                synced++;
+              } else {
+                skipped++;
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[Backfill] Failed to sync history ${item.id}:`, e);
+        }
+      }
+
+      return { synced, skipped, total: records.length };
     }),
 });
 
