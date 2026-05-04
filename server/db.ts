@@ -717,6 +717,21 @@ export async function listDocumentsByProject(projectId: number) {
   if (!db) return [];
   return db.select().from(documents).where(eq(documents.projectId, projectId)).orderBy(desc(documents.updatedAt));
 }
+export async function listMeetingDraftsByUser(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: documents.id,
+    title: documents.title,
+    content: documents.content,
+    projectId: documents.projectId,
+    createdAt: documents.createdAt,
+    updatedAt: documents.updatedAt,
+  }).from(documents)
+    .where(and(eq(documents.type, "minutes"), eq(documents.createdBy, userId)))
+    .orderBy(desc(documents.updatedAt))
+    .limit(limit);
+}
 
 export async function createDocument(data: InsertDocument) {
   const db = await getDb();

@@ -133,6 +133,27 @@ export default function MeetingMinutes() {
   useEffect(() => { meetingDateRef.current = meetingDate; }, [meetingDate]);
   useEffect(() => { importedProjectIdRef.current = importedProjectId; }, [importedProjectId]);
   useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+  // Listen for load-meeting-draft event dispatched from History page
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const draft = (e as CustomEvent).detail as { id: number; title: string; content: string | null };
+      if (!draft) return;
+      const text = draft.content || "";
+      setTranscript(text);
+      confirmedTranscriptRef.current = text;
+      sentenceMapRef.current.clear();
+      setStreamingPartial("");
+      // Parse title: "[草稿] 会议名称 · 日期"
+      const cleaned = draft.title.replace(/^\[草稿\]\s*/, "");
+      const parts = cleaned.split(" · ");
+      if (parts[0]) setMeetingTitle(parts[0]);
+      if (parts[1]) setMeetingDate(parts[1]);
+      setDraftId(draft.id);
+      toast.success("草稿已加载");
+    };
+    window.addEventListener("load-meeting-draft", handler);
+    return () => window.removeEventListener("load-meeting-draft", handler);
+  }, []);
 
   const uploadAudio = trpc.meeting.uploadAudio.useMutation();
   const transcribeMutation = trpc.meeting.transcribe.useMutation();

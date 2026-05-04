@@ -3433,6 +3433,21 @@ const meetingRouter = router({
         return { draftId: doc.id };
       }
     }),
+  // List all meeting drafts for the current user
+  listDrafts: protectedProcedure
+    .query(async ({ ctx }) => {
+      return db.listMeetingDraftsByUser(ctx.user.id);
+    }),
+  // Delete a meeting draft
+  deleteDraft: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const doc = await db.getDocumentById(input.id);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "草稿不存在" });
+      if (doc.createdBy !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "无权删除" });
+      await db.deleteDocument(input.id);
+      return { success: true };
+    }),
 });
 // ─── Admin ────────────────────────────────────────────────
 
