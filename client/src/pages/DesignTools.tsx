@@ -691,10 +691,7 @@ export default function DesignTools() {
           <div className="grid lg:grid-cols-5 gap-6">
         {/* ─── Input Panel ───────────────────────────────────────────── */}
         <Card className="lg:col-span-2 py-0 gap-0">
-          <CardHeader className="py-3 px-4 gap-0">
-            <CardTitle className="text-sm font-medium">生成参数</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-4 pb-4">
+          <CardContent className="space-y-3 px-4 py-4">
             {/* ── Base Image ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
@@ -1024,41 +1021,36 @@ export default function DesignTools() {
 
         {/* ─── Output Panel ────────────────────────────── */}
         <Card className="lg:col-span-3 py-0 gap-0">
-          <CardHeader className="py-3 px-4 gap-0">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">
-                {generatedImages.length > 0 ? "生成结果" : referencePreview ? "基础图片预览" : "工作区"}
-              </CardTitle>
-              {generatedImages.length > 1 && (
-                <div className="flex items-center gap-1 rounded-md border p-0.5">
-                  <button
-                    onClick={() => setCompareMode(false)}
-                    title="列表视图"
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                      !compareMode
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <LayoutList className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">列表</span>
-                  </button>
-                  <button
-                    onClick={() => setCompareMode(true)}
-                    title="并排对比"
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                      compareMode
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Columns2 className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">对比</span>
-                  </button>
-                </div>
-              )}
+          {generatedImages.length > 1 && (
+            <div className="flex items-center justify-end px-4 pt-3">
+              <div className="flex items-center gap-1 rounded-md border p-0.5">
+                <button
+                  onClick={() => setCompareMode(false)}
+                  title="列表视图"
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                    !compareMode
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">列表</span>
+                </button>
+                <button
+                  onClick={() => setCompareMode(true)}
+                  title="并排对比"
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                    compareMode
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Columns2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">对比</span>
+                </button>
+              </div>
             </div>
-          </CardHeader>
+          )}
           <CardContent>
             {generatedImages.length > 0 ? (
               <div className={compareMode ? "overflow-x-auto" : "space-y-4"}>
