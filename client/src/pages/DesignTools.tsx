@@ -684,12 +684,7 @@ export default function DesignTools() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="rendering" className="w-full">
-        <TabsList className="grid w-full grid-cols-1">
-          <TabsTrigger value="rendering">AI 效果图</TabsTrigger>
-        </TabsList>
-
-         <TabsContent value="rendering" className="space-y-6">
+       <div className="space-y-6">
           <div className="flex items-center justify-end">
             <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
           </div>
@@ -1497,8 +1492,7 @@ export default function DesignTools() {
           </CardContent>
         </Card>
         </div>
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* ─── Asset Picker Dialog ──────────────────────── */}
       <Dialog open={showAssetPicker} onOpenChange={setShowAssetPicker}>
