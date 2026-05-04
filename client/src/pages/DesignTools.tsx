@@ -690,11 +690,11 @@ export default function DesignTools() {
           </div>
           <div className="grid lg:grid-cols-5 gap-6">
         {/* ─── Input Panel ───────────────────────────────────────────── */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-1 pt-1.5 px-4">
+        <Card className="lg:col-span-2 py-0 gap-0">
+          <CardHeader className="py-3 px-4 gap-0">
             <CardTitle className="text-sm font-medium">生成参数</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 px-4 pb-4">
             {/* ── Base Image ── */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
@@ -1023,8 +1023,8 @@ export default function DesignTools() {
         </Card>
 
         {/* ─── Output Panel ────────────────────────────── */}
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-1 pt-1.5 px-4">
+        <Card className="lg:col-span-3 py-0 gap-0">
+          <CardHeader className="py-3 px-4 gap-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">
                 {generatedImages.length > 0 ? "生成结果" : referencePreview ? "基础图片预览" : "工作区"}
