@@ -439,17 +439,16 @@ export default function PresentationPage() {
   const canConvert = uploadedFiles.some(f => f.uploadedUrl) && !isGenerating;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">演示文稿</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {convertMode === "file"
-              ? "上传 PDF 或图片，AI 逐页分析布局，生成可编辑的 .pptx 文件"
-              : "输入演示内容，可选上传项目图片，AI 自动生成图文并茂的 PPT 文件"}
-          </p>
-        </div>
+    <div className="px-6 pb-6 pt-3 space-y-4">
+      {/* Tool selector row */}
+      <div className="flex items-center justify-end">
+        <AiToolSelector
+          capability="document"
+          value={selectedToolId}
+          onChange={setSelectedToolId}
+          label="AI 模型"
+          showBuiltIn={true}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -756,16 +755,6 @@ export default function PresentationPage() {
                 </div>
               )}
 
-              {/* AI Tool Selector */}
-              <div className="space-y-1.5">
-                <AiToolSelector
-                  capability="document"
-                  value={selectedToolId}
-                  onChange={setSelectedToolId}
-                  label="AI 模型"
-                  showBuiltIn={true}
-                />
-              </div>
 
               {/* Generate button */}
               <Button
