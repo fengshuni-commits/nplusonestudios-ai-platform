@@ -35,7 +35,6 @@ export default function MediaPortfolio() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold text-foreground">作品集</h1>
               <Badge variant="secondary" className="text-xs px-2 py-0.5 bg-amber-500/10 text-amber-600 border-amber-500/20">
                 开发中
               </Badge>

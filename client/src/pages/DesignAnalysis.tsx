@@ -300,8 +300,6 @@ export default function DesignAnalysis() {
     <div className="p-6 max-w-7xl mx-auto">
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-foreground">AI 分析图</h1>
-        <p className="text-sm text-muted-foreground mt-1">上传空间参考图，一键生成材质搭配图或软装搭配图</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">

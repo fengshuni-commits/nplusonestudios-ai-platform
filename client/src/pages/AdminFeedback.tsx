@@ -57,7 +57,6 @@ export default function AdminFeedback() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">反馈分析</h1>
           <p className="text-muted-foreground text-sm mt-1">
             各功能模块的用户满意度数据汇总与趋势分析
           </p>

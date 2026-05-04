@@ -1148,8 +1148,6 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">生成记录</h1>
-          <p className="text-sm text-muted-foreground mt-1">所有 AI 生成记录，按类别分组展示</p>
         </div>
         <div className="flex items-center gap-2">
           {isSelectMode ? (

@@ -1092,8 +1092,6 @@ export default function MediaLayout() {
           <LayoutTemplate className="w-4 h-4 text-primary" />
         </div>
         <div className="flex-1">
-          <h1 className="text-base font-semibold text-foreground">图文排版</h1>
-          <p className="text-xs text-muted-foreground">AI 生成整页图文排版，点击文字区域可局部重绘编辑</p>
         </div>
         <Button
           variant="ghost"

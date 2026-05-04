@@ -667,7 +667,6 @@ export default function Assets() {
       <div className="shrink-0 px-6 pt-5 pb-4 border-b border-border/40">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">素材库</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {totalNonFolder > 0 ? `共 ${totalNonFolder} 个素材` : "团队共享素材，按分类管理"}
             </p>

@@ -792,7 +792,6 @@ export default function ColorPlan() {
       <div className="px-6 pt-5 pb-4 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">AI 平面图</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               上传平面底图，标注功能分区，一键生成彩色平面图
             </p>

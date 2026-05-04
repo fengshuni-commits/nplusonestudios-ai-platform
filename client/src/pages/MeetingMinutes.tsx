@@ -470,8 +470,6 @@ export default function MeetingMinutes() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">会议纪要</h1>
-          <p className="text-sm text-muted-foreground mt-1">实时录音转录，或上传录音文件，AI 自动生成结构化会议纪要</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
           <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结" />

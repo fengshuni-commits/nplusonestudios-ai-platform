@@ -104,7 +104,6 @@ export default function AdminCaseSources() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">案例来源网站</h1>
           <p className="text-sm text-muted-foreground mt-1">
             管理对标调研 PPT 中案例照片的抓取来源，系统会从这些网站获取真实项目照片
           </p>

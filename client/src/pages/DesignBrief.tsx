@@ -7,8 +7,6 @@ export default function DesignBrief() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">设计任务书</h1>
-          <p className="text-sm text-muted-foreground mt-1">根据项目信息自动生成标准化设计任务书</p>
         </div>
         <Badge variant="secondary" className="text-xs">开发中</Badge>
       </div>
