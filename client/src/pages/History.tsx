@@ -51,6 +51,7 @@ import {
   Edit,
   ChevronLeft,
   ChevronRight,
+  Library,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -1106,10 +1107,21 @@ export default function HistoryPage() {
     },
     onError: (e) => toast.error(e.message || "导入失败"),
   });
-  const handleImport = useCallback((historyId: number) => {
+   const handleImport = useCallback((historyId: number) => {
     importMutation.mutate({ historyId });
   }, [importMutation]);
-
+  // Save layout pages to assets library
+  const [isSavingLayoutToAssets, setIsSavingLayoutToAssets] = useState(false);
+  const saveLayoutToAssetsMutation = trpc.graphicLayout.saveToAssets.useMutation({
+    onSuccess: (data) => {
+      toast.success(`已保存 ${data.savedCount} 张图片到素材库`);
+      setIsSavingLayoutToAssets(false);
+    },
+    onError: (e) => {
+      toast.error('保存失败：' + (e.message || '未知错误'));
+      setIsSavingLayoutToAssets(false);
+    },
+  });
   // Project association
   const { data: projectsData } = trpc.projects.list.useQuery({});
   const allProjects = Array.isArray(projectsData) ? projectsData : [];
@@ -1794,14 +1806,7 @@ export default function HistoryPage() {
                       )}
                       {/* Action buttons */}
                       <div className="flex flex-wrap gap-2 pt-1">
-                        {imgUrl && (
-                          <Button variant="outline" size="sm" className="h-8 text-xs"
-                            onClick={() => window.open(imgUrl, '_blank')}>
-                            <Download className="h-3.5 w-3.5 mr-1.5" />
-                            下载第 {layoutPageIndex + 1} 页
-                          </Button>
-                        )}
-                        {pages.length > 1 && (
+                        {pages.length > 0 && (
                           <Button variant="outline" size="sm" className="h-8 text-xs"
                             onClick={() => {
                               pages.forEach((_: any, i: number) => {
@@ -1812,7 +1817,22 @@ export default function HistoryPage() {
                               });
                             }}>
                             <Download className="h-3.5 w-3.5 mr-1.5" />
-                            下载全部 {pages.length} 页
+                            下载全部 {pages.length > 1 ? `${pages.length} 页` : ''}
+                          </Button>
+                        )}
+                        {layoutJobId && pages.length > 0 && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs"
+                            disabled={isSavingLayoutToAssets || saveLayoutToAssetsMutation.isPending}
+                            onClick={() => {
+                              setIsSavingLayoutToAssets(true);
+                              saveLayoutToAssetsMutation.mutate({ jobId: layoutJobId });
+                            }}>
+                            {isSavingLayoutToAssets || saveLayoutToAssetsMutation.isPending ? (
+                              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                            ) : (
+                              <Library className="h-3.5 w-3.5 mr-1.5" />
+                            )}
+                            保存到素材库
                           </Button>
                         )}
                         {layoutJobQuery.data?.contentText && (

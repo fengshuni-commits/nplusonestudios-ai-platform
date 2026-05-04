@@ -2418,3 +2418,7 @@
 - [x] graphicLayoutService.ts：每页收集 genResult.modelName，完成后写入 modelsUsed
 - [x] list/status 接口返回 modelsUsed 字段（list 和 getGraphicLayoutJobRaw 均已更新）
 - [x] 生成记录 UI 展示模型名 badge（支持多个）：MediaLayout.tsx 结果页头部 + History.tsx 详情面板均展示
+
+## 历史记录页图文排版面板按钮调整
+- [x] 去掉重复的下载按钮（保留「下载全部」，去掉单页下载）
+- [x] 添加「保存到素材库」按钮
