@@ -307,16 +307,12 @@ export default function DesignPlanning() {
   }, [report]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-        </div>
-        <div className="flex items-center gap-2">
-          <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
-        </div>
+    <div className="pb-6">
+      <div className="flex items-center justify-end mb-2">
+        <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
       </div>
 
-      <div className="mt-4">
+      <div>
           <div className="grid lg:grid-cols-5 gap-6">
             {/* Input Panel */}
             <Card className="lg:col-span-2 py-0 gap-0">

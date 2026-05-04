@@ -439,9 +439,9 @@ export default function PresentationPage() {
   const canConvert = uploadedFiles.some(f => f.uploadedUrl) && !isGenerating;
 
   return (
-    <div className="px-6 pb-6 pt-3 space-y-4">
+    <div className="pb-6 space-y-4">
       {/* Tool selector row */}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end mb-2">
         <AiToolSelector
           capability="document"
           value={selectedToolId}
