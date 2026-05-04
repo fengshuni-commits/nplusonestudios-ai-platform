@@ -541,9 +541,38 @@ router.get("/standards", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Graphic Layout REST API ────────────────────────────────
+// ─── Layout Packs REST API ─────────────────────────────────
+// GET /api/v1/layout-packs - 列出当前用户的所有版式包
+router.get("/layout-packs", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).apiUser;
+    if (!user) return res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+    const drizzleDb = await db.getDb();
+    if (!drizzleDb) return res.status(500).json({ error: "Database unavailable", code: "INTERNAL_ERROR" });
+    const { layoutPacks } = await import("../drizzle/schema");
+    const { eq: _eq, desc: _desc } = await import("drizzle-orm");
+    const packs = await drizzleDb
+      .select({
+        id: layoutPacks.id,
+        name: layoutPacks.name,
+        description: layoutPacks.description,
+        sourceType: layoutPacks.sourceType,
+        status: layoutPacks.status,
+        styleGuide: layoutPacks.styleGuide,
+        thumbnails: layoutPacks.thumbnails,
+        createdAt: layoutPacks.createdAt,
+      })
+      .from(layoutPacks)
+      .where(_eq(layoutPacks.userId, user.id))
+      .orderBy(_desc(layoutPacks.createdAt));
+    res.json({ data: packs, total: packs.length });
+  } catch (error) {
+    console.error("[API] layout-packs list error:", error);
+    res.status(500).json({ error: "Failed to list layout packs", code: "INTERNAL_ERROR" });
+  }
+});
 
-// POST /api/v1/graphic-layout/generate
+// ─── Graphic Layout REST API ────────────────────────────────
 router.post("/graphic-layout/generate", async (req: Request, res: Response) => {
   try {
     const user = (req as any).apiUser;

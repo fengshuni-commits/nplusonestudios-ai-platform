@@ -1098,6 +1098,94 @@ export function getOpenApiSpec(baseUrl: string) {
           },
         },
       },
+      "/layout-packs": {
+        get: {
+          summary: "获取版式包列表",
+          description: "返回当前 API Key 对应用户的所有版式包（layout packs）。版式包由用户在「图文排版」页面上传参考图片或 PDF 后由 AI 自动分析生成，可在调用图文排版接口时通过 `packId` 字段引用。只有 `status` 为 `done` 的版式包才可用于排版。",
+          operationId: "listLayoutPacks",
+          tags: ["图文排版"],
+          parameters: [],
+          responses: {
+            "200": {
+              description: "版式包列表",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "integer", description: "版式包 ID，可直接传入 /graphic-layout/generate 的 packId 字段" },
+                            name: { type: "string", description: "版式包名称" },
+                            description: { type: "string", nullable: true, description: "版式包描述" },
+                            sourceType: { type: "string", enum: ["pptx", "images", "pdf"], description: "来源文件类型" },
+                            status: {
+                              type: "string",
+                              enum: ["pending", "processing", "done", "failed"],
+                              description: "AI 分析状态：pending=等待分析、processing=分析中、done=可用、failed=失败",
+                            },
+                            styleGuide: {
+                              type: "object",
+                              nullable: true,
+                              description: "AI 提取的风格指南（包含配色、字体、风格关键词等）",
+                              properties: {
+                                colorPalette: {
+                                  type: "object",
+                                  properties: {
+                                    primary: { type: "string", description: "主色（如 #1a1a1a）" },
+                                    secondary: { type: "string" },
+                                    accent: { type: "string" },
+                                    background: { type: "string" },
+                                  },
+                                },
+                                styleKeywords: {
+                                  type: "array",
+                                  items: { type: "string" },
+                                  description: "风格关键词（如「极简主义」「工业风」）",
+                                },
+                              },
+                            },
+                            thumbnails: {
+                              type: "array",
+                              items: { type: "string" },
+                              nullable: true,
+                              description: "版式缩略图 URL 列表",
+                            },
+                            createdAt: { type: "string", format: "date-time", description: "创建时间" },
+                          },
+                        },
+                      },
+                      total: { type: "integer", description: "总数量" },
+                    },
+                  },
+                  example: {
+                    data: [
+                      {
+                        id: 5,
+                        name: "科技园区办公楼室内设计版式",
+                        description: null,
+                        sourceType: "images",
+                        status: "done",
+                        styleGuide: {
+                          colorPalette: { primary: "#1a1a1a", secondary: "#f5f5f5", accent: "#B87333", background: "#ffffff" },
+                          styleKeywords: ["极简主义", "工业风", "大量留白"],
+                        },
+                        thumbnails: ["https://cdn.example.com/thumb1.jpg"],
+                        createdAt: "2024-01-15T08:30:00.000Z",
+                      },
+                    ],
+                    total: 1,
+                  },
+                },
+              },
+            },
+            "401": { description: "API Key 无效或未提供", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
       "/graphic-layout/generate": {
         post: {
           summary: "提交图文排版生成任务",
