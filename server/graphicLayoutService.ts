@@ -6,7 +6,7 @@
 import * as db from "./db";
 import { invokeLLM, invokeLLMWithUserTool } from "./_core/llm";
 import { generateImageWithTool } from "./_core/generateImageWithTool";
-import { compositeTextOnImage } from "./compositeTextOnImage";
+// compositeTextOnImage is no longer used in generation — AI renders text directly in the image
 
 /**
  * Sanitize all pages in a job: fix duplicate/empty textBlock ids.
@@ -127,7 +127,7 @@ export async function generateGraphicLayoutAsync(
 - 最多 6 个文字块
 - 严格使用版式包中提取的配色方案，不得使用默认黑白配色
 - 排版结构应忠实还原参考版式的视觉层次和空间分布`;
-    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design layout for a Chinese architectural studio. Strictly follow the color scheme from the style guide. IMPORTANT: DO NOT render any text, characters, words, numbers, percentages, or typography anywhere in the image — all text will be composited separately as an overlay. Leave all designated text zones as clean, uncluttered background areas that blend naturally with the overall design. STRICTLY FORBIDDEN: technical drawings, engineering blueprints, dimension lines, annotation lines, percentage labels, measurement numbers, grid lines, cross-section diagrams, exploded views, CAD-style illustrations. This is a brand design layout, NOT a technical document. No watermarks, no placeholder rectangles, no solid color overlays in text areas. Background must flow seamlessly. Photorealistic quality.";
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design layout for a Chinese architectural design studio. Strictly follow the color scheme from the style guide. RENDER ALL TEXT CONTENT exactly as specified in the text layout — use clean, legible Chinese typography with correct font sizes and colors. STRICTLY FORBIDDEN: technical drawings, engineering blueprints, dimension lines, annotation lines, grid lines, cross-section diagrams, exploded views, CAD-style illustrations, watermarks. This is a brand design layout, NOT a technical document. Photorealistic quality, visually cohesive full-page composition."
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
@@ -284,16 +284,16 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           ? [...packRefImageObjects, ...assetImageObjects]
           : undefined;
 
-        // Build text layout description for composition guidance ONLY.
-        // CRITICAL: DO NOT render any text in the image — text is overlaid by server-side canvas (compositeTextOnImage).
-        // Only describe position/size so AI leaves clean background space for text overlay.
+        // Build text layout description so AI renders text at the correct positions.
+        // AI is responsible for rendering all text content directly in the image.
         const textDescriptions = textBlocks.map((b: any) => {
           const left = Math.round(b.x / imgW * 100);
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          return `${b.role} zone (at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — leave this area as clean background, DO NOT render any text or characters here`;
-        }).join("; ");
+          const fontSizePct = Math.round(b.fontSize / imgH * 100 * 10) / 10;
+          return `[${b.role}] RENDER TEXT: "${b.text}" — position: ${left}% from left, ${top}% from top, ${w}% wide, ${h}% tall, font-size ~${fontSizePct}% of page height, color: ${b.color}, align: ${b.align}`;
+        }).join("\n");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
         const assetDesc = (packReferenceImages.length > 0 || pageAssets.length > 0)
@@ -321,7 +321,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         const userDescPrefix = job.contentText.match(/(背景|配色|风格|色调|#[0-9a-fA-F]{6})/)
           ? `USER REQUIREMENT (HIGHEST PRIORITY, OVERRIDES STYLE REFERENCE): ${job.contentText}. `
           : "";
-        const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. Text layout: ${textDescriptions}. ${styleHintEn} Background color: ${bgColor}. ${imageGenStyleSuffix}`;
+        const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. ${styleHintEn} Background color: ${bgColor}.\n\nTEXT TO RENDER IN IMAGE (render each text block at the specified position with correct Chinese typography):\n${textDescriptions}\n\n${imageGenStyleSuffix}`;
 
         // Step 2: Image generation with retry on timeout
         const genResult = await withRetryOnTimeout(
@@ -337,26 +337,12 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
 
         const pageImageUrl = genResult.url ?? "";
 
-        // Step 3: Composite text onto the background image (for API callers who don't have the HTML overlay)
-        let compositeImageUrl: string | null = null;
-        if (pageImageUrl && textBlocks.length > 0) {
-          try {
-            compositeImageUrl = await compositeTextOnImage({
-              backgroundImageUrl: pageImageUrl,
-              textBlocks,
-              imageWidth: imgW,
-              imageHeight: imgH,
-              outputKeyPrefix: `graphic-layout/composite-job${jobId}-p${pageIdx}`,
-            });
-          } catch (compErr) {
-            console.warn(`[GraphicLayout] Job ${jobId} page ${pageIdx + 1} composite failed (non-fatal):`, compErr);
-          }
-        }
-
+        // AI renders text directly — no canvas composite step needed.
+        // compositeImageUrl is set equal to imageUrl so existing frontend/export code works unchanged.
         generatedPages.push({
           pageIndex: pageIdx,
           imageUrl: pageImageUrl,
-          compositeImageUrl: compositeImageUrl ?? undefined,
+          compositeImageUrl: pageImageUrl || undefined,
           backgroundColor: bgColor,
           textBlocks: textBlocks,
           imageSize: { width: imgW, height: imgH },

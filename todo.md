@@ -2399,3 +2399,10 @@
 - [x] 前端新增「保存提示词」按钮（绿色，位于「提取提示词」左侧）
 - [x] 版式包标题旁显示「已保存」绿色徽章（当该版式包有 savedStylePrompt 时）
 - [x] 点击版式包卡片时，若有 savedStylePrompt 则自动加载到提示词输入框并 toast 提示
+
+## 图文排版重构：AI直接渲染文字 + Inpainting编辑
+- [x] graphicLayoutService.ts：修改 imageGenStyleSuffix prompt，改为主动要求 AI 渲染所有文字到指定位置
+- [x] graphicLayoutService.ts：取消 canvas 合成步骤（compositeTextOnImage），compositeImageUrl 直接等于 imageUrl
+- [x] routers.ts inpaintTextBlock：更新 inpainting prompt，要求 AI 在遗罩区域重新渲染指定文案，保持周边设计不变
+- [x] 前端 MediaLayout.tsx：保留透明热区点击机制，移除对 compositeImageUrl 的特殊处理（直接用 imageUrl）
+- [x] 前端 MediaLayout.tsx：编辑弹窗标题改为「 AI 重绘文字」，添加重绘时间说明（需 5–15 秒）

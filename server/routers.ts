@@ -6025,56 +6025,49 @@ const graphicLayoutRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "生成标注图失败" });
       }
 
-      // 构建 inpainting prompt（与彩平图局部修改保持一致的指令格式）
-      const inpaintPrompt = `[INPAINTING INSTRUCTION: The image has a red-highlighted area marking the region to modify. ONLY modify the content within the red-marked area. Keep all other areas exactly unchanged.] Replace the text in the red-highlighted region with: "${input.newText}". Keep the same font style, size (approximately ${block.fontSize}px), color (${block.color}), alignment (${block.align}), and background. Only change the text content, preserve everything else exactly.`;
+      // Build inpainting prompt: ask AI to replace only the red-highlighted text area
+      const inpaintPrompt = [
+        `[INPAINTING INSTRUCTION] The image has a red-highlighted region marking the exact area to modify.`,
+        `ONLY redraw the content inside the red-highlighted region. Keep EVERYTHING outside it pixel-perfect unchanged.`,
+        `In the red region: render the following Chinese text with clean, legible typography:`,
+        `Text: "${input.newText}"`,
+        `Font size: approximately ${block.fontSize}px, color: ${block.color}, alignment: ${block.align}.`,
+        `Match the surrounding design language, background color, and visual style exactly.`,
+        `Do NOT add any extra elements, decorations, or text outside the red region.`,
+      ].join(" ");
 
-      // 调用图像 API 进行 inpainting（传入红色标注合成图）
+      // Call image API for inpainting (pass red-annotated composite image)
       const result = await generateImageWithTool({
         prompt: inpaintPrompt,
         originalImages: [
           { b64Json: compositeB64, mimeType: compositeMimeType },
         ],
-        size: `${imgW}x${imgH}`,
+        size: `${actualWidth}x${actualHeight}`,
         toolId: resolvedImageToolId,
       });
 
       const newImageUrl = result.url ?? "";
       if (!newImageUrl) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Inpainting 返回空图片" });
 
-      // Update textBlocks with new text, keep imageUrl (raw background) unchanged,
-      // update compositeImageUrl to the new inpainted result (which already has all text rendered).
+      // Update textBlocks with new text content
       const updatedTextBlocks = (page.textBlocks ?? []).map((b: any) =>
         b.id === input.blockId ? { ...b, text: input.newText } : b
       );
 
-      // Re-composite the new inpainted image with remaining text blocks using server-side canvas
-      // to ensure Chinese text accuracy for all blocks.
-      let newCompositeImageUrl: string | undefined = newImageUrl;
-      try {
-        const { compositeTextOnImage } = await import("./compositeTextOnImage");
-        const recomposite = await compositeTextOnImage({
-          backgroundImageUrl: page.imageUrl ?? newImageUrl,
-          textBlocks: updatedTextBlocks,
-          imageWidth: actualWidth,
-          imageHeight: actualHeight,
-          outputKeyPrefix: `graphic-layout/composite-job${input.jobId}-p${input.pageIndex}`,
-        });
-        if (recomposite) newCompositeImageUrl = recomposite;
-      } catch (compositeErr) {
-        console.warn("[inpaintTextBlock] Re-composite failed, using inpainted image directly:", compositeErr);
-      }
-
+      // AI inpainting produces the final image directly — no canvas re-composite needed.
+      // Both imageUrl and compositeImageUrl are updated to the new inpainted result.
+      // This new image becomes the base for any future inpainting on this page.
       const updatedPages = pages.map((p: any) => {
         if (p.pageIndex !== input.pageIndex) return p;
         return {
           ...p,
-          // imageUrl stays as the raw background (no text) — used as base for future inpainting
-          compositeImageUrl: newCompositeImageUrl,
+          imageUrl: newImageUrl,          // update base image for future inpainting
+          compositeImageUrl: newImageUrl, // display image = inpainted result
           textBlocks: updatedTextBlocks,
         };
       });
       await drizzleDb.update(graphicLayoutJobs).set({ pages: updatedPages }).where(_eq(graphicLayoutJobs.id, input.jobId));
-      return { success: true, newImageUrl: newCompositeImageUrl ?? newImageUrl, actualWidth, actualHeight };
+      return { success: true, newImageUrl, actualWidth, actualHeight };
     }),
 
   // ─── 导出 PDF ──────────────────────────────────────────────────────────────

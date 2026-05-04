@@ -1964,7 +1964,7 @@ export default function MediaLayout() {
           <DialogHeader>
             <DialogTitle className="text-base flex items-center gap-2">
               <Pencil className="w-4 h-4 text-primary" />
-              编辑文字
+              AI 重绘文字
             </DialogTitle>
           </DialogHeader>
           {editingBlock && (
@@ -1973,7 +1973,7 @@ export default function MediaLayout() {
                 <Badge variant="outline" className="text-[10px] capitalize">
                   {editingBlock.role}
                 </Badge>
-                <span className="text-[11px] text-muted-foreground">原文字：{editingBlock.text}</span>
+                <span className="text-[11px] text-muted-foreground truncate max-w-[200px]" title={editingBlock.text}>原文字：{editingBlock.text}</span>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">新文案</Label>
@@ -1985,9 +1985,9 @@ export default function MediaLayout() {
                   autoFocus
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                AI 将对该文字区域进行局部重绘，保持周围图像不变，仅更新文字内容。
-              </p>
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
+                <span className="font-medium text-foreground/70">AI 局部重绘</span>：AI 将在标记区域内重新渲染指定文字，保持周围设计不变。重绘通常需要 5–15 秒。
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => { setEditingBlock(null); setNewText(""); }}
                   className="flex-1">
