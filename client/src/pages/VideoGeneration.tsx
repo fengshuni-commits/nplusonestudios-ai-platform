@@ -302,7 +302,7 @@ export default function VideoGeneration() {
   };
 
   return (
-    <div className="px-6 pb-6 pt-3 space-y-4">
+    <div className="pb-6 space-y-4">
       <div className="flex items-center justify-end mb-2">
         <AiToolSelector capability="video" value={selectedToolId} onChange={(toolId) => setSelectedToolId(toolId)} label="AI 工具" showBuiltIn={false} />
       </div>

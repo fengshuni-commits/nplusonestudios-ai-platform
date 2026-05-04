@@ -789,7 +789,7 @@ export default function ColorPlan() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-3">
+      <div>
         <div className="flex items-center justify-end mb-2">
           <AiToolSelector
             capability="rendering"

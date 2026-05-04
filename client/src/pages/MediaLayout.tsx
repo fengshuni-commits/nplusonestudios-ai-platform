@@ -1186,7 +1186,7 @@ export default function MediaLayout() {
       </Dialog>
 
       {/* Tool selectors row */}
-      <div className="flex items-center justify-end px-6 pt-3 mb-2">
+      <div className="flex items-center justify-end mb-2">
         <div className="flex items-center gap-2">
           <AiToolSelector
             capability="layout_plan"
