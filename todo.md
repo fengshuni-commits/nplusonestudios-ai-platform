@@ -2352,3 +2352,15 @@
 - [x] 「已学习版式包」标签：只显示 layout_pack 分类，选中后直接调用 styleGuide（原有逻辑）
 - [x] 「从素材库学习」标签：显示所有素材，选中后触发 createPackMutation AI 学习流程
 - [x] 后端新增 assets.listAll 接口（返回所有非文件夹素材，最多 300 条）
+
+## Bug：图文排版生成图片中非标题文字重复/重叠
+- [ ] 查找文字重复/重叠的根本原因（排版数据 vs 渲染逻辑）
+- [ ] 修复重复和重叠问题
+
+## Bug 修复：图文排版文字重叠（AI 图已含文字 + canvas 二次合成）
+- [x] 确认根本原因：image prompt 要求 AI 渲染文字，canvas 又二次叠加，造成双重文字
+- [ ] 修改 graphicLayoutService.ts：取消 canvas 合成，直接用 AI 生成图作为 compositeImageUrl
+
+## Bug 修复：图文排版文字重叠（方案1）
+- [x] 修改 graphicLayoutService.ts image prompt：去掉 RENDER text 指令，改为留白区域
+- [x] 更新数据库存储的 image_generation prompt，明确禁止 AI 渲染任何文字

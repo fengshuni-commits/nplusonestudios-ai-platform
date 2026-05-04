@@ -116,7 +116,7 @@ export async function generateGraphicLayoutAsync(
 - 最多 6 个文字块
 - 严格使用版式包中提取的配色方案，不得使用默认黑白配色
 - 排版结构应忠实还原参考版式的视觉层次和空间分布`;
-    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. Render ALL specified text blocks with correct Chinese characters at the exact positions and sizes specified. Text must be crisp, legible, and correctly positioned. No watermarks, no extra text beyond what is specified, no gray bars, no placeholder rectangles. Photorealistic quality.";
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. IMPORTANT: DO NOT render any text, characters, or typography in the image — all text will be overlaid separately. Leave the designated text zones as clean, uncluttered background areas. No watermarks, no text of any kind, no gray bars, no placeholder rectangles. Photorealistic quality.";
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
@@ -269,19 +269,15 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
           ? pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }))
           : undefined;
 
-        // Build text layout description WITH text content for composition guidance.
-        // Including the actual text helps AI understand the semantic weight and leave appropriate visual space.
-        // CRITICAL: DO NOT render any text in the image — text is rendered as HTML overlay in the frontend.
+        // Build text layout description for composition guidance ONLY.
+        // CRITICAL: DO NOT render any text in the image — text is overlaid by server-side canvas (compositeTextOnImage).
+        // Only describe position/size so AI leaves clean background space for text overlay.
         const textDescriptions = textBlocks.map((b: any) => {
           const left = Math.round(b.x / imgW * 100);
           const top = Math.round(b.y / imgH * 100);
           const w = Math.round(b.width / imgW * 100);
           const h = Math.round(b.height / imgH * 100);
-          // Include text content so AI renders it correctly in the image.
-          // The compositeImageUrl (server-side canvas render) is the fallback for Chinese accuracy,
-          // but we want the AI image to contain all text for visual completeness.
-          const textHint = b.text ? ` [text: "${b.text}"]` : "";
-          return `${b.role} zone${textHint} (${b.fontSize}px, ${b.color ?? "#fff"}, ${b.align ?? "left"}-aligned, at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — RENDER this text clearly and legibly in the correct position, correct Chinese characters, correct font size, correct color`;
+          return `${b.role} zone (at ${left}% left ${top}% top, ${w}% wide ${h}% tall) — leave this area as clean background, DO NOT render any text or characters here`;
         }).join("; ");
 
         const byTypeDesc = getByTypeDescription(selectedGroup);
