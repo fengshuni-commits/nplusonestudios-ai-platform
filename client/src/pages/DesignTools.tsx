@@ -683,15 +683,15 @@ export default function DesignTools() {
   })();
 
   return (
-    <div className="space-y-3">
-       <div className="space-y-3">
+    <div className="space-y-1">
+       <div className="space-y-1">
           <div className="flex items-center justify-end">
             <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
           </div>
           <div className="grid lg:grid-cols-5 gap-6">
         {/* ─── Input Panel ───────────────────────────────────────────── */}
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-2 pt-3 px-4">
+          <CardHeader className="pb-1 pt-1.5 px-4">
             <CardTitle className="text-sm font-medium">生成参数</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1024,7 +1024,7 @@ export default function DesignTools() {
 
         {/* ─── Output Panel ────────────────────────────── */}
         <Card className="lg:col-span-3">
-          <CardHeader className="pb-2 pt-3 px-4">
+          <CardHeader className="pb-1 pt-1.5 px-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">
                 {generatedImages.length > 0 ? "生成结果" : referencePreview ? "基础图片预览" : "工作区"}
