@@ -1185,6 +1185,25 @@ export default function MediaLayout() {
         </DialogContent>
       </Dialog>
 
+      {/* Tool selectors row */}
+      <div className="flex items-center justify-end px-4 py-2 shrink-0 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <AiToolSelector
+            capability="layout_plan"
+            value={planToolId}
+            onChange={(id) => setPlanToolId(id ?? undefined)}
+            label="排版规划模型"
+            showBuiltIn={true}
+          />
+          <AiToolSelector
+            capability="rendering"
+            value={imageToolId}
+            onChange={(id) => setImageToolId(id ?? undefined)}
+            label="图像生成工具"
+            showBuiltIn={true}
+          />
+        </div>
+      </div>
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel */}
         <div className="w-72 border-r border-border flex flex-col overflow-y-auto shrink-0 bg-background">
@@ -1541,24 +1560,7 @@ export default function MediaLayout() {
           </div>
         </div>
         {/* Center Panel: Preview */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* Tool selectors - top right */}
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-            <AiToolSelector
-              capability="layout_plan"
-              value={planToolId}
-              onChange={(id) => setPlanToolId(id ?? undefined)}
-              label="排版规划模型"
-              showBuiltIn={true}
-            />
-            <AiToolSelector
-              capability="rendering"
-              value={imageToolId}
-              onChange={(id) => setImageToolId(id ?? undefined)}
-              label="图像生成工具"
-              showBuiltIn={true}
-            />
-          </div>
+        <div className="flex-1 flex flex-col overflow-hidden">
           {!activeJobId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
               <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
