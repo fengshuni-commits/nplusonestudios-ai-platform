@@ -2442,3 +2442,6 @@
 ## 全局 UI 优化：模块标题移入 header
 - [x] DashboardLayout：侧边栏展开时顶部显示 logo，header 左侧改为显示当前模块名称
 - [x] 批量删除各页面内容区顶部的 h1 模块标题（已移入 header 显示）
+
+## Header 模块简介
+- [ ] 在 header 模块名称旁加一行小字简介，替代原内容区描述文字

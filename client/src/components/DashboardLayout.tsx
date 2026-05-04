@@ -56,6 +56,7 @@ type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   path: string;
+  description?: string;
 };
 
 type MenuSection = {
@@ -74,9 +75,9 @@ const menuSections: MenuSection[] = [
     label: "项目管理",
     icon: ClipboardList,
     items: [
-      { icon: FolderKanban, label: "项目看板", path: "/projects" },
-      { icon: FileText, label: "会议纪要", path: "/meeting" },
-      { icon: FileText, label: "设计任务书", path: "/design/brief" },
+      { icon: FolderKanban, label: "项目看板", path: "/projects", description: "管理所有设计与施工项目" },
+      { icon: FileText, label: "会议纪要", path: "/meeting", description: "录音转录，AI 自动生成结构化纪要" },
+      { icon: FileText, label: "设计任务书", path: "/design/brief", description: "根据项目信息自动生成标准化任务书" },
     ],
   },
   {
@@ -84,12 +85,12 @@ const menuSections: MenuSection[] = [
     label: "设计",
     icon: PenTool,
     items: [
-      { icon: Compass, label: "案例调研", path: "/design/planning" },
-      { icon: Ruler, label: "AI效果图", path: "/design/tools" },
-      { icon: Layers, label: "AI分析图", path: "/design/analysis" },
-      { icon: Film, label: "AI视频", path: "/design/video" },
-      { icon: Palette, label: "AI平面图", path: "/design/color-plan" },
-      { icon: Presentation, label: "演示文稿", path: "/design/presentation" },
+      { icon: Compass, label: "案例调研", path: "/design/planning", description: "AI 生成对标案例分析报告" },
+      { icon: Ruler, label: "AI效果图", path: "/design/tools", description: "AI 渲染与草图生成，支持图生图迭代" },
+      { icon: Layers, label: "AI分析图", path: "/design/analysis", description: "上传参考图，一键生成材质或软装搭配图" },
+      { icon: Film, label: "AI视频", path: "/design/video", description: "AI 生成建筑空间漫游视频" },
+      { icon: Palette, label: "AI平面图", path: "/design/color-plan", description: "平面图上色与空间色彩方案生成" },
+      { icon: Presentation, label: "演示文稿", path: "/design/presentation", description: "AI 生成项目汇报演示文稿" },
     ],
   },
   {
@@ -97,8 +98,8 @@ const menuSections: MenuSection[] = [
     label: "营建",
     icon: Building2,
     items: [
-      { icon: HardHat, label: "施工管理", path: "/construction/docs" },
-      { icon: ShoppingCart, label: "采购跟踪", path: "/construction/procurement" },
+      { icon: HardHat, label: "施工管理", path: "/construction/docs", description: "施工图纸文档管理" },
+      { icon: ShoppingCart, label: "采购跟踪", path: "/construction/procurement", description: "材料采购进度与费用跟踪" },
     ],
   },
   {
@@ -106,11 +107,11 @@ const menuSections: MenuSection[] = [
     label: "品牌",
     icon: Megaphone,
     items: [
-      { icon: BookMarked, label: "小红书", path: "/media/xiaohongshu" },
-      { icon: MessageCircle, label: "公众号", path: "/media/wechat" },
-      { icon: Camera, label: "Instagram", path: "/media/instagram" },
-      { icon: LayoutTemplate, label: "图文排版", path: "/media/layout" },
-      { icon: BookImage, label: "作品集", path: "/media/portfolio" },
+      { icon: BookMarked, label: "小红书", path: "/media/xiaohongshu", description: "AI 生成小红书图文内容" },
+      { icon: MessageCircle, label: "公众号", path: "/media/wechat", description: "AI 生成微信公众号文章" },
+      { icon: Camera, label: "Instagram", path: "/media/instagram", description: "AI 生成 Instagram 帖子与文案" },
+      { icon: LayoutTemplate, label: "图文排版", path: "/media/layout", description: "AI 生成整页图文排版，支持局部重绘" },
+      { icon: BookImage, label: "作品集", path: "/media/portfolio", description: "项目作品集整理与展示" },
     ],
   },
   {
@@ -119,15 +120,15 @@ const menuSections: MenuSection[] = [
     icon: Settings,
     adminOnly: true,
     items: [
-      { icon: BookOpen, label: "出品标准", path: "/standards" },
-      { icon: Image, label: "素材库", path: "/assets" },
-      { icon: Webhook, label: "API 与 Webhook", path: "/integrations" },
-      { icon: Workflow, label: "工作流", path: "/workflows" },
-      { icon: Users, label: "团队管理", path: "/admin/team" },
-      { icon: Key, label: "AI 工具管理", path: "/admin/ai-tools" },
-      { icon: Globe, label: "案例来源", path: "/admin/case-sources" },
-      { icon: BarChart3, label: "反馈分析", path: "/admin/feedback" },
-      { icon: Activity, label: "调用统计", path: "/admin/ai-stats" },
+      { icon: BookOpen, label: "出品标准", path: "/standards", description: "管理 AI 渲染风格库与版式标准" },
+      { icon: Image, label: "素材库", path: "/assets", description: "团队共享素材，按分类管理" },
+      { icon: Webhook, label: "API 与 Webhook", path: "/integrations", description: "外部系统集成与事件推送" },
+      { icon: Workflow, label: "工作流", path: "/workflows", description: "自动化工作流配置" },
+      { icon: Users, label: "团队管理", path: "/admin/team", description: "成员审批与权限管理" },
+      { icon: Key, label: "AI 工具管理", path: "/admin/ai-tools", description: "配置 AI 工具 API Key" },
+      { icon: Globe, label: "案例来源", path: "/admin/case-sources", description: "管理案例调研抓取来源网站" },
+      { icon: BarChart3, label: "反馈分析", path: "/admin/feedback", description: "各模块满意度统计与趋势" },
+      { icon: Activity, label: "调用统计", path: "/admin/ai-stats", description: "AI 工具调用量与费用统计" },
     ],
   },
   {
@@ -135,7 +136,7 @@ const menuSections: MenuSection[] = [
     label: "历史",
     icon: History,
     items: [
-      { icon: History, label: "生成记录", path: "/history" },
+      { icon: History, label: "生成记录", path: "/history", description: "所有 AI 生成记录，按类别分组展示" },
     ],
   },
 ];
@@ -480,14 +481,24 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
-        <header className="h-12 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
-          <div className="flex items-center">
+        <header className="h-14 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
+          <div className="flex items-center gap-3">
             {activeMenuItem ? (
-              <span className="text-base font-semibold text-foreground tracking-tight">
-                {activeMenuItem.label}
-              </span>
+              <div className="flex flex-col justify-center">
+                <span className="text-sm font-semibold text-foreground tracking-tight leading-tight">
+                  {activeMenuItem.label}
+                </span>
+                {activeMenuItem.description && (
+                  <span className="text-xs text-muted-foreground leading-tight mt-0.5">
+                    {activeMenuItem.description}
+                  </span>
+                )}
+              </div>
             ) : location === "/" ? (
-              <span className="text-base font-semibold text-foreground tracking-tight">工作台</span>
+              <div className="flex flex-col justify-center">
+                <span className="text-sm font-semibold text-foreground tracking-tight leading-tight">工作台</span>
+                <span className="text-xs text-muted-foreground leading-tight mt-0.5">N+1 STUDIOS AI 工作平台</span>
+              </div>
             ) : null}
           </div>
           <button
