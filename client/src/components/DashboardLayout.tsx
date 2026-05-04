@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { ToolBarProvider, useToolBar } from "@/contexts/ToolBarContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -204,23 +203,7 @@ export default function DashboardLayout({
     );
   }
 
-  return (
-    <ToolBarProvider>
-      <IconSidebarLayout>{children}</IconSidebarLayout>
-    </ToolBarProvider>
-  );
-}
-
-/* ─── ToolBar Slot ───────────────────────────────────── */
-
-function ToolBarSlot() {
-  const { toolBar } = useToolBar();
-  if (!toolBar) return null;
-  return (
-    <div className="h-9 border-b border-border flex items-center justify-end px-5 shrink-0 gap-3 bg-muted/30">
-      {toolBar}
-    </div>
-  );
+  return <IconSidebarLayout>{children}</IconSidebarLayout>;
 }
 
 /* ─── Icon Sidebar Layout ─────────────────────────────── */
@@ -531,8 +514,6 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
           </button>
         </header>
 
-        {/* Tool Bar (injected by pages via useSetToolBar) */}
-        <ToolBarSlot />
         {/* Page Content */}
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
