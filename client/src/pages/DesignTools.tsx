@@ -22,10 +22,18 @@ import { useSearch } from "wouter";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Link2, Link2Off } from "lucide-react";
-
+import { useToolBar } from "@/contexts/ToolBarContext";
 
 export default function DesignTools() {
+  const { setToolBar } = useToolBar();
   const [toolId, setToolId] = useState<number | undefined>(undefined);
+  // Inject AI tool selector into the DashboardLayout toolbar
+  useEffect(() => {
+    setToolBar(
+      <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
+    );
+    return () => setToolBar(null);
+  }, [toolId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [prompt, setPrompt] = useState("");
   const [styleId, setStyleId] = useState<number | undefined>(undefined);
   const [aspectRatio, setAspectRatio] = useState("auto");
@@ -691,11 +699,7 @@ export default function DesignTools() {
         </TabsList>
 
         <TabsContent value="rendering" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-            </div>
-            <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
-          </div>
+
 
           <div className="grid lg:grid-cols-5 gap-6">
         {/* ─── Input Panel ─────────────────────────────── */}

@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { ToolBarProvider, useToolBar } from "@/contexts/ToolBarContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -203,7 +204,23 @@ export default function DashboardLayout({
     );
   }
 
-  return <IconSidebarLayout>{children}</IconSidebarLayout>;
+  return (
+    <ToolBarProvider>
+      <IconSidebarLayout>{children}</IconSidebarLayout>
+    </ToolBarProvider>
+  );
+}
+
+/* ─── ToolBar Slot ───────────────────────────────────── */
+
+function ToolBarSlot() {
+  const { toolBar } = useToolBar();
+  if (!toolBar) return null;
+  return (
+    <div className="h-9 border-b border-border flex items-center justify-end px-5 shrink-0 gap-3 bg-muted/30">
+      {toolBar}
+    </div>
+  );
 }
 
 /* ─── Icon Sidebar Layout ─────────────────────────────── */
@@ -481,23 +498,27 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
-        <header className="h-14 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
-          <div className="flex items-center gap-3">
+        <header className="h-10 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
+          <div className="flex items-center gap-2">
             {activeMenuItem ? (
-              <div className="flex flex-col justify-center">
-                <span className="text-sm font-semibold text-foreground tracking-tight leading-tight">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-foreground tracking-tight">
                   {activeMenuItem.label}
                 </span>
                 {activeMenuItem.description && (
-                  <span className="text-xs text-muted-foreground leading-tight mt-0.5">
-                    {activeMenuItem.description}
-                  </span>
+                  <>
+                    <span className="text-xs text-muted-foreground/40">|</span>
+                    <span className="text-xs text-muted-foreground">
+                      {activeMenuItem.description}
+                    </span>
+                  </>
                 )}
               </div>
             ) : location === "/" ? (
-              <div className="flex flex-col justify-center">
-                <span className="text-sm font-semibold text-foreground tracking-tight leading-tight">工作台</span>
-                <span className="text-xs text-muted-foreground leading-tight mt-0.5">N+1 STUDIOS AI 工作平台</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-foreground tracking-tight">工作台</span>
+                <span className="text-xs text-muted-foreground/40">|</span>
+                <span className="text-xs text-muted-foreground">N+1 STUDIOS AI 工作平台</span>
               </div>
             ) : null}
           </div>
@@ -510,6 +531,8 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
           </button>
         </header>
 
+        {/* Tool Bar (injected by pages via useSetToolBar) */}
+        <ToolBarSlot />
         {/* Page Content */}
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
