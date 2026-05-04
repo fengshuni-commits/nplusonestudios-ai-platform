@@ -15,12 +15,10 @@ import {
   LayoutTemplate, Upload, Sparkles, Loader2, Trash2, RefreshCw,
   Plus, ChevronLeft, ChevronRight, Check, Palette,
   BookOpen, Layers, Maximize2, FolderOpen, Pencil, FileDown, Images, HelpCircle,
-  Link2, Library, RotateCcw, Eye, ChevronDown, ChevronUp, Folder,
+  Link2, Library, RotateCcw,
   Search, ImageIcon, X
 } from "lucide-react";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -271,7 +269,7 @@ function StylePackCard({
       onClick={pack.status === "done" ? onSelect : undefined}
       className={`relative rounded-xl border-2 transition-all group ${
         pack.status === "done" ? "cursor-pointer" : "cursor-default opacity-70"
-      } ${selected ? "border-[#B87333] bg-[#B87333]/5" : "border-white/10 bg-white/3 hover:border-white/20"}`}
+      } ${selected ? "border-primary bg-primary/5" : "border-border bg-muted/30 hover:border-border/80"}`}
     >
       {sg?.colorPalette && (
         <div className="flex h-1.5 rounded-t-xl overflow-hidden">
@@ -283,12 +281,12 @@ function StylePackCard({
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-white truncate">{pack.name}</p>
-            <p className="text-xs text-white/40 mt-0.5">{pack.sourceType === "pdf" ? "PDF" : "图片"}</p>
+            <p className="text-sm font-medium text-foreground truncate">{pack.name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{pack.sourceType === "pdf" ? "PDF" : "图片"}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {(pack.status === "processing" || pack.status === "pending") && (
-              <Loader2 className="w-3.5 h-3.5 text-[#B87333] animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
             )}
             {pack.status === "failed" && (
               <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onRetry(); }}
@@ -296,9 +294,9 @@ function StylePackCard({
                 <RefreshCw className="w-3.5 h-3.5" />
               </div>
             )}
-            {pack.status === "done" && selected && <Check className="w-3.5 h-3.5 text-[#B87333]" />}
+            {pack.status === "done" && selected && <Check className="w-3.5 h-3.5 text-primary" />}
             <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="p-1 rounded text-white/30 hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
               <Trash2 className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -306,7 +304,7 @@ function StylePackCard({
         {sg && (
           <div className="mt-2 flex flex-wrap gap-1">
             {sg.styleKeywords.slice(0, 3).map((kw) => (
-              <span key={kw} className="text-[10px] px-1.5 py-0.5 rounded bg-white/8 text-white/50">{kw}</span>
+              <span key={kw} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{kw}</span>
             ))}
           </div>
         )}
@@ -388,7 +386,7 @@ function PageImageViewer({
             title={`点击编辑：${block.text}`}
             className={`absolute group cursor-pointer transition-all ${
               isInpainting
-                ? "ring-2 ring-[#B87333] animate-pulse bg-[#B87333]/10"
+                ? "ring-2 ring-primary animate-pulse bg-primary/10"
                 : "hover:ring-2 hover:ring-white/50 hover:bg-white/5"
             } rounded`}
             style={{ left, top, width, height }}
@@ -396,7 +394,7 @@ function PageImageViewer({
             {/* 加载中图标 */}
             {isInpainting && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="w-4 h-4 text-[#B87333] animate-spin" />
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
               </div>
             )}
 
@@ -404,7 +402,7 @@ function PageImageViewer({
             {!isInpainting && (
               <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                 <div
-                  className="w-4 h-4 rounded-full bg-[#B87333] flex items-center justify-center"
+                  className="w-4 h-4 rounded-full bg-primary flex items-center justify-center"
                   title="编辑文字"
                 >
                   <Pencil className="w-2 h-2 text-white" />
@@ -426,7 +424,7 @@ function PageImageViewer({
 
             {/* 角色标签（悬停时显示） */}
             {!isInpainting && (
-              <div className="absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-black/70 text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+              <div className="absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-foreground/80 text-background whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                 {block.role} · {block.text.slice(0, 20)}{block.text.length > 20 ? "…" : ""}
               </div>
             )}
@@ -970,21 +968,21 @@ export default function MediaLayout() {
   const [showHelp, setShowHelp] = useState(false);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#0F0F0F]">
+    <div className="flex flex-col h-full overflow-hidden bg-background">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-white/8 flex items-center gap-3 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-[#B87333]/20 flex items-center justify-center">
-          <LayoutTemplate className="w-4 h-4 text-[#B87333]" />
+      <div className="px-6 py-4 border-b border-border flex items-center gap-3 shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <LayoutTemplate className="w-4 h-4 text-primary" />
         </div>
         <div className="flex-1">
-          <h1 className="text-base font-semibold text-white">图文排版</h1>
-          <p className="text-xs text-white/40">AI 生成整页图文排版，点击文字区域可局部重绘编辑</p>
+          <h1 className="text-base font-semibold text-foreground">图文排版</h1>
+          <p className="text-xs text-muted-foreground">AI 生成整页图文排版，点击文字区域可局部重绘编辑</p>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setShowHelp(true)}
-          className="h-8 w-8 p-0 text-white/30 hover:text-white/70 hover:bg-white/8 rounded-lg"
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-lg"
           title="使用说明"
         >
           <HelpCircle className="w-4.5 h-4.5" />
@@ -993,18 +991,18 @@ export default function MediaLayout() {
 
       {/* Help Dialog */}
       <Dialog open={showHelp} onOpenChange={setShowHelp}>
-        <DialogContent className="max-w-2xl bg-[#1A1A1A] border-white/10 text-white max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-white text-lg font-semibold flex items-center gap-2">
-              <HelpCircle className="w-5 h-5 text-[#B87333]" />
+            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+              <HelpCircle className="w-5 h-5 text-primary" />
               图文排版——使用说明
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-6 text-sm text-white/80 pb-2">
+          <div className="space-y-6 text-sm text-muted-foreground pb-2">
 
             {/* Overview */}
-            <div className="bg-[#B87333]/10 border border-[#B87333]/20 rounded-lg p-4">
-              <p className="text-white/90 leading-relaxed">
+            <div className="bg-primary/8 border border-primary/20 rounded-lg p-4">
+              <p className="text-foreground leading-relaxed">
                 图文排版模块可以根据你提供的文字内容和素材图片，自动生成具有专业排版的整页图片——文字、色块、图形、照片全部融入同一张图片中。适用于生成品牌手册、项目图板、商品详情页等多种场景。
               </p>
             </div>
@@ -1012,10 +1010,10 @@ export default function MediaLayout() {
             {/* Step 1 */}
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">1</span>
-                <h3 className="font-semibold text-white">选择或创建版式包</h3>
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold shrink-0">1</span>
+                <h3 className="font-semibold text-foreground">选择或创建版式包</h3>
               </div>
-              <div className="ml-7 space-y-1.5 text-white/70">
+              <div className="ml-7 space-y-1.5 text-muted-foreground">
                 <p>左侧「版式包」区域存放你的版式风格库。点击「新建版式包」可以上传参考图片，让 AI 学习其排版风格、配色和字体特征。</p>
                 <p>支持上传多张图片或整个文件夹，上传后 AI 会自动提取风格指南（包含配色、字体、排版特征）。</p>
                 <p>已创建的版式包可在不同生成任务中复用。</p>
@@ -1025,26 +1023,26 @@ export default function MediaLayout() {
             {/* Step 2 */}
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">2</span>
-                <h3 className="font-semibold text-white">填写内容与设置</h3>
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold shrink-0">2</span>
+                <h3 className="font-semibold text-foreground">填写内容与设置</h3>
               </div>
-              <div className="ml-7 space-y-1.5 text-white/70">
-                <p><span className="text-white/90">文档类型：</span>可选择品牌手册、项目图板、商品详情页或自定义，不同类型会影响 AI 的排版逻辑和内容组织方式。</p>
-                <p><span className="text-white/90">页面数量：</span>支持 1–8 页，多页时 AI 会自动规划每页的内容分配。</p>
-                <p><span className="text-white/90">图幅比例：</span>3:4（竞屏展示）、A4（文档打印）、16:9（宽屏展示）等多种选项，导出 PDF 时页面尺寸会自动匹配。</p>
-                <p><span className="text-white/90">内容描述：</span>详细描述你希望展示的主题、关键信息和风格假设。内容越具体，生成质量越高。</p>
-                <p><span className="text-white/90">素材图片：</span>可选择上传你希望融入排版的实景照片或产品图片， AI 会将其嵌入到合适的版面位置。</p>
+              <div className="ml-7 space-y-1.5 text-muted-foreground">
+                <p><span className="text-foreground">文档类型：</span>可选择品牌手册、项目图板、商品详情页或自定义，不同类型会影响 AI 的排版逻辑和内容组织方式。</p>
+                <p><span className="text-foreground">页面数量：</span>支持 1–8 页，多页时 AI 会自动规划每页的内容分配。</p>
+                <p><span className="text-foreground">图幅比例：</span>3:4（竞屏展示）、A4（文档打印）、16:9（宽屏展示）等多种选项，导出 PDF 时页面尺寸会自动匹配。</p>
+                <p><span className="text-foreground">内容描述：</span>详细描述你希望展示的主题、关键信息和风格假设。内容越具体，生成质量越高。</p>
+                <p><span className="text-foreground">素材图片：</span>可选择上传你希望融入排版的实景照片或产品图片， AI 会将其嵌入到合适的版面位置。</p>
               </div>
             </div>
 
             {/* Step 3 */}
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">3</span>
-                <h3 className="font-semibold text-white">生成与预览</h3>
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold shrink-0">3</span>
+                <h3 className="font-semibold text-foreground">生成与预览</h3>
               </div>
-              <div className="ml-7 space-y-1.5 text-white/70">
-                <p>点击「生成排版」后， AI 会先规划每页的文字块布局，再逐页生成整页图片。多页文档会逐页完成，右侧预览区会实时更新。</p>
+              <div className="ml-7 space-y-1.5 text-muted-foreground">
+                <p>点击「生成排版」后， AI 会先规划每页的文字块布局，再逐页生成整页图片。多页文档会逐页完成，预览区会实时更新。</p>
                 <p>预览区可用左右箭头按鈕切换页面，也可点击左侧缩略图快速跳转。</p>
               </div>
             </div>
@@ -1052,32 +1050,32 @@ export default function MediaLayout() {
             {/* Step 4 */}
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">4</span>
-                <h3 className="font-semibold text-white">局部重绘修改文案</h3>
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold shrink-0">4</span>
+                <h3 className="font-semibold text-foreground">局部重绘修改文案</h3>
               </div>
-              <div className="ml-7 space-y-1.5 text-white/70">
+              <div className="ml-7 space-y-1.5 text-muted-foreground">
                 <p>生成完成后，预览区会在图片上叠加透明文字热区。将鼠标悬停在文字区域时，会显示文字内容和编辑图标。</p>
                 <p>点击文字区域后，在弹出的编辑框中输入新文案，点击「重绘」。AI 会以局部重绘（Inpainting）的方式，仅替换该文字区域的内容，保留其余画面不变。</p>
-                <p className="text-white/50 text-xs">提示：重绘需要 10–30 秒，请耐心等待。如果效果不理想，可再次点击重绘。</p>
+                <p className="text-muted-foreground/60 text-xs">提示：重绘需要 10–30 秒，请耐心等待。如果效果不理想，可再次点击重绘。</p>
               </div>
             </div>
 
             {/* Step 5 */}
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-[#B87333] text-white text-xs flex items-center justify-center font-bold shrink-0">5</span>
-                <h3 className="font-semibold text-white">导出与下载</h3>
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold shrink-0">5</span>
+                <h3 className="font-semibold text-foreground">导出与下载</h3>
               </div>
-              <div className="ml-7 space-y-1.5 text-white/70">
-                <p><span className="text-white/90">导出图片：</span>将所有页面打包为 ZIP 文件下载，图片按 page-01、page-02 依次命名，适合展示和分享。</p>
-                <p><span className="text-white/90">导出 PDF：</span>将所有页面合并为一个 PDF 文件，页面尺寸自动匹配所选图幅比例，适合打印和正式提交。</p>
+              <div className="ml-7 space-y-1.5 text-muted-foreground">
+                <p><span className="text-foreground">导出图片：</span>将所有页面打包为 ZIP 文件下载，图片按 page-01、page-02 依次命名，适合展示和分享。</p>
+                <p><span className="text-foreground">导出 PDF：</span>将所有页面合并为一个 PDF 文件，页面尺寸自动匹配所选图幅比例，适合打印和正式提交。</p>
               </div>
             </div>
 
             {/* Tips */}
-            <div className="border-t border-white/8 pt-4">
-              <h3 className="font-semibold text-white mb-2">使用建议</h3>
-              <div className="space-y-1.5 text-white/60">
+            <div className="border-t border-border pt-4">
+              <h3 className="font-semibold text-foreground mb-2">使用建议</h3>
+              <div className="space-y-1.5 text-muted-foreground">
                 <p>• 版式包的参考图越多、风格越统一，AI 学习效果越好，建议上传 5–10 张同一风格的参考图。</p>
                 <p>• 内容描述中建议包含：主题、核心信息点（标题/副标题/正文）、希望的调性或氛围。</p>
                 <p>• 如果生成结果不理想，可修改内容描述后重新生成，每次生成都会保存在历史记录中。</p>
@@ -1091,21 +1089,21 @@ export default function MediaLayout() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel */}
-        <div className="w-72 border-r border-white/8 flex flex-col overflow-y-auto shrink-0">
+        <div className="w-72 border-r border-border flex flex-col overflow-y-auto shrink-0 bg-background">
           {/* Style Packs */}
-          <div className="p-4 border-b border-white/8">
+          <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <Palette className="w-3.5 h-3.5 text-[#B87333]" />
-                <span className="text-xs font-medium text-white/70">版式包</span>
+                <Palette className="w-3.5 h-3.5 text-primary" />
+                <span className="text-xs font-medium text-muted-foreground">版式包</span>
               </div>
               <div className="flex items-center gap-2">
                 <div role="button" tabIndex={0} onClick={() => setShowPackUpload(true)}
-                  className="flex items-center gap-1 text-[10px] text-[#B87333] hover:text-[#D4956B] cursor-pointer">
+                  className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 cursor-pointer">
                   <Plus className="w-3 h-3" />图片学习
                 </div>
                 <div role="button" tabIndex={0} onClick={() => setLibraryPackPickerOpen(true)}
-                  className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 cursor-pointer">
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer">
                   <Library className="w-3 h-3" />版式包库
                 </div>
               </div>
@@ -1113,13 +1111,13 @@ export default function MediaLayout() {
             <div
               onClick={() => setSelectedPackId(undefined)}
               className={`mb-2 px-3 py-2 rounded-lg border cursor-pointer text-xs transition-all ${
-                !selectedPackId ? "border-[#B87333]/60 bg-[#B87333]/8 text-white" : "border-white/8 text-white/40 hover:border-white/15"
+                !selectedPackId ? "border-primary/60 bg-primary/8 text-foreground" : "border-border text-muted-foreground hover:border-border/80"
               }`}
             >
               默认风格（不使用版式包）
             </div>
             {(stylePacks as StylePack[]).length === 0 ? (
-              <p className="text-[11px] text-white/30 text-center py-2">暂无版式包，上传参考文件开始学习</p>
+              <p className="text-[11px] text-muted-foreground/60 text-center py-2">暂无版式包，上传参考文件开始学习</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {(stylePacks as StylePack[]).map((pack) => (
@@ -1132,9 +1130,9 @@ export default function MediaLayout() {
             )}
 
             {/* 风格提示词提取区域 */}
-            <div className="mt-4 pt-4 border-t border-white/8">
+            <div className="mt-4 pt-4 border-t border-border">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-white/70">风格提示词</span>
+                <span className="text-xs font-medium text-muted-foreground">风格提示词</span>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1152,7 +1150,7 @@ export default function MediaLayout() {
                     extractPromptMutation.mutate({ packId: selectedPackId });
                   }}
                   disabled={extractingPrompt || !selectedPackId}
-                  className="h-7 text-[10px] border-[#B87333]/40 text-[#B87333] hover:bg-[#B87333]/10"
+                  className="h-7 text-[10px] border-primary/40 text-primary hover:bg-primary/10"
                 >
                   {extractingPrompt ? (
                     <>
@@ -1170,10 +1168,10 @@ export default function MediaLayout() {
               <Textarea
                 value={stylePrompt}
                 onChange={(e) => setStylePrompt(e.target.value)}
-                placeholder="点击“提取提示词”按钮从选中的版式包中提取风格描述，或直接输入你的风格要求。提示词会直接传给图像模型，指导生成风格。"
-                className="min-h-[100px] text-xs bg-black/20 border-white/8 text-white/90 placeholder:text-white/30 resize-none"
+                placeholder="点击“提取提示词”按鈕从选中的版式包中提取风格描述，或直接输入你的风格要求。提示词会直接传给图像模型，指导生成风格。"
+                className="min-h-[100px] text-xs resize-none"
               />
-              <p className="text-[10px] text-white/40 mt-1.5">
+              <p className="text-[10px] text-muted-foreground/70 mt-1.5">
                 提示：提取后可以编辑提示词，或直接输入你的风格要求。如果你在下方的内容描述中包含配色/版式要求，会自动覆盖这里的提示词。
               </p>
             </div>
@@ -1183,12 +1181,12 @@ export default function MediaLayout() {
           <div className="p-4 flex flex-col gap-4">
             {/* Doc type */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">文档类型</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">文档类型</Label>
               <div className="grid grid-cols-2 gap-1.5">
                 {DOC_TYPES.map(({ value, label, icon: Icon }) => (
                   <div key={value} onClick={() => setDocType(value)}
                     className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border cursor-pointer text-xs transition-all ${
-                      docType === value ? "border-[#B87333]/60 bg-[#B87333]/8 text-white" : "border-white/8 text-white/40 hover:border-white/15"
+                      docType === value ? "border-primary/60 bg-primary/8 text-foreground" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
                     }`}>
                     <Icon className="w-3 h-3 shrink-0" />{label}
                   </div>
@@ -1198,7 +1196,7 @@ export default function MediaLayout() {
 
             {/* Aspect ratio */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1.5">
                 <Maximize2 className="w-3 h-3" />图幅
               </Label>
               <div className="grid grid-cols-4 gap-1">
@@ -1206,7 +1204,7 @@ export default function MediaLayout() {
                   <div key={value} onClick={() => setAspectRatio(value)}
                     title={desc}
                     className={`flex flex-col items-center justify-center px-1 py-1.5 rounded-lg border cursor-pointer text-[10px] transition-all ${
-                      aspectRatio === value ? "border-[#B87333]/60 bg-[#B87333]/8 text-white" : "border-white/8 text-white/40 hover:border-white/15"
+                      aspectRatio === value ? "border-primary/60 bg-primary/8 text-foreground" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
                     }`}>
                     <span className="font-medium">{label}</span>
                   </div>
@@ -1216,31 +1214,31 @@ export default function MediaLayout() {
 
             {/* Page count */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 flex items-center justify-between">
-                <span>页数</span><span className="text-white font-medium">{pageCount} 页</span>
+              <Label className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
+                <span>页数</span><span className="text-foreground font-medium">{pageCount} 页</span>
               </Label>
               <Slider min={1} max={10} step={1} value={[pageCount]} onValueChange={([v]) => setPageCount(v)} className="w-full" />
             </div>
 
             {/* Title */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">标题（可选）</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">标题（可选）</Label>
               <Input value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
                 placeholder="如：N+1 STUDIOS 品牌手册"
-                className="bg-white/5 border-white/10 text-white text-sm h-8" />
+                className="text-sm h-8" />
             </div>
 
             {/* Content */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">内容描述</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">内容描述</Label>
               <Textarea value={contentText} onChange={(e) => setContentText(e.target.value)}
                 placeholder="描述你想生成的图文内容，例如：N+1 STUDIOS 是一家专注于科技制造业办公空间设计的建筑事务所，团队6人..."
-                className="bg-white/5 border-white/10 text-white text-sm min-h-[100px] resize-none" />
+                className="text-sm min-h-[100px] resize-none" />
             </div>
 
             {/* Asset images - 双模式素材图上传 */}
             <div>
-              <Label className="text-xs text-white/50 mb-2 block">素材图（可选）</Label>
+              <Label className="text-xs text-muted-foreground mb-2 block">素材图（可选）</Label>
               {/* 模式切换 */}
               <div className="flex gap-1 mb-3">
                 <button
@@ -1248,8 +1246,8 @@ export default function MediaLayout() {
                   onClick={() => setAssetMode("per_page")}
                   className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
                     assetMode === "per_page"
-                      ? "bg-[#B87333]/20 text-[#B87333] border border-[#B87333]/30"
-                      : "bg-white/5 text-white/40 border border-white/8 hover:text-white/60"
+                      ? "bg-primary/15 text-primary border border-primary/30"
+                      : "bg-muted text-muted-foreground border border-border hover:text-foreground"
                   }`}
                 >按页上传</button>
                 <button
@@ -1257,8 +1255,8 @@ export default function MediaLayout() {
                   onClick={() => setAssetMode("by_type")}
                   className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
                     assetMode === "by_type"
-                      ? "bg-[#B87333]/20 text-[#B87333] border border-[#B87333]/30"
-                      : "bg-white/5 text-white/40 border border-white/8 hover:text-white/60"
+                      ? "bg-primary/15 text-primary border border-primary/30"
+                      : "bg-muted text-muted-foreground border border-border hover:text-foreground"
                   }`}
                 >按类型文件夹</button>
               </div>
@@ -1275,13 +1273,13 @@ export default function MediaLayout() {
                         onClick={() => setAssetPageTab(i)}
                         className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
                           assetPageTab === i
-                            ? "bg-white/15 text-white"
-                            : "bg-white/5 text-white/40 hover:text-white/60"
+                            ? "bg-secondary text-secondary-foreground"
+                            : "bg-muted text-muted-foreground hover:text-foreground"
                         }`}
                       >
                         第{i + 1}页
                         {(perPageAssets[i]?.length ?? 0) > 0 && (
-                          <span className="ml-1 text-[#B87333]">({perPageAssets[i].length})</span>
+                          <span className="ml-1 text-primary">({perPageAssets[i].length})</span>
                         )}
                       </button>
                     ))}
@@ -1307,23 +1305,23 @@ export default function MediaLayout() {
                       <div
                         role="button" tabIndex={0}
                         onClick={() => assetInputRef.current?.click()}
-                        className="w-12 h-12 rounded border border-dashed border-white/15 flex items-center justify-center cursor-pointer hover:border-white/30 transition-colors"
+                        className="w-12 h-12 rounded border border-dashed border-border flex items-center justify-center cursor-pointer hover:border-border/80 transition-colors"
                         title="添加素材图（最多 5 张）"
                       >
                         {uploadingAsset ? (
                           <div className="flex flex-col items-center gap-0.5">
-                            <Loader2 className="w-3 h-3 text-white/40 animate-spin" />
-                            {uploadProgress > 0 && <span className="text-[8px] text-white/30">{uploadProgress}%</span>}
+                            <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
+                            {uploadProgress > 0 && <span className="text-[8px] text-muted-foreground">{uploadProgress}%</span>}
                           </div>
-                        ) : <Plus className="w-3 h-3 text-white/30" />}
+                        ) : <Plus className="w-3 h-3 text-muted-foreground" />}
                       </div>
                     )}
                   </div>
-                  <p className="text-[10px] text-white/25 mt-1.5">每页最多 5 张，AI 会将该页素材融入排版</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1.5">每页最多 5 张，AI 会将该页素材融入排版</p>
                   <button
                     type="button"
                     onClick={() => { setAssetPickerMode("per_page"); setAssetPickerOpen(true); }}
-                    className="mt-1.5 w-full py-1.5 rounded-md border border-dashed border-white/15 text-[10px] text-white/40 hover:text-white/60 hover:border-white/25 transition-colors flex items-center justify-center gap-1"
+                    className="mt-1.5 w-full py-1.5 rounded-md border border-dashed border-border text-[10px] text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors flex items-center justify-center gap-1"
                   >
                     <Library className="w-3 h-3" />从素材库选择
                   </button>
@@ -1337,15 +1335,15 @@ export default function MediaLayout() {
                 <div className="space-y-2">
                   {/* 已添加的类型组 */}
                   {Object.entries(byTypeGroups).map(([typeName, urls]) => (
-                    <div key={typeName} className="bg-white/4 rounded-lg p-2">
+                    <div key={typeName} className="bg-muted rounded-lg p-2">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs text-white/70 font-medium">{typeName}</span>
+                        <span className="text-xs text-foreground font-medium">{typeName}</span>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-white/30">{urls.length} 张</span>
+                          <span className="text-[10px] text-muted-foreground">{urls.length} 张</span>
                           <button
                             type="button"
                             onClick={() => setByTypeGroups((prev) => { const n = { ...prev }; delete n[typeName]; return n; })}
-                            className="text-white/20 hover:text-white/50 transition-colors"
+                            className="text-muted-foreground hover:text-destructive transition-colors"
                           ><Trash2 className="w-3 h-3" /></button>
                         </div>
                       </div>
@@ -1363,7 +1361,7 @@ export default function MediaLayout() {
                             ><Trash2 className="w-2.5 h-2.5 text-white" /></div>
                           </div>
                         ))}
-                        {urls.length > 6 && <span className="text-[10px] text-white/30 self-center">+{urls.length - 6}</span>}
+                        {urls.length > 6 && <span className="text-[10px] text-muted-foreground self-center">+{urls.length - 6}</span>}
                       </div>
                     </div>
                   ))}
@@ -1371,7 +1369,7 @@ export default function MediaLayout() {
                   <button
                     type="button"
                     onClick={() => assetFolderRef.current?.click()}
-                    className="w-full py-2 rounded-lg border border-dashed border-white/15 text-xs text-white/40 hover:text-white/60 hover:border-white/25 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors flex items-center justify-center gap-1.5"
                   >
                     {uploadingAsset ? (
                       <><Loader2 className="w-3 h-3 animate-spin" />上传中 {uploadProgress > 0 ? `${uploadProgress}%` : ""}</>
@@ -1386,24 +1384,24 @@ export default function MediaLayout() {
                       placeholder="类型名称（如：室内实景）"
                       value={newTypeName}
                       onChange={(e) => setNewTypeName(e.target.value)}
-                      className="flex-1 bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-white placeholder-white/25 outline-none focus:border-white/20"
+                      className="flex-1 bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground placeholder-muted-foreground outline-none focus:border-ring"
                     />
                     <button
                       type="button"
                       disabled={!newTypeName.trim() || uploadingAsset}
                       onClick={() => byTypeFileRef.current?.click()}
-                      className="px-2 py-1 bg-white/8 rounded-md text-xs text-white/50 hover:text-white/70 disabled:opacity-30 transition-colors"
+                      className="px-2 py-1 bg-muted rounded-md text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
                     ><Upload className="w-3 h-3" /></button>
                   </div>
                   {/* 从素材库选择（按类型） */}
                   <button
                     type="button"
                     onClick={() => { setAssetPickerMode("by_type"); setAssetPickerOpen(true); }}
-                    className="w-full py-2 rounded-lg border border-dashed border-white/15 text-xs text-white/40 hover:text-white/60 hover:border-white/25 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <Library className="w-3 h-3" />从素材库选择图片
                   </button>
-                  <p className="text-[10px] text-white/25">上传文件夹时自动按文件夹名分组，AI 会根据每页主题选择合适的素材</p>
+                  <p className="text-[10px] text-muted-foreground/60">上传文件夹时自动按文件夹名分组，AI 会根据每页主题选择合适的素材</p>
                   <input ref={assetFolderRef} type="file" accept="image/*" multiple className="hidden"
                     // @ts-ignore
                     webkitdirectory="" directory=""
@@ -1416,7 +1414,7 @@ export default function MediaLayout() {
 
             {/* Layout Plan LLM Selector */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">排版规划模型</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">排版规划模型</Label>
               <AiToolSelector
                 capability="layout_plan"
                 value={planToolId}
@@ -1428,7 +1426,7 @@ export default function MediaLayout() {
 
             {/* AI Tool Selector */}
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">图像生成工具</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">图像生成工具</Label>
               <AiToolSelector
                 capability="rendering"
                 value={imageToolId}
@@ -1439,7 +1437,7 @@ export default function MediaLayout() {
             </div>
 
             <Button onClick={handleGenerate} disabled={generating || !contentText.trim()}
-              className="w-full bg-[#B87333] hover:bg-[#D4956B] text-white font-medium">
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium">
               {generating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />生成中...</> : <><Sparkles className="w-4 h-4 mr-2" />生成排版</>}
             </Button>
           </div>
@@ -1449,47 +1447,47 @@ export default function MediaLayout() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {!activeJobId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
-              <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-                <LayoutTemplate className="w-8 h-8 text-white/20" />
+              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+                <LayoutTemplate className="w-8 h-8 text-muted-foreground/40" />
               </div>
               <div>
-                <p className="text-white/40 text-sm">在左侧配置内容后点击「生成排版」</p>
-                <p className="text-white/20 text-xs mt-1">生成后可点击图片中的文字区域进行局部重绘编辑</p>
+                <p className="text-muted-foreground text-sm">在左侧配置内容后点击「生成排版」</p>
+                <p className="text-muted-foreground/60 text-xs mt-1">生成后可点击图片中的文字区域进行局部重绘编辑</p>
               </div>
             </div>
           ) : !activeJob ? (
             <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="w-6 h-6 text-[#B87333] animate-spin" />
+              <Loader2 className="w-6 h-6 text-primary animate-spin" />
             </div>
           ) : activeJob.status === "processing" || activeJob.status === "pending" ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-4">
-              <Loader2 className="w-8 h-8 text-[#B87333] animate-spin" />
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
               <div className="text-center">
-                <p className="text-white/60 text-sm">AI 正在生成图文排版...</p>
-                <p className="text-white/30 text-xs mt-1">每页约需 15-30 秒，请耐心等待</p>
+                <p className="text-muted-foreground text-sm">AI 正在生成图文排版...</p>
+                <p className="text-muted-foreground/60 text-xs mt-1">每页约需 15-30 秒，请耐心等待</p>
               </div>
             </div>
           ) : activeJob.status === "failed" ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <p className="text-red-400 text-sm">生成失败</p>
-              <p className="text-white/30 text-xs">{activeJob.errorMessage}</p>
+              <p className="text-destructive text-sm">生成失败</p>
+              <p className="text-muted-foreground text-xs">{activeJob.errorMessage}</p>
             </div>
           ) : pages.length === 0 ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-white/30 text-sm">暂无页面数据</p>
+              <p className="text-muted-foreground text-sm">暂无页面数据</p>
             </div>
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Page nav */}
-              <div className="px-6 py-3 border-b border-white/8 flex items-center justify-between shrink-0">
+              <div className="px-6 py-3 border-b border-border flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-white/60">{activeJob.title || DOC_TYPES.find(d => d.value === activeJob.docType)?.label}</span>
-                  <Badge variant="outline" className="text-[10px] border-white/15 text-white/40">{pages.length} 页</Badge>
+                  <span className="text-sm text-foreground">{activeJob.title || DOC_TYPES.find(d => d.value === activeJob.docType)?.label}</span>
+                  <Badge variant="outline" className="text-[10px]">{pages.length} 页</Badge>
                   {activeAspectRatio && (
-                    <Badge variant="outline" className="text-[10px] border-white/10 text-white/30">{activeAspectRatio}</Badge>
+                    <Badge variant="outline" className="text-[10px]">{activeAspectRatio}</Badge>
                   )}
                   {currentPageData?.textBlocks && currentPageData.textBlocks.length > 0 && (
-                    <Badge variant="outline" className="text-[10px] border-[#B87333]/30 text-[#B87333]/60">
+                    <Badge variant="outline" className="text-[10px] border-primary/30 text-primary/70">
                       <Pencil className="w-2.5 h-2.5 mr-1" />悬停文字可编辑
                     </Badge>
                   )}
@@ -1507,7 +1505,7 @@ export default function MediaLayout() {
                     size="sm"
                     onClick={handleExportImages}
                     disabled={exportingImages}
-                    className="h-7 px-2.5 border-white/15 text-white/60 bg-transparent hover:bg-white/8 hover:text-white text-xs"
+                    className="h-7 px-2.5 text-xs"
                   >
                     {exportingImages ? (
                       <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />导出中...</>
@@ -1521,7 +1519,7 @@ export default function MediaLayout() {
                     size="sm"
                     onClick={handleExportPdf}
                     disabled={exportingPdf}
-                    className="h-7 px-2.5 border-white/15 text-white/60 bg-transparent hover:bg-white/8 hover:text-white text-xs"
+                    className="h-7 px-2.5 text-xs"
                   >
                     {exportingPdf ? (
                       <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />导出中...</>
@@ -1530,12 +1528,12 @@ export default function MediaLayout() {
                     )}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                    disabled={currentPage === 0} className="h-7 w-7 p-0 text-white/40">
+                    disabled={currentPage === 0} className="h-7 w-7 p-0 text-muted-foreground">
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
-                  <span className="text-xs text-white/40">{currentPage + 1} / {pages.length}</span>
+                  <span className="text-xs text-muted-foreground">{currentPage + 1} / {pages.length}</span>
                   <Button variant="ghost" size="sm" onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}
-                    disabled={currentPage === pages.length - 1} className="h-7 w-7 p-0 text-white/40">
+                    disabled={currentPage === pages.length - 1} className="h-7 w-7 p-0 text-muted-foreground">
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
@@ -1565,13 +1563,13 @@ export default function MediaLayout() {
               </div>
 
               {/* Page strip */}
-              <div className="px-6 py-3 border-t border-white/8 flex gap-2 overflow-x-auto shrink-0">
+              <div className="px-6 py-3 border-t border-border flex gap-2 overflow-x-auto shrink-0">
                 {pages.map((page, i) => {
                   const thumbRatio = RATIO_CSS[activeAspectRatio] || "3/4";
                   return (
                     <div key={i} onClick={() => setCurrentPage(i)}
                       className={`relative shrink-0 rounded overflow-hidden cursor-pointer border-2 transition-all ${
-                        i === currentPage ? "border-[#B87333]" : "border-transparent hover:border-white/20"
+                        i === currentPage ? "border-primary" : "border-transparent hover:border-border"
                       }`}
                       style={{ width: "56px", aspectRatio: thumbRatio }}>
                       {(page.compositeImageUrl ?? page.imageUrl) ? (
@@ -1579,7 +1577,7 @@ export default function MediaLayout() {
                       ) : (
                         <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
                       )}
-                      <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-1 rounded">{page.pageIndex + 1}</div>
+                      <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-foreground/60 text-background px-1 rounded">{page.pageIndex + 1}</div>
                     </div>
                   );
                 })}
@@ -1588,258 +1586,49 @@ export default function MediaLayout() {
           )}
         </div>
 
-        {/* Right Panel: History */}
-        <div className="w-64 border-l border-white/8 flex flex-col overflow-hidden shrink-0">
-          <div className="px-4 py-3 border-b border-white/8 shrink-0">
-            <span className="text-xs font-medium text-white/50">历史记录</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-            {(jobs as LayoutJob[]).length === 0 ? (
-              <p className="text-[11px] text-white/25 text-center py-4">暂无记录</p>
-            ) : (
-              (jobs as LayoutJob[]).map((job) => {
-                const isExpanded = selectedHistoryJobId === job.id;
-                const isActive = activeJobId === job.id;
-                const jobPages = (job.pages ?? []) as PageData[];
-                const firstPageThumb = jobPages[0]?.imageUrl;
-                return (
-                  <div key={job.id} className={`rounded-lg border transition-all ${
-                    isActive ? "border-[#B87333]/50" : "border-white/8"
-                  }`}>
-                    {/* 卡片头部 */}
-                    <div
-                      onClick={() => {
-                        setActiveJobId(job.id);
-                        setCurrentPage(0);
-                        setSelectedHistoryJobId(isExpanded ? undefined : job.id);
-                      }}
-                      className={`group p-2.5 cursor-pointer transition-all ${
-                        isActive ? "bg-[#B87333]/5" : "hover:bg-white/3"
-                      } rounded-t-lg ${!isExpanded ? "rounded-b-lg" : ""}`}
-                    >
-                      <div className="flex items-start justify-between gap-1">
-                        {/* 缩略图 */}
-                        {firstPageThumb && (
-                          <div className="w-8 h-10 rounded overflow-hidden shrink-0 mr-1.5">
-                            <img src={firstPageThumb} alt="" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          {renamingJobId === job.id ? (
-                            <input
-                              autoFocus
-                              value={renameInput}
-                              onChange={(e) => setRenameInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") updateJobMutation.mutate({ id: job.id, title: renameInput.trim() || undefined });
-                                if (e.key === "Escape") { setRenamingJobId(undefined); setRenameInput(""); }
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-full text-xs bg-white/10 border border-white/20 rounded px-1.5 py-0.5 text-white outline-none"
-                            />
-                          ) : (
-                            <p className="text-xs text-white/70 truncate">
-                              {job.title || DOC_TYPES.find(d => d.value === job.docType)?.label || "排版"}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {job.status === "done" ? (
-                              <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500/20 text-emerald-400 border-0">完成</Badge>
-                            ) : job.status === "failed" ? (
-                              <Badge className="text-[9px] px-1.5 py-0 bg-red-500/20 text-red-400 border-0">失败</Badge>
-                            ) : (
-                              <Badge className="text-[9px] px-1.5 py-0 bg-[#B87333]/20 text-[#B87333] border-0">生成中</Badge>
-                            )}
-                            <span className="text-[9px] text-white/25">
-                              {new Date(job.createdAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          {isExpanded
-                            ? <ChevronUp className="w-3 h-3 text-white/30" />
-                            : <ChevronDown className="w-3 h-3 text-white/20 opacity-0 group-hover:opacity-100" />
-                          }
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 展开的详情面板 */}
-                    {isExpanded && (
-                      <div className="border-t border-white/8 p-2.5 flex flex-col gap-2">
-                        {/* 页面缩略图列表 */}
-                        {jobPages.length > 0 && (
-                          <div className="flex gap-1 flex-wrap">
-                            {jobPages.map((page) => (
-                              <div key={page.pageIndex} className="relative w-10 rounded overflow-hidden" style={{ aspectRatio: RATIO_CSS[job.aspectRatio || "3:4"] || "3/4" }}>
-                                {(page.compositeImageUrl ?? page.imageUrl) ? (
-                                  <img src={page.compositeImageUrl ?? page.imageUrl} alt="" className="w-full h-full object-fill" />
-                                ) : (
-                                  <div className="w-full h-full bg-white/5" />
-                                )}
-                                <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-white/60 px-0.5 rounded">{page.pageIndex + 1}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* 参数信息 */}
-                        <div className="text-[10px] text-white/35 space-y-0.5">
-                          {job.aspectRatio && <div>图幅：{job.aspectRatio}</div>}
-                          {job.pageCount && <div>页数：{job.pageCount} 页</div>}
-                          {job.docType && <div>类型：{DOC_TYPES.find(d => d.value === job.docType)?.label}</div>}
-                        </div>
-
-                        {/* 关联项目 */}
-                        <div>
-                          <div className="text-[10px] text-white/35 mb-1 flex items-center gap-1">
-                            <Folder className="w-2.5 h-2.5" />关联项目
-                          </div>
-                          <Select
-                            value={""}
-                            onValueChange={(val) => {
-                              if (val && val !== "__none__") {
-                                saveToAssetsMutation.mutate({ jobId: job.id, category: "graphic_layout", projectId: Number(val) });
-                                toast.success("已保存到素材库并关联项目");
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-7 text-[10px] border-white/15 bg-transparent text-white/50 hover:text-white">
-                              <SelectValue placeholder="选择项目并保存..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-[#1a1a1a] border-white/15 text-white">
-                              {(projectsData as any[]).length === 0 ? (
-                                <div className="px-2 py-3 text-xs text-white/40 text-center">暂无项目</div>
-                              ) : (
-                                (projectsData as any[]).map((p: any) => (
-                                  <SelectItem key={p.id} value={p.id.toString()} className="text-xs">{p.name}</SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* 操作按钮 */}
-                        <div className="flex flex-col gap-1.5">
-                          {/* 查看按钮 */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => { setActiveJobId(job.id); setCurrentPage(0); }}
-                            className="h-7 text-[10px] w-full border-white/15 text-white/60 bg-transparent hover:bg-white/8 hover:text-white justify-start gap-1.5"
-                          >
-                            <Eye className="w-3 h-3" />查看排版
-                          </Button>
-
-                          {/* 继续编辑按钮 */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleContinueEdit(job)}
-                            className="h-7 text-[10px] w-full border-[#B87333]/30 text-[#B87333] bg-transparent hover:bg-[#B87333]/10 justify-start gap-1.5"
-                          >
-                            <RotateCcw className="w-3 h-3" />继续编辑
-                          </Button>
-
-                          {/* 重命名按钮 */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenamingJobId(job.id);
-                              setRenameInput(job.title || "");
-                            }}
-                            className="h-7 text-[10px] w-full border-white/15 text-white/50 bg-transparent hover:bg-white/8 hover:text-white justify-start gap-1.5"
-                          >
-                            <Pencil className="w-3 h-3" />重命名
-                          </Button>
-
-                          {/* 保存到素材库按钮 */}
-                          {job.status === "done" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={savingToAssets}
-                              onClick={() => {
-                                setSavingToAssets(true);
-                                saveToAssetsMutation.mutate({ jobId: job.id, category: "graphic_layout" });
-                              }}
-                              className="h-7 text-[10px] w-full border-white/15 text-white/50 bg-transparent hover:bg-white/8 hover:text-white justify-start gap-1.5"
-                            >
-                              {savingToAssets ? <Loader2 className="w-3 h-3 animate-spin" /> : <Library className="w-3 h-3" />}
-                              保存到素材库
-                            </Button>
-                          )}
-
-                          {/* 删除按钮 */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm("确定删除这条排版记录？")) {
-                                deleteJobMutation.mutate({ id: job.id });
-                                if (selectedHistoryJobId === job.id) setSelectedHistoryJobId(undefined);
-                              }
-                            }}
-                            className="h-7 text-[10px] w-full border-red-500/20 text-red-400/60 bg-transparent hover:bg-red-500/10 hover:text-red-400 justify-start gap-1.5"
-                          >
-                            <Trash2 className="w-3 h-3" />删除记录
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Pack Upload Dialog */}
       <Dialog open={showPackUpload} onOpenChange={setShowPackUpload}>
-        <DialogContent className="bg-[#1a1a1a] border-white/10 text-white max-w-sm">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-base">上传版式参考文件</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4 pt-2">
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">版式包名称（可选，不填则自动从文件名生成）</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">版式包名称（可选，不填则自动从文件名生成）</Label>
               <Input value={packNameInput} onChange={(e) => setPackNameInput(e.target.value)}
-                placeholder="不填则自动从文件名生成"
-                className="bg-white/5 border-white/10 text-white" />
+                placeholder="不填则自动从文件名生成" />
             </div>
             <div>
-              <Label className="text-xs text-white/50 mb-1.5 block">选择来源</Label>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">选择来源</Label>
               <div className="grid grid-cols-3 gap-2">
                 <div role="button" tabIndex={0} onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-white/15 rounded-xl p-3 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
+                  className="border-2 border-dashed border-border rounded-xl p-3 text-center cursor-pointer hover:border-primary/40 transition-colors">
                   {uploadingPack ? (
-                    <Loader2 className="w-5 h-5 text-[#B87333] animate-spin mx-auto" />
+                    <Loader2 className="w-5 h-5 text-primary animate-spin mx-auto" />
                   ) : (
                     <>
-                      <Upload className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
-                      <p className="text-[11px] text-white/40">选择文件</p>
-                      <p className="text-[10px] text-white/20 mt-0.5">PDF/图片</p>
+                      <Upload className="w-5 h-5 text-muted-foreground mx-auto mb-1.5" />
+                      <p className="text-[11px] text-muted-foreground">选择文件</p>
+                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">PDF/图片</p>
                     </>
                   )}
                 </div>
                 <div role="button" tabIndex={0} onClick={() => folderInputRef.current?.click()}
-                  className="border-2 border-dashed border-white/15 rounded-xl p-3 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
-                  <FolderOpen className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
-                  <p className="text-[11px] text-white/40">文件夹</p>
-                  <p className="text-[10px] text-white/20 mt-0.5">整个文件夹</p>
+                  className="border-2 border-dashed border-border rounded-xl p-3 text-center cursor-pointer hover:border-primary/40 transition-colors">
+                  <FolderOpen className="w-5 h-5 text-muted-foreground mx-auto mb-1.5" />
+                  <p className="text-[11px] text-muted-foreground">文件夹</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">整个文件夹</p>
                 </div>
                 <div role="button" tabIndex={0} onClick={() => {
                   setShowPackUpload(false);
                   setPackAssetPickerOpen(true);
                 }}
-                  className="border-2 border-dashed border-white/15 rounded-xl p-3 text-center cursor-pointer hover:border-[#B87333]/40 transition-colors">
-                  <Library className="w-5 h-5 text-white/30 mx-auto mb-1.5" />
-                  <p className="text-[11px] text-white/40">素材库</p>
-                  <p className="text-[10px] text-white/20 mt-0.5">已上传图片</p>
+                  className="border-2 border-dashed border-border rounded-xl p-3 text-center cursor-pointer hover:border-primary/40 transition-colors">
+                  <Library className="w-5 h-5 text-muted-foreground mx-auto mb-1.5" />
+                  <p className="text-[11px] text-muted-foreground">素材库</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">已上传图片</p>
                 </div>
               </div>
               <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden"
@@ -1851,10 +1640,10 @@ export default function MediaLayout() {
             </div>
             {pendingPackFiles.length > 0 && (
               <div className="flex flex-col gap-2">
-                <Label className="text-xs text-white/50">已选 {pendingPackFiles.length} 张参考图</Label>
+                <Label className="text-xs text-muted-foreground">已选 {pendingPackFiles.length} 张参考图</Label>
                 <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
                   {pendingPackFiles.map((pf, idx) => (
-                    <div key={idx} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
+                    <div key={idx} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border flex-shrink-0">
                       <img src={pf.preview} alt={pf.file.name} className="w-full h-full object-cover" />
                       <button
                         className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white/70 hover:text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1865,15 +1654,15 @@ export default function MediaLayout() {
                   <div
                     role="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-16 h-16 rounded-lg border-2 border-dashed border-white/15 flex items-center justify-center cursor-pointer hover:border-[#B87333]/40 transition-colors flex-shrink-0"
+                    className="w-16 h-16 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/40 transition-colors flex-shrink-0"
                   >
-                    <Plus className="w-4 h-4 text-white/30" />
+                    <Plus className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </div>
                 <button
                   onClick={handleConfirmPackUpload}
                   disabled={uploadingPack}
-                  className="w-full h-9 rounded-lg bg-[#B87333] hover:bg-[#a06628] disabled:opacity-50 text-white text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                  className="w-full h-9 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-sm font-medium flex items-center justify-center gap-2 transition-colors"
                 >
                   {uploadingPack ? (
                     <><Loader2 className="w-4 h-4 animate-spin" />上传并分析中...</>
@@ -1883,7 +1672,7 @@ export default function MediaLayout() {
                 </button>
               </div>
             )}
-            <p className="text-[11px] text-white/30">
+            <p className="text-[11px] text-muted-foreground/60">
               AI 将综合分析所有参考图的配色、字体、排版模式，生成一个版式风格包。
             </p>
           </div>
@@ -1892,24 +1681,24 @@ export default function MediaLayout() {
 
       {/* Library Pack Picker - 从素材库选择版式包（两种模式） */}
       <Dialog open={libraryPackPickerOpen} onOpenChange={(v) => { if (!v) { setLibraryPackPickerOpen(false); setLibraryPackSearch(""); } }}>
-        <DialogContent className="max-w-2xl bg-[#1a1a1a] border-white/10 text-white" style={{ display: "flex", flexDirection: "column" }}>
+        <DialogContent className="max-w-2xl" style={{ display: "flex", flexDirection: "column" }}>
           <DialogHeader>
             <DialogTitle className="text-base flex items-center gap-2">
-              <Library className="w-4 h-4 text-[#B87333]" />
+              <Library className="w-4 h-4 text-primary" />
               版式包库
             </DialogTitle>
           </DialogHeader>
           <div className="relative mb-3">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/30" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="搜索版式包…"
               value={libraryPackSearch}
               onChange={(e) => setLibraryPackSearch(e.target.value)}
-              className="pl-8 h-8 text-sm bg-black/20 border-white/10 text-white placeholder:text-white/30"
+              className="pl-8 h-8 text-sm"
             />
           </div>
           {(libraryPackAssets as any[]).length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-white/30">
+            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
               <LayoutTemplate className="h-8 w-8 mb-2 opacity-30" />
               <p className="text-sm">暂无已学习版式包</p>
               <p className="text-xs mt-1 opacity-60">请点击「图片学习」上传参考图片进行学习</p>
@@ -1921,7 +1710,7 @@ export default function MediaLayout() {
                 .map((asset: any) => (
                 <button
                   key={asset.id}
-                  className="group relative rounded-lg overflow-hidden border border-white/10 hover:border-[#B87333]/60 transition-colors bg-black/20"
+                  className="group relative rounded-lg overflow-hidden border border-border hover:border-primary/60 transition-colors bg-muted"
                   style={{ position: "relative", paddingBottom: "100%" }}
                   onClick={async () => {
                     setLibraryPackPickerOpen(false);
@@ -1951,7 +1740,7 @@ export default function MediaLayout() {
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
                     <div className="w-full p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                       <p className="text-white text-xs truncate font-medium">{asset.name}</p>
-                      <p className="text-white/50 text-[10px] mt-0.5">直接提取风格</p>
+                      <p className="text-white/70 text-[10px] mt-0.5">直接提取风格</p>
                     </div>
                   </div>
                 </button>
@@ -1995,50 +1784,50 @@ export default function MediaLayout() {
 
       {/* Text Block Edit Dialog */}
       <Dialog open={!!editingBlock} onOpenChange={(open) => { if (!open) { setEditingBlock(null); setNewText(""); } }}>
-        <DialogContent className="bg-[#1a1a1a] border-white/10 text-white max-w-sm">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-base flex items-center gap-2">
-              <Pencil className="w-4 h-4 text-[#B87333]" />
+              <Pencil className="w-4 h-4 text-primary" />
               编辑文字
             </DialogTitle>
           </DialogHeader>
           {editingBlock && (
             <div className="flex flex-col gap-4 pt-2">
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] border-white/15 text-white/50 capitalize">
+                <Badge variant="outline" className="text-[10px] capitalize">
                   {editingBlock.role}
                 </Badge>
-                <span className="text-[11px] text-white/30">原文字：{editingBlock.text}</span>
+                <span className="text-[11px] text-muted-foreground">原文字：{editingBlock.text}</span>
               </div>
               <div>
-                <Label className="text-xs text-white/50 mb-1.5 block">新文案</Label>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">新文案</Label>
                 <Textarea
                   value={newText}
                   onChange={(e) => setNewText(e.target.value)}
                   placeholder="输入新的文字内容..."
-                  className="bg-white/5 border-white/10 text-white text-sm min-h-[80px] resize-none"
+                  className="text-sm min-h-[80px] resize-none"
                   autoFocus
                 />
               </div>
-              <p className="text-[11px] text-white/30">
+              <p className="text-[11px] text-muted-foreground">
                 AI 将对该文字区域进行局部重绘，保持周围图像不变，仅更新文字内容。
               </p>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => { setEditingBlock(null); setNewText(""); }}
-                  className="flex-1 border-white/15 text-white/60 bg-transparent hover:bg-white/5">
+                  className="flex-1">
                   取消
                 </Button>
                 <Button
                   variant="outline"
                   onClick={handleDeleteBlock}
                   disabled={deleteTextBlockMutation.isPending || inpaintMutation.isPending}
-                  className="border-red-500/30 text-red-400/70 bg-transparent hover:bg-red-500/10 hover:text-red-400"
+                  className="border-destructive/30 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
                   title="删除此文字块热区（不重绘图像）"
                 >
                   {deleteTextBlockMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 </Button>
                 <Button onClick={handleConfirmEdit} disabled={!newText.trim() || inpaintMutation.isPending || deleteTextBlockMutation.isPending}
-                  className="flex-1 bg-[#B87333] hover:bg-[#D4956B] text-white">
+                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
                   {inpaintMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />重绘中...</> : "确认重绘"}
                 </Button>
               </div>
