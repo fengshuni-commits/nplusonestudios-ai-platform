@@ -925,7 +925,7 @@ export default function HistoryPage() {
   );
 
   const handleOpenDetail = useCallback((item: any) => {
-    if (item.module === "ai_render" || item.module === "benchmark_report" || item.module === "color_plan") {
+    if (item.module === "ai_render" || item.module === "benchmark_report" || item.module === "color_plan" || item.module === "analysis_image") {
       setSelectedRootId(item.id);
       setSelectedItem(item);
       setDetailOpen(true);
