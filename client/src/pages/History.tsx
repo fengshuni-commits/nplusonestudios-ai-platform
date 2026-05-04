@@ -829,6 +829,9 @@ export default function HistoryPage() {
   // Layout design page carousel state
   const [layoutPageIndex, setLayoutPageIndex] = useState(0);
 
+  // Per-chain-item prompt expansion state
+  const [expandedPrompts, setExpandedPrompts] = useState<Set<number>>(new Set());
+
   // Benchmark report refine state
   const [refineFeedback, setRefineFeedback] = useState("");
   const [currentReportContent, setCurrentReportContent] = useState<string | null>(null);
@@ -1267,7 +1270,7 @@ export default function HistoryPage() {
       )}
 
       {/* Detail Dialog for AI Render / Benchmark Report Edit Chain */}
-      <Dialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) { setChatHistory([]); setCurrentReportContent(null); setRefineFeedback(""); setIsDetailFullscreen(false); } }}>
+      <Dialog open={detailOpen} onOpenChange={(open) => { setDetailOpen(open); if (!open) { setChatHistory([]); setCurrentReportContent(null); setRefineFeedback(""); setIsDetailFullscreen(false); setExpandedPrompts(new Set()); } }}>
         <DialogContent className={`flex flex-col p-0 transition-all duration-200 ${
           isDetailFullscreen
             ? '!fixed !inset-4 !max-w-none !w-[calc(100vw-2rem)] !h-[calc(100vh-2rem)] !translate-x-0 !translate-y-0 !left-4 !top-4'
@@ -1346,39 +1349,29 @@ export default function HistoryPage() {
                                 {chainItem.modelName && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
                                 )}
-                              </div>
-                              {isColorPlan ? (
-                                <div className="space-y-1.5">
-                                  {/* Color plan params */}
-                                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                                {/* Color plan params badges (inline with meta row) */}
+                                {isColorPlan && (
+                                  <>
                                     {inputParams?.planStyle && (
                                       <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                        风格: {inputParams.planStyle === 'colored' ? '彩色平面' : inputParams.planStyle === 'hand_drawn' ? '手绘风格' : '线稿风格'}
+                                        {inputParams.planStyle === 'colored' ? '彩色平面' : inputParams.planStyle === 'hand_drawn' ? '手绘风格' : '线稿风格'}
                                       </span>
                                     )}
                                     {inputParams?.referenceUrl && (
-                                      <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                        含参考图
-                                      </span>
+                                      <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">含参考图</span>
                                     )}
                                     {inputParams?.isInpaint && (
-                                      <span className="inline-flex items-center text-[10px] text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded">
-                                        局部修改
-                                      </span>
+                                      <span className="inline-flex items-center text-[10px] text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded">局部修改</span>
                                     )}
-                                  </div>
-                                  {promptText && (
-                                    <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
-                                  )}
-                                </div>
-                              ) : (
-                                <p className="text-xs text-foreground/80 leading-relaxed">{promptText}</p>
-                              )}
-                              {!isBenchmark && !isColorPlan && inputParams?.style && (
-                                <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-1">
-                                  风格: {inputParams.style}
-                                </span>
-                              )}
+                                  </>
+                                )}
+                                {/* AI render style badge */}
+                                {!isBenchmark && !isColorPlan && inputParams?.style && (
+                                  <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                    {inputParams.style}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                               {/* Per-version project selector */}
@@ -1520,7 +1513,7 @@ export default function HistoryPage() {
 
                           {/* Color plan: image preview */}
                           {isColorPlan && chainItem.outputUrl && (
-                            <div className="mt-2">
+                            <div className="mt-2 space-y-2">
                               <div className="rounded-lg overflow-hidden border border-border/50 bg-muted cursor-zoom-in group/img relative"
                                 onClick={() => setLightbox({ src: chainItem.outputUrl!, label: itemTitle })}>
                                 <img src={chainItem.outputUrl} alt={chainItem.title} className="w-full h-auto max-h-[320px] object-contain" />
@@ -1531,6 +1524,10 @@ export default function HistoryPage() {
                                   </div>
                                 </div>
                               </div>
+                              {/* Prompt text below image */}
+                              {promptText && (
+                                <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
+                              )}
                             </div>
                           )}
 
@@ -1562,6 +1559,10 @@ export default function HistoryPage() {
                                     </button>
                                   </div>
                                 </div>
+                              )}
+                              {/* Prompt text below image */}
+                              {promptText && (
+                                <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
                               )}
                             </div>
                           )}
