@@ -127,7 +127,7 @@ export async function generateGraphicLayoutAsync(
 - 最多 6 个文字块
 - 严格使用版式包中提取的配色方案，不得使用默认黑白配色
 - 排版结构应忠实还原参考版式的视觉层次和空间分布`;
-    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design layout for a Chinese architectural design studio. Strictly follow the color scheme from the style guide. RENDER ALL TEXT CONTENT exactly as specified in the text layout — use clean, legible Chinese typography with correct font sizes and colors. STRICTLY FORBIDDEN: technical drawings, engineering blueprints, dimension lines, annotation lines, grid lines, cross-section diagrams, exploded views, CAD-style illustrations, watermarks. This is a brand design layout, NOT a technical document. Photorealistic quality, visually cohesive full-page composition."
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design layout for a Chinese architectural design studio. Strictly follow the color scheme from the style guide. CRITICAL: You MUST render ALL Chinese text blocks specified above at their exact positions — use clean, legible Chinese (Simplified) typography with correct font sizes and colors. NEVER replace Chinese text with English placeholders like 'Title' or 'Caption'. NEVER omit any text block. STRICTLY FORBIDDEN: technical drawings, engineering blueprints, dimension lines, annotation lines, grid lines, cross-section diagrams, exploded views, CAD-style illustrations, watermarks, Lorem ipsum, placeholder text. This is a brand design layout, NOT a technical document. Photorealistic quality, visually cohesive full-page composition."
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",
@@ -278,8 +278,8 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         const pageAssets = getAssetsForPage(pageIdx, selectedGroup);
         // Combine pack reference images (style transfer) + user asset images (content)
         // Pack reference images come first so AI prioritizes their visual style
-        const packRefImageObjects = packReferenceImages.map((url: string) => ({ url, mimeType: "image/jpeg" as const }));
-        const assetImageObjects = pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const }));
+        const packRefImageObjects = packReferenceImages.map((url: string) => ({ url, mimeType: "image/jpeg" as const, role: "style_reference" as const }));
+        const assetImageObjects = pageAssets.map((url: string) => ({ url, mimeType: "image/jpeg" as const, role: "content" as const }));
         const assetImagesForPage = (packRefImageObjects.length > 0 || assetImageObjects.length > 0)
           ? [...packRefImageObjects, ...assetImageObjects]
           : undefined;
@@ -321,7 +321,10 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         const userDescPrefix = job.contentText.match(/(背景|配色|风格|色调|#[0-9a-fA-F]{6})/)
           ? `USER REQUIREMENT (HIGHEST PRIORITY, OVERRIDES STYLE REFERENCE): ${job.contentText}. `
           : "";
-        const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${assetDesc}. ${styleHintEn} Background color: ${bgColor}.\n\nTEXT TO RENDER IN IMAGE (render each text block at the specified position with correct Chinese typography):\n${textDescriptions}\n\n${imageGenStyleSuffix}`;
+        const textSection = textDescriptions
+          ? `\n\n=== MANDATORY TEXT RENDERING (HIGHEST PRIORITY) ===\nYou MUST render ALL of the following Chinese text blocks exactly as specified. Each block has a precise position, size, and color. Do NOT substitute with English placeholders. Do NOT skip any text block. Render the EXACT Chinese characters provided:\n${textDescriptions}\n=== END TEXT RENDERING ===`
+          : "";
+        const imagePrompt = `${userDescPrefix}${docTypeName} design, page ${pageIdx + 1} of ${job.pageCount}. ${pageTheme}. ${styleHintEn} Background color: ${bgColor}.${textSection}\n\n${imageGenStyleSuffix}`;
 
         // Step 2: Image generation with retry on timeout
         const genResult = await withRetryOnTimeout(

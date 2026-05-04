@@ -107,7 +107,7 @@ async function callGeminiImageApi(opts: {
   modelName: string;
   baseUrl: string;
   prompt: string;
-  referenceImages?: Array<{ url?: string; b64Json?: string; mimeType?: string }>;
+  referenceImages?: Array<{ url?: string; b64Json?: string; mimeType?: string; role?: string }>;
   imageSize?: string;
   aspectRatio?: string;
 }): Promise<Buffer> {
@@ -117,18 +117,24 @@ async function callGeminiImageApi(opts: {
   const url = `${baseUrl.replace(/\/$/, "")}/models/${modelName}:generateContent`;
 
   // Build contents array
-  const parts: any[] = [{ text: prompt }];
+  // Build contents array — images FIRST with role labels, then the main instruction prompt LAST.
+  // Gemini weights later content more heavily; putting the prompt last ensures
+  // text rendering instructions are not overridden by image content.
+  const parts: any[] = [];
 
-  // Add reference images if provided
+  // Add reference images with role labels before the main prompt
   if (referenceImages && referenceImages.length > 0) {
     for (const img of referenceImages) {
+      // Insert a role-label text part before each image so Gemini understands its purpose
+      const roleLabel = img.role === "style_reference"
+        ? "STYLE REFERENCE IMAGE (study the visual style, color palette, layout, typography, and design language — replicate this aesthetic in your output):"
+        : img.role === "content"
+        ? "CONTENT IMAGE (incorporate this as a visual element in the layout — do NOT copy its composition or text):"
+        : "REFERENCE IMAGE:";
+      parts.push({ text: roleLabel });
+      let inlineData: { mimeType: string; data: string } | null = null;
       if (img.b64Json) {
-        parts.push({
-          inlineData: {
-            mimeType: img.mimeType || "image/jpeg",
-            data: img.b64Json,
-          },
-        });
+        inlineData = { mimeType: img.mimeType || "image/jpeg", data: img.b64Json };
       } else if (img.url) {
         // Fetch the image and convert to base64
         const imgResp = await fetch(img.url, { signal: AbortSignal.timeout(30000) });
@@ -136,16 +142,14 @@ async function callGeminiImageApi(opts: {
           const imgBuf = await imgResp.arrayBuffer();
           const b64 = Buffer.from(imgBuf).toString("base64");
           const mimeType = imgResp.headers.get("content-type") || img.mimeType || "image/jpeg";
-          parts.push({
-            inlineData: {
-              mimeType,
-              data: b64,
-            },
-          });
+          inlineData = { mimeType, data: b64 };
         }
       }
+      if (inlineData) parts.push({ inlineData });
     }
   }
+  // Main instruction prompt goes LAST — Gemini follows the final text instruction most strongly
+  parts.push({ text: prompt });
 
   // Build generation config
   // Note: gemini-3.x-pro-preview models do NOT support imageConfig (aspectRatio/imageSize).
