@@ -351,6 +351,13 @@
       "when": 1777875183782,
       "tag": "0049_keen_marrow",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1777876986636,
+      "tag": "0050_certain_red_wolf",
+      "breakpoints": true
     }
   ]
 }

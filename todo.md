@@ -2392,3 +2392,10 @@
 - [x] 服务端 generate mutation 存储 stylePrompt，list 接口返回 stylePrompt
 - [x] handleContinueEdit 函数：恢复版式包、素材（per_page/by_type/legacy 三种模式）、风格提示词
 - [x] URL 参数 jobId 恢复：从 History 页跳转时自动恢复所有表单参数（docType、aspectRatio、pageCount、contentText、title、stylePrompt、packId、assets）
+
+## 版式包风格提示词保存与复用
+- [x] 数据库 graphic_style_packs 表新增 savedStylePrompt 字段（已迁移）
+- [x] 服务端新增 graphicStylePacks.saveStylePrompt mutation（保存提示词到版式包）
+- [x] 前端新增「保存提示词」按钮（绿色，位于「提取提示词」左侧）
+- [x] 版式包标题旁显示「已保存」绿色徽章（当该版式包有 savedStylePrompt 时）
+- [x] 点击版式包卡片时，若有 savedStylePrompt 则自动加载到提示词输入框并 toast 提示

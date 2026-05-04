@@ -5778,6 +5778,19 @@ const graphicStylePacksRouter = router({
         .limit(1);
       return pack ?? null;
     }),
+  // 保存风格提示词到版式包（下次选中该版式包时自动加载）
+  saveStylePrompt: protectedProcedure
+    .input(z.object({ id: z.number(), stylePrompt: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { graphicStylePacks } = await import("../drizzle/schema");
+      const { eq: _eq, and: _and } = await import("drizzle-orm");
+      await drizzleDb.update(graphicStylePacks)
+        .set({ savedStylePrompt: input.stylePrompt })
+        .where(_and(_eq(graphicStylePacks.id, input.id), _eq(graphicStylePacks.userId, ctx.user.id)));
+      return { success: true };
+    }),
 });
 
 // ─── Graphic Layout Router ────────────────────────────────────────────────────

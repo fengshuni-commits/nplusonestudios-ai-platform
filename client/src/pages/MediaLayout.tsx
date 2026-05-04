@@ -43,6 +43,7 @@ interface StylePack {
     density: string;
   };
   errorMessage?: string;
+  savedStylePrompt?: string | null;
   createdAt: Date;
 }
 
@@ -506,6 +507,13 @@ export default function MediaLayout() {
     },
   });
 
+  const saveStylePromptMutation = trpc.graphicStylePacks.saveStylePrompt.useMutation({
+    onSuccess: () => {
+      refetchPacks();
+      toast.success("风格提示词已保存到版式包，下次选中该版式包时自动加载✨");
+    },
+    onError: (err) => toast.error("保存失败：" + err.message),
+  });
   const deletePackMutation = trpc.graphicStylePacks.delete.useMutation({
     onSuccess: () => { refetchPacks(); toast.success("版式包已删除"); },
   });
@@ -1221,7 +1229,14 @@ export default function MediaLayout() {
               <div className="flex flex-col gap-2">
                 {(stylePacks as StylePack[]).map((pack) => (
                   <StylePackCard key={pack.id} pack={pack} selected={selectedPackId === pack.id}
-                    onSelect={() => setSelectedPackId(pack.id)}
+                    onSelect={() => {
+                      setSelectedPackId(pack.id);
+                      // 自动加载该版式包保存的风格提示词
+                      if (pack.savedStylePrompt) {
+                        setStylePrompt(pack.savedStylePrompt);
+                        toast.info("已自动加载保存的风格提示词");
+                      }
+                    }}
                     onDelete={() => deletePackMutation.mutate({ id: pack.id })}
                     onRetry={() => retryPackMutation.mutate({ id: pack.id })} />
                 ))}
@@ -1231,47 +1246,65 @@ export default function MediaLayout() {
             {/* 风格提示词提取区域 */}
             <div className="mt-4 pt-4 border-t border-border">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground">风格提示词</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (!selectedPackId) {
-                      toast.error("请先选择一个版式包");
-                      return;
-                    }
-                    const pack = (stylePacks as StylePack[]).find(p => p.id === selectedPackId);
-                    if (!pack || pack.status !== "done") {
-                      toast.error("请等待版式包提取完成");
-                      return;
-                    }
-                    setExtractingPrompt(true);
-                    extractPromptMutation.mutate({ packId: selectedPackId });
-                  }}
-                  disabled={extractingPrompt || !selectedPackId}
-                  className="h-7 text-[10px] border-primary/40 text-primary hover:bg-primary/10"
-                >
-                  {extractingPrompt ? (
-                    <>
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      提取中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      提取提示词
-                    </>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">风格提示词</span>
+                  {selectedPackId && (stylePacks as StylePack[]).find(p => p.id === selectedPackId)?.savedStylePrompt && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-500 border border-green-500/30">已保存</span>
                   )}
-                </Button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (!selectedPackId) { toast.error("请先选择一个版式包"); return; }
+                      if (!stylePrompt.trim()) { toast.error("提示词不能为空"); return; }
+                      saveStylePromptMutation.mutate({ id: selectedPackId, stylePrompt: stylePrompt.trim() });
+                    }}
+                    disabled={saveStylePromptMutation.isPending || !selectedPackId || !stylePrompt.trim()}
+                    className="h-7 text-[10px] border-green-500/40 text-green-500 hover:bg-green-500/10"
+                  >
+                    {saveStylePromptMutation.isPending ? (
+                      <><Loader2 className="w-3 h-3 mr-1 animate-spin" />保存中...</>
+                    ) : (
+                      <><Check className="w-3 h-3 mr-1" />保存提示词</>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (!selectedPackId) {
+                        toast.error("请先选择一个版式包");
+                        return;
+                      }
+                      const pack = (stylePacks as StylePack[]).find(p => p.id === selectedPackId);
+                      if (!pack || pack.status !== "done") {
+                        toast.error("请等待版式包提取完成");
+                        return;
+                      }
+                      setExtractingPrompt(true);
+                      extractPromptMutation.mutate({ packId: selectedPackId });
+                    }}
+                    disabled={extractingPrompt || !selectedPackId}
+                    className="h-7 text-[10px] border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    {extractingPrompt ? (
+                      <><Loader2 className="w-3 h-3 mr-1 animate-spin" />提取中...</>
+                    ) : (
+                      <><Sparkles className="w-3 h-3 mr-1" />提取提示词</>
+                    )}
+                  </Button>
+                </div>
               </div>
               <Textarea
                 value={stylePrompt}
                 onChange={(e) => setStylePrompt(e.target.value)}
-                placeholder="点击“提取提示词”按鈕从选中的版式包中提取风格描述，或直接输入你的风格要求。提示词会直接传给图像模型，指导生成风格。"
+                placeholder="点击“提取提示词”从选中的版式包中提取风格描述，编辑满意后点“保存提示词”即可下次选中该版式包时自动加载。"
                 className="min-h-[100px] text-xs resize-none"
               />
               <p className="text-[10px] text-muted-foreground/70 mt-1.5">
-                提示：提取后可以编辑提示词，或直接输入你的风格要求。如果你在下方的内容描述中包含配色/版式要求，会自动覆盖这里的提示词。
+                提示：提取并编辑满意后，点“保存提示词”可将当前提示词绑定到该版式包，下次选中时自动加载。
               </p>
             </div>
           </div>

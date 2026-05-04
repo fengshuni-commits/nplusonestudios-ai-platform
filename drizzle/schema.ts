@@ -607,6 +607,8 @@ export const graphicStylePacks = mysqlTable("graphic_style_packs", {
   styleGuide: json("styleGuide"),
   // 参考截图缩略图 URL 数组（JSON）
   thumbnails: json("thumbnails"),
+  // 用户保存的风格提示词（从提取结果编辑后手动保存，下次选中该版式包时自动加载）
+  savedStylePrompt: text("savedStylePrompt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
