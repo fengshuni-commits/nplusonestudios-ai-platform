@@ -169,7 +169,12 @@ export function createVolcengineStreamSession(
   let flushGeneration = 0;
   let flushing = false;
   let confirmedText = "";  // accumulates all definite sentences
-  let sentDefiniteCount = 0;  // how many definite utterances have already been sent (to avoid re-sending on reconnect)
+  // Use end_time watermark instead of count-based dedup.
+  // Volcengine may truncate the utterances array when it gets long (100+ items),
+  // so an absolute index (sentDefiniteCount) would skip new sentences after truncation.
+  // end_time is monotonically increasing and survives array truncation.
+  let lastSentEndTime = -1;  // end_time of the last definite utterance we sent
+  const sentTexts = new Set<string>(); // fallback dedup when end_time is missing
   let currentPartialText = ""; // current non-definite sentence
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -252,8 +257,9 @@ export function createVolcengineStreamSession(
     volcReady = false;
     flushing = false;
     stopKeepalive();
-    // Reset per-session utterance counter so new session's utterances are not skipped
-    sentDefiniteCount = 0;
+    // Reset per-session watermark so new session's utterances are not skipped
+    lastSentEndTime = -1;
+    sentTexts.clear();
 
     // Rescue any partial text from interrupted session
     if (currentPartialText.trim()) {
@@ -359,16 +365,22 @@ export function createVolcengineStreamSession(
       const newDefinite = utterances.filter(u => u.definite);
       const nonDefinite = utterances.filter(u => !u.definite);
 
-      // Send final for each NEWLY confirmed sentence (skip already-sent ones)
-      // Volcengine returns cumulative utterances, so we track how many we've already sent
-      const newlyDefinite = newDefinite.slice(sentDefiniteCount);
+      // Send final for each NEWLY confirmed sentence (skip already-sent ones).
+      // Use end_time watermark: only send utterances whose end_time > lastSentEndTime.
+      // This is robust to array truncation (volcengine may drop old entries when list grows long).
+      const newlyDefinite = newDefinite.filter(u => {
+        if (u.end_time !== undefined) return u.end_time > lastSentEndTime;
+        // Fallback: use text dedup when end_time is missing
+        return !sentTexts.has(u.text);
+      });
       for (const utt of newlyDefinite) {
         if (utt.text && utt.text.trim()) {
-          console.log(`[volcStreamTranscribe] definite: "${utt.text}"`);
+          console.log(`[volcStreamTranscribe] definite: "${utt.text}" end_time=${utt.end_time}`);
           send({ type: "final", text: utt.text });
           confirmedText += utt.text;
         }
-        sentDefiniteCount++;
+        if (utt.end_time !== undefined && utt.end_time > lastSentEndTime) lastSentEndTime = utt.end_time;
+        sentTexts.add(utt.text);
       }
 
       // Send partial for the current non-definite sentence
