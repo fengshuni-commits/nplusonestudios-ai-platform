@@ -683,9 +683,9 @@ export default function DesignTools() {
   })();
 
   return (
-    <div className="space-y-1">
-       <div className="space-y-1">
-          <div className="flex items-center justify-end">
+    <div>
+       <div>
+          <div className="flex items-center justify-end mb-2">
             <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
           </div>
           <div className="grid lg:grid-cols-5 gap-6">
