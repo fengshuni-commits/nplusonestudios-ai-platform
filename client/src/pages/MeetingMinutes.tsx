@@ -481,11 +481,8 @@ export default function MeetingMinutes() {
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Input Panel */}
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-medium">会议信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <Card className="py-0 gap-0">
+            <CardContent className="space-y-4 px-4 py-4">
               <ImportProjectInfo
                 selectedProjectId={importedProjectId}
                 onImport={(ctx: ProjectContext) => {
@@ -536,29 +533,24 @@ export default function MeetingMinutes() {
           </Card>
 
           {/* Audio Input Mode Switcher */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-medium">录音输入</CardTitle>
-                <div className="flex rounded-md border border-border overflow-hidden text-xs">
-                  <button
-                    onClick={() => { if (!isRecordingActive) setInputMode("live"); }}
-                    disabled={isRecordingActive}
-                    className={`px-3 py-1.5 transition-colors ${inputMode === "live" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent"}`}
-                  >
-                    <Mic className="h-3 w-3 inline mr-1" />实时录音
-                  </button>
-                  <button
-                    onClick={() => { if (!isRecordingActive) setInputMode("upload"); }}
-                    disabled={isRecordingActive}
-                    className={`px-3 py-1.5 transition-colors ${inputMode === "upload" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent"}`}
-                  >
-                    <Upload className="h-3 w-3 inline mr-1" />上传文件
-                  </button>
-                </div>
+          <Card className="py-0 gap-0">
+            <CardContent className="px-4 py-4">
+              <div className="flex rounded-md border border-border overflow-hidden text-xs mb-4">
+                <button
+                  onClick={() => { if (!isRecordingActive) setInputMode("live"); }}
+                  disabled={isRecordingActive}
+                  className={`px-3 py-1.5 transition-colors ${inputMode === "live" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent"}`}
+                >
+                  <Mic className="h-3 w-3 inline mr-1" />实时录音
+                </button>
+                <button
+                  onClick={() => { if (!isRecordingActive) setInputMode("upload"); }}
+                  disabled={isRecordingActive}
+                  className={`px-3 py-1.5 transition-colors ${inputMode === "upload" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-accent"}`}
+                >
+                  <Upload className="h-3 w-3 inline mr-1" />上传文件
+                </button>
               </div>
-            </CardHeader>
-            <CardContent>
               {inputMode === "live" ? (
                 <div className="space-y-4">
                   {/* Recording status display */}
@@ -728,11 +720,8 @@ export default function MeetingMinutes() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-medium">会议内容</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <Card className="py-0 gap-0">
+            <CardContent className="space-y-4 px-4 py-4">
               <Textarea
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
@@ -755,16 +744,15 @@ export default function MeetingMinutes() {
         </div>
 
         {/* Output Panel */}
-        <Card className="h-fit">
-          <CardHeader className="pb-4 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-medium">会议纪要</CardTitle>
+        <Card className="h-fit py-0 gap-0">
+          <CardContent className="px-4 py-4">
             {minutes && (
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                <Copy className="h-3 w-3 mr-1.5" />复制
-              </Button>
+              <div className="flex justify-end mb-3">
+                <Button variant="outline" size="sm" onClick={handleCopy}>
+                  <Copy className="h-3 w-3 mr-1.5" />复制
+                </Button>
+              </div>
             )}
-          </CardHeader>
-          <CardContent>
             {minutes ? (
               <>
                 <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">

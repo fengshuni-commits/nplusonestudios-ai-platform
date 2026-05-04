@@ -319,11 +319,8 @@ export default function DesignPlanning() {
       <div className="mt-4">
           <div className="grid lg:grid-cols-5 gap-6">
             {/* Input Panel */}
-            <Card className="lg:col-span-2">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base font-medium">调研参数</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <Card className="lg:col-span-2 py-0 gap-0">
+              <CardContent className="space-y-4 px-4 py-4">
                 {/* Import project info button */}
                 <ImportProjectInfo
                   selectedProjectId={importedProjectId}
@@ -393,11 +390,8 @@ export default function DesignPlanning() {
 
             {/* Output Panel */}
             <div className="lg:col-span-3 space-y-4">
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base font-medium">调研报告</CardTitle>
-                </CardHeader>
-                <CardContent>
+              <Card className="py-0 gap-0">
+                <CardContent className="px-4 py-4">
                   {report ? (
                     <>
                       {/* Original report - collapsible when revisions exist */}

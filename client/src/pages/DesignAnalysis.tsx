@@ -306,11 +306,8 @@ export default function DesignAnalysis() {
         {/* ─── Left panel: controls ─── */}
         <div className="flex flex-col gap-4">
           {/* Reference image upload */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">参考图片</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card className="border-border py-0 gap-0">
+            <CardContent className="px-4 py-4">
               {referencePreview ? (
                 <div className="relative group">
                   <img
@@ -351,11 +348,8 @@ export default function DesignAnalysis() {
           </Card>
 
           {/* Analysis type selection */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">搭配图类型</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2">
+          <Card className="border-border py-0 gap-0">
+            <CardContent className="flex flex-col gap-2 px-4 py-4">
               {ANALYSIS_TYPES.map((type) => {
                 const Icon = type.icon;
                 const isSelected = selectedType === type.id;
@@ -381,11 +375,8 @@ export default function DesignAnalysis() {
           </Card>
 
           {/* Aspect ratio & size */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">图片比例</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card className="border-border py-0 gap-0">
+            <CardContent className="px-4 py-4">
               <div className="grid grid-cols-3 gap-2">
                 {ASPECT_RATIOS.map((ratio) => {
                   const isSelected = aspectRatio === ratio.value;
@@ -418,11 +409,8 @@ export default function DesignAnalysis() {
           </Card>
 
           {/* Generation count */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">生成数量</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card className="border-border py-0 gap-0">
+            <CardContent className="px-4 py-4">
               <div className="flex gap-2">
                 {COUNT_OPTIONS.map((opt) => {
                   const isSelected = count === opt.value;
@@ -451,11 +439,8 @@ export default function DesignAnalysis() {
           </Card>
 
           {/* AI tool selector */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">生图 AI 工具</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card className="border-border py-0 gap-0">
+            <CardContent className="px-4 py-4">
               <AiToolSelector
                 capability="rendering"
                 value={toolId}
@@ -466,11 +451,8 @@ export default function DesignAnalysis() {
           </Card>
 
           {/* Extra prompt */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">附加说明（可选）</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card className="border-border py-0 gap-0">
+            <CardContent className="px-4 py-4">
               <Textarea
                 placeholder={`在内置提示词基础上补充额外要求，例如：\n"重点突出石材纹理" 或 "风格偏向日式侘寂"`}
                 value={extraPrompt}

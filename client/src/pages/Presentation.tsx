@@ -455,14 +455,10 @@ export default function PresentationPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left: Input Panel */}
         <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Presentation className="h-4 w-4 text-primary" />
-                演示参数
-              </CardTitle>
+          <Card className="py-0 gap-0">
+            <CardContent className="space-y-4 px-4 py-4">
               {/* Mode Tab */}
-              <div className="flex rounded-lg border border-border overflow-hidden mt-2">
+              <div className="flex rounded-lg border border-border overflow-hidden">
                 <button
                   className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors ${
                     convertMode === "file"
@@ -488,8 +484,6 @@ export default function PresentationPage() {
                   AI 创作
                 </button>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
 
               {/* ── FILE CONVERT MODE ── */}
               {convertMode === "file" && (

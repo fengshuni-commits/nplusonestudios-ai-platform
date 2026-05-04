@@ -789,7 +789,7 @@ export default function ColorPlan() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 border-b border-border/40">
+      <div className="px-6 pt-2 pb-2 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-muted-foreground mt-0.5">
