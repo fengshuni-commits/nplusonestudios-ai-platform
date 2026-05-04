@@ -2364,3 +2364,7 @@
 ## Bug 修复：图文排版文字重叠（方案1）
 - [x] 修改 graphicLayoutService.ts image prompt：去掉 RENDER text 指令，改为留白区域
 - [x] 更新数据库存储的 image_generation prompt，明确禁止 AI 渲染任何文字
+
+## 版式包板块按钮整合
+- [x] 「上传学习」改名为「图片学习」，功能不变
+- [x] 「素材库」改名为「版式包库」，去掉「从素材库学习」标签页，只展示已学习版式包
