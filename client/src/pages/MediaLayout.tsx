@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo, memo } from "react";
-import { useLocation } from "wouter";
+import { useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -470,7 +470,7 @@ function PageImageViewer({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MediaLayout() {
-  const [location] = useLocation();
+  const search = useSearch();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const assetInputRef = useRef<HTMLInputElement>(null); // per_page 模式用
@@ -557,11 +557,10 @@ export default function MediaLayout() {
 
   // 从 URL 参数读取 jobId（由生成记录模块跳转过来时自动恢复）
   const urlJobId = useMemo(() => {
-    const search = location.includes("?") ? location.split("?")[1] : "";
     const params = new URLSearchParams(search);
     const v = params.get("jobId");
     return v ? Number(v) : undefined;
-  }, [location]);
+  }, [search]);
 
   // Jobs
   const { data: jobs = [], refetch: refetchJobs } = trpc.graphicLayout.list.useQuery(undefined, { staleTime: 30_000 });
@@ -842,6 +841,37 @@ export default function MediaLayout() {
       prevActiveStatusRef.current = status;
     }
   }, [activeJob?.status]);
+  // When URL has jobId and activeJob data loads, restore form params from status API
+  // This fixes the timing issue where jobs list may not be loaded yet
+  const restoredFromJobRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!urlJobId || !activeJob || activeJob.id !== urlJobId) return;
+    if (restoredFromJobRef.current === urlJobId) return;
+    restoredFromJobRef.current = urlJobId;
+    setDocType(activeJob.docType);
+    setAspectRatio(activeJob.aspectRatio || "3:4");
+    setPageCount(activeJob.pageCount || 1);
+    setContentText(activeJob.contentText || "");
+    setTitleInput(activeJob.title || "");
+    if (activeJob.stylePrompt) setStylePrompt(activeJob.stylePrompt);
+    if (activeJob.packId) setSelectedPackId(activeJob.packId);
+    const assetConfig = activeJob.assetUrls as any;
+    if (assetConfig) {
+      if (assetConfig.mode === "per_page" && assetConfig.pages) {
+        setAssetMode("per_page");
+        const restored: Record<number, string[]> = {};
+        Object.entries(assetConfig.pages).forEach(([k, v]) => { restored[Number(k)] = v as string[]; });
+        setPerPageAssets(restored);
+      } else if (assetConfig.mode === "by_type" && assetConfig.groups) {
+        setAssetMode("by_type");
+        setByTypeGroups(assetConfig.groups as Record<string, string[]>);
+      } else if (assetConfig.mode === "legacy" && (assetConfig.urls as string[])?.length) {
+        setAssetMode("per_page");
+        setPerPageAssets({ 0: assetConfig.urls });
+      }
+    }
+    toast.success("已恢复版式包、素材和提示词，可修改后重新生成");
+  }, [urlJobId, activeJob]);
 
   const uploadFile = useCallback(async (file: File): Promise<{ url: string; key: string }> => {
     const formData = new FormData();
