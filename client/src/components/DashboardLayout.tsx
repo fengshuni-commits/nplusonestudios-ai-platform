@@ -485,7 +485,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             {activeMenuItem ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-foreground tracking-tight">
+                <span className="text-base font-semibold text-foreground tracking-tight">
                   {activeMenuItem.label}
                 </span>
                 {activeMenuItem.description && (
@@ -499,7 +499,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
               </div>
             ) : location === "/" ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-foreground tracking-tight">工作台</span>
+                <span className="text-base font-semibold text-foreground tracking-tight">工作台</span>
                 <span className="text-xs text-muted-foreground/40">|</span>
                 <span className="text-xs text-muted-foreground">N+1 STUDIOS AI 工作平台</span>
               </div>
