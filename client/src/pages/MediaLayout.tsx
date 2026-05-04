@@ -1204,9 +1204,9 @@ export default function MediaLayout() {
           />
         </div>
       </div>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         {/* Left Panel */}
-        <div className="w-72 border-r border-border flex flex-col overflow-y-auto shrink-0 bg-background">
+        <div className="w-72 border-r border-border flex flex-col shrink-0 bg-background">
           {/* Style Packs */}
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-3">
@@ -1560,7 +1560,7 @@ export default function MediaLayout() {
           </div>
         </div>
         {/* Center Panel: Preview */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col">
           {!activeJobId ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
               <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
@@ -1593,7 +1593,7 @@ export default function MediaLayout() {
               <p className="text-muted-foreground text-sm">暂无页面数据</p>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col">
               {/* Page nav */}
               <div className="px-6 py-3 border-b border-border flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
@@ -1659,7 +1659,7 @@ export default function MediaLayout() {
               </div>
 
               {/* Page preview */}
-              <div className="flex-1 overflow-y-auto p-6 flex items-start justify-center">
+              <div className="p-6 flex items-start justify-center">
                 <div className="w-full max-w-sm">
                   {currentPageData && (
                     <PageImageViewer
