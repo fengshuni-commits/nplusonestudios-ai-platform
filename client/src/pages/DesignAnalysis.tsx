@@ -297,11 +297,7 @@ export default function DesignAnalysis() {
   ).length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Page header */}
-      <div className="mb-6">
-      </div>
-
+    <div className="px-6 pb-6 pt-3 max-w-7xl mx-auto">
       <div>
         <div className="flex items-center justify-end mb-2">
           <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
