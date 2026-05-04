@@ -116,7 +116,7 @@ export async function generateGraphicLayoutAsync(
 - 最多 6 个文字块
 - 严格使用版式包中提取的配色方案，不得使用默认黑白配色
 - 排版结构应忠实还原参考版式的视觉层次和空间分布`;
-    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design, high-end architectural studio aesthetic. Strictly follow the color scheme from the style guide. IMPORTANT: DO NOT render any text, characters, or typography in the image — all text will be overlaid separately. Leave the designated text zones as clean, uncluttered background areas. No watermarks, no text of any kind, no gray bars, no placeholder rectangles. Photorealistic quality.";
+    const imageGenStyleSuffix = imageGenPromptRow?.prompt ?? "Professional brand design layout for a Chinese architectural studio. Strictly follow the color scheme from the style guide. IMPORTANT: DO NOT render any text, characters, words, numbers, percentages, or typography anywhere in the image — all text will be composited separately as an overlay. Leave all designated text zones as clean, uncluttered background areas that blend naturally with the overall design. STRICTLY FORBIDDEN: technical drawings, engineering blueprints, dimension lines, annotation lines, percentage labels, measurement numbers, grid lines, cross-section diagrams, exploded views, CAD-style illustrations. This is a brand design layout, NOT a technical document. No watermarks, no placeholder rectangles, no solid color overlays in text areas. Background must flow seamlessly. Photorealistic quality.";
 
     const docTypeNames: Record<string, string> = {
       brand_manual: "品牌手册", product_detail: "商品详情页",

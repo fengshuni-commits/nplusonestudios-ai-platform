@@ -2374,3 +2374,9 @@
 - [x] StylePackCard 卡片顶部展示缩略图（取 sourceFileUrls 前几张或 sourceFileUrl）
 - [x] 版式包库弹窗改为直接使用 stylePacks 数据，展示名称+缩略图，点击只做选中（不自动提取提示词）
 - [x] 修复：从版式包库选中后 selectedPackId 正确更新，左侧卡片高亮
+
+## Bug 修复：版式包卡片缩略图裁切 + 图文排版生成图异常
+- [x] StylePackCard 缩略图改为 object-contain，完整展示参考图不裁切
+- [x] 版式包库弹窗缩略图同步修改为 object-contain
+- [x] 排查 graphicLayoutService.ts 中 image prompt 导致生成工程图/蓝图风格的原因
+- [x] 修复 prompt：禁止生成技术制图、标注线、百分比数字、工程图样式；确保生成中文排版图

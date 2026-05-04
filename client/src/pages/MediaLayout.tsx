@@ -287,9 +287,9 @@ function StylePackCard({
     >
       {/* Thumbnail strip */}
       {previewUrls.length > 0 ? (
-        <div className={`grid rounded-t-xl overflow-hidden ${previewUrls.length === 1 ? "grid-cols-1" : previewUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"}`} style={{ height: 72 }}>
+        <div className={`grid rounded-t-xl overflow-hidden bg-muted ${previewUrls.length === 1 ? "grid-cols-1" : previewUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"}`} style={{ height: 80 }}>
           {previewUrls.map((url, i) => (
-            <img key={i} src={url} alt="" className="w-full h-full object-cover" />
+            <img key={i} src={url} alt="" className="w-full h-full object-contain" />
           ))}
         </div>
       ) : (
@@ -1764,12 +1764,12 @@ export default function MediaLayout() {
                     >
                       {/* Thumbnail grid */}
                       {previewUrls.length > 0 ? (
-                        <div className={`grid ${
+                        <div className={`grid bg-muted ${
                           previewUrls.length === 1 ? "grid-cols-1" :
                           previewUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"
-                        }`} style={{ height: 90 }}>
+                        }`} style={{ height: 100 }}>
                           {previewUrls.map((url, i) => (
-                            <img key={i} src={url} alt="" className="w-full h-full object-cover" />
+                            <img key={i} src={url} alt="" className="w-full h-full object-contain" />
                           ))}
                         </div>
                       ) : (
