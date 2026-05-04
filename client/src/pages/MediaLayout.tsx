@@ -30,6 +30,9 @@ interface StylePack {
   name: string;
   sourceType: string;
   status: StylePackStatus;
+  sourceFileUrl?: string | null;
+  sourceFileUrls?: string[] | null;
+  thumbnails?: string[] | null;
   styleGuide?: {
     description: string;
     colorPalette: { primary: string; secondary: string; background: string; text: string; accent: string };
@@ -264,27 +267,58 @@ function StylePackCard({
   onSelect: () => void; onDelete: () => void; onRetry: () => void;
 }) {
   const sg = pack.styleGuide;
+  // Collect preview images: prefer thumbnails, fall back to sourceFileUrls, then sourceFileUrl
+  const previewUrls: string[] = (
+    (pack.thumbnails && pack.thumbnails.length > 0)
+      ? pack.thumbnails
+      : (pack.sourceFileUrls && pack.sourceFileUrls.length > 0)
+        ? pack.sourceFileUrls
+        : pack.sourceFileUrl
+          ? [pack.sourceFileUrl]
+          : []
+  ).slice(0, 3);
+
   return (
     <div
       onClick={pack.status === "done" ? onSelect : undefined}
       className={`relative rounded-xl border-2 transition-all group ${
         pack.status === "done" ? "cursor-pointer" : "cursor-default opacity-70"
-      } ${selected ? "border-primary bg-primary/5" : "border-border bg-muted/30 hover:border-border/80"}`}
+      } ${selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-border/80"}`}
     >
-      {sg?.colorPalette && (
-        <div className="flex h-1.5 rounded-t-xl overflow-hidden">
-          {[sg.colorPalette.primary, sg.colorPalette.secondary, sg.colorPalette.accent, sg.colorPalette.background].map((c, i) => (
-            <div key={i} className="flex-1" style={{ backgroundColor: `#${c.replace("#", "")}` }} />
+      {/* Thumbnail strip */}
+      {previewUrls.length > 0 ? (
+        <div className={`grid rounded-t-xl overflow-hidden ${previewUrls.length === 1 ? "grid-cols-1" : previewUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"}`} style={{ height: 72 }}>
+          {previewUrls.map((url, i) => (
+            <img key={i} src={url} alt="" className="w-full h-full object-cover" />
           ))}
         </div>
-      )}
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{pack.name}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{pack.sourceType === "pdf" ? "PDF" : "图片"}</p>
+      ) : (
+        sg?.colorPalette && (
+          <div className="flex h-6 rounded-t-xl overflow-hidden">
+            {[sg.colorPalette.primary, sg.colorPalette.secondary, sg.colorPalette.accent, sg.colorPalette.background].map((c, i) => (
+              <div key={i} className="flex-1" style={{ backgroundColor: `#${c.replace("#", "")}` }} />
+            ))}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+        )
+      )}
+      {/* Selected indicator overlay on thumbnail */}
+      {selected && previewUrls.length > 0 && (
+        <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow">
+          <Check className="w-3 h-3 text-primary-foreground" />
+        </div>
+      )}
+      <div className="p-2.5">
+        <div className="flex items-start justify-between gap-1">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-foreground truncate leading-tight">{pack.name}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {pack.status === "processing" || pack.status === "pending" ? "AI 分析中…" :
+               pack.status === "failed" ? "提取失败" :
+               (pack.sourceFileUrls?.length ?? 1) > 1 ? `${pack.sourceFileUrls!.length} 张参考图` :
+               pack.sourceType === "pdf" ? "PDF" : "图片"}
+            </p>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
             {(pack.status === "processing" || pack.status === "pending") && (
               <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
             )}
@@ -294,17 +328,16 @@ function StylePackCard({
                 <RefreshCw className="w-3.5 h-3.5" />
               </div>
             )}
-            {pack.status === "done" && selected && <Check className="w-3.5 h-3.5 text-primary" />}
             <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onDelete(); }}
               className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3 h-3" />
             </div>
           </div>
         </div>
-        {sg && (
-          <div className="mt-2 flex flex-wrap gap-1">
+        {sg?.styleKeywords && sg.styleKeywords.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {sg.styleKeywords.slice(0, 3).map((kw) => (
-              <span key={kw} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{kw}</span>
+              <span key={kw} className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">{kw}</span>
             ))}
           </div>
         )}
@@ -520,15 +553,8 @@ export default function MediaLayout() {
   // 从素材库选择已有版式包（直接提取 styleGuide）
   const [libraryPackPickerOpen, setLibraryPackPickerOpen] = useState(false);
   const [libraryPackSearch, setLibraryPackSearch] = useState("");
-  const [libraryPackTab, setLibraryPackTab] = useState<"learned" | "all">("learned");
-  const { data: libraryPackAssets = [] } = trpc.assets.listByCategory.useQuery(
-    { category: "layout_pack" },
-    { enabled: libraryPackPickerOpen }
-  );
-  const { data: allLibraryAssets = [] } = trpc.assets.listAll.useQuery(
-    undefined,
-    { enabled: libraryPackPickerOpen && libraryPackTab === "all" }
-  );
+  // libraryPackTab / libraryPackAssets / allLibraryAssets removed:
+  // 版式包库弹窗现在直接使用 stylePacks 数据，无需额外查询
 
   // 从 URL 参数读取 jobId（由生成记录模块跳转过来时自动恢复）
   const urlJobId = useMemo(() => {
@@ -1679,14 +1705,15 @@ export default function MediaLayout() {
         </DialogContent>
       </Dialog>
 
-      {/* Library Pack Picker - 从素材库选择版式包（两种模式） */}
+      {/* Library Pack Picker - 直接使用 stylePacks 数据，点击只做选中 */}
       <Dialog open={libraryPackPickerOpen} onOpenChange={(v) => { if (!v) { setLibraryPackPickerOpen(false); setLibraryPackSearch(""); } }}>
-        <DialogContent className="max-w-2xl" style={{ display: "flex", flexDirection: "column" }}>
-          <DialogHeader>
+        <DialogContent className="max-w-2xl" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <DialogHeader className="pb-3">
             <DialogTitle className="text-base flex items-center gap-2">
               <Library className="w-4 h-4 text-primary" />
               版式包库
             </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">点击版式包即可选中，选中后可在左侧面板查看并提取风格提示词</p>
           </DialogHeader>
           <div className="relative mb-3">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -1697,56 +1724,99 @@ export default function MediaLayout() {
               className="pl-8 h-8 text-sm"
             />
           </div>
-          {(libraryPackAssets as any[]).length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-              <LayoutTemplate className="h-8 w-8 mb-2 opacity-30" />
-              <p className="text-sm">暂无已学习版式包</p>
-              <p className="text-xs mt-1 opacity-60">请点击「图片学习」上传参考图片进行学习</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
-              {(libraryPackAssets as any[])
-                .filter((a: any) => a.name.toLowerCase().includes(libraryPackSearch.toLowerCase()))
-                .map((asset: any) => (
-                <button
-                  key={asset.id}
-                  className="group relative rounded-lg overflow-hidden border border-border hover:border-primary/60 transition-colors bg-muted"
-                  style={{ position: "relative", paddingBottom: "100%" }}
-                  onClick={async () => {
-                    setLibraryPackPickerOpen(false);
-                    setLibraryPackSearch("");
-                    try {
-                      const pack = await trpcUtils.graphicStylePacks.getByAssetUrl.fetch({ fileUrl: asset.fileUrl });
-                      if (pack && pack.status === "done" && pack.id) {
+          {(() => {
+            const donePacks = (stylePacks as StylePack[]).filter(p => p.status === "done");
+            const filtered = donePacks.filter(p => p.name.toLowerCase().includes(libraryPackSearch.toLowerCase()));
+            if (donePacks.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                  <LayoutTemplate className="h-8 w-8 mb-2 opacity-30" />
+                  <p className="text-sm">暂无已完成的版式包</p>
+                  <p className="text-xs mt-1 opacity-60">请点击「图片学习」上传参考图片进行学习</p>
+                </div>
+              );
+            }
+            return (
+              <div className="grid grid-cols-3 gap-3 max-h-[420px] overflow-y-auto pr-1">
+                {filtered.map((pack) => {
+                  const previewUrls: string[] = (
+                    (pack.thumbnails && pack.thumbnails.length > 0)
+                      ? pack.thumbnails
+                      : (pack.sourceFileUrls && pack.sourceFileUrls.length > 0)
+                        ? pack.sourceFileUrls
+                        : pack.sourceFileUrl
+                          ? [pack.sourceFileUrl]
+                          : []
+                  ).slice(0, 3);
+                  const isSelected = selectedPackId === pack.id;
+                  return (
+                    <button
+                      key={pack.id}
+                      onClick={() => {
                         setSelectedPackId(pack.id);
-                        setExtractingPrompt(true);
-                        extractPromptMutation.mutate({ packId: pack.id });
-                        toast.info(`已选择版式包「${pack.name}」，正在提取风格提示词…`);
-                      } else if (pack && pack.status !== "done") {
-                        toast.error("该版式包尚未完成 AI 分析，请稍后再试");
-                      } else {
-                        setExtractingPrompt(true);
-                        extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
-                        toast.info(`正在从「${asset.name}」提取风格提示词…`);
-                      }
-                    } catch {
-                      setExtractingPrompt(true);
-                      extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
-                      toast.info(`正在从「${asset.name}」提取风格提示词…`);
-                    }
-                  }}
-                >
-                  <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
-                    <div className="w-full p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <p className="text-white text-xs truncate font-medium">{asset.name}</p>
-                      <p className="text-white/70 text-[10px] mt-0.5">直接提取风格</p>
-                    </div>
+                        setLibraryPackPickerOpen(false);
+                        setLibraryPackSearch("");
+                        toast.success(`已选择版式包「${pack.name}」`);
+                      }}
+                      className={`group relative rounded-xl border-2 overflow-hidden text-left transition-all ${
+                        isSelected ? "border-primary" : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {/* Thumbnail grid */}
+                      {previewUrls.length > 0 ? (
+                        <div className={`grid ${
+                          previewUrls.length === 1 ? "grid-cols-1" :
+                          previewUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"
+                        }`} style={{ height: 90 }}>
+                          {previewUrls.map((url, i) => (
+                            <img key={i} src={url} alt="" className="w-full h-full object-cover" />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex h-12 bg-muted">
+                          {pack.styleGuide?.colorPalette && [
+                            pack.styleGuide.colorPalette.primary,
+                            pack.styleGuide.colorPalette.secondary,
+                            pack.styleGuide.colorPalette.accent,
+                            pack.styleGuide.colorPalette.background,
+                          ].map((c, i) => (
+                            <div key={i} className="flex-1" style={{ backgroundColor: `#${c.replace("#", "")}` }} />
+                          ))}
+                        </div>
+                      )}
+                      {/* Selected badge */}
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow">
+                          <Check className="w-3 h-3 text-primary-foreground" />
+                        </div>
+                      )}
+                      {/* Info */}
+                      <div className="p-2 bg-card">
+                        <p className="text-xs font-medium text-foreground truncate">{pack.name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {(pack.sourceFileUrls?.length ?? 1) > 1
+                            ? `${pack.sourceFileUrls!.length} 张参考图`
+                            : pack.sourceType === "pdf" ? "PDF" : "图片"}
+                        </p>
+                        {pack.styleGuide?.styleKeywords && pack.styleGuide.styleKeywords.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-0.5">
+                            {pack.styleGuide.styleKeywords.slice(0, 2).map((kw) => (
+                              <span key={kw} className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">{kw}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <div className="col-span-3 flex flex-col items-center justify-center h-24 text-muted-foreground">
+                    <p className="text-sm">未找到匹配的版式包</p>
                   </div>
-                </button>
-              ))}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
       {/* Pack Asset Library Picker */}

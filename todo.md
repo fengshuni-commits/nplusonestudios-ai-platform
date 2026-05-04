@@ -2368,3 +2368,9 @@
 ## 版式包板块按钮整合
 - [x] 「上传学习」改名为「图片学习」，功能不变
 - [x] 「素材库」改名为「版式包库」，去掉「从素材库学习」标签页，只展示已学习版式包
+
+## 版式包选择 UX 改造
+- [x] StylePack 接口添加 thumbnails 和 sourceFileUrls 字段
+- [x] StylePackCard 卡片顶部展示缩略图（取 sourceFileUrls 前几张或 sourceFileUrl）
+- [x] 版式包库弹窗改为直接使用 stylePacks 数据，展示名称+缩略图，点击只做选中（不自动提取提示词）
+- [x] 修复：从版式包库选中后 selectedPackId 正确更新，左侧卡片高亮
