@@ -267,76 +267,33 @@ function StylePackCard({
   onSelect: () => void; onDelete: () => void; onRetry: () => void;
 }) {
   const sg = pack.styleGuide;
-  // Collect preview images: prefer thumbnails, fall back to sourceFileUrls, then sourceFileUrl
-  const previewUrls: string[] = (
+  // Use first available image as square thumbnail
+  const thumbUrl: string | null = (
     (pack.thumbnails && pack.thumbnails.length > 0)
-      ? pack.thumbnails
+      ? pack.thumbnails[0]
       : (pack.sourceFileUrls && pack.sourceFileUrls.length > 0)
-        ? pack.sourceFileUrls
-        : pack.sourceFileUrl
-          ? [pack.sourceFileUrl]
-          : []
-  ).slice(0, 3);
-
+        ? pack.sourceFileUrls[0]
+        : pack.sourceFileUrl ?? null
+  );
   return (
     <div
       onClick={pack.status === "done" ? onSelect : undefined}
-      className={`relative rounded-xl border-2 transition-all group ${
+      className={`relative flex items-center gap-3 rounded-xl border-2 p-2.5 transition-all group ${
         pack.status === "done" ? "cursor-pointer" : "cursor-default opacity-70"
       } ${selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-border/80"}`}
     >
-      {/* Thumbnail strip */}
-      {previewUrls.length > 0 ? (
-        <div className={`grid rounded-t-xl overflow-hidden bg-muted ${previewUrls.length === 1 ? "grid-cols-1" : previewUrls.length === 2 ? "grid-cols-2" : "grid-cols-3"}`} style={{ height: 80 }}>
-          {previewUrls.map((url, i) => (
-            <img key={i} src={url} alt="" className="w-full h-full object-contain" />
-          ))}
-        </div>
-      ) : (
-        sg?.colorPalette && (
-          <div className="flex h-6 rounded-t-xl overflow-hidden">
-            {[sg.colorPalette.primary, sg.colorPalette.secondary, sg.colorPalette.accent, sg.colorPalette.background].map((c, i) => (
-              <div key={i} className="flex-1" style={{ backgroundColor: `#${c.replace("#", "")}` }} />
-            ))}
-          </div>
-        )
-      )}
-      {/* Selected indicator overlay on thumbnail */}
-      {selected && previewUrls.length > 0 && (
-        <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow">
-          <Check className="w-3 h-3 text-primary-foreground" />
-        </div>
-      )}
-      <div className="p-2.5">
-        <div className="flex items-start justify-between gap-1">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-foreground truncate leading-tight">{pack.name}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {pack.status === "processing" || pack.status === "pending" ? "AI 分析中…" :
-               pack.status === "failed" ? "提取失败" :
-               (pack.sourceFileUrls?.length ?? 1) > 1 ? `${pack.sourceFileUrls!.length} 张参考图` :
-               pack.sourceType === "pdf" ? "PDF" : "图片"}
-            </p>
-          </div>
-          <div className="flex items-center gap-0.5 shrink-0">
-            {(pack.status === "processing" || pack.status === "pending") && (
-              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-            )}
-            {pack.status === "failed" && (
-              <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onRetry(); }}
-                className="p-1 rounded text-orange-400 hover:bg-orange-400/10 cursor-pointer">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </div>
-            )}
-            <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-              <Trash2 className="w-3 h-3" />
-            </div>
-          </div>
-        </div>
+      {/* Left: info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-foreground truncate leading-tight">{pack.name}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          {pack.status === "processing" || pack.status === "pending" ? "AI 分析中…" :
+           pack.status === "failed" ? "提取失败" :
+           (pack.sourceFileUrls?.length ?? 1) > 1 ? `${pack.sourceFileUrls!.length} 张参考图` :
+           pack.sourceType === "pdf" ? "PDF" : "图片"}
+        </p>
         {sg?.styleKeywords && sg.styleKeywords.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {sg.styleKeywords.slice(0, 3).map((kw) => (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {sg.styleKeywords.slice(0, 2).map((kw) => (
               <span key={kw} className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">{kw}</span>
             ))}
           </div>
@@ -344,6 +301,47 @@ function StylePackCard({
         {pack.status === "failed" && (
           <p className="text-[10px] text-red-400 mt-1 truncate">{pack.errorMessage || "提取失败"}</p>
         )}
+      </div>
+
+      {/* Right: square thumbnail */}
+      <div className="shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-muted border border-border flex items-center justify-center relative">
+        {thumbUrl ? (
+          <img src={thumbUrl} alt="" className="w-full h-full object-contain" />
+        ) : sg?.colorPalette ? (
+          <div className="w-full h-full grid grid-cols-2">
+            {[sg.colorPalette.primary, sg.colorPalette.background, sg.colorPalette.accent, sg.colorPalette.text].map((c, i) => (
+              <div key={i} style={{ backgroundColor: `#${(c ?? "888").replace("#", "")}` }} />
+            ))}
+          </div>
+        ) : (
+          <div className="w-full h-full bg-muted" />
+        )}
+        {(pack.status === "processing" || pack.status === "pending") && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+            <Loader2 className="w-4 h-4 text-primary animate-spin" />
+          </div>
+        )}
+      </div>
+
+      {/* Selected check badge */}
+      {selected && (
+        <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center shadow">
+          <Check className="w-2.5 h-2.5 text-primary-foreground" />
+        </div>
+      )}
+
+      {/* Action buttons (hover) */}
+      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {pack.status === "failed" && (
+          <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onRetry(); }}
+            className="p-1 rounded text-orange-400 hover:bg-orange-400/10 cursor-pointer">
+            <RefreshCw className="w-3 h-3" />
+          </div>
+        )}
+        <div role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer">
+          <Trash2 className="w-3 h-3" />
+        </div>
       </div>
     </div>
   );
