@@ -252,6 +252,8 @@ export function createVolcengineStreamSession(
     volcReady = false;
     flushing = false;
     stopKeepalive();
+    // Reset per-session utterance counter so new session's utterances are not skipped
+    sentDefiniteCount = 0;
 
     // Rescue any partial text from interrupted session
     if (currentPartialText.trim()) {
