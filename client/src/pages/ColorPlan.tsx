@@ -789,8 +789,8 @@ export default function ColorPlan() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-2 pb-2 border-b border-border/40">
-        <div className="flex items-center justify-end">
+      <div className="px-6 pt-3">
+        <div className="flex items-center justify-end mb-2">
           <AiToolSelector
             capability="rendering"
             value={toolId}
