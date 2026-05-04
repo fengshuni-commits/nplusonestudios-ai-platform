@@ -1345,9 +1345,14 @@ export default function HistoryPage() {
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                                   {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
                                 </span>
-                                <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
-                                {chainItem.modelName && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
+                                {/* Time and model shown inline for benchmark; moved below image for ai_render/color_plan */}
+                                {isBenchmark && (
+                                  <>
+                                    <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
+                                    {chainItem.modelName && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
+                                    )}
+                                  </>
                                 )}
                                 {/* Color plan params badges (inline with meta row) */}
                                 {isColorPlan && (
@@ -1528,6 +1533,13 @@ export default function HistoryPage() {
                               {promptText && (
                                 <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
                               )}
+                              {/* Time and model below prompt */}
+                              <div className="flex items-center gap-2 flex-wrap px-0.5">
+                                <span className="text-[11px] text-muted-foreground/50">{formatFullTime(chainItem.createdAt)}</span>
+                                {chainItem.modelName && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/50 font-mono">{chainItem.modelName}</span>
+                                )}
+                              </div>
                             </div>
                           )}
 
@@ -1564,6 +1576,13 @@ export default function HistoryPage() {
                               {promptText && (
                                 <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
                               )}
+                              {/* Time and model below prompt */}
+                              <div className="flex items-center gap-2 flex-wrap px-0.5">
+                                <span className="text-[11px] text-muted-foreground/50">{formatFullTime(chainItem.createdAt)}</span>
+                                {chainItem.modelName && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/50 font-mono">{chainItem.modelName}</span>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
