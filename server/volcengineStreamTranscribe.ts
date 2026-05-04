@@ -37,7 +37,7 @@ const FRAME_INTERVAL_MS = 40;     // 40ms between frames when flushing
 const FLUSH_FRAMES_PER_TICK = 4;
 const MAX_RETRIES = 5;
 const MAX_PENDING_FRAMES = 500;
-const KEEPALIVE_INTERVAL_MS = 2000; // send silence every 2s to prevent server timeout
+const KEEPALIVE_INTERVAL_MS = 200; // send silence every 200ms to prevent server timeout (45000081)
 
 // Silence frame: 1280 bytes of zeros (40ms of silence)
 const SILENCE_FRAME = Buffer.alloc(FRAME_SIZE, 0);

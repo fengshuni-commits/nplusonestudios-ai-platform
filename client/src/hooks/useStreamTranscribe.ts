@@ -5,12 +5,13 @@
  * - 通过 AudioWorklet 采集麦克风 PCM 帧
  * - 通过 WebSocket 发送到后端 /api/transcribe-stream
  * - 实时接收识别结果并回调
- * - 支持预连接（toolId 设置后提前建立 WS 连接，减少录音开始时的延迟）
  *
  * 关键设计原则：
  * - 所有回调（onPartial/onFinal/onError/onReady）通过 ref 访问，避免闭包过期问题
- * - 只有一套 WS 消息处理函数（handleWsMessage），同时用于预连接和活跃连接
+ * - 只有一套 WS 消息处理函数（handleWsMessage）
  * - recordingActiveRef 仅控制是否向 WS 发送音频数据，不控制是否接收消息
+ * - 预连接已禁用：火山引擎在建立连接后若长时间未收到音频会报 45000081 超时，
+ *   因此改为仅在 start() 时建立连接，避免空连接超时。
  */
 
 import { useRef, useState, useCallback, useEffect } from "react";
@@ -121,9 +122,11 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     }
   }, []); // no deps needed - all callbacks accessed via refs
 
-  // ── Pre-connect WS when toolId is set ─────────────────────────────────
+  // ── Pre-connect disabled to prevent 45000081 timeout ─────────────────
+  // Volcengine closes the session if no audio arrives within ~60s of connection.
+  // Pre-connecting causes this timeout when the user hasn't started recording yet.
+  // WS is now created only inside start().
   const preConnectRef = useRef<WebSocket | null>(null);
-  const preConnectToolIdRef = useRef<number | undefined>(undefined);
 
   const closePreConnect = useCallback(() => {
     if (preConnectRef.current) {
@@ -135,51 +138,10 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     }
   }, []);
 
+  // Cleanup on unmount only
   useEffect(() => {
-    if (!toolId) {
-      closePreConnect();
-      return;
-    }
-    // Don't pre-connect if already recording
-    if (recordingActiveRef.current) return;
-    // Don't re-connect if same toolId and already open
-    if (preConnectToolIdRef.current === toolId && preConnectRef.current?.readyState === WebSocket.OPEN) return;
-
-    closePreConnect();
-    preConnectToolIdRef.current = toolId;
-
-    const wsUrl = buildWsUrl(toolId);
-    const ws = new WebSocket(wsUrl);
-    ws.binaryType = "arraybuffer";
-    preConnectRef.current = ws;
-
-    // Use the unified handler - it will call onReady/onPartial/etc. via refs
-    ws.onmessage = handleWsMessage;
-
-    ws.onerror = () => {
-      // Pre-connect error is non-fatal; start() will create a fresh WS if needed
-    };
-
-    ws.onclose = () => {
-      if (preConnectRef.current === ws) {
-        preConnectRef.current = null;
-      }
-      if (recordingActiveRef.current) {
-        setIsReady(false);
-        setIsConnecting(false);
-      }
-    };
-
-    return () => {
-      if (!recordingActiveRef.current) {
-        ws.onmessage = null;
-        ws.onerror = null;
-        ws.onclose = null;
-        ws.close();
-        if (preConnectRef.current === ws) preConnectRef.current = null;
-      }
-    };
-  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage]);
+    return () => { closePreConnect(); };
+  }, [closePreConnect]);
 
   const stop = useCallback(() => {
     recordingActiveRef.current = false;
@@ -288,27 +250,11 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     workletNodeRef.current = workletNode;
     workletNode.port.postMessage({ type: 'init', sampleRate: audioCtx.sampleRate });
 
-    // 3. Use pre-connected WS if available, otherwise create new one
-    let ws: WebSocket;
-    if (preConnectRef.current &&
-        (preConnectRef.current.readyState === WebSocket.OPEN ||
-         preConnectRef.current.readyState === WebSocket.CONNECTING)) {
-      // Reuse the pre-connected WS - it already has handleWsMessage attached
-      ws = preConnectRef.current;
-      preConnectRef.current = null;
-      // If xfyun already sent "ready" before recording started, signal now
-      if (isReady) {
-        // already set, no-op
-      }
-    } else {
-      // No usable pre-connection - create fresh WS
-      closePreConnect();
-      const wsUrl = buildWsUrl();
-      ws = new WebSocket(wsUrl);
-      ws.binaryType = "arraybuffer";
-      // Attach the unified handler
-      ws.onmessage = handleWsMessage;
-    }
+    // 3. Create a fresh WS connection (pre-connect disabled)
+    const wsUrl = buildWsUrl();
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = handleWsMessage;
 
     wsRef.current = ws;
 
@@ -334,7 +280,7 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
         ws.send(e.data as ArrayBuffer);
       }
     };
-  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage, isReady]);
+  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage]);
 
   return { start, stop, pause, resume, isReady, isConnecting, streamingText };
 }
