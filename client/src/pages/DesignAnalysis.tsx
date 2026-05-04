@@ -89,6 +89,24 @@ export default function DesignAnalysis() {
   const uploadMutation = trpc.upload.file.useMutation();
   const submitMutation = trpc.analysisImage.submit.useMutation();
 
+  // ─── Prefill from URL params (e.g. from History "重新生成") ──────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const typeParam = params.get('type') as AnalysisType | null;
+    const refImageUrl = params.get('referenceImageUrl');
+    const toolIdParam = params.get('toolId');
+    if (typeParam && (typeParam === 'material' || typeParam === 'soft_furnishing')) {
+      setSelectedType(typeParam);
+    }
+    if (refImageUrl) {
+      setReferenceUrl(refImageUrl);
+      setReferencePreview(refImageUrl);
+    }
+    if (toolIdParam) {
+      setToolId(Number(toolIdParam));
+    }
+  }, []);
+
   // ─── Cleanup polling on unmount ─────────────────────────────────────────
   useEffect(() => {
     return () => {

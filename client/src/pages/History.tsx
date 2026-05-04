@@ -1406,6 +1406,19 @@ export default function HistoryPage() {
                                       </Button>
                                     </>
                                   )}
+                                  {/* 重新生成：回填参数到分析图页面 */}
+                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary/80"
+                                    onClick={() => {
+                                      const p = new URLSearchParams();
+                                      if (inputParams?.type) p.set('type', inputParams.type);
+                                      if (inputParams?.referenceImageUrl) p.set('referenceImageUrl', inputParams.referenceImageUrl);
+                                      if (inputParams?.toolId) p.set('toolId', String(inputParams.toolId));
+                                      setDetailOpen(false);
+                                      setTimeout(() => navigate(`/design/analysis?${p.toString()}`), 150);
+                                    }} title="回填参数，重新生成">
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    重新生成
+                                  </Button>
                                 </>
                               ) : isColorPlan ? (
                                 <>
