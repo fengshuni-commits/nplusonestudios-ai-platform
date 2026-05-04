@@ -485,6 +485,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             {activeMenuItem ? (
               <div className="flex items-center gap-2">
+                <activeMenuItem.icon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="text-base font-semibold text-foreground tracking-tight">
                   {activeMenuItem.label}
                 </span>
@@ -499,6 +500,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
               </div>
             ) : location === "/" ? (
               <div className="flex items-center gap-2">
+                <LayoutDashboard className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="text-base font-semibold text-foreground tracking-tight">工作台</span>
                 <span className="text-xs text-muted-foreground/40">|</span>
                 <span className="text-xs text-muted-foreground">N+1 STUDIOS AI 工作平台</span>
