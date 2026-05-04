@@ -421,23 +421,23 @@ export default function Projects() {
 
       {viewMode === "grid" ? (
         isLoading ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[1, 2, 3, 4, 5].map((i) => (
               <Card key={i} className="animate-pulse"><CardContent className="p-6"><div className="h-20 bg-muted rounded" /></CardContent></Card>
             ))}
           </div>
         ) : projects && projects.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {projects.map((project: any) => (
               <Card
                 key={project.id}
                 className="hover:shadow-md transition-shadow cursor-pointer group relative"
                 onClick={() => setLocation(`/projects/${project.id}`)}
               >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <FolderKanban className="h-5 w-5 text-primary" />
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <FolderKanban className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Badge variant="outline" className={`text-xs ${statusBadgeProps(project.status).className}`}>{statusBadgeProps(project.status).label}</Badge>
@@ -457,7 +457,7 @@ export default function Projects() {
                   <h3 className="font-medium text-sm group-hover:text-primary transition-colors">{project.name}</h3>
                   {project.code && <p className="text-xs text-muted-foreground mt-0.5">{project.code}</p>}
                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{(project as any).summaryDisplay || "暂无描述"}</p>
-                  <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                     {(project as any).clientNameDisplay && (
                       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(project as any).clientNameDisplay}</span>
                     )}
