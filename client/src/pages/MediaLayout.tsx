@@ -1086,23 +1086,6 @@ export default function MediaLayout() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border flex items-center gap-3 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <LayoutTemplate className="w-4 h-4 text-primary" />
-        </div>
-        <div className="flex-1">
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowHelp(true)}
-          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-lg"
-          title="使用说明"
-        >
-          <HelpCircle className="w-4.5 h-4.5" />
-        </Button>
-      </div>
 
       {/* Help Dialog */}
       <Dialog open={showHelp} onOpenChange={setShowHelp}>
