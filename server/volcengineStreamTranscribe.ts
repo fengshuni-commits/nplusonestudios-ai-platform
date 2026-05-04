@@ -317,14 +317,20 @@ export function createVolcengineStreamSession(
       if (parsed.error && parsed.error.code && parsed.error.code !== 0) {
         console.error(`[volcStreamTranscribe] server error ${parsed.error.code}: ${parsed.error.message}`);
         stopKeepalive();
-        if (retryCount < MAX_RETRIES && !ended && !clientClosed) {
-          retryCount++;
-          // Faster retry: 500ms, 1s, 2s, 4s, 8s
-          const delay = Math.pow(2, retryCount - 1) * 500;
-          send({ type: "warning", message: `火山引擎连接重试中 (${retryCount}/${MAX_RETRIES})...` });
+        // 45000081 = session timeout / waiting next packet timeout.
+        // This happens when the volcengine session expires (every ~2min) or when
+        // the server closes the session due to inactivity. It is NOT a fatal error
+        // and should always trigger a reconnect, regardless of retryCount.
+        const isSessionTimeout = parsed.error.code === 45000081;
+        if (!ended && !clientClosed && (isSessionTimeout || retryCount < MAX_RETRIES)) {
+          if (!isSessionTimeout) retryCount++;
+          const delay = isSessionTimeout ? 500 : Math.pow(2, retryCount - 1) * 500;
+          if (!isSessionTimeout) {
+            send({ type: "warning", message: `火山引擎连接重试中 (${retryCount}/${MAX_RETRIES})...` });
+          }
           ws.close();
           setTimeout(() => connectVolcengine(true), delay);
-        } else {
+        } else if (!isSessionTimeout) {
           send({ type: "error", message: `火山引擎识别错误 (${parsed.error.code}): ${parsed.error.message}` });
         }
         return;
