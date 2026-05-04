@@ -302,7 +302,11 @@ export default function DesignAnalysis() {
       <div className="mb-6">
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+      <div>
+        <div className="flex items-center justify-end mb-2">
+          <AiToolSelector capability="rendering" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
         {/* ─── Left panel: controls ─── */}
         <div className="flex flex-col gap-4">
           {/* Reference image upload */}
@@ -438,17 +442,7 @@ export default function DesignAnalysis() {
             </CardContent>
           </Card>
 
-          {/* AI tool selector */}
-          <Card className="border-border py-0 gap-0">
-            <CardContent className="px-4 py-4">
-              <AiToolSelector
-                capability="rendering"
-                value={toolId}
-                onChange={setToolId}
-                showBuiltIn={false}
-              />
-            </CardContent>
-          </Card>
+
 
           {/* Extra prompt */}
           <Card className="border-border py-0 gap-0">
@@ -611,10 +605,10 @@ export default function DesignAnalysis() {
           )}
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
-
 // ─── RatioPreview: visual aspect ratio indicator ──────────────────────────────
 function RatioPreview({ ratio }: { ratio: string }) {
   const [w, h] = ratio.split(":").map(Number);
