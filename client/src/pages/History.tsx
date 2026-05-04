@@ -1341,42 +1341,18 @@ export default function HistoryPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
-                                </span>
-                                {/* Time and model shown inline for benchmark; moved below image for ai_render/color_plan */}
-                                {isBenchmark && (
-                                  <>
-                                    <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
-                                    {chainItem.modelName && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
-                                    )}
-                                  </>
-                                )}
-                                {/* Color plan params badges (inline with meta row) */}
-                                {isColorPlan && (
-                                  <>
-                                    {inputParams?.planStyle && (
-                                      <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                        {inputParams.planStyle === 'colored' ? '彩色平面' : inputParams.planStyle === 'hand_drawn' ? '手绘风格' : '线稿风格'}
-                                      </span>
-                                    )}
-                                    {inputParams?.referenceUrl && (
-                                      <span className="inline-flex items-center text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">含参考图</span>
-                                    )}
-                                    {inputParams?.isInpaint && (
-                                      <span className="inline-flex items-center text-[10px] text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded">局部修改</span>
-                                    )}
-                                  </>
-                                )}
-                                {/* AI render style badge */}
-                                {!isBenchmark && !isColorPlan && inputParams?.style && (
-                                  <span className="inline-block text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                    {inputParams.style}
+                              {/* For benchmark: show all meta inline. For ai_render/color_plan: top row is empty (all meta moved below image) */}
+                              {isBenchmark && (
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                    {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
                                   </span>
-                                )}
-                              </div>
+                                  <span className="text-[11px] text-muted-foreground/60">{formatFullTime(chainItem.createdAt)}</span>
+                                  {chainItem.modelName && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground/70 font-mono">{chainItem.modelName}</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                               {/* Per-version project selector */}
@@ -1533,11 +1509,25 @@ export default function HistoryPage() {
                               {promptText && (
                                 <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
                               )}
-                              {/* Time and model below prompt */}
-                              <div className="flex items-center gap-2 flex-wrap px-0.5">
-                                <span className="text-[11px] text-muted-foreground/50">{formatFullTime(chainItem.createdAt)}</span>
+                              {/* Meta row: generation order + color plan params + time + model */}
+                              <div className="flex items-center gap-1.5 flex-wrap px-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
+                                </span>
+                                {inputParams?.planStyle && (
+                                  <span className="inline-flex items-center text-[10px] text-muted-foreground/60 bg-muted/60 px-1.5 py-0.5 rounded">
+                                    {inputParams.planStyle === 'colored' ? '彩色平面' : inputParams.planStyle === 'hand_drawn' ? '手绘风格' : '线稿风格'}
+                                  </span>
+                                )}
+                                {inputParams?.referenceUrl && (
+                                  <span className="inline-flex items-center text-[10px] text-muted-foreground/60 bg-muted/60 px-1.5 py-0.5 rounded">含参考图</span>
+                                )}
+                                {inputParams?.isInpaint && (
+                                  <span className="inline-flex items-center text-[10px] text-primary/60 bg-primary/10 px-1.5 py-0.5 rounded">局部修改</span>
+                                )}
+                                <span className="text-[11px] text-muted-foreground/40">{formatFullTime(chainItem.createdAt)}</span>
                                 {chainItem.modelName && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/50 font-mono">{chainItem.modelName}</span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/40 font-mono">{chainItem.modelName}</span>
                                 )}
                               </div>
                             </div>
@@ -1576,11 +1566,17 @@ export default function HistoryPage() {
                               {promptText && (
                                 <p className="text-xs text-muted-foreground/70 leading-relaxed px-0.5">{promptText}</p>
                               )}
-                              {/* Time and model below prompt */}
-                              <div className="flex items-center gap-2 flex-wrap px-0.5">
-                                <span className="text-[11px] text-muted-foreground/50">{formatFullTime(chainItem.createdAt)}</span>
+                              {/* Meta row: generation order + style + time + model */}
+                              <div className="flex items-center gap-1.5 flex-wrap px-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                  {isFirst ? "初始生成" : `第 ${idx + 1} 次修改`}
+                                </span>
+                                {inputParams?.style && (
+                                  <span className="inline-block text-[10px] text-muted-foreground/60 bg-muted/60 px-1.5 py-0.5 rounded">{inputParams.style}</span>
+                                )}
+                                <span className="text-[11px] text-muted-foreground/40">{formatFullTime(chainItem.createdAt)}</span>
                                 {chainItem.modelName && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/50 font-mono">{chainItem.modelName}</span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground/40 font-mono">{chainItem.modelName}</span>
                                 )}
                               </div>
                             </div>
