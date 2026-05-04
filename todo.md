@@ -2412,3 +2412,9 @@
 - [x] 去掉工具无 apiEndpoint/apiKeyEncrypted 时的静默 fallback
 - [x] 去掉 key pool 无可用 key 时的静默 fallback
 - [x] 去掉 unknown provider 时的静默 fallback
+
+## 图文排版生成记录展示大模型名称
+- [x] 数据库 graphic_layout_jobs 表新增 modelsUsed 字段（JSON 数组，存所有页用到的模型名去重）
+- [x] graphicLayoutService.ts：每页收集 genResult.modelName，完成后写入 modelsUsed
+- [x] list/status 接口返回 modelsUsed 字段（list 和 getGraphicLayoutJobRaw 均已更新）
+- [x] 生成记录 UI 展示模型名 badge（支持多个）：MediaLayout.tsx 结果页头部 + History.tsx 详情面板均展示

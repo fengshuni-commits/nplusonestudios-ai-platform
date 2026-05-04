@@ -5890,6 +5890,7 @@ const graphicLayoutRouter = router({
       createdAt: graphicLayoutJobs.createdAt,
       updatedAt: graphicLayoutJobs.updatedAt,
       pages: graphicLayoutJobs.pages,
+      modelsUsed: graphicLayoutJobs.modelsUsed,
     }).from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(30);
     // Only include the first page thumbnail to avoid sending all page images
     return rows.map(row => {

@@ -644,6 +644,8 @@ export const graphicLayoutJobs = mysqlTable("graphic_layout_jobs", {
   pages: json("pages"),
   // LLM 生成的每页完整 HTML 字符串数组
   htmlPages: json("htmlPages"),
+  // 本次生成所用的大模型名称列表（去重，JSON 字符串数组）
+  modelsUsed: json("modelsUsed"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

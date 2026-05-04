@@ -196,6 +196,7 @@ export async function generateGraphicLayoutAsync(
     const generatedPages: any[] = [];
     const byTypeGroupNames = getByTypeGroupNames();
     let anyPageFailed = false;
+    const modelNamesCollected: string[] = [];
 
     for (let pageIdx = 0; pageIdx < job.pageCount; pageIdx++) {
       try {
@@ -339,6 +340,9 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
         );
 
         const pageImageUrl = genResult.url ?? "";
+        if (genResult.modelName && !modelNamesCollected.includes(genResult.modelName)) {
+          modelNamesCollected.push(genResult.modelName);
+        }
 
         // AI renders text directly — no canvas composite step needed.
         // compositeImageUrl is set equal to imageUrl so existing frontend/export code works unchanged.
@@ -380,7 +384,7 @@ ${styleGuideHint ? styleGuideHint : "风格：现代简约，专业感强"}
       : null;
 
     await drizzleDb.update(graphicLayoutJobs)
-      .set({ status: finalStatus, pages: generatedPages, htmlPages: [], errorMessage: errorSummary } as any)
+      .set({ status: finalStatus, pages: generatedPages, htmlPages: [], errorMessage: errorSummary, modelsUsed: modelNamesCollected.length > 0 ? modelNamesCollected : null } as any)
       .where(_eq(graphicLayoutJobs.id, jobId));
 
     const docTypeLabels: Record<string, string> = {

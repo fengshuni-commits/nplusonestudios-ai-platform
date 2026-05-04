@@ -1839,6 +1839,19 @@ export default function HistoryPage() {
                           </Button>
                         )}
                       </div>
+                      {/* Models used badges */}
+                      {(() => {
+                        const modelsUsed = (layoutJobQuery.data as any)?.modelsUsed as string[] | null | undefined;
+                        if (!modelsUsed || modelsUsed.length === 0) return null;
+                        return (
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                            <span className="text-[10px] text-muted-foreground/60">生成模型：</span>
+                            {modelsUsed.map((name: string) => (
+                              <span key={name} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground/70 border border-border/40">{name}</span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {/* Summary / content text */}
                       {displayContentItem?.summary && (
                         <div className="space-y-1 pt-2 border-t border-border/30">

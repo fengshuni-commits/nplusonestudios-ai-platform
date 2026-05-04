@@ -88,6 +88,7 @@ interface LayoutJob {
   pageCount?: number;
   assetUrls?: any;
   stylePrompt?: string | null;
+  modelsUsed?: string[] | null;
 }
 
 const DOC_TYPES = [
@@ -1623,6 +1624,9 @@ export default function MediaLayout() {
                       <Pencil className="w-2.5 h-2.5 mr-1" />悬停文字可编辑
                     </Badge>
                   )}
+                  {((activeJob as any)?.modelsUsed as string[] | null | undefined)?.map((name: string) => (
+                    <Badge key={name} variant="outline" className="text-[10px] font-mono border-muted-foreground/20 text-muted-foreground/60">{name}</Badge>
+                  ))}
                 </div>
                 <div className="flex items-center gap-2">
                   {/* 反馈按钮 */}

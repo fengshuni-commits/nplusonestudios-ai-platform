@@ -2402,7 +2402,7 @@ export async function getGraphicLayoutJobRaw(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.execute(
-    sql`SELECT id, userId, packId, docType, pageCount, aspectRatio, contentText, assetUrls, title, stylePrompt, status, errorMessage, pages, htmlPages, createdAt, updatedAt
+    sql`SELECT id, userId, packId, docType, pageCount, aspectRatio, contentText, assetUrls, title, stylePrompt, status, errorMessage, pages, htmlPages, modelsUsed, createdAt, updatedAt
         FROM graphic_layout_jobs
         WHERE id = ${id} AND userId = ${userId}
         LIMIT 1`
@@ -2430,6 +2430,7 @@ export async function getGraphicLayoutJobRaw(id: number, userId: number) {
     errorMessage: row.errorMessage as string | null,
     pages: parseJson(row.pages) as any[] | null,
     htmlPages: parseJson(row.htmlPages) as any[] | null,
+    modelsUsed: parseJson(row.modelsUsed) as string[] | null,
     createdAt: row.createdAt ? new Date(row.createdAt as string) : new Date(),
     updatedAt: row.updatedAt ? new Date(row.updatedAt as string) : new Date(),
   };
