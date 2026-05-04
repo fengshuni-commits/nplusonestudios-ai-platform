@@ -164,8 +164,8 @@ function AssetPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl" style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+        <DialogHeader style={{flexShrink: 0}}>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {folderPath.length > 0 && (
@@ -188,11 +188,11 @@ function AssetPickerDialog({
             className="pl-8 h-8 text-sm"
           />
         </div>
-        <div className="grid grid-cols-4 gap-2 max-h-80 overflow-y-auto">
+        <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', maxHeight: '320px', overflowY: 'auto', flexShrink: 0}}>
           {filtered.map((asset) => (
             <button
               key={asset.id}
-              className="group relative aspect-square rounded-lg overflow-hidden border border-border/40 hover:border-primary/60 transition-colors bg-muted/30"
+              style={{position: 'relative', width: '100%', paddingBottom: '100%', display: 'block', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'rgba(255,255,255,0.05)'}}
               onClick={() => {
                 if (asset.isFolder) {
                   handleOpenFolder(asset.id, asset.name);
@@ -209,13 +209,13 @@ function AssetPickerDialog({
               }}
             >
               {asset.isFolder ? (
-                <div className="flex flex-col items-center justify-center h-full gap-1">
+                <div style={{position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px'}}>
                   <FolderOpen className="h-8 w-8 text-amber-500" />
                   <span className="text-xs text-muted-foreground truncate px-1 w-full text-center">{asset.name}</span>
                 </div>
               ) : (
                 <>
-                  <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
+                  <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover'}} />
                   {multiSelect && selectedIds.has(asset.id) ? (
                     <div className="absolute inset-0 bg-primary/40 flex items-center justify-center">
                       <Check className="h-5 w-5 text-white" />
