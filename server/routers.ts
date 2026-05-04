@@ -1673,6 +1673,18 @@ const assetsRouter = router({
         .where(_eq(assets.category, input.category))
         .orderBy(assets.createdAt);
     }),
+  listAll: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }).optional())
+    .query(async ({ input }) => {
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) return [];
+      const { assets } = await import("../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+      return drizzleDb.select().from(assets)
+        .where(eq(assets.isFolder, false))
+        .orderBy(assets.createdAt)
+        .limit(input?.limit ?? 300);
+    }),
   moveAsset: protectedProcedure
     .input(z.object({
       assetId: z.number(),

@@ -522,9 +522,14 @@ export default function MediaLayout() {
   // 从素材库选择已有版式包（直接提取 styleGuide）
   const [libraryPackPickerOpen, setLibraryPackPickerOpen] = useState(false);
   const [libraryPackSearch, setLibraryPackSearch] = useState("");
+  const [libraryPackTab, setLibraryPackTab] = useState<"learned" | "all">("learned");
   const { data: libraryPackAssets = [] } = trpc.assets.listByCategory.useQuery(
     { category: "layout_pack" },
     { enabled: libraryPackPickerOpen }
+  );
+  const { data: allLibraryAssets = [] } = trpc.assets.listAll.useQuery(
+    undefined,
+    { enabled: libraryPackPickerOpen && libraryPackTab === "all" }
   );
 
   // 从 URL 参数读取 jobId（由生成记录模块跳转过来时自动恢复）
@@ -1885,78 +1890,136 @@ export default function MediaLayout() {
         </DialogContent>
       </Dialog>
 
-      {/* Library Pack Picker - 从素材库选择已有版式包 */}
-      <Dialog open={libraryPackPickerOpen} onOpenChange={(v) => { if (!v) { setLibraryPackPickerOpen(false); setLibraryPackSearch(""); } }}>
-        <DialogContent className="max-w-xl bg-[#1a1a1a] border-white/10 text-white">
+      {/* Library Pack Picker - 从素材库选择版式包（两种模式） */}
+      <Dialog open={libraryPackPickerOpen} onOpenChange={(v) => { if (!v) { setLibraryPackPickerOpen(false); setLibraryPackSearch(""); setLibraryPackTab("learned"); } }}>
+        <DialogContent className="max-w-2xl bg-[#1a1a1a] border-white/10 text-white" style={{ display: "flex", flexDirection: "column" }}>
           <DialogHeader>
             <DialogTitle className="text-base flex items-center gap-2">
               <Library className="w-4 h-4 text-[#B87333]" />
-              从素材库选择版式包
+              从素材库选择
             </DialogTitle>
           </DialogHeader>
+          {/* Tabs */}
+          <div className="flex gap-1 mb-3 bg-black/20 rounded-lg p-1">
+            <button
+              className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${libraryPackTab === "learned" ? "bg-[#B87333] text-white" : "text-white/50 hover:text-white/80"}`}
+              onClick={() => setLibraryPackTab("learned")}
+            >
+              已学习版式包
+            </button>
+            <button
+              className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${libraryPackTab === "all" ? "bg-[#B87333] text-white" : "text-white/50 hover:text-white/80"}`}
+              onClick={() => setLibraryPackTab("all")}
+            >
+              从素材库学习
+            </button>
+          </div>
           <div className="relative mb-3">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/30" />
             <Input
-              placeholder="搜索版式包…"
+              placeholder={libraryPackTab === "learned" ? "搜索版式包…" : "搜索素材…"}
               value={libraryPackSearch}
               onChange={(e) => setLibraryPackSearch(e.target.value)}
               className="pl-8 h-8 text-sm bg-black/20 border-white/10 text-white placeholder:text-white/30"
             />
           </div>
-          {(libraryPackAssets as any[]).length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-white/30">
-              <LayoutTemplate className="h-8 w-8 mb-2 opacity-30" />
-              <p className="text-sm">素材库中暂无版式包</p>
-              <p className="text-xs mt-1 opacity-60">请先上传版式包参考图片</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3 max-h-72 overflow-y-auto">
-              {(libraryPackAssets as any[])
-                .filter((a: any) => a.name.toLowerCase().includes(libraryPackSearch.toLowerCase()))
-                .map((asset: any) => (
-                <button
-                  key={asset.id}
-                  className="group relative aspect-[3/4] rounded-lg overflow-hidden border border-white/10 hover:border-[#B87333]/60 transition-colors bg-black/20"
-                  onClick={async () => {
-                    setLibraryPackPickerOpen(false);
-                    setLibraryPackSearch("");
-                    // Find the corresponding graphic_style_pack by fileUrl
-                    try {
-                      const pack = await trpcUtils.graphicStylePacks.getByAssetUrl.fetch({ fileUrl: asset.fileUrl });
-                      if (pack && pack.status === "done" && pack.id) {
-                        setSelectedPackId(pack.id);
-                        setExtractingPrompt(true);
-                        extractPromptMutation.mutate({ packId: pack.id });
-                        toast.info(`已选择版式包「${pack.name}」，正在提取风格提示词…`);
-                      } else if (pack && pack.status !== "done") {
-                        toast.error("该版式包尚未完成 AI 分析，请稍后再试");
-                      } else {
-                        // No matching pack found, use imageUrls directly
+          {libraryPackTab === "learned" ? (
+            (libraryPackAssets as any[]).length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-white/30">
+                <LayoutTemplate className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm">素材库中暂无已学习版式包</p>
+                <p className="text-xs mt-1 opacity-60">请切换到「从素材库学习」选择图片进行学习</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+                {(libraryPackAssets as any[])
+                  .filter((a: any) => a.name.toLowerCase().includes(libraryPackSearch.toLowerCase()))
+                  .map((asset: any) => (
+                  <button
+                    key={asset.id}
+                    className="group relative rounded-lg overflow-hidden border border-white/10 hover:border-[#B87333]/60 transition-colors bg-black/20"
+                    style={{ position: "relative", paddingBottom: "100%" }}
+                    onClick={async () => {
+                      setLibraryPackPickerOpen(false);
+                      setLibraryPackSearch("");
+                      setLibraryPackTab("learned");
+                      try {
+                        const pack = await trpcUtils.graphicStylePacks.getByAssetUrl.fetch({ fileUrl: asset.fileUrl });
+                        if (pack && pack.status === "done" && pack.id) {
+                          setSelectedPackId(pack.id);
+                          setExtractingPrompt(true);
+                          extractPromptMutation.mutate({ packId: pack.id });
+                          toast.info(`已选择版式包「${pack.name}」，正在提取风格提示词…`);
+                        } else if (pack && pack.status !== "done") {
+                          toast.error("该版式包尚未完成 AI 分析，请稍后再试");
+                        } else {
+                          setExtractingPrompt(true);
+                          extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
+                          toast.info(`正在从「${asset.name}」提取风格提示词…`);
+                        }
+                      } catch {
                         setExtractingPrompt(true);
                         extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
                         toast.info(`正在从「${asset.name}」提取风格提示词…`);
                       }
-                    } catch {
-                      setExtractingPrompt(true);
-                      extractPromptMutation.mutate({ imageUrls: [asset.fileUrl] });
-                      toast.info(`正在从「${asset.name}」提取风格提示词…`);
-                    }
-                  }}
-                >
-                  <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
-                    <div className="w-full p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <p className="text-white text-xs truncate font-medium">{asset.name}</p>
-                      <p className="text-white/50 text-[10px] mt-0.5">点击提取风格提示词</p>
+                    }}
+                  >
+                    <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="absolute inset-0 w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
+                      <div className="w-full p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-white text-xs truncate font-medium">{asset.name}</p>
+                        <p className="text-white/50 text-[10px] mt-0.5">直接提取风格</p>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : (
+            (allLibraryAssets as any[]).length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-white/30">
+                <Images className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-sm">素材库暂无图片</p>
+                <p className="text-xs mt-1 opacity-60">请先在素材库上传图片</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+                {(allLibraryAssets as any[])
+                  .filter((a: any) => a.name.toLowerCase().includes(libraryPackSearch.toLowerCase()))
+                  .map((asset: any) => (
+                  <button
+                    key={asset.id}
+                    className="group relative rounded-lg overflow-hidden border border-white/10 hover:border-[#B87333]/60 transition-colors bg-black/20"
+                    style={{ position: "relative", paddingBottom: "100%" }}
+                    onClick={() => {
+                      setLibraryPackPickerOpen(false);
+                      setLibraryPackSearch("");
+                      setLibraryPackTab("learned");
+                      const isPdf = asset.fileUrl?.toLowerCase().includes(".pdf");
+                      createPackMutation.mutate({
+                        name: asset.name,
+                        sourceType: isPdf ? "pdf" : "images",
+                        sourceFileUrls: [asset.fileUrl],
+                        sourceFileUrl: asset.fileUrl,
+                        sourceFileKey: asset.fileKey || asset.fileUrl,
+                      });
+                      toast.info(`正在对「${asset.name}」进行版式学习，请稍候…`);
+                    }}
+                  >
+                    <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="absolute inset-0 w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
+                      <div className="w-full p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-white text-xs truncate font-medium">{asset.name}</p>
+                        <p className="text-white/50 text-[10px] mt-0.5">点击触发 AI 学习</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </DialogContent>
       </Dialog>
-
       {/* Pack Asset Library Picker */}
       <AssetPickerDialog
         open={packAssetPickerOpen}
