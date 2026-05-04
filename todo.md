@@ -2406,3 +2406,9 @@
 - [x] routers.ts inpaintTextBlock：更新 inpainting prompt，要求 AI 在遗罩区域重新渲染指定文案，保持周边设计不变
 - [x] 前端 MediaLayout.tsx：保留透明热区点击机制，移除对 compositeImageUrl 的特殊处理（直接用 imageUrl）
 - [x] 前端 MediaLayout.tsx：编辑弹窗标题改为「 AI 重绘文字」，添加重绘时间说明（需 5–15 秒）
+
+## 移除 generateImageWithTool 静默 fallback
+- [x] 去掉 toolId 为空时静默用内置 AI 的 fallback，改为抛出明确错误
+- [x] 去掉工具无 apiEndpoint/apiKeyEncrypted 时的静默 fallback
+- [x] 去掉 key pool 无可用 key 时的静默 fallback
+- [x] 去掉 unknown provider 时的静默 fallback

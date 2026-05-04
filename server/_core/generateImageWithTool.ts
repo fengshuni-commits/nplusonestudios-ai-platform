@@ -211,38 +211,33 @@ async function callGeminiImageApi(opts: {
 }
 
 /**
- * Generate an image using the specified AI tool, or fall back to built-in AI.
+ * Generate an image using the specified AI tool. Throws a descriptive error if the tool is unavailable.
  */
 export async function generateImageWithTool(
   opts: GenerateWithToolOptions
 ): Promise<{ url: string; modelName?: string }> {
   const { toolId, ...genOpts } = opts;
 
-  // If no toolId, use built-in AI
+  // No toolId provided — caller must select an AI tool
   if (!toolId) {
-    const result = await generateImage(genOpts);
-    return { url: result.url || "" };
+    throw new Error("未选择 AI 工具，请在工具选择器中选择一个图像生成工具后重试。");
   }
 
   // Fetch tool config
   const tool = await getAiToolById(toolId);
 
-  // If tool has no external API configured, fall back to built-in AI
+  // Validate tool has external API configured
   // Exception: jimeng/volcengine uses HMAC auth and does NOT need apiEndpoint
   const _toolProvider = tool?.provider?.toLowerCase() || "";
   const _isJimeng = _toolProvider === "jimeng" || _toolProvider === "volcengine";
   if (!tool || (!tool.apiEndpoint && !_isJimeng) || !tool.apiKeyEncrypted) {
-    console.log(`[generateImageWithTool] Tool ${toolId} has no external API, using built-in AI`);
-    const result = await generateImage(genOpts);
-    return { url: result.url || "", modelName: tool?.name };
+    throw new Error(`AI 工具「${tool?.name || toolId}」未配置 API 端点或 API Key，请在 API 密钥管理页面完成配置后重试。`);
   }
 
   // Pick API key from pool (round-robin across primary + extra keys)
   const poolKey = await pickKey(toolId, tool.apiKeyEncrypted);
   if (!poolKey) {
-    console.error(`[generateImageWithTool] No available API key for tool ${toolId}, falling back to built-in AI`);
-    const result = await generateImage(genOpts);
-    return { url: result.url || "", modelName: tool.name };
+    throw new Error(`AI 工具「${tool.name}」的 API Key 暂时不可用（可能因连续失败进入冷却期），请稍后重试或在 API 密钥管理页面检查 Key 状态。`);
   }
   const apiKey = poolKey.apiKey;
   const _poolKeyId = poolKey.id;
@@ -457,10 +452,7 @@ export async function generateImageWithTool(
       }
       imageBuffer = Buffer.from(await imgResp.arrayBuffer());
     } else {
-      // Unknown provider — fall back to built-in AI
-      console.warn(`[generateImageWithTool] Unknown provider "${provider}", falling back to built-in AI`);
-      const result = await generateImage(genOpts);
-      return { url: result.url || "", modelName: tool.name };
+      throw new Error(`AI 工具「${tool.name}」的 provider「${provider}」暂不支持，请联系管理员检查工具配置。`);
     }
 
     // Upload to S3
