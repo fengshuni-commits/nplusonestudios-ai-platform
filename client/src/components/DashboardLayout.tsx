@@ -165,7 +165,7 @@ export default function DashboardLayout({
             <img
               src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo-transparent_aaa215a8.png"
               alt="N+1 STUDIOS"
-              className="h-12 w-auto object-contain"
+              className="h-12 w-auto object-contain brightness-0 invert"
             />
             <div className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
               AI 工作平台
@@ -313,7 +313,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
             <img
               src="https://d2xsxph8kpxj0f.cloudfront.net/310519663304605552/fRco6A2SeYp4EEqicyDKLT/nplus1-logo-transparent_aaa215a8.png"
               alt="N+1 STUDIOS"
-              className="h-[16px] w-auto object-contain opacity-80"
+              className="h-[16px] w-auto object-contain brightness-0 invert opacity-80"
             />
             <button
               onClick={toggleExpanded}
@@ -517,7 +517,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto px-6 pt-3 pb-6">{children}</main>
       </div>
     </div>
   );
