@@ -1725,7 +1725,7 @@ export default function HistoryPage() {
                     复制
                   </Button>
                 )}
-                {displayContentItem?.outputUrl && (
+                {displayContentItem?.outputUrl && displayContentItem?.module !== 'layout_design' && (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
                     onClick={() => window.open(displayContentItem.outputUrl, "_blank")}>
                     <Download className="h-3 w-3 mr-1" />
