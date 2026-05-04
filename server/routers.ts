@@ -5820,7 +5820,7 @@ const graphicLayoutRouter = router({
       await drizzleDb.insert(graphicLayoutJobs).values({
         userId: ctx.user.id, packId: input.packId ?? null, docType: input.docType,
         pageCount: input.pageCount, aspectRatio: input.aspectRatio ?? "3:4", contentText: input.contentText,
-        assetUrls: storedAssets, title: input.title ?? null, status: "pending",
+        assetUrls: storedAssets, title: input.title ?? null, stylePrompt: input.stylePrompt ?? null, status: "pending",
       });
       const [newJob] = await drizzleDb.select().from(graphicLayoutJobs).where(_eq(graphicLayoutJobs.userId, ctx.user.id)).orderBy(_desc(graphicLayoutJobs.createdAt)).limit(1);
       if (!newJob) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建排版任务失败" });
@@ -5871,6 +5871,7 @@ const graphicLayoutRouter = router({
       contentText: graphicLayoutJobs.contentText,
       assetUrls: graphicLayoutJobs.assetUrls,
       title: graphicLayoutJobs.title,
+      stylePrompt: graphicLayoutJobs.stylePrompt,
       status: graphicLayoutJobs.status,
       errorMessage: graphicLayoutJobs.errorMessage,
       createdAt: graphicLayoutJobs.createdAt,

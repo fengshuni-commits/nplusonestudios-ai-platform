@@ -1,0 +1,1 @@
+ALTER TABLE `graphic_layout_jobs` ADD `stylePrompt` text;

@@ -2385,3 +2385,10 @@
 - [x] 修复文字合成失败：用 sharp+SVG 方案重写 compositeTextOnImage，解决 @napi-rs/canvas 中文渲染失败问题
 - [x] 修复风格传递：将版式包参考图（sourceFileUrls）加入 originalImages，让 AI 直接看到参考图学习视觉风格
 - [x] 修复 assetDesc prompt：明确区分「风格参考图」和「内容素材图」，避免 AI 混淆两类图片的用途
+
+## 图文排版「继续编辑」功能
+- [x] 生成记录「继续编辑」按钮点击后，打开图文排版页面并恢复版式包、素材、提示词等参数
+- [x] 数据库 graphicLayoutJobs 表新增 stylePrompt 字段（已迁移）
+- [x] 服务端 generate mutation 存储 stylePrompt，list 接口返回 stylePrompt
+- [x] handleContinueEdit 函数：恢复版式包、素材（per_page/by_type/legacy 三种模式）、风格提示词
+- [x] URL 参数 jobId 恢复：从 History 页跳转时自动恢复所有表单参数（docType、aspectRatio、pageCount、contentText、title、stylePrompt、packId、assets）

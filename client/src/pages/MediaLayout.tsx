@@ -86,6 +86,7 @@ interface LayoutJob {
   packId?: number;
   pageCount?: number;
   assetUrls?: any;
+  stylePrompt?: string | null;
 }
 
 const DOC_TYPES = [
@@ -578,7 +579,33 @@ export default function MediaLayout() {
     setActiveJobId(urlJobId);
     setCurrentPage(0);
     urlJobIdAppliedRef.current = urlJobId;
-  }, [urlJobId]);
+    // Also restore form params from the job list if available
+    const found = (jobs as LayoutJob[]).find((j) => j.id === urlJobId);
+    if (found) {
+      setDocType(found.docType);
+      setAspectRatio(found.aspectRatio || "3:4");
+      setPageCount(found.pageCount || 1);
+      setContentText(found.contentText || "");
+      setTitleInput(found.title || "");
+      if (found.stylePrompt) setStylePrompt(found.stylePrompt);
+      if (found.packId) setSelectedPackId(found.packId);
+      const assetConfig = found.assetUrls as any;
+      if (assetConfig) {
+        if (assetConfig.mode === "per_page" && assetConfig.pages) {
+          setAssetMode("per_page");
+          const restored: Record<number, string[]> = {};
+          Object.entries(assetConfig.pages).forEach(([k, v]) => { restored[Number(k)] = v as string[]; });
+          setPerPageAssets(restored);
+        } else if (assetConfig.mode === "by_type" && assetConfig.groups) {
+          setAssetMode("by_type");
+          setByTypeGroups(assetConfig.groups as Record<string, string[]>);
+        } else if (assetConfig.mode === "legacy" && (assetConfig.urls as string[])?.length) {
+          setAssetMode("per_page");
+          setPerPageAssets({ 0: assetConfig.urls });
+        }
+      }
+    }
+  }, [urlJobId, jobs]);
 
   // 历史记录详情面板
   const [selectedHistoryJobId, setSelectedHistoryJobId] = useState<number | undefined>(); // 当前展开详情的 job
@@ -621,12 +648,30 @@ export default function MediaLayout() {
     setPageCount(job.pageCount || 1);
     setContentText(job.contentText || "");
     setTitleInput(job.title || "");
+    // 恢复风格提示词
+    if (job.stylePrompt) setStylePrompt(job.stylePrompt);
     // 如果有 packId，选中对应的版式包
     if (job.packId) setSelectedPackId(job.packId);
+    // 恢复素材
+    const assetConfig = job.assetUrls as any;
+    if (assetConfig) {
+      if (assetConfig.mode === "per_page" && assetConfig.pages) {
+        setAssetMode("per_page");
+        const restored: Record<number, string[]> = {};
+        Object.entries(assetConfig.pages).forEach(([k, v]) => { restored[Number(k)] = v as string[]; });
+        setPerPageAssets(restored);
+      } else if (assetConfig.mode === "by_type" && assetConfig.groups) {
+        setAssetMode("by_type");
+        setByTypeGroups(assetConfig.groups as Record<string, string[]>);
+      } else if (assetConfig.mode === "legacy" && (assetConfig.urls as string[])?.length) {
+        setAssetMode("per_page");
+        setPerPageAssets({ 0: assetConfig.urls });
+      }
+    }
     // 切换到该 job 的预览
     setActiveJobId(job.id);
     setCurrentPage(0);
-    toast.success("已恢复参数，可修改后重新生成");
+    toast.success("已恢复版式包、素材和提示词，可修改后重新生成");
   };
 
   // Inpainting state

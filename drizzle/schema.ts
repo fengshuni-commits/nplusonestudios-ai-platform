@@ -632,6 +632,8 @@ export const graphicLayoutJobs = mysqlTable("graphic_layout_jobs", {
   assetUrls: json("assetUrls"),
   // 版式名称（用户自定义）
   title: varchar("title", { length: 256 }),
+  // 用户输入的风格提示词（用于继续编辑时恢复）
+  stylePrompt: text("stylePrompt"),
   // 生成状态
   status: mysqlEnum("status", ["pending", "processing", "done", "failed"]).default("pending").notNull(),
   errorMessage: text("errorMessage"),
