@@ -99,10 +99,15 @@ function DocumentPickerDialog({ open, onClose, onAdd }: {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const { data: projects = [] } = trpc.projects.list.useQuery({});
   const { data: allDocs = [] } = trpc.meeting.listDrafts.useQuery();
-  const { data: projectDocs = [] } = trpc.documents.listByProject.useQuery(
+  const { data: projectHistory = [] } = trpc.projects.listGenerationHistory.useQuery(
     { projectId: Number(selectedProjectId) },
     { enabled: selectedProjectId !== "all" && !isNaN(Number(selectedProjectId)) }
   );
+  // Filter project history to text-based modules only (meeting_minutes, design_brief, benchmark_report, etc.)
+  const TEXT_MODULES = ["meeting_minutes", "design_brief", "benchmark_report", "layout_design"];
+  const projectDocs = projectHistory
+    .filter((item: any) => TEXT_MODULES.includes(item.module) && item.outputContent)
+    .map((item: any) => ({ id: item.id, title: item.title || `${item.module} #${item.id}`, content: item.outputContent }));
   const docs = selectedProjectId === "all" ? allDocs : projectDocs;
   const handleSelect = (doc: { id: number; title: string; content?: string | null }) => {
     onAdd({ id: `doc-${doc.id}`, inputType: "document", label: doc.title, documentId: doc.id, extractedText: doc.content || "" });
