@@ -337,7 +337,9 @@ export const directorRouter = router({
       ];
 
       // First LLM call
-      let response = await invokeLLMWithUserTool({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" }, ctx.user.id);
+      // Resolve director capability tool ID (falls back to user default)
+      const directorToolId = await db.getDefaultToolForCapability("director");
+      let response = await invokeLLMWithUserTool({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" }, ctx.user.id, directorToolId);
       let assistantMsg = response.choices[0]?.message;
 
       // Agentic loop: handle tool calls
@@ -380,7 +382,7 @@ export const directorRouter = router({
         }
 
         // Next LLM call
-        response = await invokeLLMWithUserTool({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" }, ctx.user.id);
+        response = await invokeLLMWithUserTool({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" }, ctx.user.id, directorToolId);
         assistantMsg = response.choices[0]?.message;
       }
 

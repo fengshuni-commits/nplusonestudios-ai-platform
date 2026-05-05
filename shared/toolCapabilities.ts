@@ -29,7 +29,8 @@ export type ToolCapability =
   | "speech_transcription"
   | "stream_transcription"
   | "file_transcription"
-  | "layout_plan";
+  | "layout_plan"
+  | "director";
 
 export const ALL_CAPABILITIES: ToolCapability[] = [
   "rendering",
@@ -43,6 +44,7 @@ export const ALL_CAPABILITIES: ToolCapability[] = [
   "stream_transcription",
   "file_transcription",
   "layout_plan",
+  "director",
 ];
 
 /** 能力标签的中文显示名 */
@@ -58,6 +60,7 @@ export const CAPABILITY_LABELS: Record<ToolCapability, string> = {
   stream_transcription: "实时录音识别",
   file_transcription: "文件转写",
   layout_plan: "图文排版规划",
+  director: "所长 AI 助手",
 };
 
 interface CapabilityRule {
