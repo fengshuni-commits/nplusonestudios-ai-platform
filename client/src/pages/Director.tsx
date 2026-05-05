@@ -198,6 +198,28 @@ export default function Director() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Pick up prefill message from Home quick input
+  useEffect(() => {
+    const prefill = sessionStorage.getItem("director_prefill");
+    if (prefill) {
+      sessionStorage.removeItem("director_prefill");
+      // Wait for history to load before auto-sending
+      const send = () => {
+        const userMsg: ChatMessage = {
+          id: `user-${Date.now()}`,
+          role: "user",
+          content: prefill,
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        setIsLoading(true);
+        chatMutation.mutate({ message: prefill });
+      };
+      // Small delay to let history load first
+      const timer = setTimeout(send, 300);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || isLoading) return;

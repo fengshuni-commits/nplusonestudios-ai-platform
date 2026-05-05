@@ -18,13 +18,28 @@ import {
   Circle,
   CircleDot,
   CircleCheck,
+  Send,
 } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 
 export default function Home() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+
+  const [quickInput, setQuickInput] = useState("");
+  const quickInputRef = useRef<HTMLInputElement>(null);
+
+  const handleQuickSend = (msg?: string) => {
+    const text = msg || quickInput.trim();
+    if (!text) {
+      setLocation("/director");
+      return;
+    }
+    // Store message in sessionStorage so Director page can pick it up
+    sessionStorage.setItem("director_prefill", text);
+    setLocation("/director");
+  };
 
   const { data: stats, isLoading: statsLoading } = trpc.dashboard.stats.useQuery();
   const { data: greetingData, isLoading: greetingLoading } = trpc.director.getGreeting.useQuery(
@@ -88,36 +103,62 @@ export default function Home() {
       </div>
 
       {/* Director Greeting Card */}
-      <button
-        onClick={() => setLocation("/director")}
-        className="w-full text-left group"
-      >
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background hover:border-primary/40 hover:shadow-sm transition-all">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                <Bot className="h-4.5 w-4.5 text-primary" />
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <button
+              onClick={() => handleQuickSend()}
+              className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 hover:bg-primary/20 transition-colors"
+            >
+              <Bot className="h-4.5 w-4.5 text-primary" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-semibold text-primary tracking-wide">所长</span>
+                <span className="text-xs text-muted-foreground">N+1 STUDIOS AI 助手</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold text-primary tracking-wide">所长</span>
-                  <span className="text-xs text-muted-foreground">N+1 STUDIOS AI 助手</span>
-                </div>
-                {greetingLoading ? (
-                  <Skeleton className="h-4 w-64" />
-                ) : (
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {greetingData?.greeting || `欢迎回来，${user?.name?.split(" ")[0] || "成员"}。`}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground mt-1.5 group-hover:text-primary transition-colors">
-                  点击进入对话 →
+              {greetingLoading ? (
+                <Skeleton className="h-4 w-64 mb-3" />
+              ) : (
+                <p className="text-sm text-foreground leading-relaxed mb-3">
+                  {greetingData?.greeting || `欢迎回来，${user?.name?.split(" ")[0] || "成员"}。`}
                 </p>
+              )}
+              {/* Quick input */}
+              <div className="flex gap-2 items-center">
+                <input
+                  ref={quickInputRef}
+                  type="text"
+                  value={quickInput}
+                  onChange={(e) => setQuickInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && quickInput.trim()) handleQuickSend(); }}
+                  placeholder="直接输入问题发给所长…"
+                  className="flex-1 h-8 px-3 text-sm rounded-md border border-border bg-background/80 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors"
+                />
+                <button
+                  onClick={() => handleQuickSend()}
+                  className="h-8 w-8 rounded-md bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary transition-colors shrink-0"
+                  title="发送"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {/* Quick suggestions */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {["当前项目状态", "我的待办任务", "帮我生成效果图"].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleQuickSend(s)}
+                    className="text-xs px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* My Tasks */}
