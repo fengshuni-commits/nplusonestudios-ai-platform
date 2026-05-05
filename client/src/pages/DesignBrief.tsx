@@ -264,7 +264,7 @@ export default function DesignBrief() {
     try {
       const result = await generateMutation.mutateAsync({
         briefId: selectedBriefId ?? undefined,
-        projectId: selectedProjectId ? Number(selectedProjectId) : undefined,
+        projectId: selectedProjectId && selectedProjectId !== "none" ? Number(selectedProjectId) : undefined,
         title: briefTitle.trim() || undefined,
         textInput: textInput.trim() || undefined,
         inputs: sources.map(s => ({
@@ -413,7 +413,7 @@ export default function DesignBrief() {
                         <SelectValue placeholder="绑定项目（可选）" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">不绑定项目</SelectItem>
+                        <SelectItem value="none">不绑定项目</SelectItem>
                         {projects.map((p: any) => (
                           <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                         ))}
