@@ -138,8 +138,8 @@ export const designBriefsRouter = router({
         }
       }
 
-      // 4. Build LLM prompt
-      const systemPrompt = `你是 N+1 STUDIOS 建筑设计事务所的设计任务书生成专家。请根据用户提供的输入材料，生成一份结构化的设计任务书（Design Brief）。
+      // 4. Build LLM prompt — load custom prompt from DB, fall back to built-in default
+      const DEFAULT_SYSTEM_PROMPT = `你是 N+1 STUDIOS 建筑设计事务所的设计任务书生成专家。请根据用户提供的输入材料，生成一份结构化的设计任务书（Design Brief）。
 
 任务书应包含以下章节（根据可用信息填写，信息不足的章节可注明"待补充"）：
 
@@ -195,6 +195,9 @@ export const designBriefsRouter = router({
 - 数字和单位要具体（如 "约 2000㎡" 而非 "较大面积"）
 - 信息不足处标注 "待补充" 而非猜测
 - 语言专业、简洁、准确`;
+
+      const customPromptRow = await db.getDesignBriefPrompt("system");
+      const systemPrompt = customPromptRow?.prompt?.trim() ? customPromptRow.prompt.trim() : DEFAULT_SYSTEM_PROMPT;
 
       const userMessages: Array<{ role: "user" | "system" | "assistant"; content: string }> = [];
 
