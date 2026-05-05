@@ -1850,7 +1850,7 @@ export default function HistoryPage() {
                   <span className="text-xs text-muted-foreground">{displayContentItem && MODULE_MAP[displayContentItem.module]?.label}</span>
                   <span className="text-xs text-muted-foreground/50">·</span>
                   <span className="text-xs text-muted-foreground/50">{displayContentItem && formatFullTime(displayContentItem.createdAt)}</span>
-                  {displayContentItem?.modelName && (
+                  {displayContentItem?.modelName && displayContentItem?.module !== 'meeting_minutes' && (
                     <>
                       <span className="text-xs text-muted-foreground/50">·</span>
                       <span className="text-xs text-muted-foreground/60 font-mono bg-muted px-1.5 py-0 rounded">{displayContentItem.modelName}</span>
@@ -1904,7 +1904,7 @@ export default function HistoryPage() {
                     </div>
                   );
                 })()}
-                {displayContentItem?.outputContent && (
+                {displayContentItem?.outputContent && displayContentItem?.module !== 'meeting_minutes' && (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
                     onClick={() => {
                       let text = displayContentItem?.outputContent || "";
@@ -2150,19 +2150,26 @@ export default function HistoryPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" className="h-8 text-xs"
-                    onClick={() => { setEditedMinutesContent(displayContentItem.outputContent || ""); setIsEditingMinutes(true); }}>
-                    <Edit className="h-3.5 w-3.5 mr-1.5" />编辑纪要
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-8 text-xs"
-                    onClick={() => handleDownloadMinutesMd(displayContentItem)}>
-                    <Download className="h-3.5 w-3.5 mr-1.5" />下载 MD
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-8 text-xs"
-                    onClick={() => navigator.clipboard.writeText(displayContentItem.outputContent || "").then(() => toast.success("已复制")).catch(() => toast.error("复制失败"))}>
-                    <Copy className="h-3.5 w-3.5 mr-1.5" />复制内容
-                  </Button>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="h-8 text-xs"
+                      onClick={() => { setEditedMinutesContent(displayContentItem.outputContent || ""); setIsEditingMinutes(true); }}>
+                      <Edit className="h-3.5 w-3.5 mr-1.5" />编辑纪要
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-xs"
+                      onClick={() => handleDownloadMinutesMd(displayContentItem)}>
+                      <Download className="h-3.5 w-3.5 mr-1.5" />下载 MD
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-xs"
+                      onClick={() => navigator.clipboard.writeText(displayContentItem.outputContent || "").then(() => toast.success("已复制")).catch(() => toast.error("复制失败"))}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />复制内容
+                    </Button>
+                  </div>
+                  {displayContentItem.modelName && (
+                    <span className="text-[11px] font-mono px-2 py-1 rounded bg-muted/80 text-muted-foreground/70 border border-border/40 shrink-0">
+                      {displayContentItem.modelName}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
