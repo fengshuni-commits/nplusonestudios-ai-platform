@@ -1848,8 +1848,12 @@ export default function HistoryPage() {
                     return <Icon className={`h-4 w-4 shrink-0 ${cfg?.iconColor || "text-muted-foreground"}`} />;
                   })()}
                   <span className="text-xs text-muted-foreground">{displayContentItem && MODULE_MAP[displayContentItem.module]?.label}</span>
-                  <span className="text-xs text-muted-foreground/50">·</span>
-                  <span className="text-xs text-muted-foreground/50">{displayContentItem && formatFullTime(displayContentItem.createdAt)}</span>
+                  {displayContentItem?.module !== 'meeting_minutes' && (
+                    <>
+                      <span className="text-xs text-muted-foreground/50">·</span>
+                      <span className="text-xs text-muted-foreground/50">{displayContentItem && formatFullTime(displayContentItem.createdAt)}</span>
+                    </>
+                  )}
                   {displayContentItem?.modelName && displayContentItem?.module !== 'meeting_minutes' && (
                     <>
                       <span className="text-xs text-muted-foreground/50">·</span>
@@ -2165,11 +2169,16 @@ export default function HistoryPage() {
                       <Copy className="h-3.5 w-3.5 mr-1.5" />复制内容
                     </Button>
                   </div>
-                  {displayContentItem.modelName && (
-                    <span className="text-[11px] font-mono px-2 py-1 rounded bg-muted/80 text-muted-foreground/70 border border-border/40 shrink-0">
-                      {displayContentItem.modelName}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[11px] text-muted-foreground/60">
+                      {formatFullTime(displayContentItem.createdAt)}
                     </span>
-                  )}
+                    {displayContentItem.modelName && (
+                      <span className="text-[11px] font-mono px-2 py-1 rounded bg-muted/80 text-muted-foreground/70 border border-border/40">
+                        {displayContentItem.modelName}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
