@@ -2085,7 +2085,7 @@ const aiToolsRouter = router({
 
   testTool: adminProcedure
     .input(z.object({ toolId: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       // First, load the tool to check its type before attempting LLM test
       const { getDb } = await import("./db");
       const { aiTools } = await import("../drizzle/schema");
@@ -2108,7 +2108,7 @@ const aiToolsRouter = router({
       try {
         result = await invokeLLMWithUserTool(
           { messages: [{ role: "user", content: "Reply with the single word: OK" }], max_tokens: 16 },
-          undefined,
+          ctx.user.id,
           input.toolId
         );
       } catch (err: any) {
