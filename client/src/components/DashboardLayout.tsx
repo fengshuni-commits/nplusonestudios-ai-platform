@@ -78,6 +78,7 @@ const menuSections: MenuSection[] = [
       { icon: FolderKanban, label: "项目看板", path: "/projects", description: "管理所有设计与施工项目" },
       { icon: FileText, label: "会议纪要", path: "/meeting", description: "录音转录，AI 自动生成结构化纪要" },
       { icon: FileText, label: "设计任务书", path: "/design/brief", description: "根据项目信息自动生成标准化任务书" },
+      { icon: Compass, label: "案例调研", path: "/design/planning", description: "AI 生成对标案例分析报告" },
     ],
   },
   {
@@ -85,7 +86,6 @@ const menuSections: MenuSection[] = [
     label: "设计",
     icon: PenTool,
     items: [
-      { icon: Compass, label: "案例调研", path: "/design/planning", description: "AI 生成对标案例分析报告" },
       { icon: Ruler, label: "AI效果图", path: "/design/tools", description: "AI 渲染与草图生成，支持图生图迭代" },
       { icon: Layers, label: "AI分析图", path: "/design/analysis", description: "上传参考图，一键生成材质或软装搭配图" },
       { icon: Film, label: "AI视频", path: "/design/video", description: "AI 生成建筑空间漫游视频" },
