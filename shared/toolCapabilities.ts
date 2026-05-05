@@ -89,39 +89,39 @@ const CAPABILITY_RULES: CapabilityRule[] = [
   // ── 多模态大模型（文本 + 图像理解 + 文档生成 + 分析 + 媒体） ──
   {
     keywords: ["gpt-4o", "gpt4o", "o1", "o3", "o4"],
-    capabilities: ["rendering", "document", "analysis", "media", "layout_plan"],
+    capabilities: ["rendering", "document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["gpt-4", "gpt4", "gpt-3.5", "gpt3.5", "openai"],
-    capabilities: ["document", "analysis", "media", "layout_plan"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["gemini", "gemini-pro", "gemini-flash", "gemini-ultra", "gemini-2.0", "gemini-3", "imagen", "image-generation"],
-    capabilities: ["rendering", "image", "document", "analysis", "media", "layout_plan"],
+    capabilities: ["rendering", "image", "document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["claude-3", "claude3", "claude-sonnet", "claude-opus", "claude-haiku", "anthropic"],
-    capabilities: ["document", "analysis", "media", "layout_plan"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["qwen", "qwen-vl", "qwen2", "tongyi", "aliyun"],
-    capabilities: ["rendering", "document", "analysis", "media", "layout_plan"],
+    capabilities: ["rendering", "document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["doubao", "豆包"],
-    capabilities: ["document", "analysis", "media", "layout_plan"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["deepseek"],
-    capabilities: ["document", "analysis", "media", "layout_plan"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["kimi", "moonshot"],
-    capabilities: ["document", "analysis", "media", "layout_plan"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
   {
     keywords: ["glm", "chatglm", "zhipu"],
-    capabilities: ["document", "analysis", "media", "layout_plan"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
   // ── 专用图像生成模型 ──
   {
@@ -164,7 +164,7 @@ const CAPABILITY_RULES: CapabilityRule[] = [
   // ── 专用文档/分析模型 ──
   {
     keywords: ["llama", "mistral", "mixtral"],
-    capabilities: ["document", "analysis"],
+    capabilities: ["document", "analysis", "director"],
   },
 ];
 
@@ -182,5 +182,5 @@ export function inferCapabilities(name: string, apiEndpoint?: string | null): To
   }
 
   // 默认：通用文本模型
-  return ["document", "analysis"];
+  return ["document", "analysis", "director"];
 }
