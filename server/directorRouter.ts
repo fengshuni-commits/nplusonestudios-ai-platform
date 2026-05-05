@@ -2,7 +2,7 @@ import { protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLMWithUserTool } from "./_core/llm";
 import type { Message, Tool, ToolCall } from "./_core/llm";
 import { getDb } from "./db";
 import { directorConversations, directorWorkspaceItems } from "../drizzle/schema";
@@ -337,7 +337,7 @@ export const directorRouter = router({
       ];
 
       // First LLM call
-      let response = await invokeLLM({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" });
+      let response = await invokeLLMWithUserTool({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" }, ctx.user.id);
       let assistantMsg = response.choices[0]?.message;
 
       // Agentic loop: handle tool calls
@@ -380,7 +380,7 @@ export const directorRouter = router({
         }
 
         // Next LLM call
-        response = await invokeLLM({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" });
+        response = await invokeLLMWithUserTool({ messages, tools: DIRECTOR_TOOLS, toolChoice: "auto" }, ctx.user.id);
         assistantMsg = response.choices[0]?.message;
       }
 
