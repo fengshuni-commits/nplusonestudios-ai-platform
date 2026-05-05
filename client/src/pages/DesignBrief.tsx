@@ -368,10 +368,10 @@ export default function DesignBrief() {
         </div>
 
         {/* Two-column layout: input left (1/3), output right (2/3) */}
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid lg:grid-cols-3 gap-4 items-start">
 
         {/* Input Card */}
-        <div className="col-span-1">
+        <div className="lg:col-span-1">
         <Card>
           <CardContent className="pt-5 space-y-4">
             {/* Project selector */}
@@ -457,7 +457,7 @@ export default function DesignBrief() {
         </div>
 
         {/* Output Card - always in col-span-2 */}
-        <div className="col-span-2">
+        <div className="lg:col-span-2">
         {displayContent ? (
           <Card>
             <CardHeader className="pb-3 shrink-0">
