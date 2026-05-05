@@ -39,6 +39,7 @@ async function getPptxGenJS() {
 }
 import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 import { pdfToImages } from "./pdfToImages";
+import { designBriefsRouter } from "./designBriefsRouter";
 
 // ─── PPT Job Store (in-memory async queue) ──────────────
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
@@ -7209,6 +7210,7 @@ export const appRouter = router({system: systemRouter,
   }),
   analysisImage: analysisImageRouter,
   session: sessionRouter,
+  designBriefs: designBriefsRouter,
 });
 export type AppRouter = typeof appRouter;
 

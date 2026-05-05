@@ -2448,3 +2448,9 @@
 
 ##- [x] Header 进一步优化
 - [x] 简介改为行内显示（模块名称 | 简介），压缩 header 高度，AI 效果图页面 header 下方加工具栏（AI 工具选择器）
+## 设计任务书功能
+- [x] 数据库：design_briefs 表（任务书）+ design_brief_inputs 表（输入素材记录）
+- [x] 后端：designBriefsRouter（generate/list/get/delete/extractUrl）
+- [x] 后端：db helpers（listDesignBriefs/getDesignBriefById/createDesignBrief/updateDesignBrief/deleteDesignBrief/listDesignBriefVersions/createDesignBriefInputs/listDesignBriefInputsByHistory）
+- [x] 前端：DesignBrief.tsx（多源输入：文字/文件/URL/素材库/项目文档；版本历史；迭代生成；Markdown 输出+复制+下载）
+- [x] 路由注册：/design/brief，导航已存在

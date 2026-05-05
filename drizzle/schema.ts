@@ -828,3 +828,51 @@ export const aiToolKeys = mysqlTable("ai_tool_keys", {
 });
 export type AiToolKey = typeof aiToolKeys.$inferSelect;
 export type InsertAiToolKey = typeof aiToolKeys.$inferInsert;
+
+// ─── Design Briefs (设计任务书) ──────────────────────────
+// 每条记录代表一个与项目绑定的任务书版本链
+// 版本迭代通过 generationHistory 的 parentId 链接
+export const designBriefs = mysqlTable("design_briefs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 绑定的项目 ID（可选，未绑定时为个人草稿） */
+  projectId: int("projectId"),
+  /** 标题（默认取项目名 + 版本号） */
+  title: varchar("title", { length: 512 }).notNull(),
+  /** 最新版本的 generationHistory.id */
+  latestHistoryId: int("latestHistoryId"),
+  /** 当前版本号（每次迭代 +1） */
+  currentVersion: int("currentVersion").default(1).notNull(),
+  /** 创建者 */
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DesignBrief = typeof designBriefs.$inferSelect;
+export type InsertDesignBrief = typeof designBriefs.$inferInsert;
+
+// ─── Design Brief Inputs (任务书输入源记录) ──────────────
+// 记录每次生成时使用的输入源，便于版本溯源
+export const designBriefInputs = mysqlTable("design_brief_inputs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 关联的 generationHistory.id（某次生成） */
+  historyId: int("historyId").notNull(),
+  /** 输入类型 */
+  inputType: mysqlEnum("inputType", ["text", "file", "url", "asset", "document"]).notNull(),
+  /** 文本内容（type=text 时） */
+  textContent: text("textContent"),
+  /** 文件/素材/文档的 URL */
+  fileUrl: text("fileUrl"),
+  /** 文件名或标题 */
+  label: varchar("label", { length: 512 }),
+  /** 关联的 assets.id（type=asset 时） */
+  assetId: int("assetId"),
+  /** 关联的 documents.id（type=document 时） */
+  documentId: int("documentId"),
+  /** 网页 URL（type=url 时） */
+  webUrl: text("webUrl"),
+  /** AI 提取的文本摘要（文件/URL 解析后） */
+  extractedText: longtext("extractedText"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DesignBriefInput = typeof designBriefInputs.$inferSelect;
+export type InsertDesignBriefInput = typeof designBriefInputs.$inferInsert;

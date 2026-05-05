@@ -30,6 +30,8 @@ import {
   apiTokens, InsertApiToken, ApiToken,
   analysisImagePrompts,
   analysisImageJobs,
+  designBriefs, InsertDesignBrief,
+  designBriefInputs, InsertDesignBriefInput,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2496,4 +2498,88 @@ export async function syncVideoProxyEntry(
   if (updates.outputUrl !== undefined) setValues.outputUrl = updates.outputUrl;
   if (Object.keys(setValues).length === 0) return;
   await db.update(generationHistory).set(setValues).where(eq(generationHistory.id, proxy.id));
+}
+
+// ─── Design Briefs (设计任务书) ──────────────────────────
+
+export async function listDesignBriefs(opts: { userId: number; projectId?: number }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (opts.projectId !== undefined) {
+    conditions.push(eq(designBriefs.projectId, opts.projectId));
+  }
+  conditions.push(eq(designBriefs.createdBy, opts.userId));
+  return db.select().from(designBriefs)
+    .where(and(...conditions))
+    .orderBy(desc(designBriefs.updatedAt));
+}
+
+export async function getDesignBriefById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(designBriefs).where(eq(designBriefs.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createDesignBrief(data: InsertDesignBrief) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(designBriefs).values(data);
+  return { id: result[0].insertId as number };
+}
+
+export async function updateDesignBrief(id: number, data: Partial<InsertDesignBrief>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(designBriefs).set(data).where(eq(designBriefs.id, id));
+}
+
+export async function deleteDesignBrief(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  // Also delete associated inputs
+  const history = await db.select({ historyId: designBriefs.latestHistoryId })
+    .from(designBriefs).where(eq(designBriefs.id, id)).limit(1);
+  await db.delete(designBriefs).where(eq(designBriefs.id, id));
+}
+
+/** List all generation history entries for a design brief (version chain) */
+export async function listDesignBriefVersions(briefId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  // Get the brief to find the latest history entry
+  const brief = await getDesignBriefById(briefId);
+  if (!brief || !brief.latestHistoryId) return [];
+
+  // Walk the parentId chain to collect all versions
+  const versions: typeof generationHistory.$inferSelect[] = [];
+  let currentId: number | null = brief.latestHistoryId;
+  const visited = new Set<number>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const rows = await db.select().from(generationHistory)
+      .where(eq(generationHistory.id, currentId)).limit(1);
+    if (rows.length === 0) break;
+    versions.push(rows[0]);
+    currentId = rows[0].parentId ?? null;
+  }
+  return versions; // newest first
+}
+
+/** Save inputs for a generation history entry */
+export async function createDesignBriefInputs(inputs: InsertDesignBriefInput[]) {
+  const db = await getDb();
+  if (!db) return;
+  if (inputs.length === 0) return;
+  await db.insert(designBriefInputs).values(inputs);
+}
+
+export async function listDesignBriefInputsByHistory(historyId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(designBriefInputs)
+    .where(eq(designBriefInputs.historyId, historyId))
+    .orderBy(designBriefInputs.id);
 }
