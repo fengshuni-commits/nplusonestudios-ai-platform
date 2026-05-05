@@ -3,6 +3,9 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Bot,
   User,
@@ -16,8 +19,12 @@ import {
   ImageOff,
   ChevronLeft,
   FolderKanban,
+  Paperclip,
+  FolderOpen,
+  Search,
+  ImageIcon,
 } from "lucide-react";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Streamdown } from "streamdown";
 
@@ -28,6 +35,8 @@ interface ChatMessage {
   content: string;
   navigateTo?: { path: string; name: string; project_id?: number | null } | null;
   createdAt?: string | Date;
+  imageUrl?: string;
+  generatedDocument?: { doc_type: string; title: string; content: string } | null;
 }
 
 // ─── Module path map (same as backend) ───────────────────────────────────────
@@ -56,6 +65,12 @@ export default function Director() {
   const [workspaceZoom, setWorkspaceZoom] = useState(1);
   const [selectedItem, setSelectedItem] = useState<number | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Image attachment state
+  const [attachedImage, setAttachedImage] = useState<{ url: string; name: string; preview: string } | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetSearch, setAssetSearch] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const utils = trpc.useUtils();
@@ -72,13 +87,67 @@ export default function Director() {
     { staleTime: 30 * 1000, refetchOnWindowFocus: false }
   );
 
+  const uploadImageMutation = trpc.director.uploadImage.useMutation();
+
+  // Asset list for picker
+  const { data: allAssets } = trpc.assets.list.useQuery(undefined, { enabled: showAssetPicker });
+  const imageAssets = useMemo(() => {
+    if (!allAssets) return [];
+    return (allAssets as any[]).filter((a) => {
+      const isImage = a.fileType?.startsWith("image/") ||
+        /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(a.fileUrl || "") ||
+        a.category === "image" || a.category === "ai_render";
+      if (!isImage) return false;
+      if (assetSearch.trim()) {
+        const q = assetSearch.toLowerCase();
+        return a.name?.toLowerCase().includes(q) || a.tags?.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [allAssets, assetSearch]);
+
+  const handleFileSelect = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    setIsUploadingImage(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const preview = URL.createObjectURL(file);
+      const result = await uploadImageMutation.mutateAsync({
+        fileName: file.name,
+        fileData: base64,
+        contentType: file.type,
+      });
+      setAttachedImage({ url: result.url, name: file.name, preview });
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }, [uploadImageMutation]);
+
+  const handleSelectAsset = useCallback((asset: any) => {
+    setAttachedImage({ url: asset.fileUrl, name: asset.name, preview: asset.thumbnailUrl || asset.fileUrl });
+    setShowAssetPicker(false);
+    setAssetSearch("");
+  }, []);
+
   const chatMutation = trpc.director.chat.useMutation({
     onSuccess: (data) => {
+      // If a new image was generated, refresh workspace
+      if (data.generatedImageUrl) {
+        utils.director.getWorkspaceItems.invalidate();
+      }
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content: data.content,
         navigateTo: data.navigateTo,
+        generatedDocument: data.generatedDocument,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setIsLoading(false);
@@ -132,16 +201,19 @@ export default function Director() {
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || isLoading) return;
+    const imageUrl = attachedImage?.url;
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
       content: text,
+      imageUrl,
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAttachedImage(null);
     setIsLoading(true);
-    chatMutation.mutate({ message: text });
-  }, [input, isLoading, chatMutation]);
+    chatMutation.mutate({ message: text, imageUrl });
+  }, [input, isLoading, attachedImage, chatMutation]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -176,6 +248,16 @@ export default function Director() {
 
         {/* Input */}
         <div className="px-4 py-3 border-t border-border shrink-0">
+          {/* Attached image preview */}
+          {attachedImage && (
+            <div className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border">
+              <img src={attachedImage.preview} alt={attachedImage.name} className="h-10 w-10 rounded object-cover shrink-0" />
+              <span className="text-xs text-muted-foreground truncate flex-1">{attachedImage.name}</span>
+              <button onClick={() => setAttachedImage(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <div className="flex gap-2 items-end">
             <Textarea
               ref={textareaRef}
@@ -187,16 +269,46 @@ export default function Director() {
               rows={2}
               disabled={isLoading}
             />
-            <Button
-              size="sm"
-              className="h-9 w-9 p-0 shrink-0"
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-            >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <Button
+                size="sm"
+                className="h-9 w-9 p-0"
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 w-9 p-0 bg-background"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isUploadingImage}
+                title="上传参考图"
+              >
+                {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 w-9 p-0 bg-background"
+                onClick={() => setShowAssetPicker(true)}
+                disabled={isLoading}
+                title="从素材库选图"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mt-1.5">Enter 发送，Shift+Enter 换行</p>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); e.target.value = ""; }}
+          />
         </div>
       </div>
 
@@ -233,6 +345,59 @@ export default function Director() {
         </div>
       </div>
 
+      {/* Asset Picker Dialog */}
+      <Dialog open={showAssetPicker} onOpenChange={setShowAssetPicker}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              从素材库选择
+            </DialogTitle>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={assetSearch}
+              onChange={(e) => setAssetSearch(e.target.value)}
+              placeholder="搜索素材名称或标签..."
+              className="pl-9"
+            />
+          </div>
+          <ScrollArea className="h-[50vh]">
+            {imageAssets.length > 0 ? (
+              <div className="grid grid-cols-3 gap-3 p-1">
+                {imageAssets.map((asset: any) => (
+                  <div
+                    key={asset.id}
+                    onClick={() => handleSelectAsset(asset)}
+                    className="group relative rounded-lg overflow-hidden border border-border bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                  >
+                    <div className="aspect-square">
+                      <img src={asset.thumbnailUrl || asset.fileUrl} alt={asset.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                          <Search className="h-4 w-4 text-primary-foreground" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
+                      <p className="text-[11px] text-white/90 truncate">{asset.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <ImageIcon className="h-10 w-10 mb-3 opacity-20" />
+                <p className="text-sm">{assetSearch ? "没有找到匹配的素材" : "素材库中暂无图片素材"}</p>
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
       {/* Lightbox */}
       {lightboxUrl && (
         <div
@@ -257,6 +422,45 @@ export default function Director() {
   );
 }
 
+// ─── Document Download Button ────────────────────────────────────────────────
+const DOC_TYPE_LABELS: Record<string, string> = {
+  design_brief: "设计任务书",
+  case_study: "案例调研报告",
+  xiaohongshu: "小红书文案",
+  wechat_article: "公众号文章",
+  instagram: "Instagram 文案",
+  meeting_summary: "会议纪要",
+  project_report: "项目进度报告",
+};
+
+function DocumentDownloadButton({ doc }: { doc: { doc_type: string; title: string; content: string } }) {
+  const handleDownload = () => {
+    const blob = new Blob([doc.content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${doc.title}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const label = DOC_TYPE_LABELS[doc.doc_type] || "文档";
+
+  return (
+    <button
+      onClick={handleDownload}
+      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground transition-colors"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+      下载{label}（.md）
+    </button>
+  );
+}
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 function MessageBubble({ message, onNavigate }: { message: ChatMessage; onNavigate: (path: string) => void }) {
   const isUser = message.role === "user";
@@ -268,7 +472,12 @@ function MessageBubble({ message, onNavigate }: { message: ChatMessage; onNaviga
       <div className={`flex flex-col gap-1.5 max-w-[85%] ${isUser ? "items-end" : "items-start"}`}>
         <div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${isUser ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card border border-border rounded-tl-sm"}`}>
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <div>
+              {message.imageUrl && (
+                <img src={message.imageUrl} alt="参考图" className="max-w-[180px] rounded-lg mb-2 object-cover" />
+              )}
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <Streamdown>{message.content}</Streamdown>
@@ -285,6 +494,10 @@ function MessageBubble({ message, onNavigate }: { message: ChatMessage; onNaviga
             前往「{message.navigateTo.name}」
             <ExternalLink className="h-3 w-3" />
           </button>
+        )}
+        {/* Document download button */}
+        {message.generatedDocument && (
+          <DocumentDownloadButton doc={message.generatedDocument} />
         )}
       </div>
     </div>
@@ -312,8 +525,8 @@ function WelcomeState({ userName, onSuggestion }: { userName: string; onSuggesti
   const suggestions = [
     "当前有哪些进行中的项目？",
     "我有哪些待处理任务？",
-    "帮我查看工作室成员情况",
-    "打开设计任务书",
+    "帮我生成一张工业风办公室效果图",
+    "帮我生成一张展厅设计效果图，现代极简风格",
   ];
   return (
     <div className="py-4 space-y-4">
@@ -323,7 +536,7 @@ function WelcomeState({ userName, onSuggestion }: { userName: string; onSuggesti
         </div>
         <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%]">
           <p>你好，{userName}。我是所长，N+1 STUDIOS 的 AI 工作助手。</p>
-          <p className="mt-1.5 text-muted-foreground">我可以帮你查询项目状态、任务安排，或引导你使用各功能模块。</p>
+          <p className="mt-1.5 text-muted-foreground">我可以帮你查询项目状态、任务安排，直接生成 AI 效果图，或引导你使用各功能模块。上传参考图可进行图生图。</p>
         </div>
       </div>
       <div className="pl-9.5 space-y-1.5">

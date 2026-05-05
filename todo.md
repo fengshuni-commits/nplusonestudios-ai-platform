@@ -2544,3 +2544,11 @@
 ## 管理板块 - 删除工作流模块
 - [x] 删除侧边栏工作流入口
 - [x] 删除工作流路由和页面组件
+
+## 所长 - 直接调用功能模块
+- [x] 所长对话框支持图片上传（本地上传 + 从素材库选图）
+- [x] 所长后端新增 generate_image 工具（text-to-image + image-to-image），生成结果存入工作区
+- [x] 所长接入设计任务书生成（generate_document 工具）
+- [x] 所长接入案例调研报告生成（generate_document 工具）
+- [x] 所长接入内容创作生成（generate_document 工具，支持小红书/公众号/Instagram）
+- [x] 消息底部显示可下载文件按钮（.md）
