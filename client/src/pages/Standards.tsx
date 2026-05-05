@@ -1782,9 +1782,6 @@ export default function Standards() {
           <TabsTrigger value="render-styles" className="gap-1.5">
             <Palette className="h-4 w-4" />AI效果图
           </TabsTrigger>
-          <TabsTrigger value="ppt-layouts" className="gap-1.5">
-            <Layout className="h-4 w-4" />演示文稿
-          </TabsTrigger>
           <TabsTrigger value="analysis-prompts" className="gap-1.5">
             <Layers className="h-4 w-4" />AI分析图
           </TabsTrigger>
@@ -1804,11 +1801,6 @@ export default function Standards() {
             <FileText className="h-4 w-4" />设计任务书
           </TabsTrigger>
         </TabsList>
-
-        {/* ─── 演示文稿版式标准 Tab ─── */}
-        <TabsContent value="ppt-layouts">
-          <PptLayoutStandardsTab />
-        </TabsContent>
 
         {/* ─── 渲染风格库 Tab ─── */}
         <TabsContent value="render-styles">
