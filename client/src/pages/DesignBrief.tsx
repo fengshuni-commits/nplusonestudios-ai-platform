@@ -360,7 +360,7 @@ export default function DesignBrief() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-4 pb-8 max-w-6xl mx-auto w-full">
+      <div className="flex flex-col gap-2 pb-8 w-full">
 
         {/* AI Tool Selector - top right */}
         <div className="flex items-center justify-end">
@@ -368,10 +368,10 @@ export default function DesignBrief() {
         </div>
 
         {/* Two-column layout: input left (1/3), output right (2/3) */}
-        <div className="grid lg:grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-3 gap-4 items-start">
 
         {/* Input Card */}
-        <div className="lg:col-span-1">
+        <div className="col-span-1">
         <Card>
           <CardContent className="pt-5 space-y-4">
             {/* Project selector */}
@@ -456,9 +456,9 @@ export default function DesignBrief() {
         </Card>
         </div>
 
-        {/* Output Card */}
-        {displayContent && (
-          <div className="lg:col-span-2">
+        {/* Output Card - always in col-span-2 */}
+        <div className="col-span-2">
+        {displayContent ? (
           <Card>
             <CardHeader className="pb-3 shrink-0">
               <div className="flex items-center justify-between">
@@ -563,8 +563,12 @@ export default function DesignBrief() {
               </div>
             </CardContent>
           </Card>
+        ) : (
+          <div className="h-full min-h-[300px] rounded-lg border border-dashed border-border/50 flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">选择项目并填写需求后，生成的设计任务书将在此显示</p>
           </div>
         )}
+        </div>
 
         </div>{/* end two-column */}
 
