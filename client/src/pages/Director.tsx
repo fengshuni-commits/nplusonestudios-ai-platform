@@ -157,35 +157,6 @@ export default function Director() {
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -mx-6 -mt-6">
       {/* ── Left: Chat Panel (1/3) ── */}
       <div className="w-[340px] shrink-0 flex flex-col border-r border-border bg-background">
-        {/* Chat header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setLocation("/")}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
-              <Bot className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold leading-none">所长</p>
-              <p className="text-xs text-muted-foreground mt-0.5">N+1 STUDIOS AI 助手</p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-            onClick={() => clearHistoryMutation.mutate()}
-            title="清空对话"
-            disabled={clearHistoryMutation.isPending}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {historyLoading ? (
@@ -231,27 +202,6 @@ export default function Director() {
 
       {/* ── Right: Workspace (2/3) ── */}
       <div className="flex-1 flex flex-col bg-muted/20 overflow-hidden">
-        {/* Workspace header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-background shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">工作区</span>
-            {workspaceItems && workspaceItems.length > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {workspaceItems.length} 项成果
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={zoomOut} disabled={workspaceZoom <= 0.5}>
-              <ZoomOut className="h-3.5 w-3.5" />
-            </Button>
-            <span className="text-xs text-muted-foreground w-10 text-center">{Math.round(workspaceZoom * 100)}%</span>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={zoomIn} disabled={workspaceZoom >= 2}>
-              <ZoomIn className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-
         {/* Workspace content */}
         <div className="flex-1 overflow-auto p-5">
           {workspaceLoading ? (
