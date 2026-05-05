@@ -1,0 +1,1 @@
+ALTER TABLE `generation_history` MODIFY COLUMN `outputContent` longtext;

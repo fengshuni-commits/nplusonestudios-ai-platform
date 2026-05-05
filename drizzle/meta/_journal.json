@@ -372,6 +372,13 @@
       "when": 1777948047016,
       "tag": "0052_cloudy_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1777962667162,
+      "tag": "0053_curved_magneto",
+      "breakpoints": true
     }
   ]
 }

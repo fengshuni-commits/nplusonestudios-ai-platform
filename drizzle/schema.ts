@@ -395,7 +395,7 @@ export const generationHistory = mysqlTable("generation_history", {
   /** Output URL (e.g. PPT download link, image URL) */
   outputUrl: text("outputUrl"),
   /** Output content (e.g. report text, for text-based outputs) */
-  outputContent: text("outputContent"),
+  outputContent: longtext("outputContent"),
   /** Status: success, failed, processing */
   status: mysqlEnum("status", ["success", "failed", "processing"]).default("success").notNull(),
   /** Duration in milliseconds */
