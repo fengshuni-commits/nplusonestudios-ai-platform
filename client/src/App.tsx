@@ -14,7 +14,6 @@ import Procurement from "./pages/Procurement";
 import Assets from "./pages/Assets";
 import Standards from "./pages/Standards";
 import Integrations from "./pages/Integrations";
-import Workflows from "./pages/Workflows";
 import AdminTeam from "./pages/AdminTeam";
 import AiToolsManagement from "./pages/AiToolsManagement";
 import AiToolStats from "./pages/AiToolStats";
@@ -88,7 +87,6 @@ function Router() {
         <Route path="/standards" component={Standards} />
         <Route path="/assets" component={Assets} />
         <Route path="/integrations" component={Integrations} />
-        <Route path="/workflows" component={Workflows} />
         <Route path="/admin/team" component={AdminTeam} />
         <Route path="/admin/ai-tools" component={AiToolsManagement} />
         <Route path="/admin/ai-stats" component={AiToolStats} />
