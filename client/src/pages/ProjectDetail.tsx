@@ -15,6 +15,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
   Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye, Maximize2, CheckCircle2,
+  Edit,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -590,7 +591,32 @@ function ProjectDocumentsTab({
 
   // ─── Document preview state ──────────────────────────────
   const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string; fileName: string; title: string } | null>(null);
-  const [contentPreviewItem, setContentPreviewItem] = useState<{ title: string; content: string } | null>(null);
+  const [contentPreviewItem, setContentPreviewItem] = useState<{ id: number; title: string; content: string; module: string } | null>(null);
+  const [isEditingMinutes, setIsEditingMinutes] = useState(false);
+  const [editedMinutesContent, setEditedMinutesContent] = useState("");
+  const [isSavingMinutes, setIsSavingMinutes] = useState(false);
+
+  const updateContentMutation = trpc.history.updateContent.useMutation({
+    onSuccess: () => {
+      if (contentPreviewItem) setContentPreviewItem({ ...contentPreviewItem, content: editedMinutesContent });
+      setIsEditingMinutes(false);
+      setIsSavingMinutes(false);
+      toast.success("会议纪要已保存");
+    },
+    onError: () => { setIsSavingMinutes(false); toast.error("保存失败"); },
+  });
+
+  const handleDownloadMinutesMd = (item: { title: string; content: string }) => {
+    const blob = new Blob([item.content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `会议纪要_${item.title.replace(/[/\\?%*:|"<>]/g, "-")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // ─── Image lightbox state ────────────────────────────────
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -908,9 +934,16 @@ function ProjectDocumentsTab({
                               </Button>
                             )}
                             {!item.outputUrl && item.outputContent && (
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setContentPreviewItem({ title: item.title, content: item.outputContent })} title="查看">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
+                              <>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setIsEditingMinutes(false); setEditedMinutesContent(""); setContentPreviewItem({ id: item.id, title: item.title, content: item.outputContent, module: mod }); }} title="查看">
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                                {mod === 'meeting_minutes' && (
+                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDownloadMinutesMd({ title: item.title, content: item.outputContent })} title="下载 MD">
+                                    <Download className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </>
                             )}
                             {/* Unlink button */}
                             <Button
@@ -1524,13 +1557,61 @@ function ProjectDocumentsTab({
       )}
       {/* ─── Text Content Preview Modal (for meeting_minutes etc.) ─── */}
       {contentPreviewItem && (
-        <Dialog open={!!contentPreviewItem} onOpenChange={(open) => { if (!open) setContentPreviewItem(null); }}>
-          <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle className="text-base">{contentPreviewItem.title}</DialogTitle>
+        <Dialog open={!!contentPreviewItem} onOpenChange={(open) => { if (!open) { setContentPreviewItem(null); setIsEditingMinutes(false); setEditedMinutesContent(""); } }}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+            <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <DialogTitle className="text-base font-medium leading-snug">{contentPreviewItem.title}</DialogTitle>
+                <div className="flex items-center gap-1 shrink-0">
+                  {contentPreviewItem.module === 'meeting_minutes' && (
+                    <>
+                      {!isEditingMinutes ? (
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => { setEditedMinutesContent(contentPreviewItem.content); setIsEditingMinutes(true); }}>
+                          <Edit className="h-3 w-3 mr-1" />编辑
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-500 hover:text-emerald-600"
+                            disabled={isSavingMinutes}
+                            onClick={() => { setIsSavingMinutes(true); updateContentMutation.mutate({ id: contentPreviewItem.id, outputContent: editedMinutesContent }); }}>
+                            {isSavingMinutes ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                            {isSavingMinutes ? "保存中…" : "保存"}
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => setIsEditingMinutes(false)}>
+                            取消
+                          </Button>
+                        </>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                        onClick={() => handleDownloadMinutesMd(contentPreviewItem)}>
+                        <Download className="h-3 w-3 mr-1" />下载 MD
+                      </Button>
+                    </>
+                  )}
+                  {contentPreviewItem.module !== 'meeting_minutes' && (
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                      onClick={() => navigator.clipboard.writeText(contentPreviewItem.content).then(() => toast.success("内容已复制")).catch(() => toast.error("复制失败"))}>
+                      <Copy className="h-3 w-3 mr-1" />复制
+                    </Button>
+                  )}
+                </div>
+              </div>
             </DialogHeader>
-            <div className="flex-1 overflow-y-auto prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 mt-2">
-              <Streamdown>{contentPreviewItem.content}</Streamdown>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {isEditingMinutes && contentPreviewItem.module === 'meeting_minutes' ? (
+                <Textarea
+                  value={editedMinutesContent}
+                  onChange={(e) => setEditedMinutesContent(e.target.value)}
+                  className="min-h-[400px] font-mono text-sm resize-y w-full"
+                  placeholder="编辑会议纪要内容…"
+                />
+              ) : (
+                <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                  <Streamdown>{contentPreviewItem.content}</Streamdown>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>

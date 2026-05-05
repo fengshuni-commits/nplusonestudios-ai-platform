@@ -1837,7 +1837,7 @@ export default function HistoryPage() {
 
       {/* Content Viewer Dialog for text-based modules */}
       <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) { setContentItem(null); setContentItemId(null); setCurrentReportContent(null); setRefineFeedback(""); setIsEditingMinutes(false); setEditedMinutesContent(""); } }}>
-        <DialogContent className="max-w-2xl w-[90vw] max-h-[88vh] overflow-hidden flex flex-col p-0">
+        <DialogContent className={`${displayContentItem?.module === 'meeting_minutes' ? 'max-w-3xl' : 'max-w-2xl'} w-[90vw] max-h-[88vh] overflow-hidden flex flex-col p-0`}>
           <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -1935,33 +1935,7 @@ export default function HistoryPage() {
                     下载
                   </Button>
                 )}
-                {displayContentItem?.module === 'meeting_minutes' && displayContentItem?.outputContent && (
-                  <>
-                    {!isEditingMinutes ? (
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-                        onClick={() => { setEditedMinutesContent(displayContentItem.outputContent || ""); setIsEditingMinutes(true); }}>
-                        <Edit className="h-3 w-3 mr-1" />编辑
-                      </Button>
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-500 hover:text-emerald-600"
-                          disabled={isSavingMinutes}
-                          onClick={() => { setIsSavingMinutes(true); updateContentMutation.mutate({ id: displayContentItem.id, outputContent: editedMinutesContent }); }}>
-                          {isSavingMinutes ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                          {isSavingMinutes ? "保存中…" : "保存"}
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-                          onClick={() => setIsEditingMinutes(false)}>
-                          取消
-                        </Button>
-                      </>
-                    )}
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-                      onClick={() => handleDownloadMinutesMd(displayContentItem)}>
-                      <Download className="h-3 w-3 mr-1" />下载 MD
-                    </Button>
-                  </>
-                )}
+
               </div>
             </div>
           </DialogHeader>
@@ -2133,9 +2107,18 @@ export default function HistoryPage() {
               <Textarea
                 value={editedMinutesContent}
                 onChange={(e) => setEditedMinutesContent(e.target.value)}
-                className="min-h-[400px] font-mono text-sm resize-y w-full"
+                className="min-h-[480px] font-mono text-sm resize-y w-full"
                 placeholder="编辑会议纪要内容…"
               />
+            ) : displayContentItem?.module === 'meeting_minutes' && (displayContentItem?.outputContent) ? (
+              <div className="space-y-0">
+                {/* Rendered markdown in a document-style card */}
+                <div className="rounded-lg border border-border/40 bg-card overflow-hidden">
+                  <div className="px-6 py-5 prose prose-sm prose-neutral dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h2:border-b prose-h2:border-border/30 prose-h2:pb-1.5 prose-p:text-foreground/80 prose-li:text-foreground/80 prose-strong:text-foreground prose-table:text-sm">
+                    <ReportMarkdown>{displayContentItem.outputContent}</ReportMarkdown>
+                  </div>
+                </div>
+              </div>
             ) : (currentReportContent || displayContentItem?.outputContent) ? (
               <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
                 <ReportMarkdown>{currentReportContent || displayContentItem?.outputContent || ""}</ReportMarkdown>
@@ -2149,6 +2132,41 @@ export default function HistoryPage() {
               <p className="text-sm text-muted-foreground">暂无内容</p>
             )}
           </div>
+
+          {/* Action bar for meeting_minutes */}
+          {displayContentItem?.module === 'meeting_minutes' && displayContentItem?.outputContent && (
+            <div className="shrink-0 border-t border-border/40 px-6 py-3 bg-muted/20">
+              {isEditingMinutes ? (
+                <div className="flex items-center gap-2">
+                  <Button variant="default" size="sm" className="h-8 text-xs"
+                    disabled={isSavingMinutes}
+                    onClick={() => { setIsSavingMinutes(true); updateContentMutation.mutate({ id: displayContentItem.id, outputContent: editedMinutesContent }); }}>
+                    {isSavingMinutes ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+                    {isSavingMinutes ? "保存中…" : "保存修改"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs"
+                    onClick={() => setIsEditingMinutes(false)}>
+                    取消
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-xs"
+                    onClick={() => { setEditedMinutesContent(displayContentItem.outputContent || ""); setIsEditingMinutes(true); }}>
+                    <Edit className="h-3.5 w-3.5 mr-1.5" />编辑纪要
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs"
+                    onClick={() => handleDownloadMinutesMd(displayContentItem)}>
+                    <Download className="h-3.5 w-3.5 mr-1.5" />下载 MD
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs"
+                    onClick={() => navigator.clipboard.writeText(displayContentItem.outputContent || "").then(() => toast.success("已复制")).catch(() => toast.error("复制失败"))}>
+                    <Copy className="h-3.5 w-3.5 mr-1.5" />复制内容
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Refine input for benchmark_report */}
           {displayContentItem?.module === "benchmark_report" && (currentReportContent || displayContentItem?.outputContent) && (

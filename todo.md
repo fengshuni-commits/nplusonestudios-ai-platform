@@ -2484,3 +2484,7 @@
 - [x] 历史记录页面会议纪要记录添加下载 MD 按钮
 - [x] 后端 history.updateContent tRPC 过程（更新 outputContent）
 - [x] 后端 db.updateGenerationHistoryContent 辅助函数
+
+## 会议纪要弹窗与项目文档改进
+- [x] 项目文档页面（ProjectDetail）会议纪要记录添加编辑和下载 MD 功能
+- [x] 生成记录（History）会议纪要弹窗 UI 参照图文排版弹窗形式重新设计（全宽内容区、工具栏样式统一）
