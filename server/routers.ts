@@ -2086,6 +2086,21 @@ const aiToolsRouter = router({
   testTool: adminProcedure
     .input(z.object({ toolId: z.number() }))
     .mutation(async ({ input }) => {
+      // First, load the tool to check its type before attempting LLM test
+      const { getDb } = await import("./db");
+      const { aiTools } = await import("../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+      const drizzleDb = await getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "数据库连接失败" });
+      const rows = await drizzleDb.select().from(aiTools).where(eq(aiTools.id, input.toolId)).limit(1);
+      if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
+      const tool = rows[0] as any;
+      // Non-LLM tools (ASR, image generation with no chat API) cannot be tested via chat/completions
+      const caps: string[] = Array.isArray(tool.capabilities) ? tool.capabilities : JSON.parse(tool.capabilities || "[]");
+      const isLLMTool = caps.some((c: string) => ["document", "analysis", "rendering", "chat"].includes(c));
+      if (!isLLMTool) {
+        return { success: true, latencyMs: 0, model: tool.name as string, reply: "此工具为非语言模型工具（如语音识别、图像生成），不支持 LLM 连通性测试。请在实际功能中验证。" };
+      }
       // Use the same invokeLLMWithUserTool path as all real AI calls
       // so the test result accurately reflects actual usability.
       const startMs = Date.now();
