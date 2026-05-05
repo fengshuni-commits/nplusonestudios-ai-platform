@@ -99,18 +99,22 @@ function DocumentPickerDialog({ open, onClose, onAdd, defaultProjectId }: {
   onAdd: (source: InputSource) => void;
   defaultProjectId?: string;
 }) {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || "all");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || "");
   const { data: projects = [] } = trpc.projects.list.useQuery({});
-  const { data: allDocs = [] } = trpc.meeting.listDrafts.useQuery();
+  // Auto-select first project when projects load
+  React.useEffect(() => {
+    if (!selectedProjectId && projects.length > 0) {
+      setSelectedProjectId(String((projects as any[])[0].id));
+    }
+  }, [(projects as any[]).length]);
   const { data: projectHistory = [] } = trpc.projects.listGenerationHistory.useQuery(
     { projectId: Number(selectedProjectId) },
-    { enabled: selectedProjectId !== "all" && !isNaN(Number(selectedProjectId)) }
+    { enabled: !!selectedProjectId && !isNaN(Number(selectedProjectId)) }
   );
   const TEXT_MODULES = ["meeting_minutes", "design_brief", "benchmark_report", "layout_design"];
-  const projectDocs = projectHistory
+  const docs = projectHistory
     .filter((item: any) => TEXT_MODULES.includes(item.module) && item.outputContent)
     .map((item: any) => ({ id: item.id, title: item.title || `${item.module} #${item.id}`, content: item.outputContent }));
-  const docs = selectedProjectId === "all" ? allDocs : projectDocs;
   const handleSelect = (doc: { id: number; title: string; content?: string | null }) => {
     onAdd({ id: `doc-${doc.id}`, inputType: "document", label: doc.title, documentId: doc.id, extractedText: doc.content || "" });
     onClose();
@@ -123,8 +127,7 @@ function DocumentPickerDialog({ open, onClose, onAdd, defaultProjectId }: {
           <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
             <SelectTrigger><SelectValue placeholder="选择项目" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">会议纪要草稿</SelectItem>
-              {projects.map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+              {(projects as any[]).map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="max-h-64 overflow-y-auto space-y-1">
