@@ -29,6 +29,7 @@ import MediaInstagram from "./pages/MediaInstagram";
 import PendingApproval from "./pages/PendingApproval";
 import Home from "./pages/Home";
 import DesignBrief from "./pages/DesignBrief";
+import Director from "./pages/Director";
 import PresentationPage from "./pages/Presentation";
 import ColorPlan from "./pages/ColorPlan";
 import DesignAnalysis from "./pages/DesignAnalysis";
@@ -52,6 +53,7 @@ function Router() {
       <Switch>
         {/* Home dashboard */}
         <Route path="/" component={Home} />
+        <Route path="/director" component={Director} />
 
         {/* 设计板块 */}
         <Route path="/design/planning" component={DesignPlanning} />

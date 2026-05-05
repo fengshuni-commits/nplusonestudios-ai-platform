@@ -914,3 +914,42 @@ export const designBriefPrompts = mysqlTable("design_brief_prompts", {
 });
 export type DesignBriefPrompt = typeof designBriefPrompts.$inferSelect;
 export type InsertDesignBriefPrompt = typeof designBriefPrompts.$inferInsert;
+
+// ─── Director Conversations (所长对话历史) ────────────────────────────────────
+// 每个成员有独立的对话历史，每条消息记录角色、内容和关联的工具调用
+export const directorConversations = mysqlTable("director_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // 消息角色：user（用户）| assistant（所长）| tool（工具调用结果）
+  role: mysqlEnum("role", ["user", "assistant", "tool"]).notNull(),
+  content: longtext("content").notNull(),
+  // 工具调用信息（JSON），仅 assistant 消息可能有
+  toolCalls: json("toolCalls"),
+  // 工具调用 ID（仅 tool 角色消息使用，对应 assistant 的 toolCalls 中的 id）
+  toolCallId: varchar("toolCallId", { length: 128 }),
+  // 关联的工作区成果 ID（所长生成图片时关联）
+  workspaceItemId: int("workspaceItemId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DirectorConversation = typeof directorConversations.$inferSelect;
+export type InsertDirectorConversation = typeof directorConversations.$inferInsert;
+
+// ─── Director Workspace Items (所长工作区成果) ───────────────────────────────
+// 存储所长工作区中的图片类成果，每个成员独立的工作区
+export const directorWorkspaceItems = mysqlTable("director_workspace_items", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // 成果类型：effect（效果图）| plan（平面图）| color_plan（彩平图）| analysis（分析图）| other（其他图片）
+  type: mysqlEnum("type", ["effect", "plan", "color_plan", "analysis", "other"]).notNull().default("other"),
+  title: varchar("title", { length: 256 }),
+  imageUrl: text("imageUrl").notNull(),
+  // 关联的项目 ID（可选）
+  projectId: int("projectId"),
+  // 关联的对话消息 ID（可选，追踪是哪次对话生成的）
+  conversationId: int("conversationId"),
+  // 成果元数据（JSON），如生成参数、提示词等
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DirectorWorkspaceItem = typeof directorWorkspaceItems.$inferSelect;
+export type InsertDirectorWorkspaceItem = typeof directorWorkspaceItems.$inferInsert;

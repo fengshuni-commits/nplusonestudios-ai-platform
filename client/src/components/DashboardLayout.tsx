@@ -44,6 +44,7 @@ import {
   Film,
   Activity,
   Layers,
+  Bot,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
@@ -370,6 +371,34 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
               }`}
             >
               <LayoutDashboard className="h-4 w-4" />
+            </button>
+          )}
+          {/* 所长 item */}
+          {expanded ? (
+            <button
+              key="director"
+              onClick={() => setLocation("/director")}
+              className={`flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm transition-colors ${
+                location.startsWith("/director")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+              }`}
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              <span>所长</span>
+            </button>
+          ) : (
+            <button
+              key="director"
+              onClick={() => setLocation("/director")}
+              title="所长"
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+                location.startsWith("/director")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+              }`}
+            >
+              <Bot className="h-4 w-4" />
             </button>
           )}
           {mainSections.map((section) => (

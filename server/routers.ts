@@ -40,6 +40,7 @@ async function getPptxGenJS() {
 import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 import { pdfToImages } from "./pdfToImages";
 import { designBriefsRouter } from "./designBriefsRouter";
+import { directorRouter } from "./directorRouter";
 
 // ─── Meeting Minutes Prompts Router ─────────────────────────────────────────
 const meetingMinutesPromptsRouter = router({
@@ -7313,6 +7314,7 @@ export const appRouter = router({system: systemRouter,
   designBriefs: designBriefsRouter,
   meetingMinutesPrompts: meetingMinutesPromptsRouter,
   designBriefPrompts: designBriefPromptsRouter,
+  director: directorRouter,
 });
 export type AppRouter = typeof appRouter;
 
