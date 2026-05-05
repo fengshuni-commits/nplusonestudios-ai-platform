@@ -273,12 +273,13 @@ export default function DesignBrief() {
     setGeneratedContent(null);
   };
 
-  // After briefs load, auto-select the latest brief for the project
+  // After briefs load for a SELECTED project, auto-select the latest brief
+  // Only triggers when user has explicitly chosen a project (not on initial load)
   React.useEffect(() => {
-    if (briefs.length > 0 && !selectedBriefId) {
+    if (selectedProjectId !== "none" && briefs.length > 0 && !selectedBriefId) {
       setSelectedBriefId((briefs as any[])[0].id);
     }
-  }, [briefs.length, selectedProjectId]);
+  }, [briefs.length, selectedProjectId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGenerate = async () => {
     if (selectedProjectId === "none") {
@@ -359,14 +360,18 @@ export default function DesignBrief() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-4 pb-8 max-w-4xl mx-auto w-full">
+      <div className="flex flex-col gap-4 pb-8 max-w-6xl mx-auto w-full">
 
         {/* AI Tool Selector - top right */}
         <div className="flex items-center justify-end">
           <AiToolSelector capability="document" value={toolId} onChange={setToolId} label="AI 工具" />
         </div>
 
+        {/* Two-column layout on wide screens */}
+        <div className={`flex gap-4 ${displayContent ? 'lg:flex-row items-start' : 'flex-col'}`}>
+
         {/* Input Card */}
+        <div className={displayContent ? 'lg:w-1/3 w-full shrink-0' : 'w-full'}>
         <Card>
           <CardContent className="pt-5 space-y-4">
             {/* Project selector */}
@@ -449,9 +454,11 @@ export default function DesignBrief() {
             </Button>
           </CardContent>
         </Card>
+        </div>
 
         {/* Output Card */}
         {displayContent && (
+          <div className="flex-1 min-w-0">
           <Card>
             <CardHeader className="pb-3 shrink-0">
               <div className="flex items-center justify-between">
@@ -556,7 +563,10 @@ export default function DesignBrief() {
               </div>
             </CardContent>
           </Card>
+          </div>
         )}
+
+        </div>{/* end two-column */}
 
         {/* Dialogs */}
         <UrlInputDialog open={showUrlDialog} onClose={() => setShowUrlDialog(false)} onAdd={addSource} />
