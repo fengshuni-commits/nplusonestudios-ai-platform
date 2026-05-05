@@ -49,6 +49,7 @@ import {
   Film,
   LayoutTemplate,
   Edit,
+  Save,
   ChevronLeft,
   ChevronRight,
   Library,
@@ -900,6 +901,11 @@ export default function HistoryPage() {
   const [chatHistory, setChatHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Inline editing state for meeting_minutes
+  const [isEditingMinutes, setIsEditingMinutes] = useState(false);
+  const [editedMinutesContent, setEditedMinutesContent] = useState("");
+  const [isSavingMinutes, setIsSavingMinutes] = useState(false);
+
   const PAGE_SIZE = 30;
   const [loadedCount, setLoadedCount] = useState(PAGE_SIZE);
 
@@ -1043,6 +1049,38 @@ export default function HistoryPage() {
   });
 
   const utils = trpc.useUtils();
+
+  const updateContentMutation = trpc.history.updateContent.useMutation({
+    onSuccess: () => {
+      setIsSavingMinutes(false);
+      setIsEditingMinutes(false);
+      // Update local displayContentItem with the new content
+      if (contentItem) {
+        setContentItem((prev: any) => prev ? { ...prev, outputContent: editedMinutesContent } : prev);
+      }
+      utils.history.getById.invalidate();
+      toast.success("修改已保存");
+    },
+    onError: (e) => {
+      setIsSavingMinutes(false);
+      toast.error(e.message || "保存失败");
+    },
+  });
+
+  const handleDownloadMinutesMd = useCallback((item: any) => {
+    const content = item?.outputContent || "";
+    if (!content) { toast.error("暂无内容可下载"); return; }
+    const title = item?.title || "会议纪要";
+    const fileName = `${title}.md`;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`已下载 ${fileName}`);
+  }, []);
 
   // Poll refine job status
   const pollRefineStatus = useCallback(async (jobId: string) => {
@@ -1798,7 +1836,7 @@ export default function HistoryPage() {
       </Dialog>
 
       {/* Content Viewer Dialog for text-based modules */}
-      <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) { setContentItem(null); setContentItemId(null); setCurrentReportContent(null); setRefineFeedback(""); } }}>
+      <Dialog open={!!contentItem} onOpenChange={(open) => { if (!open) { setContentItem(null); setContentItemId(null); setCurrentReportContent(null); setRefineFeedback(""); setIsEditingMinutes(false); setEditedMinutesContent(""); } }}>
         <DialogContent className="max-w-2xl w-[90vw] max-h-[88vh] overflow-hidden flex flex-col p-0">
           <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
             <div className="flex items-start justify-between gap-3">
@@ -1896,6 +1934,33 @@ export default function HistoryPage() {
                     <Download className="h-3 w-3 mr-1" />
                     下载
                   </Button>
+                )}
+                {displayContentItem?.module === 'meeting_minutes' && displayContentItem?.outputContent && (
+                  <>
+                    {!isEditingMinutes ? (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                        onClick={() => { setEditedMinutesContent(displayContentItem.outputContent || ""); setIsEditingMinutes(true); }}>
+                        <Edit className="h-3 w-3 mr-1" />编辑
+                      </Button>
+                    ) : (
+                      <>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-emerald-500 hover:text-emerald-600"
+                          disabled={isSavingMinutes}
+                          onClick={() => { setIsSavingMinutes(true); updateContentMutation.mutate({ id: displayContentItem.id, outputContent: editedMinutesContent }); }}>
+                          {isSavingMinutes ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                          {isSavingMinutes ? "保存中…" : "保存"}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => setIsEditingMinutes(false)}>
+                          取消
+                        </Button>
+                      </>
+                    )}
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                      onClick={() => handleDownloadMinutesMd(displayContentItem)}>
+                      <Download className="h-3 w-3 mr-1" />下载 MD
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -2064,6 +2129,13 @@ export default function HistoryPage() {
               </div>
             ) : displayContentItem && ['media_xiaohongshu', 'media_wechat', 'media_instagram'].includes(displayContentItem.module) ? (
               <MediaContentView item={displayContentItem} onLightbox={(src, label) => setLightbox({ src, label })} />
+            ) : displayContentItem?.module === 'meeting_minutes' && isEditingMinutes ? (
+              <Textarea
+                value={editedMinutesContent}
+                onChange={(e) => setEditedMinutesContent(e.target.value)}
+                className="min-h-[400px] font-mono text-sm resize-y w-full"
+                placeholder="编辑会议纪要内容…"
+              />
             ) : (currentReportContent || displayContentItem?.outputContent) ? (
               <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
                 <ReportMarkdown>{currentReportContent || displayContentItem?.outputContent || ""}</ReportMarkdown>

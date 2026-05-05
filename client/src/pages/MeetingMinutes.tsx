@@ -524,6 +524,21 @@ export default function MeetingMinutes() {
     toast.success("已复制到剪贴板");
   };
 
+  const handleDownloadMd = () => {
+    const content = isEditing ? editedMinutes : minutes;
+    const dateStr = meetingDate || new Date().toISOString().slice(0, 10);
+    const titleStr = meetingTitle || projectName || "会议纪要";
+    const fileName = `${titleStr}_${dateStr}.md`;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`已下载 ${fileName}`);
+  };
+
   const isRecordingActive = recordingState === "recording" || recordingState === "paused";
 
   return (
@@ -821,9 +836,14 @@ export default function MeetingMinutes() {
                     </>
                   )}
                 </div>
-                <Button variant="outline" size="sm" onClick={handleCopy}>
-                  <Copy className="h-3 w-3 mr-1.5" />复制
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" onClick={handleCopy}>
+                    <Copy className="h-3 w-3 mr-1.5" />复制
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleDownloadMd}>
+                    <Download className="h-3 w-3 mr-1.5" />下载
+                  </Button>
+                </div>
               </div>
             )}
             {minutes ? (

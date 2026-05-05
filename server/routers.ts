@@ -3419,6 +3419,7 @@ const meetingRouter = router({
 
         return { content, generatedAt: new Date().toISOString(), historyId: historyResult.id, documentId };
       } catch (error) {
+        console.error("[meeting.generateMinutes] error:", error);
         await db.createAiToolLog({
           toolId: input.toolId || 0,
           userId: ctx.user.id,
@@ -3426,7 +3427,9 @@ const meetingRouter = router({
           status: "failed",
           durationMs: Date.now() - startTime,
         });
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "会议纪要生成失败" });
+        if (error instanceof TRPCError) throw error;
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `会议纪要生成失败: ${msg}` });
       }
     }),
 
@@ -4042,6 +4045,19 @@ const historyRouter = router({
         }
       }
 
+      return { success: true };
+    }),
+
+  /** Update outputContent of a history record (for inline editing of text-based outputs) */
+  updateContent: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      outputContent: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const item = await db.getGenerationHistoryById(input.id, ctx.user.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "记录不存在" });
+      await db.updateGenerationHistoryContent(input.id, ctx.user.id, input.outputContent);
       return { success: true };
     }),
 

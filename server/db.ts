@@ -1657,6 +1657,14 @@ export async function updateGenerationHistoryProject(historyId: number, projectI
     .where(eq(generationHistory.id, historyId));
 }
 
+export async function updateGenerationHistoryContent(historyId: number, userId: number, outputContent: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(generationHistory)
+    .set({ outputContent })
+    .where(and(eq(generationHistory.id, historyId), eq(generationHistory.userId, userId)));
+}
+
 // ─── Render Styles (出品标准：渲染风格库) ─────────────────────────────────────
 
 export async function listRenderStyles(opts?: { activeOnly?: boolean }) {

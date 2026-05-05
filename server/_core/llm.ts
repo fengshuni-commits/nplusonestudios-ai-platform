@@ -387,8 +387,18 @@ export async function invokeLLMWithUserTool(
               response_format,
             } = params;
 
+            // Determine model name: prefer configJson.modelName, then tool.name
+            const configJson = tool.configJson as Record<string, unknown> | null;
+            let modelName: string = (configJson?.modelName as string) || tool.name || "gpt-4o";
+
+            // Google Gemini OpenAI-compat endpoint requires "models/" prefix
+            const isGoogleEndpoint = tool.apiEndpoint.includes("generativelanguage.googleapis.com");
+            if (isGoogleEndpoint && modelName && !modelName.startsWith("models/")) {
+              modelName = `models/${modelName}`;
+            }
+
             const payload: Record<string, unknown> = {
-              model: tool.name || "gpt-4o",
+              model: modelName,
               messages: messages.map(normalizeMessage),
             };
 

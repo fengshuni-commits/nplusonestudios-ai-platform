@@ -2476,3 +2476,11 @@
 
 ## 侧边栏手风琴模式
 - [x] 侧边栏改为手风琴模式：每次只展开一个下拉菜单，打开新菜单时自动收起上一个
+
+## 会议纪要生成记录编辑与下载
+- [x] 修复 Gemini 3 Flash model 名称格式错误（添加 models/ 前缀，使用 configJson.modelName）
+- [x] 会议纪要生成结果（MeetingMinutes 页面）添加下载 Markdown 按钮
+- [x] 历史记录页面（History 页面）会议纪要记录添加编辑按钮（内联编辑 + 保存到数据库）
+- [x] 历史记录页面会议纪要记录添加下载 MD 按钮
+- [x] 后端 history.updateContent tRPC 过程（更新 outputContent）
+- [x] 后端 db.updateGenerationHistoryContent 辅助函数
