@@ -305,10 +305,25 @@ async function getRecentHistory(userId: number, limit = 20): Promise<Message[]> 
       } as Message;
     }
     if (r.role === "tool") {
+      // Recover tool function name from the preceding assistant's toolCalls by matching toolCallId
+      const toolCallId = r.toolCallId ?? undefined;
+      let toolFnName: string | undefined;
+      if (toolCallId) {
+        // Find the assistant message that contains this tool call
+        const assistantRow = rows.find(
+          (row) => row.role === "assistant" && row.toolCalls &&
+          (row.toolCalls as ToolCall[]).some((tc) => tc.id === toolCallId)
+        );
+        if (assistantRow) {
+          const tc = (assistantRow.toolCalls as ToolCall[]).find((tc) => tc.id === toolCallId);
+          toolFnName = tc?.function?.name;
+        }
+      }
       return {
         role: "tool" as const,
         content: r.content,
-        tool_call_id: r.toolCallId ?? undefined,
+        tool_call_id: toolCallId,
+        ...(toolFnName ? { name: toolFnName } : {}),
       } as Message;
     }
     return { role: r.role as "user" | "assistant", content: r.content } as Message;
@@ -378,6 +393,7 @@ export const directorRouter = router({
             role: "tool",
             content: result,
             tool_call_id: tc.id,
+            name: tc.function.name, // required by Gemini: function_response.name must not be empty
           } as Message);
         }
 

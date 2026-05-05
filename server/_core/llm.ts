@@ -30,6 +30,7 @@ export type Message = {
   content: MessageContent | MessageContent[];
   name?: string;
   tool_call_id?: string;
+  tool_calls?: ToolCall[];
 };
 
 export type Tool = {
@@ -138,37 +139,34 @@ const normalizeContentPart = (
 };
 
 const normalizeMessage = (message: Message) => {
-  const { role, name, tool_call_id } = message;
+  const { role, name, tool_call_id, tool_calls } = message;
 
   if (role === "tool" || role === "function") {
     const content = ensureArray(message.content)
       .map(part => (typeof part === "string" ? part : JSON.stringify(part)))
       .join("\n");
 
-    return {
-      role,
-      name,
-      tool_call_id,
-      content,
-    };
+    // Gemini requires a non-empty name on function_response messages.
+    // Use the name field if provided, otherwise leave it undefined (OpenAI-compat models don't need it).
+    const normalized: Record<string, unknown> = { role, tool_call_id, content };
+    if (name) normalized.name = name;
+    return normalized;
   }
 
   const contentParts = ensureArray(message.content).map(normalizeContentPart);
 
   // If there's only text content, collapse to a single string for compatibility
   if (contentParts.length === 1 && contentParts[0].type === "text") {
-    return {
-      role,
-      name,
-      content: contentParts[0].text,
-    };
+    const normalized: Record<string, unknown> = { role, content: contentParts[0].text };
+    if (name) normalized.name = name;
+    if (tool_calls && tool_calls.length > 0) normalized.tool_calls = tool_calls;
+    return normalized;
   }
 
-  return {
-    role,
-    name,
-    content: contentParts,
-  };
+  const normalized: Record<string, unknown> = { role, content: contentParts };
+  if (name) normalized.name = name;
+  if (tool_calls && tool_calls.length > 0) normalized.tool_calls = tool_calls;
+  return normalized;
 };
 
 const normalizeToolChoice = (
