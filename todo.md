@@ -2458,3 +2458,10 @@
 ## 会议纪要功能修复
 - [x] 会议纪要生成结果支持直接在页面内编辑，编辑后点击保存按钮存入项目文档
 - [x] 修复项目文档内会议纪要文件无法打开的问题
+
+## 会议纪要工具选择器修复
+- [ ] 修复会议纪要 LLM 工具选择器未生效问题：llmToolId 未传给后端，导致始终使用平台默认模型
+
+## AI工具选择器修复
+- [x] 修复 MeetingMinutes/DesignPlanning 的 AiToolSelector 用 category 而非 capability 过滤导致工具列表为空
+- [x] 去掉 invokeLLMWithUserTool 的静默回退逻辑，工具不可用时直接报错

@@ -529,7 +529,7 @@ export default function MeetingMinutes() {
   return (
     <div className="pb-6">
       <div className="flex items-center justify-end mb-2 gap-2">
-        <AiToolSelector category="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结" />
+        <AiToolSelector capability="document" value={llmToolId} onChange={setLlmToolId} label="纪要总结" />
         <AiToolSelector capability="stream_transcription" value={streamToolId} onChange={setStreamToolId} label="实时识别" showBuiltIn={false} />
         <AiToolSelector capability="file_transcription" value={fileToolId} onChange={setFileToolId} label="文件转写" showBuiltIn={false} />
       </div>

@@ -309,7 +309,7 @@ export default function DesignPlanning() {
   return (
     <div className="pb-6">
       <div className="flex items-center justify-end mb-2">
-        <AiToolSelector category="analysis" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
+        <AiToolSelector capability="analysis" value={toolId} onChange={setToolId} label="AI 工具" showBuiltIn={false} />
       </div>
 
       <div>

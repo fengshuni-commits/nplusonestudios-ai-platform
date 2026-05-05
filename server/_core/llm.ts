@@ -434,17 +434,30 @@ export async function invokeLLMWithUserTool(
               await _reportSuccess(tool.id, _llmPoolKeyId).catch(() => {});
               return (await response.json()) as InvokeResult;
             }
-            // If user's tool fails, report to key pool and fall through to built-in
+            // Tool call failed
             await _reportFailure(tool.id, _llmPoolKeyId).catch(() => {});
+            if (toolId) {
+              // Explicit toolId: surface error directly, no silent fallback
+              const errBody = await response.text().catch(() => "");
+              throw new Error(`AI 工具「${tool.name}」调用失败 (${response.status})：${errBody.substring(0, 300)}`);
+            }
             console.warn(`[LLM] User tool "${tool.name}" failed (${response.status}), falling back to built-in API`);
+          } else if (toolId) {
+            // toolId specified but no apiKey or endpoint configured
+            throw new Error(`AI 工具「${tool.name}」配置不完整，请检查 API Key 和接口地址`);
           }
+        } else if (toolId) {
+          // toolId specified but tool not found in DB
+          throw new Error(`AI 工具 (id=${toolId}) 不存在或未启用，请在工具管理中检查`);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      // Re-throw explicit tool errors; only swallow errors during default-tool lookup
+      if (toolId || err?.message?.startsWith('AI 工具')) throw err;
       console.warn("[LLM] Failed to load user tool, falling back to built-in API:", err);
     }
   }
 
-  // Fallback to built-in API
+  // Fallback to built-in API (only reached when no toolId was specified)
   return invokeLLM(params);
 }
