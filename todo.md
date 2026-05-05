@@ -2468,3 +2468,6 @@
 
 ## AI工具一键测试
 - [x] AI 工具管理页面添加一键测试按鈕，验证 API Key 和接口地址是否可用
+
+## 测试工具修复
+- [x] 修复 testTool 改为走 invokeLLMWithUserTool（与实际调用路径一致），而非直接 fetch apiEndpoint
