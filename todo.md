@@ -2454,3 +2454,7 @@
 - [x] 后端：db helpers（listDesignBriefs/getDesignBriefById/createDesignBrief/updateDesignBrief/deleteDesignBrief/listDesignBriefVersions/createDesignBriefInputs/listDesignBriefInputsByHistory）
 - [x] 前端：DesignBrief.tsx（多源输入：文字/文件/URL/素材库/项目文档；版本历史；迭代生成；Markdown 输出+复制+下载）
 - [x] 路由注册：/design/brief，导航已存在
+
+## 会议纪要功能修复
+- [x] 会议纪要生成结果支持直接在页面内编辑，编辑后点击保存按钮存入项目文档
+- [x] 修复项目文档内会议纪要文件无法打开的问题

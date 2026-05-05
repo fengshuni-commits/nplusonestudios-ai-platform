@@ -23,6 +23,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
+import { Streamdown } from "streamdown";
 
 // ─── Module labels for generation history ───────────────
 const moduleLabels: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -589,6 +590,7 @@ function ProjectDocumentsTab({
 
   // ─── Document preview state ──────────────────────────────
   const [previewDoc, setPreviewDoc] = useState<{ fileUrl: string; fileName: string; title: string } | null>(null);
+  const [contentPreviewItem, setContentPreviewItem] = useState<{ title: string; content: string } | null>(null);
 
   // ─── Image lightbox state ────────────────────────────────
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -903,6 +905,11 @@ function ProjectDocumentsTab({
                             {item.outputUrl && (
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(item.outputUrl!, "_blank")} title={mod === "benchmark_ppt" ? "下载" : "查看"}>
                                 {mod === "benchmark_ppt" ? <Download className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                              </Button>
+                            )}
+                            {!item.outputUrl && item.outputContent && (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setContentPreviewItem({ title: item.title, content: item.outputContent })} title="查看">
+                                <Eye className="h-3.5 w-3.5" />
                               </Button>
                             )}
                             {/* Unlink button */}
@@ -1514,6 +1521,19 @@ function ProjectDocumentsTab({
           fileName={previewDoc.fileName}
           title={previewDoc.title}
         />
+      )}
+      {/* ─── Text Content Preview Modal (for meeting_minutes etc.) ─── */}
+      {contentPreviewItem && (
+        <Dialog open={!!contentPreviewItem} onOpenChange={(open) => { if (!open) setContentPreviewItem(null); }}>
+          <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="text-base">{contentPreviewItem.title}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80 mt-2">
+              <Streamdown>{contentPreviewItem.content}</Streamdown>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       {/* ─── Image Lightbox ─── */}
       {lightboxUrl && (

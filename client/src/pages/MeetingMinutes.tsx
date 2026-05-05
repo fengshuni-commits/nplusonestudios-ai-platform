@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText, Download } from "lucide-react";
+import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText, Download, Edit2, Save, X } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useStreamTranscribe } from "@/hooks/useStreamTranscribe";
 import { toast } from "sonner";
@@ -43,6 +43,10 @@ export default function MeetingMinutes() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [archivedDocId, setArchivedDocId] = useState<number | undefined>(undefined);
 
+  // Inline editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedMinutes, setEditedMinutes] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   // Auto-save draft state
   const [draftId, setDraftId] = useState<number | undefined>(undefined);
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
@@ -480,8 +484,43 @@ export default function MeetingMinutes() {
     });
   };
 
+  const updateDocMutation = trpc.documents.update.useMutation({
+    onSuccess: () => {
+      setMinutes(editedMinutes);
+      setIsEditing(false);
+      setIsSavingEdit(false);
+      toast.success("会议纪要已保存");
+    },
+    onError: () => {
+      setIsSavingEdit(false);
+      toast.error("保存失败，请重试");
+    },
+  });
+
+  const handleStartEdit = () => {
+    setEditedMinutes(minutes);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedMinutes("");
+  };
+
+  const handleSaveEdit = () => {
+    if (!archivedDocId) {
+      // No document saved yet, just update local state
+      setMinutes(editedMinutes);
+      setIsEditing(false);
+      toast.success("已更新（未绑定项目，仅本地生效）");
+      return;
+    }
+    setIsSavingEdit(true);
+    updateDocMutation.mutate({ id: archivedDocId, content: editedMinutes });
+  };
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(minutes);
+    navigator.clipboard.writeText(isEditing ? editedMinutes : minutes);
     toast.success("已复制到剪贴板");
   };
 
@@ -764,7 +803,24 @@ export default function MeetingMinutes() {
         <Card className="h-fit py-0 gap-0">
           <CardContent className="px-4 py-4">
             {minutes && (
-              <div className="flex justify-end mb-3">
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <div className="flex items-center gap-1.5">
+                  {!isEditing ? (
+                    <Button variant="outline" size="sm" onClick={handleStartEdit} disabled={isGenerating}>
+                      <Edit2 className="h-3 w-3 mr-1.5" />编辑
+                    </Button>
+                  ) : (
+                    <>
+                      <Button size="sm" onClick={handleSaveEdit} disabled={isSavingEdit}>
+                        {isSavingEdit ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Save className="h-3 w-3 mr-1.5" />}
+                        {archivedDocId ? "保存到项目文档" : "保存"}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleCancelEdit} disabled={isSavingEdit}>
+                        <X className="h-3 w-3 mr-1.5" />取消
+                      </Button>
+                    </>
+                  )}
+                </div>
                 <Button variant="outline" size="sm" onClick={handleCopy}>
                   <Copy className="h-3 w-3 mr-1.5" />复制
                 </Button>
@@ -772,10 +828,19 @@ export default function MeetingMinutes() {
             )}
             {minutes ? (
               <>
-                <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
-                  <Streamdown>{minutes}</Streamdown>
-                </div>
-                {!isGenerating && (
+                {isEditing ? (
+                  <Textarea
+                    value={editedMinutes}
+                    onChange={(e) => setEditedMinutes(e.target.value)}
+                    className="min-h-[400px] font-mono text-sm resize-y"
+                    placeholder="编辑会议纪要内容…"
+                  />
+                ) : (
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground/80 prose-li:text-foreground/80">
+                    <Streamdown>{minutes}</Streamdown>
+                  </div>
+                )}
+                {!isGenerating && !isEditing && (
                   <div className="mt-6 pt-4 border-t space-y-3">
                     {archivedDocId && importedProjectId && (
                       <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">

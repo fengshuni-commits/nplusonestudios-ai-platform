@@ -3355,9 +3355,10 @@ const meetingRouter = router({
           title: `${input.meetingTitle || input.projectName || "会议"} - 会议纪要`,
           summary: `${input.meetingDate || "今日"} | ${input.meetingLocation ? input.meetingLocation + " | " : ""}${content.substring(0, 100)}`,
           inputParams: { projectName: input.projectName, meetingDate: input.meetingDate, meetingTitle: input.meetingTitle, meetingLocation: input.meetingLocation, meetingAttendees: input.meetingAttendees },
+          outputContent: content,
           status: "success",
           durationMs: Date.now() - startTime,
-          projectId: null,
+          projectId: input.projectId || null,
           createdByName: ctx.user.name || null,
           modelName: response.model || null,
         }).catch(() => ({ id: 0 }));
