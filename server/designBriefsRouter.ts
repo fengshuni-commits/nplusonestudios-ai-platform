@@ -2,7 +2,7 @@ import { protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, invokeLLMWithUserTool } from "./_core/llm";
 
 export const designBriefsRouter = router({
   /** List all design briefs for the current user, optionally filtered by project */
@@ -89,6 +89,7 @@ export const designBriefsRouter = router({
         documentId: z.number().optional(),
       })).default([]),
       instructions: z.string().optional(),
+      toolId: z.number().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const startTime = Date.now();
@@ -223,12 +224,13 @@ export const designBriefsRouter = router({
       userMessages.push({ role: "user", content: "请生成设计任务书。" });
 
       // 5. Call LLM
-      const llmResp = await invokeLLM({
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...userMessages,
-        ],
-      });
+      const llmMessages = [
+        { role: "system" as const, content: systemPrompt },
+        ...userMessages,
+      ];
+      const llmResp = input.toolId
+        ? await invokeLLMWithUserTool({ messages: llmMessages }, ctx.user.id, input.toolId)
+        : await invokeLLM({ messages: llmMessages });
 
       const content = llmResp.choices?.[0]?.message?.content;
       const outputContent = typeof content === "string" ? content : "生成失败，请重试";

@@ -15,6 +15,7 @@ import {
   Loader2, AlertCircle
 } from "lucide-react";
 import { Streamdown } from "streamdown";
+import { AiToolSelector } from "@/components/AiToolSelector";
 
 type InputSource = {
   id: string;
@@ -214,6 +215,7 @@ export default function DesignBrief() {
   const [showAssetDialog, setShowAssetDialog] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showNewBrief, setShowNewBrief] = useState(false);
+  const [toolId, setToolId] = useState<number | undefined>(undefined);
 
   const { data: projects = [] } = trpc.projects.list.useQuery({});
   const { data: briefs = [], refetch: refetchBriefs } = trpc.designBriefs.list.useQuery({});
@@ -278,6 +280,7 @@ export default function DesignBrief() {
           assetId: s.assetId, documentId: s.documentId,
         })),
         instructions: instructions.trim() || undefined,
+        toolId: toolId ?? undefined,
       });
       setSelectedBriefId(result.briefId!); setSelectedHistoryId(result.historyId); setViewContent(result.content);
       setTextInput(""); setInstructions(""); setSources([]); setBriefTitle(""); setShowNewBrief(false);
@@ -344,6 +347,9 @@ export default function DesignBrief() {
 
         {/* Center: Output + Input */}
         <div className="flex-1 flex flex-col min-w-0 gap-3">
+          <div className="flex items-center justify-end mb-2">
+            <AiToolSelector capability="document" value={toolId} onChange={setToolId} label="AI 工具" />
+          </div>
           <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {displayContent ? (
               <>
