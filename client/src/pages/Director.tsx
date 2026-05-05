@@ -320,6 +320,16 @@ export default function Director() {
               >
                 <FolderOpen className="h-4 w-4" />
               </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 w-9 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                onClick={() => { if (messages.length > 0) clearHistoryMutation.mutate(); }}
+                disabled={isLoading || messages.length === 0}
+                title="清空对话"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-1.5">Enter 发送，Shift+Enter 换行</p>
