@@ -41,6 +41,52 @@ import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 import { pdfToImages } from "./pdfToImages";
 import { designBriefsRouter } from "./designBriefsRouter";
 
+// ─── Meeting Minutes Prompts Router ─────────────────────────────────────────
+const meetingMinutesPromptsRouter = router({
+  listPrompts: protectedProcedure.query(async () => {
+    return db.listMeetingMinutesPrompts();
+  }),
+  updatePrompt: protectedProcedure
+    .input(z.object({
+      type: z.enum(["system"]),
+      prompt: z.string().min(1),
+      label: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.updateMeetingMinutesPrompt(input.type, {
+        prompt: input.prompt,
+        label: input.label,
+        description: input.description,
+        updatedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
+});
+
+// ─── Design Brief Prompts Router ─────────────────────────────────────────────
+const designBriefPromptsRouter = router({
+  listPrompts: protectedProcedure.query(async () => {
+    return db.listDesignBriefPrompts();
+  }),
+  updatePrompt: protectedProcedure
+    .input(z.object({
+      type: z.enum(["system", "revise"]),
+      prompt: z.string().min(1),
+      label: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.updateDesignBriefPrompt(input.type, {
+        prompt: input.prompt,
+        label: input.label,
+        description: input.description,
+        updatedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
+});
+
 // ─── PPT Job Store (in-memory async queue) ──────────────
 type PptSlidePreview = { title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any };
 type PptJob =
@@ -7265,6 +7311,8 @@ export const appRouter = router({system: systemRouter,
   analysisImage: analysisImageRouter,
   session: sessionRouter,
   designBriefs: designBriefsRouter,
+  meetingMinutesPrompts: meetingMinutesPromptsRouter,
+  designBriefPrompts: designBriefPromptsRouter,
 });
 export type AppRouter = typeof appRouter;
 

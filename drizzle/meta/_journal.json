@@ -379,6 +379,13 @@
       "when": 1777962667162,
       "tag": "0053_curved_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "5",
+      "when": 1777964584604,
+      "tag": "0054_new_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

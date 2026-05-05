@@ -590,6 +590,169 @@ function CaseStudyPromptsTab() {
   );
 }
 
+// ─── Meeting Minutes Prompts Tab ────────────────────────────────────────────
+const MEETING_MINUTES_PROMPT_TYPES = [
+  { id: "system" as const, label: "系统提示词", icon: FileText, desc: "控制会议纪要的生成格式和风格，修改后将影响所有新生成的会议纪要。" },
+];
+
+function MeetingMinutesPromptsTab() {
+  const utils = trpc.useUtils();
+  const { data: prompts = [], isLoading } = trpc.meetingMinutesPrompts.listPrompts.useQuery();
+  const updateMutation = trpc.meetingMinutesPrompts.updatePrompt.useMutation({
+    onSuccess: () => { utils.meetingMinutesPrompts.listPrompts.invalidate(); toast.success("提示词已保存"); },
+    onError: (e) => toast.error("保存失败：" + e.message),
+  });
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [editingType, setEditingType] = React.useState<string | null>(null);
+  const promptMap = Object.fromEntries(
+    (prompts as Array<{ type: string; prompt: string; label: string; description?: string | null }>).map(p => [p.type, p])
+  );
+  const handleEdit = (type: string) => { setDrafts(d => ({ ...d, [type]: promptMap[type]?.prompt ?? "" })); setEditingType(type); };
+  const handleSave = (type: "system") => {
+    const draft = drafts[type];
+    if (!draft?.trim()) { toast.error("提示词不能为空"); return; }
+    updateMutation.mutate({ type, prompt: draft.trim() });
+    setEditingType(null);
+  };
+  const handleCancel = (type: string) => { setEditingType(null); setDrafts(d => { const n = { ...d }; delete n[type]; return n; }); };
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">会议纪要提示词</CardTitle>
+              <CardDescription className="text-xs mt-0.5">配置会议纪要生成的系统提示词。修改后将立即影响所有新的会议纪要生成任务。</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">加载中…</span></div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              {MEETING_MINUTES_PROMPT_TYPES.map(({ id, label, icon: Icon, desc }) => {
+                const current = promptMap[id];
+                const isEditing = editingType === id;
+                const draftValue = drafts[id] ?? current?.prompt ?? "";
+                return (
+                  <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-muted-foreground">{desc}</p></div>
+                      </div>
+                      {!isEditing && <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5"><Pencil className="h-3.5 w-3.5" />编辑</Button>}
+                    </div>
+                    {isEditing ? (
+                      <div className="flex flex-col gap-2">
+                        <Textarea value={draftValue} onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))} rows={14} className="text-sm font-mono resize-y" placeholder="输入提示词…" />
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => handleSave(id as "system")} disabled={updateMutation.isPending} className="gap-1.5">
+                            {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}保存
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-muted/50 rounded-md p-3 border border-border">
+                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">{current?.prompt || <span className="italic">暂无提示词（将使用内置默认值）</span>}</pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Design Brief Prompts Tab ─────────────────────────────────────────────────
+const DESIGN_BRIEF_PROMPT_TYPES = [
+  { id: "system" as const, label: "生成提示词", icon: FileText, desc: "控制设计任务书的生成格式和章节结构，修改后将影响所有新生成的任务书。" },
+  { id: "revise" as const, label: "AI 修订提示词", icon: Sparkles, desc: "控制 AI 修订功能的行为，修改后将影响所有修订操作。" },
+];
+
+function DesignBriefPromptsTab() {
+  const utils = trpc.useUtils();
+  const { data: prompts = [], isLoading } = trpc.designBriefPrompts.listPrompts.useQuery();
+  const updateMutation = trpc.designBriefPrompts.updatePrompt.useMutation({
+    onSuccess: () => { utils.designBriefPrompts.listPrompts.invalidate(); toast.success("提示词已保存"); },
+    onError: (e) => toast.error("保存失败：" + e.message),
+  });
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [editingType, setEditingType] = React.useState<string | null>(null);
+  const promptMap = Object.fromEntries(
+    (prompts as Array<{ type: string; prompt: string; label: string; description?: string | null }>).map(p => [p.type, p])
+  );
+  const handleEdit = (type: string) => { setDrafts(d => ({ ...d, [type]: promptMap[type]?.prompt ?? "" })); setEditingType(type); };
+  const handleSave = (type: "system" | "revise") => {
+    const draft = drafts[type];
+    if (!draft?.trim()) { toast.error("提示词不能为空"); return; }
+    updateMutation.mutate({ type, prompt: draft.trim() });
+    setEditingType(null);
+  };
+  const handleCancel = (type: string) => { setEditingType(null); setDrafts(d => { const n = { ...d }; delete n[type]; return n; }); };
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="border-border">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">设计任务书提示词</CardTitle>
+              <CardDescription className="text-xs mt-0.5">配置设计任务书生成和 AI 修订的提示词。修改后将立即影响所有新的任务书生成和修订任务。</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">加载中…</span></div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              {DESIGN_BRIEF_PROMPT_TYPES.map(({ id, label, icon: Icon, desc }) => {
+                const current = promptMap[id];
+                const isEditing = editingType === id;
+                const draftValue = drafts[id] ?? current?.prompt ?? "";
+                return (
+                  <div key={id} className="flex flex-col gap-3 pb-6 border-b border-border last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-muted-foreground">{desc}</p></div>
+                      </div>
+                      {!isEditing && <Button variant="outline" size="sm" onClick={() => handleEdit(id)} className="gap-1.5"><Pencil className="h-3.5 w-3.5" />编辑</Button>}
+                    </div>
+                    {isEditing ? (
+                      <div className="flex flex-col gap-2">
+                        <Textarea value={draftValue} onChange={(e) => setDrafts(d => ({ ...d, [id]: e.target.value }))} rows={14} className="text-sm font-mono resize-y" placeholder="输入提示词…" />
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => handleSave(id as "system" | "revise")} disabled={updateMutation.isPending} className="gap-1.5">
+                            {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}保存
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleCancel(id)}>取消</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-muted/50 rounded-md p-3 border border-border">
+                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">{current?.prompt || <span className="italic">暂无提示词（将使用内置默认值）</span>}</pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const COLOR_PLAN_STYLES = [
   { id: "colored" as const, label: "彩色平面", icon: Palette },
   { id: "hand_drawn" as const, label: "手绘平面", icon: PenLine },
@@ -1634,6 +1797,12 @@ export default function Standards() {
           <TabsTrigger value="case-study-prompts" className="gap-1.5">
             <Sparkles className="h-4 w-4" />案例调研
           </TabsTrigger>
+          <TabsTrigger value="meeting-minutes-prompts" className="gap-1.5">
+            <FileText className="h-4 w-4" />会议纪要
+          </TabsTrigger>
+          <TabsTrigger value="design-brief-prompts" className="gap-1.5">
+            <FileText className="h-4 w-4" />设计任务书
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── 演示文稿版式标准 Tab ─── */}
@@ -1814,6 +1983,16 @@ export default function Standards() {
         {/* ─── 案例调研提示词 Tab ─── */}
         <TabsContent value="case-study-prompts">
           <CaseStudyPromptsTab />
+        </TabsContent>
+
+        {/* ─── 会议纪要提示词 Tab ─── */}
+        <TabsContent value="meeting-minutes-prompts">
+          <MeetingMinutesPromptsTab />
+        </TabsContent>
+
+        {/* ─── 设计任务书提示词 Tab ─── */}
+        <TabsContent value="design-brief-prompts">
+          <DesignBriefPromptsTab />
         </TabsContent>
       </Tabs>
     </div>

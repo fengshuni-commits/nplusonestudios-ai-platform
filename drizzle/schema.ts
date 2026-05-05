@@ -876,3 +876,41 @@ export const designBriefInputs = mysqlTable("design_brief_inputs", {
 });
 export type DesignBriefInput = typeof designBriefInputs.$inferSelect;
 export type InsertDesignBriefInput = typeof designBriefInputs.$inferInsert;
+
+// ─── Meeting Minutes Prompts (会议纪要提示词) ─────────────────────────────────
+// 存储会议纪要生成的系统提示词，可在出品标准中编辑
+export const meetingMinutesPrompts = mysqlTable("meeting_minutes_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  // 提示词类型：system（系统提示词）
+  type: mysqlEnum("type", ["system"]).notNull().unique(),
+  // 显示名称
+  label: varchar("label", { length: 128 }).notNull(),
+  // 提示词内容
+  prompt: longtext("prompt").notNull(),
+  // 提示词说明（给编辑者的备注）
+  description: text("description"),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type MeetingMinutesPrompt = typeof meetingMinutesPrompts.$inferSelect;
+export type InsertMeetingMinutesPrompt = typeof meetingMinutesPrompts.$inferInsert;
+
+// ─── Design Brief Prompts (设计任务书提示词) ──────────────────────────────────
+// 存储设计任务书生成的系统提示词，可在出品标准中编辑
+export const designBriefPrompts = mysqlTable("design_brief_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  // 提示词类型：system（系统提示词）| revise（AI修订提示词）
+  type: mysqlEnum("type", ["system", "revise"]).notNull().unique(),
+  // 显示名称
+  label: varchar("label", { length: 128 }).notNull(),
+  // 提示词内容
+  prompt: longtext("prompt").notNull(),
+  // 提示词说明（给编辑者的备注）
+  description: text("description"),
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DesignBriefPrompt = typeof designBriefPrompts.$inferSelect;
+export type InsertDesignBriefPrompt = typeof designBriefPrompts.$inferInsert;

@@ -2612,3 +2612,70 @@ export async function listDesignBriefInputsByHistory(historyId: number) {
     .where(eq(designBriefInputs.historyId, historyId))
     .orderBy(designBriefInputs.id);
 }
+
+// ─── Meeting Minutes Prompts ─────────────────────────────────────────────────
+export async function listMeetingMinutesPrompts() {
+  const db = await getDb();
+  if (!db) return [];
+  const { meetingMinutesPrompts } = await import("../drizzle/schema");
+  return db.select().from(meetingMinutesPrompts).orderBy(meetingMinutesPrompts.type);
+}
+
+export async function getMeetingMinutesPrompt(type: "system") {
+  const db = await getDb();
+  if (!db) return null;
+  const { meetingMinutesPrompts } = await import("../drizzle/schema");
+  const rows = await db.select().from(meetingMinutesPrompts).where(eq(meetingMinutesPrompts.type, type)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateMeetingMinutesPrompt(
+  type: "system",
+  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { meetingMinutesPrompts } = await import("../drizzle/schema");
+  const existing = await getMeetingMinutesPrompt(type);
+  if (existing) {
+    await db.update(meetingMinutesPrompts).set({ ...data, updatedAt: new Date() }).where(eq(meetingMinutesPrompts.type, type));
+    return { ...existing, ...data };
+  } else {
+    const result = await db.insert(meetingMinutesPrompts).values({ type, label: data.label ?? "系统提示词", prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
+    return { id: Number((result as any).insertId), type, label: data.label ?? "系统提示词", prompt: data.prompt };
+  }
+}
+
+// ─── Design Brief Prompts ────────────────────────────────────────────────────
+export async function listDesignBriefPrompts() {
+  const db = await getDb();
+  if (!db) return [];
+  const { designBriefPrompts } = await import("../drizzle/schema");
+  return db.select().from(designBriefPrompts).orderBy(designBriefPrompts.type);
+}
+
+export async function getDesignBriefPrompt(type: "system" | "revise") {
+  const db = await getDb();
+  if (!db) return null;
+  const { designBriefPrompts } = await import("../drizzle/schema");
+  const rows = await db.select().from(designBriefPrompts).where(eq(designBriefPrompts.type, type)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateDesignBriefPrompt(
+  type: "system" | "revise",
+  data: { label?: string; prompt: string; description?: string; updatedBy?: number }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const { designBriefPrompts } = await import("../drizzle/schema");
+  const existing = await getDesignBriefPrompt(type);
+  if (existing) {
+    await db.update(designBriefPrompts).set({ ...data, updatedAt: new Date() }).where(eq(designBriefPrompts.type, type));
+    return { ...existing, ...data };
+  } else {
+    const label = type === "system" ? "生成提示词" : "AI修订提示词";
+    const result = await db.insert(designBriefPrompts).values({ type, label: data.label ?? label, prompt: data.prompt, description: data.description, updatedBy: data.updatedBy });
+    return { id: Number((result as any).insertId), type, label: data.label ?? label, prompt: data.prompt };
+  }
+}
