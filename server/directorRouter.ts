@@ -138,21 +138,17 @@ const DIRECTOR_TOOLS: Tool[] = [
     type: "function",
     function: {
       name: "navigate_to_module",
-      description: "引导用户跳转到指定功能模块页面。仅当用户需要进行复杂操作（如上传底图做平面图、录制会议纪要、制作演示文稿等）时才跳转。效果图生成请优先使用 generate_image 工具直接生成，不要跳转。",
+      description: "引导用户跳转到指定功能模块页面。仅当用户需要进行以下操作时才跳转：上传底图做 AI 平面图、录制会议纪要、制作演示文稿。注意：效果图、设计任务书、案例调研、内容创作文案请直接使用 generate_image 或 generate_document 工具完成，不要跳转。",
       parameters: {
         type: "object",
         properties: {
           module: {
             type: "string",
-            description: "功能模块名称",
+            description: "功能模块名称（注意：效果图生成请使用 generate_image 工具，不要选择 ai_effect）",
             enum: [
-              "design_brief",
               "meeting_minutes",
-              "ai_effect",
               "ai_floor_plan",
-              "case_study",
               "presentation",
-              "content_creation",
               "project_management",
               "construction_management",
             ],
