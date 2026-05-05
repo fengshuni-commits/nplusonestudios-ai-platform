@@ -2082,6 +2082,55 @@ const aiToolsRouter = router({
         totalSeconds,
       };
     }),
+
+  testTool: adminProcedure
+    .input(z.object({ toolId: z.number() }))
+    .mutation(async ({ input }) => {
+      const { getDb } = await import("./db");
+      const { aiTools } = await import("../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+      const { pickKey } = await import("./_core/keyPool");
+      const drizzleDb = await getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "数据库连接失败" });
+      const rows = await drizzleDb.select().from(aiTools).where(eq(aiTools.id, input.toolId)).limit(1);
+      if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
+      const tool = rows[0] as any;
+      const poolKey = await pickKey(tool.id, tool.apiKeyEncrypted || null);
+      let apiKey: string | null = poolKey?.apiKey ?? null;
+      if (!apiKey && tool.apiKeyName && tool.apiKeyName.startsWith("sk-")) {
+        apiKey = tool.apiKeyName;
+      }
+      if (!apiKey) throw new TRPCError({ code: "BAD_REQUEST", message: "未配置 API Key，请先添加密钥" });
+      if (!tool.apiEndpoint) throw new TRPCError({ code: "BAD_REQUEST", message: "未配置接口地址（API Endpoint）" });
+      let endpoint = tool.apiEndpoint.trim();
+      if (!endpoint.endsWith("/chat/completions")) {
+        endpoint = `${endpoint.replace(/\/$/, "")}/chat/completions`;
+      }
+      const startMs = Date.now();
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: tool.name || "gpt-4o",
+            messages: [{ role: "user", content: "Reply with the single word: OK" }],
+            max_tokens: 16,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `网络请求失败：${err?.message ?? err}` });
+      }
+      const latencyMs = Date.now() - startMs;
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => "");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `接口返回错误 ${response.status}：${errBody.substring(0, 300)}` });
+      }
+      const json = await response.json() as any;
+      const reply = (json?.choices?.[0]?.message?.content ?? "(无返回内容)") as string;
+      return { success: true, latencyMs, model: (json?.model ?? tool.name) as string, reply };
+    }),
 });
 
 // ─── Session Router ───────────────────────────────────────

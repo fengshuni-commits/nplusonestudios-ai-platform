@@ -2465,3 +2465,6 @@
 ## AI工具选择器修复
 - [x] 修复 MeetingMinutes/DesignPlanning 的 AiToolSelector 用 category 而非 capability 过滤导致工具列表为空
 - [x] 去掉 invokeLLMWithUserTool 的静默回退逻辑，工具不可用时直接报错
+
+## AI工具一键测试
+- [x] AI 工具管理页面添加一键测试按鈕，验证 API Key 和接口地址是否可用

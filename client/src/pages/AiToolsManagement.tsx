@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock, Timer, TrendingUp, AlertTriangle, Zap } from "lucide-react";
+import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock, Timer, TrendingUp, AlertTriangle, Zap, PlayCircle, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shared/toolCapabilities";
@@ -265,6 +265,24 @@ export default function AdminApiKeys() {
   const [editVolcengineAccessToken, setEditVolcengineAccessToken] = useState("");
   const [editXfyunAppId, setEditXfyunAppId] = useState("");
   const [editXfyunApiSecret, setEditXfyunApiSecret] = useState("");
+  // ─── Test tool state ───
+  const [testingToolId, setTestingToolId] = useState<number | null>(null);
+  type TestResult = { success: boolean; latencyMs?: number; model?: string; reply?: string; error?: string };
+  const [testResults, setTestResults] = useState<Record<number, TestResult>>({});
+  const testTool = trpc.aiTools.testTool.useMutation({
+    onMutate: ({ toolId }) => { setTestingToolId(toolId); },
+    onSuccess: (data, { toolId }) => {
+      setTestingToolId(null);
+      setTestResults(prev => ({ ...prev, [toolId]: { success: true, latencyMs: data.latencyMs, model: data.model, reply: data.reply } }));
+      toast.success(`连接成功 · ${data.model} · ${data.latencyMs}ms`);
+    },
+    onError: (err, { toolId }) => {
+      setTestingToolId(null);
+      setTestResults(prev => ({ ...prev, [toolId]: { success: false, error: err.message } }));
+      toast.error(`测试失败：${err.message}`);
+    },
+  });
+
   const [toolForm, setToolForm] = useState({
     name: "",
     apiEndpoint: "",
@@ -708,6 +726,25 @@ export default function AdminApiKeys() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        {/* Test result badge */}
+                        {testResults[tool.id] && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${testResults[tool.id].success ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
+                            {testResults[tool.id].success ? `✓ ${testResults[tool.id].latencyMs}ms` : "✗ 失败"}
+                          </span>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs gap-1"
+                          disabled={testingToolId === tool.id}
+                          onClick={(e) => { e.stopPropagation(); testTool.mutate({ toolId: tool.id }); }}
+                          title="测试 API Key 连通性"
+                        >
+                          {testingToolId === tool.id
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <PlayCircle className="h-3 w-3" />}
+                          测试
+                        </Button>
                         <Button
                           variant={tool.isActive ? "secondary" : "outline"}
                           size="sm"
@@ -721,6 +758,23 @@ export default function AdminApiKeys() {
 
                     {isExpanded && (
                       <div className="px-4 pb-4 pt-2 border-t border-border bg-muted/30 space-y-3">
+                        {/* Test result detail */}
+                        {testResults[tool.id] && (
+                          <div className={`rounded-md px-3 py-2 text-xs ${testResults[tool.id].success ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"}`}>
+                            {testResults[tool.id].success ? (
+                              <div className="space-y-0.5">
+                                <p className="font-medium text-green-700 dark:text-green-400">连接测试通过</p>
+                                <p className="text-muted-foreground">模型：{testResults[tool.id].model} · 延迟：{testResults[tool.id].latencyMs}ms</p>
+                                <p className="text-muted-foreground">回复：{testResults[tool.id].reply}</p>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="font-medium text-red-700 dark:text-red-400">连接测试失败</p>
+                                <p className="text-muted-foreground mt-0.5">{testResults[tool.id].error}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {tool.apiEndpoint && (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1">API 端点</p>
