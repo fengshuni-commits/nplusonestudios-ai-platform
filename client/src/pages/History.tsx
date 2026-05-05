@@ -573,13 +573,24 @@ function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImpo
         {/* Bottom: title + time */}
         <div className={`${isRender ? "opacity-0 group-hover:opacity-100 transition-opacity" : ""}`}>
           <div className={`rounded-lg p-2 ${isRender ? "bg-gradient-to-t from-black/70 via-black/40 to-transparent -mx-2.5 -mb-2.5 px-2.5 pb-2.5 pt-4" : ""}`}>
-            <p className="text-[11px] font-medium text-white leading-tight line-clamp-2">{title}</p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <p className="text-[10px] text-white/50">{formatTime(item.createdAt)}</p>
-              {item.modelName && (
-                <span className="text-[9px] text-white/40 bg-white/10 px-1 py-0 rounded truncate max-w-[70px]">{item.modelName}</span>
-              )}
-            </div>
+            {item.module === 'meeting_minutes' ? (
+              <>
+                {item.projectName && (
+                  <p className="text-[9px] text-white/50 leading-tight truncate mb-0.5">{item.projectName}</p>
+                )}
+                <p className="text-[11px] font-medium text-white leading-tight line-clamp-2">{title}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] font-medium text-white leading-tight line-clamp-2">{title}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-[10px] text-white/50">{formatTime(item.createdAt)}</p>
+                  {item.modelName && (
+                    <span className="text-[9px] text-white/40 bg-white/10 px-1 py-0 rounded truncate max-w-[70px]">{item.modelName}</span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { eq, desc, like, and, sql, inArray, or, isNull } from "drizzle-orm";
+import { eq, desc, like, and, sql, inArray, or, isNull, getTableColumns } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -1331,15 +1331,32 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   // ai_video records are now stored directly in generation_history (proxy entries).
   // No more videoHistory merge needed.
 
-  // If filtering to a specific module (non-chain modules), use the simple list
+  // If filtering to a specific module (non-chain modules), use a join to include projectName
   if (opts?.module && opts.module !== "ai_render" && opts.module !== "benchmark_report") {
-    return listGenerationHistory(userId, opts);
+    const conditions = [eq(generationHistory.userId, userId), eq(generationHistory.module, opts.module)];
+    const where = and(...conditions);
+    const moduleItems = await db.select({
+      ...getTableColumns(generationHistory),
+      projectName: projects.name,
+    }).from(generationHistory)
+      .leftJoin(projects, eq(generationHistory.projectId, projects.id))
+      .where(where)
+      .orderBy(desc(generationHistory.createdAt))
+      .limit(limit)
+      .offset(offset);
+    const moduleCount = await db.select({ count: sql<number>`count(*)` }).from(generationHistory).where(where);
+    const moduleEnriched = moduleItems.map(item => ({ ...item, chainLength: 1, latestOutputUrl: item.outputUrl, latestTitle: item.title, latestEnhancedImageUrl: item.enhancedImageUrl || null }));
+    return { items: moduleEnriched, total: moduleCount[0]?.count || 0 };
   }
 
   // For ai_render or benchmark_report single-module view, get roots with chain metadata
   if (opts?.module === "ai_render" || opts?.module === "benchmark_report") {
     const moduleFilter = opts.module;
-    const roots = await db.select().from(generationHistory)
+    const roots = await db.select({
+      ...getTableColumns(generationHistory),
+      projectName: projects.name,
+    }).from(generationHistory)
+      .leftJoin(projects, eq(generationHistory.projectId, projects.id))
       .where(and(
         eq(generationHistory.userId, userId),
         eq(generationHistory.module, moduleFilter),
@@ -1379,7 +1396,11 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   ];
   const where = and(...conditions);
 
-  const items = await db.select().from(generationHistory)
+  const rows = await db.select({
+    ...getTableColumns(generationHistory),
+    projectName: projects.name,
+  }).from(generationHistory)
+    .leftJoin(projects, eq(generationHistory.projectId, projects.id))
     .where(where)
     .orderBy(desc(generationHistory.createdAt))
     .limit(limit)
@@ -1388,7 +1409,7 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
   const countResult = await db.select({ count: sql<number>`count(*)` }).from(generationHistory).where(where);
 
   // Enrich chain-capable roots with chain info
-  const enrichedItems = await Promise.all(items.map(async (item) => {
+  const enrichedItems = await Promise.all(rows.map(async (item) => {
     if ((item.module === "ai_render" || item.module === "benchmark_report") && !item.parentId) {
       const chainItems = await getEditChain(item.id, userId);
       const latestItem = chainItems[chainItems.length - 1];
