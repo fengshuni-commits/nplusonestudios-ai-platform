@@ -8,11 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
-  FileText, Plus, Trash2, Link, Upload, FolderOpen, BookOpen,
-  Sparkles, Clock, RefreshCw, Download, Copy, X,
-  Loader2, AlertCircle
+  FileText, Link, Upload, FolderOpen, BookOpen,
+  Sparkles, Download, Copy, X, ChevronDown,
+  Loader2, AlertCircle, RefreshCw, MessageSquarePlus, Send
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { AiToolSelector } from "@/components/AiToolSelector";
@@ -93,18 +94,18 @@ function UrlInputDialog({ open, onClose, onAdd }: {
   );
 }
 
-function DocumentPickerDialog({ open, onClose, onAdd }: {
+function DocumentPickerDialog({ open, onClose, onAdd, defaultProjectId }: {
   open: boolean; onClose: () => void;
   onAdd: (source: InputSource) => void;
+  defaultProjectId?: string;
 }) {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || "all");
   const { data: projects = [] } = trpc.projects.list.useQuery({});
   const { data: allDocs = [] } = trpc.meeting.listDrafts.useQuery();
   const { data: projectHistory = [] } = trpc.projects.listGenerationHistory.useQuery(
     { projectId: Number(selectedProjectId) },
     { enabled: selectedProjectId !== "all" && !isNaN(Number(selectedProjectId)) }
   );
-  // Filter project history to text-based modules only (meeting_minutes, design_brief, benchmark_report, etc.)
   const TEXT_MODULES = ["meeting_minutes", "design_brief", "benchmark_report", "layout_design"];
   const projectDocs = projectHistory
     .filter((item: any) => TEXT_MODULES.includes(item.module) && item.outputContent)
@@ -128,7 +129,7 @@ function DocumentPickerDialog({ open, onClose, onAdd }: {
           </Select>
           <div className="max-h-64 overflow-y-auto space-y-1">
             {docs.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">暂无文档</p>}
-            {docs.map((doc: any) => (
+            {(docs as any[]).map((doc: any) => (
               <button key={doc.id} onClick={() => handleSelect(doc)} className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-sm flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="truncate">{doc.title}</span>
@@ -178,64 +179,61 @@ function AssetPickerDialog({ open, onClose, onAdd }: {
   );
 }
 
-function VersionHistory({ versions, selectedHistoryId, onSelect }: {
-  versions: any[]; selectedHistoryId?: number; onSelect: (v: any) => void;
-}) {
-  if (versions.length === 0) return null;
-  return (
-    <div className="space-y-1">
-      {versions.map((v, i) => (
-        <button key={v.id} onClick={() => onSelect(v)}
-          className={`w-full text-left px-3 py-2 rounded-md text-xs transition-colors ${selectedHistoryId === v.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/50 text-muted-foreground"}`}>
-          <div className="flex items-center justify-between gap-1">
-            <span className="font-medium text-foreground/80">V{versions.length - i}</span>
-            <span className="text-muted-foreground">
-              {new Date(v.createdAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-            </span>
-          </div>
-          {v.summary && <div className="mt-0.5 truncate">{v.summary}</div>}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function DesignBrief() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Project & brief selection
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("none");
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
-  const [viewContent, setViewContent] = useState<string | null>(null);
+
+  // Input state
   const [textInput, setTextInput] = useState("");
-  const [instructions, setInstructions] = useState("");
   const [sources, setSources] = useState<InputSource[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [briefTitle, setBriefTitle] = useState("");
+
+  // Output state
+  const [generatedContent, setGeneratedContent] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+
+  // AI revision state
+  const [revisionInput, setRevisionInput] = useState("");
+  const [isRevising, setIsRevising] = useState(false);
+
+  // Dialog state
   const [showUrlDialog, setShowUrlDialog] = useState(false);
   const [showDocDialog, setShowDocDialog] = useState(false);
   const [showAssetDialog, setShowAssetDialog] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [showNewBrief, setShowNewBrief] = useState(false);
+
+  // Tool selector
   const [toolId, setToolId] = useState<number | undefined>(undefined);
 
+  // Data queries
   const { data: projects = [] } = trpc.projects.list.useQuery({});
-  const { data: briefs = [], refetch: refetchBriefs } = trpc.designBriefs.list.useQuery({});
+  const { data: projectBriefs = [], refetch: refetchProjectBriefs } = trpc.designBriefs.list.useQuery(
+    { projectId: Number(selectedProjectId) },
+    { enabled: selectedProjectId !== "none" && !isNaN(Number(selectedProjectId)) }
+  );
+  const { data: allBriefs = [], refetch: refetchAllBriefs } = trpc.designBriefs.list.useQuery(
+    {},
+    { enabled: selectedProjectId === "none" }
+  );
+
+  // Latest brief for the selected project (sorted by updatedAt desc)
+  const briefs = selectedProjectId !== "none" ? projectBriefs : allBriefs;
+  const latestBrief = (briefs as any[])[0] ?? null;
+
   const { data: briefDetail, refetch: refetchDetail } = trpc.designBriefs.get.useQuery(
     { id: selectedBriefId! }, { enabled: !!selectedBriefId }
   );
+  const versions = briefDetail?.versions ?? [];
+  const currentVersion = selectedHistoryId ? versions.find((v: any) => v.id === selectedHistoryId) : versions[0];
+  const displayContent = generatedContent ?? currentVersion?.outputContent ?? null;
+
   const generateMutation = trpc.designBriefs.generate.useMutation();
-  const deleteMutation = trpc.designBriefs.delete.useMutation();
   const uploadAsset = trpc.assets.upload.useMutation();
 
-  const versions = briefDetail?.versions ?? [];
-  const currentVersion = selectedHistoryId ? versions.find(v => v.id === selectedHistoryId) : versions[0];
-  const displayContent = viewContent ?? currentVersion?.outputContent ?? null;
-
-  const handleSelectBrief = (brief: any) => {
-    setSelectedBriefId(brief.id); setSelectedHistoryId(null); setViewContent(null); setShowNewBrief(false);
-  };
-  const handleSelectVersion = (v: any) => {
-    setSelectedHistoryId(v.id); setViewContent(v.outputContent || "");
-  };
   const addSource = (source: InputSource) => {
     setSources(prev => {
       const idx = prev.findIndex(s => s.id === source.id);
@@ -264,14 +262,36 @@ export default function DesignBrief() {
     e.target.value = "";
   };
 
+  // When project changes, auto-select the latest design brief for that project
+  const handleProjectChange = (val: string) => {
+    setSelectedProjectId(val);
+    setSelectedBriefId(null);
+    setSelectedHistoryId(null);
+    setGeneratedContent(null);
+  };
+
+  // After briefs load, auto-select the latest brief for the project
+  React.useEffect(() => {
+    if (briefs.length > 0 && !selectedBriefId) {
+      setSelectedBriefId((briefs as any[])[0].id);
+    }
+  }, [briefs.length, selectedProjectId]);
+
   const handleGenerate = async () => {
+    if (selectedProjectId === "none") {
+      toast.error("请先选择项目");
+      return;
+    }
     const hasInput = textInput.trim() || sources.some(s => s.extractedText || s.textContent);
-    if (!hasInput) { toast.error("请至少提供一项输入内容"); return; }
+    if (!hasInput && !latestBrief) {
+      toast.error("请至少提供一项输入内容");
+      return;
+    }
     setIsGenerating(true);
     try {
       const result = await generateMutation.mutateAsync({
         briefId: selectedBriefId ?? undefined,
-        projectId: selectedProjectId && selectedProjectId !== "none" ? Number(selectedProjectId) : undefined,
+        projectId: Number(selectedProjectId),
         title: briefTitle.trim() || undefined,
         textInput: textInput.trim() || undefined,
         inputs: sources.map(s => ({
@@ -279,16 +299,46 @@ export default function DesignBrief() {
           fileUrl: s.fileUrl, webUrl: s.webUrl, extractedText: s.extractedText,
           assetId: s.assetId, documentId: s.documentId,
         })),
-        instructions: instructions.trim() || undefined,
         toolId: toolId ?? undefined,
       });
-      setSelectedBriefId(result.briefId!); setSelectedHistoryId(result.historyId); setViewContent(result.content);
-      setTextInput(""); setInstructions(""); setSources([]); setBriefTitle(""); setShowNewBrief(false);
-      await refetchBriefs(); await refetchDetail();
+      setSelectedBriefId(result.briefId!);
+      setSelectedHistoryId(result.historyId);
+      setGeneratedContent(result.content);
+      setTextInput("");
+      setSources([]);
+      setBriefTitle("");
+      await refetchProjectBriefs();
+      await refetchAllBriefs();
+      await refetchDetail();
       toast.success(`任务书生成成功：${result.title} · V${result.version}`);
     } catch (err: any) {
       toast.error(err.message || "生成失败");
     } finally { setIsGenerating(false); }
+  };
+
+  const handleRevise = async () => {
+    if (!revisionInput.trim()) return;
+    if (!displayContent) { toast.error("请先生成任务书"); return; }
+    setIsRevising(true);
+    try {
+      const result = await generateMutation.mutateAsync({
+        briefId: selectedBriefId ?? undefined,
+        projectId: selectedProjectId !== "none" ? Number(selectedProjectId) : undefined,
+        textInput: `【修订意见】${revisionInput.trim()}`,
+        inputs: [],
+        toolId: toolId ?? undefined,
+      });
+      setSelectedBriefId(result.briefId!);
+      setSelectedHistoryId(result.historyId);
+      setGeneratedContent(result.content);
+      setRevisionInput("");
+      await refetchProjectBriefs();
+      await refetchAllBriefs();
+      await refetchDetail();
+      toast.success("修订完成");
+    } catch (err: any) {
+      toast.error(err.message || "修订失败");
+    } finally { setIsRevising(false); }
   };
 
   const handleCopy = () => {
@@ -301,196 +351,218 @@ export default function DesignBrief() {
     const a = document.createElement("a"); a.href = url;
     a.download = `${briefDetail?.brief.title || "设计任务书"}.md`; a.click(); URL.revokeObjectURL(url);
   };
-  const handleDelete = async (id: number) => {
-    if (!confirm("确认删除此任务书？")) return;
-    await deleteMutation.mutateAsync({ id });
-    if (selectedBriefId === id) { setSelectedBriefId(null); setViewContent(null); }
-    await refetchBriefs();
-  };
+
+  const selectedProject = (projects as any[]).find((p: any) => String(p.id) === selectedProjectId);
 
   return (
     <TooltipProvider>
-      <div className="flex h-full gap-4 pb-6">
-        {/* Left: Brief List */}
-        <div className="w-56 shrink-0 flex flex-col gap-2">
-          <Button size="sm" className="w-full justify-start gap-2"
-            onClick={() => { setShowNewBrief(true); setSelectedBriefId(null); setViewContent(null); }}>
-            <Plus className="h-4 w-4" />新建任务书
-          </Button>
-          <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
-            {briefs.length === 0 && (
-              <div className="text-xs text-muted-foreground text-center py-8 px-2">暂无任务书，点击上方按钮新建</div>
-            )}
-            {briefs.map((brief: any) => (
-              <div key={brief.id}
-                className={`group relative rounded-md transition-colors cursor-pointer ${selectedBriefId === brief.id ? "bg-accent" : "hover:bg-accent/50"}`}
-                onClick={() => handleSelectBrief(brief)}>
-                <div className="px-3 py-2">
-                  <div className="flex items-start gap-1.5">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium truncate">{brief.title}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        V{brief.currentVersion} · {new Date(brief.updatedAt).toLocaleDateString("zh-CN")}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <button onClick={e => { e.stopPropagation(); handleDelete(brief.id); }}
-                  className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-all">
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
+      <div className="flex flex-col gap-4 pb-8 max-w-4xl mx-auto w-full">
+
+        {/* AI Tool Selector - top right */}
+        <div className="flex items-center justify-end">
+          <AiToolSelector capability="document" value={toolId} onChange={setToolId} label="AI 工具" />
         </div>
 
-        {/* Center: Output + Input */}
-        <div className="flex-1 flex flex-col min-w-0 gap-3">
-          <div className="flex items-center justify-end mb-2">
-            <AiToolSelector capability="document" value={toolId} onChange={setToolId} label="AI 工具" />
-          </div>
-          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {displayContent ? (
-              <>
-                <CardHeader className="pb-2 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-sm">{briefDetail?.brief.title || "设计任务书"}</CardTitle>
-                      <Badge variant="secondary" className="text-xs">
-                        V{versions.length - (selectedHistoryId ? versions.findIndex(v => v.id === selectedHistoryId) : 0)}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopy}>
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>复制内容</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleDownload}>
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>下载 Markdown</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto min-h-0 pt-0">
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
-                    <Streamdown>{displayContent}</Streamdown>
-                  </div>
-                </CardContent>
-              </>
-            ) : (
-              <CardContent className="flex flex-col items-center justify-center h-full py-24">
-                <FileText className="h-12 w-12 text-muted-foreground/20 mb-4" />
-                <p className="text-sm text-muted-foreground">从左侧选择任务书查看内容，或新建任务书</p>
-              </CardContent>
-            )}
-          </Card>
+        {/* Input Card */}
+        <Card>
+          <CardContent className="pt-5 space-y-4">
+            {/* Project selector */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">选择项目</Label>
+              <Select value={selectedProjectId} onValueChange={handleProjectChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择要生成任务书的项目..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— 不绑定项目 —</SelectItem>
+                  {(projects as any[]).map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedProjectId !== "none" && latestBrief && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  已找到该项目最新任务书（{latestBrief.title}），将整合新输入生成新版本
+                </p>
+              )}
+              {selectedProjectId !== "none" && !latestBrief && briefs.length === 0 && (
+                <p className="text-xs text-muted-foreground">该项目暂无任务书，将生成第一版</p>
+              )}
+            </div>
 
-          {(showNewBrief || selectedBriefId) && (
-            <Card className="shrink-0">
-              <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {selectedBriefId ? (
-                      <><RefreshCw className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">迭代更新</span>
-                      <Badge variant="outline" className="text-xs">将整合上一版本</Badge></>
-                    ) : (
-                      <><Sparkles className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">新建任务书</span></>
-                    )}
-                  </div>
-                  {showNewBrief && !selectedBriefId && (
-                    <Button size="sm" variant="ghost" onClick={() => setShowNewBrief(false)}>
-                      <X className="h-4 w-4" />
-                    </Button>
+            {/* Title (optional) */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">任务书标题 <span className="text-muted-foreground font-normal">（可选，自动生成）</span></Label>
+              <Input placeholder="例：文心仪海办公室设计任务书 V2" value={briefTitle}
+                onChange={e => setBriefTitle(e.target.value)} className="text-sm" />
+            </div>
+
+            {/* Text input */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                {latestBrief ? "描述本次需求变更或补充信息" : "项目背景与需求描述"}
+              </Label>
+              <Textarea
+                placeholder={latestBrief
+                  ? "输入本次变更内容，例如：甲方新增了展厅面积要求，需要调整空间分区方案..."
+                  : "输入项目背景、甲方需求、设计目标等信息..."}
+                value={textInput} onChange={e => setTextInput(e.target.value)}
+                className="text-sm resize-none min-h-[100px]" rows={4} />
+            </div>
+
+            {/* Attached sources */}
+            {sources.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {sources.map(s => <SourceBadge key={s.id} source={s} onRemove={() => removeSource(s.id)} />)}
+              </div>
+            )}
+
+            {/* Add input buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-muted-foreground mr-1">添加附件：</span>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setShowUrlDialog(true)}>
+                <Link className="h-3 w-3" />网页链接
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-3 w-3" />上传文件
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setShowDocDialog(true)}>
+                <BookOpen className="h-3 w-3" />项目文档
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setShowAssetDialog(true)}>
+                <FolderOpen className="h-3 w-3" />素材库
+              </Button>
+              <input ref={fileInputRef} type="file" className="hidden"
+                accept=".txt,.md,.pdf,.doc,.docx" onChange={handleFileUpload} />
+            </div>
+
+            {/* Generate button */}
+            <Button className="w-full gap-2" size="lg" onClick={handleGenerate} disabled={isGenerating || selectedProjectId === "none"}>
+              {isGenerating
+                ? <><Loader2 className="h-4 w-4 animate-spin" />正在生成任务书...</>
+                : <><Sparkles className="h-4 w-4" />{latestBrief ? "整合更新，生成新版任务书" : "生成设计任务书"}</>
+              }
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Output Card */}
+        {displayContent && (
+          <Card>
+            <CardHeader className="pb-3 shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm">
+                    {briefDetail?.brief.title || selectedProject?.name ? `${selectedProject?.name} · 设计任务书` : "设计任务书"}
+                  </CardTitle>
+                  {versions.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      V{versions.length - (selectedHistoryId ? versions.findIndex((v: any) => v.id === selectedHistoryId) : 0)}
+                    </Badge>
                   )}
                 </div>
-                {!selectedBriefId && (
-                  <div className="flex gap-2">
-                    <Input placeholder="任务书标题（可选，自动生成）" value={briefTitle}
-                      onChange={e => setBriefTitle(e.target.value)} className="flex-1 text-sm h-8" />
-                    <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                      <SelectTrigger className="w-40 h-8 text-sm">
-                        <SelectValue placeholder="绑定项目（可选）" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">不绑定项目</SelectItem>
-                        {projects.map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <Textarea
-                  placeholder={selectedBriefId
-                    ? "输入本次迭代的补充信息或修改说明..."
-                    : "直接输入项目背景、需求描述、甲方要求等文字信息..."}
-                  value={textInput} onChange={e => setTextInput(e.target.value)}
-                  className="text-sm resize-none min-h-[80px]" rows={3} />
-                {sources.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {sources.map(s => <SourceBadge key={s.id} source={s} onRemove={() => removeSource(s.id)} />)}
-                  </div>
-                )}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-xs text-muted-foreground mr-1">添加输入：</span>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setShowUrlDialog(true)}>
-                    <Link className="h-3 w-3" />网页链接
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="h-3 w-3" />上传文件
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setShowDocDialog(true)}>
-                    <BookOpen className="h-3 w-3" />项目文档
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setShowAssetDialog(true)}>
-                    <FolderOpen className="h-3 w-3" />素材库
-                  </Button>
-                  <input ref={fileInputRef} type="file" className="hidden"
-                    accept=".txt,.md,.pdf,.doc,.docx" onChange={handleFileUpload} />
+                <div className="flex items-center gap-1">
+                  {/* Version history dropdown */}
+                  {versions.length > 1 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2"
+                          onClick={() => setShowVersionHistory(v => !v)}>
+                          <span>版本历史</span>
+                          <ChevronDown className={`h-3 w-3 transition-transform ${showVersionHistory ? "rotate-180" : ""}`} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>查看历史版本</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopy}>
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>复制内容</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleDownload}>
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>下载 Markdown</TooltipContent>
+                  </Tooltip>
                 </div>
-                {selectedBriefId && (
-                  <Input placeholder="特别说明（可选，如：重点补充空间需求章节）"
-                    value={instructions} onChange={e => setInstructions(e.target.value)} className="text-sm h-8" />
-                )}
-                <Button className="w-full gap-2" onClick={handleGenerate} disabled={isGenerating}>
-                  {isGenerating
-                    ? <><Loader2 className="h-4 w-4 animate-spin" />正在生成任务书...</>
-                    : <><Sparkles className="h-4 w-4" />{selectedBriefId ? "迭代生成" : "生成任务书"}</>
-                  }
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+              </div>
 
-        {/* Right: Version History */}
-        {selectedBriefId && versions.length > 0 && (
-          <div className="w-44 shrink-0 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1">
-              <Clock className="h-3.5 w-3.5" /><span>版本历史</span>
-            </div>
-            <VersionHistory
-              versions={versions}
-              selectedHistoryId={selectedHistoryId ?? currentVersion?.id}
-              onSelect={handleSelectVersion}
-            />
-          </div>
+              {/* Version history list */}
+              {showVersionHistory && versions.length > 1 && (
+                <div className="mt-2 border rounded-md divide-y">
+                  {versions.map((v: any, i: number) => (
+                    <button key={v.id}
+                      onClick={() => { setSelectedHistoryId(v.id); setGeneratedContent(v.outputContent || ""); setShowVersionHistory(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-accent transition-colors ${(selectedHistoryId === v.id || (!selectedHistoryId && i === 0)) ? "bg-accent/50" : ""}`}>
+                      <span className="font-medium">V{versions.length - i}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(v.createdAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardHeader>
+
+            {/* Full content display */}
+            <CardContent className="pt-0">
+              <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed border rounded-lg p-4 bg-muted/20">
+                <Streamdown>{displayContent}</Streamdown>
+              </div>
+            </CardContent>
+
+            {/* AI Revision dialog at bottom */}
+            <CardContent className="pt-0 pb-5">
+              <div className="border rounded-lg p-3 space-y-2 bg-muted/10">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                  <span>AI 修订</span>
+                  <span className="text-muted-foreground/60">— 输入修改意见，AI 将基于当前版本润色或补充</span>
+                </div>
+                <div className="flex gap-2">
+                  <Textarea
+                    placeholder="例：请在第三章补充智能化系统需求，并将预算章节改为概算范围..."
+                    value={revisionInput}
+                    onChange={e => setRevisionInput(e.target.value)}
+                    className="text-sm resize-none min-h-[60px] flex-1"
+                    rows={2}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRevise();
+                    }}
+                  />
+                  <Button
+                    className="self-end gap-1.5"
+                    size="sm"
+                    onClick={handleRevise}
+                    disabled={isRevising || !revisionInput.trim()}
+                  >
+                    {isRevising
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Send className="h-3.5 w-3.5" />}
+                    {isRevising ? "修订中..." : "提交修订"}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
+        {/* Dialogs */}
         <UrlInputDialog open={showUrlDialog} onClose={() => setShowUrlDialog(false)} onAdd={addSource} />
-        <DocumentPickerDialog open={showDocDialog} onClose={() => setShowDocDialog(false)} onAdd={addSource} />
+        <DocumentPickerDialog
+          open={showDocDialog}
+          onClose={() => setShowDocDialog(false)}
+          onAdd={addSource}
+          defaultProjectId={selectedProjectId !== "none" ? selectedProjectId : undefined}
+        />
         <AssetPickerDialog open={showAssetDialog} onClose={() => setShowAssetDialog(false)} onAdd={addSource} />
       </div>
     </TooltipProvider>
