@@ -367,11 +367,11 @@ export default function DesignBrief() {
           <AiToolSelector capability="document" value={toolId} onChange={setToolId} label="AI 工具" />
         </div>
 
-        {/* Two-column layout on wide screens */}
-        <div className={`flex gap-4 ${displayContent ? 'lg:flex-row items-start' : 'flex-col'}`}>
+        {/* Two-column layout: input left (1/3), output right (2/3) */}
+        <div className="grid lg:grid-cols-3 gap-4 items-start">
 
         {/* Input Card */}
-        <div className={displayContent ? 'lg:w-1/3 w-full shrink-0' : 'w-full'}>
+        <div className="lg:col-span-1">
         <Card>
           <CardContent className="pt-5 space-y-4">
             {/* Project selector */}
@@ -458,7 +458,7 @@ export default function DesignBrief() {
 
         {/* Output Card */}
         {displayContent && (
-          <div className="flex-1 min-w-0">
+          <div className="lg:col-span-2">
           <Card>
             <CardHeader className="pb-3 shrink-0">
               <div className="flex items-center justify-between">
