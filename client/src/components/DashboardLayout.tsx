@@ -518,8 +518,8 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Bar */}
-        <header className="h-10 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
+        {/* Top Bar - hidden on /director for fullscreen experience */}
+        {!location.startsWith("/director") && <header className="h-10 border-b border-border flex items-center justify-between px-5 shrink-0 bg-background/95 backdrop-blur">
           <div className="flex items-center gap-2">
             {activeMenuItem ? (
               <div className="flex items-center gap-2">
@@ -552,10 +552,10 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
           >
             <HelpCircle className="h-5 w-5" />
           </button>
-        </header>
+        </header>}
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto px-6 pt-3 pb-6">{children}</main>
+        <main className={`flex-1 overflow-auto${location.startsWith("/director") ? "" : " px-6 pt-3 pb-6"}`}>{children}</main>
       </div>
     </div>
   );

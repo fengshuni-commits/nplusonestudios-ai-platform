@@ -154,7 +154,7 @@ export default function Director() {
   const zoomOut = () => setWorkspaceZoom((z) => Math.max(z - 0.25, 0.5));
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden -mx-6 -mt-6">
+    <div className="flex h-screen overflow-hidden">
       {/* ── Left: Chat Panel (1/3) ── */}
       <div className="w-[340px] shrink-0 flex flex-col border-r border-border bg-background">
         {/* Messages */}
