@@ -223,6 +223,13 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
   });
   const [helpOpen, setHelpOpen] = useState(false);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
+  const [openSectionId, setOpenSectionId] = useState<string | null>(() => {
+    // Auto-open the section that contains the current route
+    const active = menuSections.find(s =>
+      s.items.some(item => item.path !== "/" && location.startsWith(item.path))
+    );
+    return active?.id ?? null;
+  });
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -372,6 +379,8 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
                 section={section}
                 location={location}
                 onNavigate={setLocation}
+                isOpen={openSectionId === section.id}
+                onToggle={(id) => setOpenSectionId(prev => prev === id ? null : id)}
               />
             ) : (
               <SidebarIconButton
@@ -400,6 +409,8 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
                 section={section}
                 location={location}
                 onNavigate={setLocation}
+                isOpen={openSectionId === section.id}
+                onToggle={(id) => setOpenSectionId(prev => prev === id ? null : id)}
               />
             ) : (
               <SidebarIconButton
@@ -578,18 +589,16 @@ function ExpandedSection({
   section,
   location,
   onNavigate,
+  isOpen,
+  onToggle,
 }: {
   section: MenuSection;
   location: string;
   onNavigate: (path: string) => void;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(() =>
-    section.items.some(
-      (item) =>
-        location === item.path ||
-        (item.path !== "/" && location.startsWith(item.path))
-    )
-  );
+  const open = isOpen;
 
   // Auto-open when navigating to a section item
   useEffect(() => {
@@ -598,8 +607,9 @@ function ExpandedSection({
         location === item.path ||
         (item.path !== "/" && location.startsWith(item.path))
     );
-    if (hasActive) setOpen(true);
-  }, [location, section.items]);
+    if (hasActive) onToggle(section.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
 
   return (
     <div className="mb-0.5">
@@ -608,7 +618,7 @@ function ExpandedSection({
           if (section.items.length === 1) {
             onNavigate(section.items[0].path);
           } else {
-            setOpen((prev) => !prev);
+            onToggle(section.id);
           }
         }}
         className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 transition-colors uppercase tracking-wider"

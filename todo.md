@@ -2473,3 +2473,6 @@
 - [x] 修复 testTool 改为走 invokeLLMWithUserTool（与实际调用路径一致），而非直接 fetch apiEndpoint
 
 ## 测试工具非LLM工具处理- [x] testTool 对语音识别/图像生成等非语言模型工具跳过测试并给出明确提示，不走LLM回退
+
+## 侧边栏手风琴模式
+- [x] 侧边栏改为手风琴模式：每次只展开一个下拉菜单，打开新菜单时自动收起上一个
