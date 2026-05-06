@@ -7030,6 +7030,7 @@ export const appRouter = router({system: systemRouter,
           duration: z.number().min(1).max(8),
           toolId: z.number(),
           inputImageUrl: z.string().optional(),
+          resolution: z.enum(["720p", "1080p"]).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -7041,6 +7042,7 @@ export const appRouter = router({system: systemRouter,
           mode: input.mode,
           prompt: input.prompt,
           duration: input.duration,
+          resolution: input.resolution,
           inputImageUrl: input.inputImageUrl,
           tool: {
             id: tool.id,

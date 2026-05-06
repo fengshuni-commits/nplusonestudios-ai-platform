@@ -674,3 +674,130 @@ export function generateHmacSignature(
     .update(message)
     .digest("hex");
 }
+
+// ─── Seedance 2.0 Pro (火山方舟 ModelArk API) ─────────────────────────────────
+
+export interface SeedanceVideoRequest {
+  mode: "text-to-video" | "image-to-video";
+  prompt: string;
+  duration: 5 | 10;
+  resolution?: "720p" | "1080p";
+  ratio?: string;
+  inputImageUrl?: string;
+  generateAudio?: boolean;
+}
+
+const SEEDANCE_ARK_BASE = "https://ark.cn-beijing.volces.com/api/v3";
+const SEEDANCE_MODEL = "doubao-seedance-2-0-260128";
+
+/**
+ * 提交 Seedance 2.0 Pro 视频生成任务（火山方舟 ModelArk API）
+ */
+export async function submitSeedanceVideoTask(
+  arkApiKey: string,
+  request: SeedanceVideoRequest
+): Promise<VideoSubmitResponse> {
+  const content: Array<Record<string, unknown>> = [
+    { type: "text", text: request.prompt || " " },
+  ];
+
+  if (request.mode === "image-to-video" && request.inputImageUrl) {
+    content.push({
+      type: "image_url",
+      image_url: { url: request.inputImageUrl },
+    });
+  }
+
+  const body: Record<string, unknown> = {
+    model: SEEDANCE_MODEL,
+    content,
+    duration: request.duration ?? 5,
+    ratio: request.ratio ?? "16:9",
+    resolution: request.resolution ?? "1080p",
+    watermark: false,
+    generate_audio: request.generateAudio ?? false,
+  };
+
+  try {
+    const resp = await fetch(`${SEEDANCE_ARK_BASE}/contents/generations/tasks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${arkApiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = (await resp.json()) as Record<string, unknown>;
+
+    if (!resp.ok) {
+      const errMsg =
+        (json.error as Record<string, unknown>)?.message as string ||
+        JSON.stringify(json);
+      throw new Error(`Seedance API 错误 (${resp.status}): ${errMsg}`);
+    }
+
+    const taskId = json.id as string;
+    if (!taskId) throw new Error("Seedance API 未返回任务 ID");
+
+    return { taskId, status: "pending" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    return { taskId: "", status: "failed", errorMessage: message };
+  }
+}
+
+/**
+ * 查询 Seedance 2.0 Pro 视频生成任务状态
+ */
+export async function querySeedanceVideoTask(
+  arkApiKey: string,
+  taskId: string
+): Promise<VideoStatusResponse> {
+  try {
+    const resp = await fetch(
+      `${SEEDANCE_ARK_BASE}/contents/generations/tasks/${taskId}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${arkApiKey}`,
+        },
+      }
+    );
+
+    const json = (await resp.json()) as Record<string, unknown>;
+
+    if (!resp.ok) {
+      const errMsg =
+        (json.error as Record<string, unknown>)?.message as string ||
+        JSON.stringify(json);
+      throw new Error(`Seedance 查询错误 (${resp.status}): ${errMsg}`);
+    }
+
+    const status = json.status as string;
+    const content = json.content as Record<string, unknown> | undefined;
+    const videoUrl = content?.video_url as string | undefined;
+
+    let mappedStatus: VideoStatusResponse["status"];
+    let progress: number;
+
+    if (status === "succeeded") {
+      mappedStatus = "completed";
+      progress = 100;
+    } else if (status === "failed" || status === "cancelled") {
+      mappedStatus = "failed";
+      progress = 0;
+    } else if (status === "queued") {
+      mappedStatus = "pending";
+      progress = 10;
+    } else {
+      mappedStatus = "processing";
+      progress = 50;
+    }
+
+    return { status: mappedStatus, videoUrl, progress };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    return { status: "failed", errorMessage: message, progress: 0 };
+  }
+}

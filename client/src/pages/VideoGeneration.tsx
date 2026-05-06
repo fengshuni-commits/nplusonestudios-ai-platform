@@ -37,7 +37,8 @@ type TaskStatus = "pending" | "processing" | "completed" | "failed";
 export default function VideoGeneration() {
   const [mode, setMode] = useState<"text-to-video" | "image-to-video">("text-to-video");
   const [prompt, setPrompt] = useState("");
-  const [duration, setDuration] = useState(3);
+  const [duration, setDuration] = useState(5);
+  const [resolution, setResolution] = useState<"720p" | "1080p">("1080p");
   const [selectedToolId, setSelectedToolId] = useState<number | undefined>();
   const [inputImageUrl, setInputImageUrl] = useState("");
   const [inputImagePreview, setInputImagePreview] = useState<string | null>(null);
@@ -260,6 +261,7 @@ export default function VideoGeneration() {
       mode,
       prompt,
       duration,
+      resolution,
       toolId: selectedToolId,
       inputImageUrl: mode === "image-to-video" ? inputImageUrl : undefined,
     });
@@ -330,9 +332,28 @@ export default function VideoGeneration() {
               <div className="space-y-2">
                 <Label>视频时长 *</Label>
                 <div className="flex items-center gap-2">
-                  <input type="range" min="1" max="8" value={duration}
+                  <input type="range" min="5" max="10" step="5" value={duration}
                     onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
                   <span className="text-sm font-medium w-12">{duration}秒</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>分辨率</Label>
+                <div className="flex gap-2">
+                  {(["720p", "1080p"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setResolution(r)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        resolution === r
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
                 </div>
               </div>
             </CardContent>
@@ -429,9 +450,28 @@ export default function VideoGeneration() {
               <div className="space-y-2">
                 <Label>视频时长 *</Label>
                 <div className="flex items-center gap-2">
-                  <input type="range" min="1" max="8" value={duration}
+                  <input type="range" min="5" max="10" step="5" value={duration}
                     onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
                   <span className="text-sm font-medium w-12">{duration}秒</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>分辨率</Label>
+                <div className="flex gap-2">
+                  {(["720p", "1080p"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setResolution(r)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        resolution === r
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
                 </div>
               </div>
             </CardContent>
