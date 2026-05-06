@@ -2555,3 +2555,7 @@
 
 ## AI 工具管理 - 添加模型 ID 字段
 - [x] 在"添加 AI 工具"表单中新增"模型 ID"输入框（写入 configJson.modelName），方便添加 Gemini 3.1 Pro 等需要指定模型 ID 的工具
+
+## Bug 修复：AI 工具测试按钮 Failed to fetch
+- [x] 诊断原因：testTool 向 Gemini 3.1 Pro 等慢速模型发请求超过 30s，被代理层超时切断
+- [x] 修复：在 testTool 后端加 25s 超时，超时后返回友好错误而非崩溃

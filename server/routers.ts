@@ -2154,14 +2154,21 @@ const aiToolsRouter = router({
       }
       // Use the same invokeLLMWithUserTool path as all real AI calls
       // so the test result accurately reflects actual usability.
+      // Wrap in a 25s timeout to stay safely under the 30s proxy limit.
       const startMs = Date.now();
       let result: Awaited<ReturnType<typeof invokeLLMWithUserTool>>;
       try {
-        result = await invokeLLMWithUserTool(
-          { messages: [{ role: "user", content: "Reply with the single word: OK" }], max_tokens: 16 },
-          ctx.user.id,
-          input.toolId
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("连接超时（25s），请检查 API 端点和网络连通性")), 25000)
         );
+        result = await Promise.race([
+          invokeLLMWithUserTool(
+            { messages: [{ role: "user", content: "Reply with the single word: OK" }], max_tokens: 16 },
+            ctx.user.id,
+            input.toolId
+          ),
+          timeoutPromise,
+        ]);
       } catch (err: any) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: err?.message ?? String(err) });
       }
