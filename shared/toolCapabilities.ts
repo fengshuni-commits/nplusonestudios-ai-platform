@@ -166,7 +166,7 @@ const CAPABILITY_RULES: CapabilityRule[] = [
     capabilities: ["video"],
   },
   {
-    keywords: ["seedance", "doubao-seedance"],
+    keywords: ["seedance", "doubao-seedance", "seedance-2-0", "seedance-2-0-fast"],
     capabilities: ["video"],
   },
   // ── 专用文档/分析模型 ──

@@ -8,6 +8,7 @@ import {
   queryJimengVideoTask,
   submitSeedanceVideoTask,
   querySeedanceVideoTask,
+  getSeedanceModelId,
   type VideoSubmitResponse,
   type VideoStatusResponse,
 } from "./volcengine";
@@ -86,6 +87,7 @@ async function generateVideoWithSeedance(
 
   const duration = (input.duration === 10 ? 10 : 5) as 5 | 10;
 
+  const seedanceModelId = getSeedanceModelId(input.tool?.name ?? "");
   const result: VideoSubmitResponse = await submitSeedanceVideoTask(arkApiKey, {
     mode: input.mode,
     prompt: input.prompt,
@@ -93,7 +95,7 @@ async function generateVideoWithSeedance(
     resolution: input.resolution ?? "1080p",
     ratio: "16:9",
     inputImageUrl: input.inputImageUrl,
-  });
+  }, seedanceModelId);
 
   return {
     taskId: result.taskId,

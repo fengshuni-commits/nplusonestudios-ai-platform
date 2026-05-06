@@ -688,14 +688,23 @@ export interface SeedanceVideoRequest {
 }
 
 const SEEDANCE_ARK_BASE = "https://ark.cn-beijing.volces.com/api/v3";
-const SEEDANCE_MODEL = "doubao-seedance-2-0-260128";
+const SEEDANCE_MODEL_STANDARD = "doubao-seedance-2-0-260128";
+const SEEDANCE_MODEL_FAST = "doubao-seedance-2-0-fast-260128";
+
+/** 根据工具名称选择 Seedance model ID */
+export function getSeedanceModelId(toolName: string): string {
+  const name = toolName.toLowerCase();
+  if (name.includes("fast")) return SEEDANCE_MODEL_FAST;
+  return SEEDANCE_MODEL_STANDARD;
+}
 
 /**
  * 提交 Seedance 2.0 Pro 视频生成任务（火山方舟 ModelArk API）
  */
 export async function submitSeedanceVideoTask(
   arkApiKey: string,
-  request: SeedanceVideoRequest
+  request: SeedanceVideoRequest,
+  modelId?: string
 ): Promise<VideoSubmitResponse> {
   const content: Array<Record<string, unknown>> = [
     { type: "text", text: request.prompt || " " },
@@ -709,7 +718,7 @@ export async function submitSeedanceVideoTask(
   }
 
   const body: Record<string, unknown> = {
-    model: SEEDANCE_MODEL,
+    model: modelId || SEEDANCE_MODEL_STANDARD,
     content,
     duration: request.duration ?? 5,
     ratio: request.ratio ?? "16:9",
