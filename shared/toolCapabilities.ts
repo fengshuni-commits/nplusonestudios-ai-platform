@@ -141,6 +141,10 @@ const CAPABILITY_RULES: CapabilityRule[] = [
     capabilities: ["rendering", "image"],
   },
   {
+    keywords: ["gpt-image", "gpt_image", "gpt-image-1", "gpt-image-2"],
+    capabilities: ["rendering", "image"],
+  },
+  {
     keywords: ["ideogram"],
     capabilities: ["rendering", "image"],
   },
@@ -159,6 +163,10 @@ const CAPABILITY_RULES: CapabilityRule[] = [
   // ── 专用视频生成模型 ──
   {
     keywords: ["sora", "runway", "pika", "kling", "可灵", "hailuo", "海螺", "vidu", "luma"],
+    capabilities: ["video"],
+  },
+  {
+    keywords: ["seedance", "doubao-seedance"],
     capabilities: ["video"],
   },
   // ── 专用文档/分析模型 ──

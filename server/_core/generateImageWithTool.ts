@@ -250,6 +250,8 @@ export async function generateImageWithTool(
       provider = "qwen";
     } else if (ep.includes("generativelanguage.googleapis.com")) {
       provider = "gemini";
+    } else if (ep.includes("api.openai.com")) {
+      provider = "openai";
     } else {
       provider = "unknown";
     }
@@ -364,6 +366,73 @@ export async function generateImageWithTool(
         imageSize,
         aspectRatio,
       });
+    } else if (provider === "openai") {
+      // OpenAI GPT Image 2 (gpt-image-1) 图像生成
+      const openaiEndpoint = tool.apiEndpoint || "https://api.openai.com/v1/images/generations";
+      const openaiEditEndpoint = tool.apiEndpoint
+        ? tool.apiEndpoint.replace("/generations", "/edits")
+        : "https://api.openai.com/v1/images/edits";
+      const openaiModel = config.imageModel || config.modelName || "gpt-image-1";
+      const hasReferenceImage = genOpts.originalImages && genOpts.originalImages.length > 0;
+
+      if (hasReferenceImage) {
+        // 图生图：使用 /images/edits 接口
+        const refUrl = genOpts.originalImages![0].url!;
+        const refResp = await fetch(refUrl, { signal: AbortSignal.timeout(30000) });
+        if (!refResp.ok) throw new Error(`Failed to download reference image (${refResp.status})`);
+        const refBuffer = Buffer.from(await refResp.arrayBuffer());
+        const refBlob = new Blob([refBuffer], { type: genOpts.originalImages![0].mimeType || "image/png" });
+
+        const formData = new FormData();
+        formData.append("model", openaiModel);
+        formData.append("prompt", genOpts.prompt);
+        formData.append("image", refBlob, "reference.png");
+        formData.append("n", "1");
+        formData.append("response_format", "b64_json");
+        if (genOpts.size) formData.append("size", genOpts.size);
+
+        const editResp = await fetch(openaiEditEndpoint, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: formData,
+          signal: AbortSignal.timeout(120000),
+        });
+        if (!editResp.ok) {
+          const detail = await editResp.text().catch(() => "");
+          throw new Error(`OpenAI Images Edit API failed (${editResp.status}): ${detail.substring(0, 500)}`);
+        }
+        const editResult = await editResp.json();
+        const b64 = editResult?.data?.[0]?.b64_json;
+        if (!b64) throw new Error(`OpenAI Images Edit returned no image data: ${JSON.stringify(editResult).substring(0, 300)}`);
+        imageBuffer = Buffer.from(b64, "base64");
+      } else {
+        // 文生图：使用 /images/generations 接口
+        const body: Record<string, any> = {
+          model: openaiModel,
+          prompt: genOpts.prompt,
+          n: 1,
+          response_format: "b64_json",
+          size: genOpts.size || "1024x1024",
+        };
+
+        const genResp = await fetch(openaiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(120000),
+        });
+        if (!genResp.ok) {
+          const detail = await genResp.text().catch(() => "");
+          throw new Error(`OpenAI Images API failed (${genResp.status}): ${detail.substring(0, 500)}`);
+        }
+        const genResult = await genResp.json();
+        const b64 = genResult?.data?.[0]?.b64_json;
+        if (!b64) throw new Error(`OpenAI Images API returned no image data: ${JSON.stringify(genResult).substring(0, 300)}`);
+        imageBuffer = Buffer.from(b64, "base64");
+      }
     } else if (provider === "jimeng" || provider === "volcengine") {
       // 即梦 AI (火山引擎) 图像生成
       const volcengineConfig: VolcengineConfig = {
