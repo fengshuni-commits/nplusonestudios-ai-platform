@@ -2081,25 +2081,18 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                       </DialogTitle>
                     )}
                   </div>
-                  <div className="flex items-center gap-1">
-                    {canEditTask(selectedTask) && !isEditingTaskTitle && (
-                      <Edit2 className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    {canDeleteTask(selectedTask) && (
-                      <button
-                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                        title="删除任务"
-                        onClick={() => {
-                          if (confirm(`确定删除任务「${selectedTask.title}」？此操作不可撤销。`)) {
-                            deleteTask.mutate({ id: selectedTask.id });
-                          }
-                        }}
-                        disabled={deleteTask.isPending}
-                      >
-                        {deleteTask.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      </button>
-                    )}
-                  </div>
+                  {canEditTask(selectedTask) && !isEditingTaskTitle && (
+                    <button
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="编辑标题"
+                      onClick={() => {
+                        setEditingTaskTitle(selectedTask.title);
+                        setIsEditingTaskTitle(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </DialogHeader>
               <div className="space-y-4 pt-1 max-h-[70vh] overflow-y-auto pr-1">
@@ -2593,6 +2586,23 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                   </div>
                 </div>
               </div>
+              {/* Footer: delete button */}
+              {canDeleteTask(selectedTask) && (
+                <div className="pt-3 border-t border-border">
+                  <button
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1.5 rounded hover:bg-destructive/10"
+                    onClick={() => {
+                      if (confirm(`确定删除任务「${selectedTask.title}」？此操作不可撤销。`)) {
+                        deleteTask.mutate({ id: selectedTask.id });
+                      }
+                    }}
+                    disabled={deleteTask.isPending}
+                  >
+                    {deleteTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    删除此任务
+                  </button>
+                </div>
+              )}
             </>
           )}
         </DialogContent>
