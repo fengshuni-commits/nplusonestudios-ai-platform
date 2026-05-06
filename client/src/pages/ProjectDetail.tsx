@@ -1667,7 +1667,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
   const isCreator = project?.createdBy === currentUser?.id;
   const canCreateTask = isCreator;
   const canEditTask = (task: any) => isCreator || task.assigneeId === currentUser?.id;
-  const canDeleteTask = isCreator;
+  const canDeleteTask = (task: any) => isCreator || currentUser?.role === "admin" || task.createdBy === currentUser?.id;
   // True when current user is the assignee but NOT the project creator
   const isAssigneeOnly = (task: any) => !isCreator && task.assigneeId === currentUser?.id;
 
@@ -1774,6 +1774,15 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
     onError: (err) => toast.error(err.message),
   });
 
+  const deleteTask = trpc.tasks.delete.useMutation({
+    onSuccess: () => {
+      utils.tasks.listByProject.invalidate({ projectId });
+      setTaskDetailOpen(false);
+      setSelectedTask(null);
+      toast.success("任务已删除");
+    },
+    onError: (err) => toast.error(err.message || "删除失败"),
+  });
   const createSubTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
       if (selectedTask) utils.tasks.listSubTasks.invalidate({ parentId: selectedTask.id });
@@ -2072,9 +2081,25 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                       </DialogTitle>
                     )}
                   </div>
-                  {canEditTask(selectedTask) && !isEditingTaskTitle && (
-                    <Edit2 className="h-4 w-4 text-muted-foreground" />
-                  )}
+                  <div className="flex items-center gap-1">
+                    {canEditTask(selectedTask) && !isEditingTaskTitle && (
+                      <Edit2 className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    {canDeleteTask(selectedTask) && (
+                      <button
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="删除任务"
+                        onClick={() => {
+                          if (confirm(`确定删除任务「${selectedTask.title}」？此操作不可撤销。`)) {
+                            deleteTask.mutate({ id: selectedTask.id });
+                          }
+                        }}
+                        disabled={deleteTask.isPending}
+                      >
+                        {deleteTask.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </DialogHeader>
               <div className="space-y-4 pt-1 max-h-[70vh] overflow-y-auto pr-1">

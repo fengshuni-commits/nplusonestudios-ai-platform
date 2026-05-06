@@ -1312,12 +1312,16 @@ const tasksRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      // 权限检查：仅项目创建者可以删除任务
+      // 权限检查：任务创建者、项目创建者或管理员可以删除任务
       const task = await db.getTaskById(input.id);
       if (!task) throw new TRPCError({ code: "NOT_FOUND" });
-      const project = await db.getProjectById(task.projectId);
-      if (!project || project.createdBy !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限删除任务" });
+      const isAdmin = ctx.user.role === "admin";
+      const isTaskCreator = task.createdBy === ctx.user.id;
+      if (!isAdmin && !isTaskCreator) {
+        const project = await db.getProjectById(task.projectId);
+        if (!project || project.createdBy !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限删除任务" });
+        }
       }
       await db.deleteTask(input.id);
       return { success: true };
