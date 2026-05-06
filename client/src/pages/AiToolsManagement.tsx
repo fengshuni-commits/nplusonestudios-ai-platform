@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock, Timer, TrendingUp, AlertTriangle, Zap, PlayCircle, Loader2 } from "lucide-react";
+import { Plus, Sparkles, Trash2, ChevronDown, ChevronUp, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Star, PlusCircle, RefreshCw, ShieldCheck, ShieldOff, Clock, Timer, TrendingUp, AlertTriangle, Zap, PlayCircle, Loader2, Pencil, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { inferCapabilities, CAPABILITY_LABELS, type ToolCapability } from "@shared/toolCapabilities";
@@ -260,6 +260,8 @@ export default function AdminApiKeys() {
   const [showNewKey, setShowNewKey] = useState(false);
   const [editModelNameId, setEditModelNameId] = useState<number | null>(null);
   const [editModelNameValue, setEditModelNameValue] = useState("");
+  const [editToolNameId, setEditToolNameId] = useState<number | null>(null);
+  const [editToolNameValue, setEditToolNameValue] = useState("");
   const [editXfyunId, setEditXfyunId] = useState<number | null>(null);
   const [editVolcengineId, setEditVolcengineId] = useState<number | null>(null);
   const [editVolcengineAppId, setEditVolcengineAppId] = useState("");
@@ -782,6 +784,47 @@ export default function AdminApiKeys() {
                             <p className="text-xs font-mono bg-background rounded px-2 py-1 border">{tool.apiEndpoint}</p>
                           </div>
                         )}
+                        {/* Tool name inline edit */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">工具名称</p>
+                          {editToolNameId === tool.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={editToolNameValue}
+                                onChange={(e) => setEditToolNameValue(e.target.value)}
+                                className="h-7 text-xs flex-1"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    if (!editToolNameValue.trim()) { toast.error("工具名称不能为空"); return; }
+                                    updateTool.mutate({ id: tool.id, name: editToolNameValue.trim() }, {
+                                      onSuccess: () => { setEditToolNameId(null); setEditToolNameValue(""); }
+                                    });
+                                  }
+                                  if (e.key === "Escape") { setEditToolNameId(null); setEditToolNameValue(""); }
+                                }}
+                              />
+                              <Button size="sm" className="h-7 w-7 p-0" onClick={() => {
+                                if (!editToolNameValue.trim()) { toast.error("工具名称不能为空"); return; }
+                                updateTool.mutate({ id: tool.id, name: editToolNameValue.trim() }, {
+                                  onSuccess: () => { setEditToolNameId(null); setEditToolNameValue(""); }
+                                });
+                              }} disabled={updateTool.isPending}>
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditToolNameId(null); setEditToolNameValue(""); }}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs bg-background rounded px-2 py-1 border flex-1">{tool.name}</p>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); setEditToolNameId(tool.id); setEditToolNameValue(tool.name); }}>
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
 
                         <div>
                           <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
