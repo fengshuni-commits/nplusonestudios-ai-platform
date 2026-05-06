@@ -289,6 +289,7 @@ export default function AdminApiKeys() {
   const [toolForm, setToolForm] = useState({
     name: "",
     apiEndpoint: "",
+    modelName: "", // 模型 ID，写入 configJson.modelName
     apiKeyName: "",
     apiKey: "",
     description: "",
@@ -315,7 +316,7 @@ export default function AdminApiKeys() {
     onSuccess: () => {
       utils.aiTools.list.invalidate();
       setToolDialogOpen(false);
-      setToolForm({ name: "", apiEndpoint: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "", xfyunAppId: "", xfyunApiSecret: "", volcengineAppId: "", volcengineAccessToken: "" });
+      setToolForm({ name: "", apiEndpoint: "", modelName: "", apiKeyName: "", apiKey: "", description: "", accessKeyId: "", xfyunAppId: "", xfyunApiSecret: "", volcengineAppId: "", volcengineAccessToken: "" });
       setShowFormKey(false);
       toast.success("AI 工具添加成功");
     },
@@ -437,6 +438,16 @@ export default function AdminApiKeys() {
                   onChange={(e) => setToolForm({ ...toolForm, apiEndpoint: e.target.value })}
                   placeholder="https://api.openai.com/v1/chat/completions"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>模型 ID <span className="text-muted-foreground text-xs">（可选）</span></Label>
+                <Input
+                  value={toolForm.modelName}
+                  onChange={(e) => setToolForm({ ...toolForm, modelName: e.target.value })}
+                  placeholder="例：gemini-3.1-pro-preview、gpt-4o、qwen-max"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">API 调用时传入的具体模型名称，不填则使用默认模型</p>
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
@@ -579,10 +590,18 @@ export default function AdminApiKeys() {
                     // Store accessToken as apiKey so it gets encrypted
                     formData.apiKey = toolForm.volcengineAccessToken;
                   }
+                  // Write modelName into configJson
+                  if (toolForm.modelName.trim()) {
+                    formData.configJson = {
+                      ...(formData.configJson || {}),
+                      modelName: toolForm.modelName.trim(),
+                    };
+                  }
                   delete formData.xfyunAppId;
                   delete formData.xfyunApiSecret;
                   delete formData.volcengineAppId;
                   delete formData.volcengineAccessToken;
+                  delete formData.modelName; // remove from top-level, already in configJson
                   createTool.mutate(formData);
                 }}
                 disabled={createTool.isPending}

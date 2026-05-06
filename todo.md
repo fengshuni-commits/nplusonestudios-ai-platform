@@ -2552,3 +2552,6 @@
 - [x] 所长接入案例调研报告生成（generate_document 工具）
 - [x] 所长接入内容创作生成（generate_document 工具，支持小红书/公众号/Instagram）
 - [x] 消息底部显示可下载文件按钮（.md）
+
+## AI 工具管理 - 添加模型 ID 字段
+- [x] 在"添加 AI 工具"表单中新增"模型 ID"输入框（写入 configJson.modelName），方便添加 Gemini 3.1 Pro 等需要指定模型 ID 的工具
