@@ -2148,13 +2148,20 @@ const aiToolsRouter = router({
       const tool = rows[0] as any;
       // Non-LLM tools (ASR, image/video generation) cannot be tested via chat/completions
       const caps: string[] = Array.isArray(tool.capabilities) ? tool.capabilities : JSON.parse(tool.capabilities || "[]");
-      const isLLMTool = caps.some((c: string) => ["document", "analysis", "rendering", "chat"].includes(c));
+      // A tool is LLM-testable only if it has a chat-compatible capability AND has an API endpoint
+      // Providers like jimeng/volcengine use proprietary APIs, not OpenAI-compatible chat endpoints
+      const NON_LLM_PROVIDERS = ["jimeng", "volcengine", "volcengine_speech", "xfyun", "seedance"];
+      const hasLLMCap = caps.some((c: string) => ["document", "analysis", "rendering", "chat"].includes(c));
+      const hasLLMEndpoint = !!(tool.apiEndpoint as string)?.trim() && !NON_LLM_PROVIDERS.includes(tool.provider as string);
+      const isLLMTool = hasLLMCap && hasLLMEndpoint;
       if (!isLLMTool) {
         const isVideoTool = caps.includes("video");
         const isImageTool = caps.includes("image");
         const isAsrTool = caps.includes("asr") || (tool.name as string)?.toLowerCase().includes("语音") || (tool.name as string)?.toLowerCase().includes("speech");
+        const isJimeng = tool.provider === "jimeng" || (tool.name as string)?.includes("即梦");
         let typeLabel = "非语言模型工具";
-        if (isVideoTool) typeLabel = "视频生成工具";
+        if (isJimeng) typeLabel = "即梦 AI（图像/视频生成）";
+        else if (isVideoTool) typeLabel = "视频生成工具";
         else if (isImageTool) typeLabel = "图像生成工具";
         else if (isAsrTool) typeLabel = "语音识别工具";
         return {
