@@ -2043,7 +2043,7 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
 
       {/* Task Detail Dialog */}
       <Dialog open={taskDetailOpen} onOpenChange={setTaskDetailOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           {selectedTask && (
             <>
               <DialogHeader>

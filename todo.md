@@ -2559,3 +2559,7 @@
 ## Bug 修复：AI 工具测试按钮 Failed to fetch
 - [x] 诊断原因：testTool 向 Gemini 3.1 Pro 等慢速模型发请求超过 30s，被代理层超时切断
 - [x] 修复：在 testTool 后端加 25s 超时，超时后返回友好错误而非崩溃
+
+## Bug 修复：任务详情弹窗删除按钮不可见
+- [x] 诊断：删除按钮代码存在，但弹窗无 max-h/overflow 设置，内容多时底部被截断
+- [x] 修复：为任务详情 DialogContent 添加 max-h-[90vh] overflow-y-auto
