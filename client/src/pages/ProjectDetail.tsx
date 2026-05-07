@@ -2046,9 +2046,9 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           {selectedTask && (
             <>
-              <DialogHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1">
+              <DialogHeader className="pr-8">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
                     {isEditingTaskTitle ? (
                       <Input
                         value={editingTaskTitle}
@@ -2071,19 +2071,14 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                         className="text-base font-medium h-8"
                       />
                     ) : (
-                      <DialogTitle className="text-base pr-6 text-left cursor-pointer hover:text-primary" onClick={() => {
-                        if (canEditTask(selectedTask)) {
-                          setEditingTaskTitle(selectedTask.title);
-                          setIsEditingTaskTitle(true);
-                        }
-                      }}>
+                      <DialogTitle className="text-base text-left leading-snug">
                         {selectedTask.title}
                       </DialogTitle>
                     )}
                   </div>
                   {canEditTask(selectedTask) && !isEditingTaskTitle && (
                     <button
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       title="编辑标题"
                       onClick={() => {
                         setEditingTaskTitle(selectedTask.title);
