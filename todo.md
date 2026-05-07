@@ -2563,3 +2563,8 @@
 ## Bug 修复：任务详情弹窗删除按钮不可见
 - [x] 诊断：删除按钮代码存在，但弹窗无 max-h/overflow 设置，内容多时底部被截断
 - [x] 修复：为任务详情 DialogContent 添加 max-h-[90vh] overflow-y-auto
+
+## AI 工具管理 - 启用/停用开关
+- [x] 在 aiTools 表中添加 enabled 字段（默认 true）（已有 isActive 字段，无需迁移）
+- [x] 后端 listForUser 等查询过滤掉 enabled=false 的工具（管理接口除外）（已内置）
+- [x] 管理页面添加启用/停用切换开关，停用工具显示在“暂不启用”分区

@@ -250,7 +250,7 @@ const DISPLAY_CAPABILITIES: { key: ToolCapability; label: string; desc: string }
 ];
 
 export default function AdminApiKeys() {
-  const { data: tools, isLoading: toolsLoading } = trpc.aiTools.list.useQuery({});
+  const { data: tools, isLoading: toolsLoading } = trpc.aiTools.list.useQuery({ activeOnly: false });
   const { data: capabilityDefaults, isLoading: defaultsLoading } = trpc.aiTools.getCapabilityDefaults.useQuery();
   const utils = trpc.useUtils();
   const [toolDialogOpen, setToolDialogOpen] = useState(false);
@@ -700,7 +700,8 @@ export default function AdminApiKeys() {
             </div>
           ) : tools && tools.length > 0 ? (
             <div className="space-y-2">
-              {tools.map((tool: any) => {
+              {/* ─── Active tools ─── */}
+              {tools.filter((t: any) => t.isActive !== false).map((tool: any) => {
                 const caps: ToolCapability[] = Array.isArray(tool.capabilities) ? tool.capabilities : [];
                 const isExpanded = expandedId === tool.id;
                 const isEditingKey = editKeyId === tool.id;
@@ -768,11 +769,14 @@ export default function AdminApiKeys() {
                           测试
                         </Button>
                         <Button
-                          variant={tool.isActive ? "secondary" : "outline"}
+                          variant="ghost"
                           size="sm"
-                          onClick={(e) => { e.stopPropagation(); updateTool.mutate({ id: tool.id, isActive: !tool.isActive }); }}
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                          title="移入暂不启用"
+                          onClick={(e) => { e.stopPropagation(); updateTool.mutate({ id: tool.id, isActive: false }); }}
+                          disabled={updateTool.isPending}
                         >
-                          {tool.isActive ? "已启用" : "已停用"}
+                          停用
                         </Button>
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                       </div>
@@ -1287,6 +1291,54 @@ export default function AdminApiKeys() {
                   </div>
                 );
               })}
+              {/* ─── Inactive tools section ─── */}
+              {tools.filter((t: any) => t.isActive === false).length > 0 && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-xs text-muted-foreground px-2">暂不启用（{tools.filter((t: any) => t.isActive === false).length}）</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                  <div className="space-y-2 opacity-60">
+                    {tools.filter((t: any) => t.isActive === false).map((tool: any) => {
+                      const caps: ToolCapability[] = Array.isArray(tool.capabilities) ? tool.capabilities : [];
+                      const merged = Array.from(new Set([...caps, ...inferCapabilities(tool.name ?? "", tool.apiEndpoint ?? "")]));
+                      return (
+                        <div key={tool.id} className="rounded-lg border border-border border-dashed bg-muted/20 overflow-hidden">
+                          <div className="flex items-center justify-between gap-3 px-4 py-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                <Sparkles className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-muted-foreground truncate">{tool.name}</p>
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {merged.length > 0 ? merged.map((cap) => (
+                                    <Badge key={cap} variant="outline" className="text-[10px] h-4 px-1 opacity-60">
+                                      {CAPABILITY_LABELS[cap as ToolCapability] ?? cap}
+                                    </Badge>
+                                  )) : (
+                                    <span className="text-xs text-muted-foreground">未识别能力</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-3 text-xs shrink-0"
+                              onClick={() => updateTool.mutate({ id: tool.id, isActive: true })}
+                              disabled={updateTool.isPending}
+                            >
+                              启用
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-10 text-muted-foreground text-sm">
