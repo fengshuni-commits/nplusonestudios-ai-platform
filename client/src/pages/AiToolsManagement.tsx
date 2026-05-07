@@ -614,7 +614,9 @@ export default function AdminApiKeys() {
         </Dialog>
       </div>
 
-      {/* ── 按功能类别分组设置默认工具 ── */}
+      {/* ── 宽屏左右分栏布局 ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_2fr] gap-6 items-start">
+      {/* 左栏：按功能类别分组设置默认工具 */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium flex items-center gap-2">
@@ -684,7 +686,7 @@ export default function AdminApiKeys() {
         </CardContent>
       </Card>
 
-      {/* ── 已配置的 AI 工具列表 ── */}
+      {/* 右栏：已配置的 AI 工具列表 */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium flex items-center gap-2">
@@ -1349,6 +1351,7 @@ export default function AdminApiKeys() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
