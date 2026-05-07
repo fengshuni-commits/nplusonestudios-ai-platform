@@ -2146,11 +2146,23 @@ const aiToolsRouter = router({
       const rows = await drizzleDb.select().from(aiTools).where(eq(aiTools.id, input.toolId)).limit(1);
       if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "工具不存在" });
       const tool = rows[0] as any;
-      // Non-LLM tools (ASR, image generation with no chat API) cannot be tested via chat/completions
+      // Non-LLM tools (ASR, image/video generation) cannot be tested via chat/completions
       const caps: string[] = Array.isArray(tool.capabilities) ? tool.capabilities : JSON.parse(tool.capabilities || "[]");
       const isLLMTool = caps.some((c: string) => ["document", "analysis", "rendering", "chat"].includes(c));
       if (!isLLMTool) {
-        return { success: true, latencyMs: 0, model: tool.name as string, reply: "此工具为非语言模型工具（如语音识别、图像生成），不支持 LLM 连通性测试。请在实际功能中验证。" };
+        const isVideoTool = caps.includes("video");
+        const isImageTool = caps.includes("image");
+        const isAsrTool = caps.includes("asr") || (tool.name as string)?.toLowerCase().includes("语音") || (tool.name as string)?.toLowerCase().includes("speech");
+        let typeLabel = "非语言模型工具";
+        if (isVideoTool) typeLabel = "视频生成工具";
+        else if (isImageTool) typeLabel = "图像生成工具";
+        else if (isAsrTool) typeLabel = "语音识别工具";
+        return {
+          success: false,
+          latencyMs: 0,
+          model: tool.name as string,
+          reply: `此工具为「${typeLabel}」，不支持通过对话接口进行连通性测试，请在实际功能中验证工具是否可用。`,
+        };
       }
       // Use the same invokeLLMWithUserTool path as all real AI calls
       // so the test result accurately reflects actual usability.
