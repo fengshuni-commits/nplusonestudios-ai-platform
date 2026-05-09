@@ -202,6 +202,71 @@ export async function reportFailure(toolId: number, keyId: number): Promise<void
     .where(eq(aiToolKeys.id, keyId));
 }
 
+/**
+ * Pick a key by index for round-robin batch distribution.
+ * Used when generating multiple images in parallel to spread load across keys.
+ *
+ * index 0 → primary key (or first pool key if no primary)
+ * index 1 → first pool key (or primary if no pool keys)
+ * index 2 → wraps around
+ *
+ * Unlike pickKey(), this is deterministic — no randomness — so parallel
+ * batch jobs each get a different key when possible.
+ */
+export async function pickKeyByIndex(
+  toolId: number,
+  primaryKeyEncrypted: string | null | undefined,
+  index: number
+): Promise<PoolKey | null> {
+  const db = await getDb();
+  const now = Math.floor(Date.now() / 1000);
+
+  let extraKeys: Array<{
+    id: number;
+    apiKeyEncrypted: string;
+    label: string | null;
+    weight: number;
+    cooldownUntil: number | null;
+    isActive: boolean;
+  }> = [];
+
+  if (db) {
+    const rows = await db
+      .select({
+        id: aiToolKeys.id,
+        apiKeyEncrypted: aiToolKeys.apiKeyEncrypted,
+        label: aiToolKeys.label,
+        weight: aiToolKeys.weight,
+        cooldownUntil: aiToolKeys.cooldownUntil,
+        isActive: aiToolKeys.isActive,
+      })
+      .from(aiToolKeys)
+      .where(and(eq(aiToolKeys.toolId, toolId), eq(aiToolKeys.isActive, true)))
+      .orderBy(aiToolKeys.sortOrder, aiToolKeys.id);
+    // Only include keys not in cooldown
+    extraKeys = rows.filter(k => !k.cooldownUntil || k.cooldownUntil <= now);
+  }
+
+  type Candidate = { id: number; encrypted: string; label?: string | null; weight: number };
+  const candidates: Candidate[] = [];
+
+  if (primaryKeyEncrypted) {
+    candidates.push({ id: 0, encrypted: primaryKeyEncrypted, label: "主 Key", weight: PRIMARY_KEY_DEFAULT_WEIGHT });
+  }
+  for (const k of extraKeys) {
+    candidates.push({ id: k.id, encrypted: k.apiKeyEncrypted, label: k.label, weight: Math.max(1, k.weight ?? 1) });
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Round-robin: pick by index mod total (deterministic, spreads load across keys)
+  const chosen = candidates[index % candidates.length];
+  const apiKey = decryptApiKey(chosen.encrypted);
+  if (!apiKey) return null;
+
+  return { id: chosen.id, apiKey, label: chosen.label, weight: chosen.weight };
+}
+
 // ─── DB helpers for CRUD (used by routers) ───────────────────────────────────
 
 export async function listToolKeys(toolId: number) {

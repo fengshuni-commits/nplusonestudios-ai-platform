@@ -2726,7 +2726,8 @@ async function generateRenderingInBackground(
     jimengUpscaleScale?: number;
   },
   userId: number,
-  userName: string | null
+  userName: string | null,
+  batchIndex = 0
 ) {
   const startTime = Date.now();
   try {
@@ -2827,6 +2828,7 @@ async function generateRenderingInBackground(
       maskImageUrl: input.jimengMaskUrl,
       upscaleResolution: input.jimengUpscaleResolution,
       upscaleScale: input.jimengUpscaleScale,
+      batchIndex,
     });
 
     await db.createAiToolLog({
@@ -2927,7 +2929,7 @@ const renderingRouter = router({
           userId: ctx.user.id,
           inputParams: baseInput as Record<string, unknown>,
         });
-        generateRenderingInBackground(jobId, baseInput, ctx.user.id, ctx.user.name || null).catch(err => {
+        generateRenderingInBackground(jobId, baseInput, ctx.user.id, ctx.user.name || null, i).catch(err => {
           console.error("[Rendering] Unhandled error:", err);
         });
         jobIds.push(jobId);

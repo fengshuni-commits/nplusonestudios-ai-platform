@@ -15,7 +15,7 @@ import { decryptApiKey } from "./crypto";
 import { storagePut } from "server/storage";
 import { generateImage, type GenerateImageOptions } from "./imageGeneration";
 import { generateImageWithJimeng, imageToImageWithJimeng, inpaintWithJimeng, upscaleWithJimeng, type VolcengineConfig } from "./volcengine";
-import { pickKey, reportSuccess, reportFailure } from "./keyPool";
+import { pickKey, pickKeyByIndex, reportSuccess, reportFailure } from "./keyPool";
 
 export type GenerateWithToolOptions = GenerateImageOptions & {
   toolId?: number | null;
@@ -26,6 +26,7 @@ export type GenerateWithToolOptions = GenerateImageOptions & {
   // upscale 专用参数
   upscaleResolution?: "4k" | "8k";
   upscaleScale?: number;
+  batchIndex?: number;
 };
 
 /**
@@ -233,9 +234,10 @@ export async function generateImageWithTool(
   if (!tool || (!tool.apiEndpoint && !_isJimeng) || !tool.apiKeyEncrypted) {
     throw new Error(`AI 工具「${tool?.name || toolId}」未配置 API 端点或 API Key，请在 API 密钥管理页面完成配置后重试。`);
   }
-
-  // Pick API key from pool (round-robin across primary + extra keys)
-  const poolKey = await pickKey(toolId, tool.apiKeyEncrypted);
+  // Pick API key from pool; use round-robin for batch jobs
+  const poolKey = typeof opts.batchIndex === "number"
+    ? await pickKeyByIndex(toolId, tool.apiKeyEncrypted, opts.batchIndex)
+    : await pickKey(toolId, tool.apiKeyEncrypted);
   if (!poolKey) {
     throw new Error(`AI 工具「${tool.name}」的 API Key 暂时不可用（可能因连续失败进入冷却期），请稍后重试或在 API 密钥管理页面检查 Key 状态。`);
   }

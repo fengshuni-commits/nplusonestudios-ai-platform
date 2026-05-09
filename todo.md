@@ -2575,3 +2575,10 @@
 ## Bug 修复：AI 效果图批量生成只生成 1 张
 - [x] 根因：单/多 job 轮询的 enabled 条件用 <=1 / >=2 导致竞态，count=3 时单 job 轮询先启动
 - [x] 修复：改为严格等于（=== 1 / > 1），彻底消除竞态
+
+## Bug 修复：批量生成效果图只成功 1 张（Gemini 并发限制）
+- [x] 根因：3 个 job 并发随机抽 Key，概率上 3 次都打到主 Key，触发 503/超时
+- [x] 修复：在 keyPool.ts 添加 pickKeyByIndex，批量生成时按 index 轮询分配 Key（job0→主Key, job1→备用Key, job2→主Key...）
+- [x] 修改 generateImageWithTool 接受 batchIndex 参数
+- [x] 修改 generateRenderingInBackground 接受 batchIndex 并传递给 generateImageWithTool
+- [x] 修改批量 for 循环传入 i 作为 batchIndex
