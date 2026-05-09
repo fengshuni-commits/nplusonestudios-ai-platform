@@ -277,7 +277,7 @@ export default function DesignTools() {
   const pollJobQuery = trpc.rendering.pollJob.useQuery(
     { jobId: currentJobId! },
     {
-      enabled: currentJobId !== null && currentJobIds.length <= 1,
+      enabled: currentJobId !== null && currentJobIds.length === 1,
       refetchInterval: (query) => {
         const data = query.state.data;
         if (!data) return 2000;
@@ -288,7 +288,7 @@ export default function DesignTools() {
     }
   );
   useEffect(() => {
-    if (!currentJobId || currentJobIds.length > 1 || !pollJobQuery.data) return;
+    if (!currentJobId || currentJobIds.length !== 1 || !pollJobQuery.data) return;
     const data = pollJobQuery.data;
     if (data.status === "done") {
       const url = (data as any).url as string;
@@ -314,11 +314,11 @@ export default function DesignTools() {
     }
   }, [currentJobId, currentJobIds.length, pollJobQuery.data]);
 
-  // Multi-job poll (for count >= 2)
+  // Multi-job poll (for count > 1)
   const pollJobsQuery = trpc.rendering.pollJobs.useQuery(
     { jobIds: currentJobIds },
     {
-      enabled: currentJobIds.length >= 2,
+      enabled: currentJobIds.length > 1,
       refetchInterval: (query) => {
         const data = query.state.data;
         if (!data) return 2000;
@@ -329,7 +329,7 @@ export default function DesignTools() {
     }
   );
   useEffect(() => {
-    if (currentJobIds.length < 2 || !pollJobsQuery.data) return;
+    if (currentJobIds.length <= 1 || !pollJobsQuery.data) return;
     const results = pollJobsQuery.data as Array<{ jobId: string; status: string; url?: string; prompt?: string; historyId?: number; error?: string }>;
     let newlyDoneCount = 0;
     for (const r of results) {
