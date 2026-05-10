@@ -2582,3 +2582,6 @@
 - [x] 修改 generateImageWithTool 接受 batchIndex 参数
 - [x] 修改 generateRenderingInBackground 接受 batchIndex 并传递给 generateImageWithTool
 - [x] 修改批量 for 循环传入 i 作为 batchIndex
+
+## 批量生成数量上限改为 2 张
+- [x] 前端 DesignTools.tsx 生成数量选项从 [1,2,3] 改为 [1,2]，最多同时生成 2 张

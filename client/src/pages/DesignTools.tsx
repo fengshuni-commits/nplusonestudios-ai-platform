@@ -880,7 +880,7 @@ export default function DesignTools() {
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">生成数量</Label>
                 <div className="flex gap-1">
-                  {[1, 2, 3].map((n) => (
+                  {[1, 2].map((n) => (
                     <button
                       key={n}
                       onClick={() => setGenerateCount(n)}
