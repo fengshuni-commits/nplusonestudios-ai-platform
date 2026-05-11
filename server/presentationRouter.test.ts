@@ -266,6 +266,43 @@ describe("Presentation Router - generateOneSlideFull", () => {
   });
 });
 
+describe("Documents Router - listImagesByProject filter", () => {
+  it("should filter documents to only image files by URL extension", () => {
+    const docs = [
+      { id: 1, title: "Floor Plan", fileUrl: "https://s3.example.com/docs/plan.pdf" },
+      { id: 2, title: "Render 01", fileUrl: "https://s3.example.com/docs/render01.jpg" },
+      { id: 3, title: "Render 02", fileUrl: "https://s3.example.com/docs/render02.png" },
+      { id: 4, title: "No File", fileUrl: null },
+      { id: 5, title: "WebP Image", fileUrl: "https://s3.example.com/docs/photo.webp?v=1" },
+      { id: 6, title: "SVG Logo", fileUrl: "https://s3.example.com/docs/logo.svg" },
+    ];
+    const imagePattern = /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?|#|$)/i;
+    const imageFiles = docs.filter(d => {
+      if (!d.fileUrl) return false;
+      return imagePattern.test(d.fileUrl.toLowerCase());
+    });
+    expect(imageFiles).toHaveLength(4);
+    expect(imageFiles.map(d => d.id)).toEqual([2, 3, 5, 6]);
+    // PDF should be excluded
+    expect(imageFiles.find(d => d.title === "Floor Plan")).toBeUndefined();
+    // Null fileUrl should be excluded
+    expect(imageFiles.find(d => d.title === "No File")).toBeUndefined();
+  });
+
+  it("should handle query params and hash fragments in image URLs", () => {
+    const urls = [
+      "https://cdn.example.com/img.jpg?w=800&h=600",
+      "https://cdn.example.com/img.png#section",
+      "https://cdn.example.com/img.gif",
+      "https://cdn.example.com/document.pdf?download=1",
+    ];
+    const imagePattern = /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?|#|$)/i;
+    const imageUrls = urls.filter(u => imagePattern.test(u.toLowerCase()));
+    expect(imageUrls).toHaveLength(3);
+    expect(imageUrls).not.toContain("https://cdn.example.com/document.pdf?download=1");
+  });
+});
+
 describe("Presentation Router - text element coordinate conversion", () => {
   it("should convert pixel coordinates to percentage correctly", () => {
     const SLIDE_W_PX = 1920;

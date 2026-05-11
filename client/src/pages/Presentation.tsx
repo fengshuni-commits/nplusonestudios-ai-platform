@@ -41,6 +41,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -334,11 +336,27 @@ export default function PresentationPage() {
   // ── Project list dialog ───────────────────────────────────────────────────
   const [showProjectImport, setShowProjectImport] = useState(false);
 
+  // ── Asset import dialog ───────────────────────────────────────────────────
+  const [showAssetImport, setShowAssetImport] = useState(false);
+  const [assetImportTab, setAssetImportTab] = useState<"library" | "project">("library");
+  const [assetImportProjectId, setAssetImportProjectId] = useState<string>("");
+  const [assetSearch, setAssetSearch] = useState("");
+  const [selectedImportAssets, setSelectedImportAssets] = useState<Set<string>>(new Set());
+
   // ── Presentation list ─────────────────────────────────────────────────────
   const [showList, setShowList] = useState(true);
 
   // ── Queries & Mutations ───────────────────────────────────────────────────
   const { data: projects } = trpc.projects.list.useQuery();
+  // Asset import queries (lazy, only when dialog is open)
+  const { data: allAssets } = trpc.assets.listAll.useQuery(
+    undefined,
+    { enabled: showAssetImport && assetImportTab === "library" }
+  );
+  const { data: projectDocImages } = trpc.documents.listImagesByProject.useQuery(
+    { projectId: Number(assetImportProjectId) },
+    { enabled: showAssetImport && assetImportTab === "project" && !!assetImportProjectId }
+  );
   const uploadMutation = trpc.upload.file.useMutation();
   const createMutation = trpc.presentationProjects.create.useMutation();
   const generatePromptsMutation = trpc.presentationProjects.generatePrompts.useMutation();
@@ -474,6 +492,50 @@ export default function PresentationPage() {
     if (!title && project.name) setTitle(project.name);
     setShowProjectImport(false);
     toast.success("项目信息已导入");
+  };
+
+  // ── Import assets from library / project docs ───────────────────────────────────
+  const handleConfirmAssetImport = () => {
+    const currentCount = uploadedAssets.length;
+    const remaining = 10 - currentCount;
+    if (remaining <= 0) { toast.error("已达到最大素材数量 (10 张)"); return; }
+    // Build list of items to import based on active tab
+    const items: Array<{ url: string; name: string; mimeType: string }> = [];
+    if (assetImportTab === "library" && allAssets) {
+      for (const a of allAssets) {
+        if (selectedImportAssets.has(`lib-${a.id}`) && a.fileUrl) {
+          items.push({ url: a.fileUrl, name: a.name, mimeType: a.fileType ?? "image/jpeg" });
+        }
+      }
+    } else if (assetImportTab === "project" && projectDocImages) {
+      for (const d of projectDocImages) {
+        if (selectedImportAssets.has(`doc-${d.id}`) && d.fileUrl) {
+          items.push({ url: d.fileUrl, name: d.title, mimeType: "image/jpeg" });
+        }
+      }
+    }
+    if (items.length === 0) { toast.error("请先选择要导入的图片"); return; }
+    const toAdd = items.slice(0, remaining);
+    // Create synthetic UploadedAsset entries (already uploaded, no re-upload needed)
+    const newAssets: UploadedAsset[] = toAdd.map(item => ({
+      file: new File([], item.name, { type: item.mimeType }),
+      previewUrl: item.url,
+      uploadedUrl: item.url,
+      uploading: false,
+    }));
+    setUploadedAssets(prev => [...prev, ...newAssets]);
+    setShowAssetImport(false);
+    setSelectedImportAssets(new Set());
+    toast.success(`已导入 ${newAssets.length} 张图片`);
+  };
+
+  const toggleImportAsset = (key: string) => {
+    setSelectedImportAssets(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   // ── Step 1 → Step 2: Create presentation and generate prompts ─────────────
@@ -1048,15 +1110,37 @@ export default function PresentationPage() {
 
               {/* Asset upload */}
               <div className="space-y-2">
-                <Label className="text-xs font-medium">参考素材（可选，最多 10 张）</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">参考素材（可选，最多 10 张）</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 gap-1"
+                      onClick={() => { setAssetImportTab("library"); setShowAssetImport(true); setSelectedImportAssets(new Set()); }}
+                    >
+                      <ImageIcon className="h-3 w-3" />素材库
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 gap-1"
+                      onClick={() => { setAssetImportTab("project"); setShowAssetImport(true); setSelectedImportAssets(new Set()); }}
+                    >
+                      <FolderOpen className="h-3 w-3" />项目文件
+                    </Button>
+                  </div>
+                </div>
                 <div
                   className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
                   onClick={() => assetInputRef.current?.click()}
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => { e.preventDefault(); handleAssetSelect(e.dataTransfer.files); }}
                 >
-                  <ImageIcon className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
-                  <p className="text-xs text-muted-foreground">点击或拖拽上传项目图片</p>
+                  <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+                  <p className="text-xs text-muted-foreground">点击或拖拽上传本地图片</p>
                 </div>
                 <input
                   ref={assetInputRef}
@@ -1548,6 +1632,127 @@ export default function PresentationPage() {
                 <><Upload className="h-4 w-4 mr-2" />开始转换</>
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Asset Import Dialog ────────────────────────────────────────────────── */}
+      <Dialog open={showAssetImport} onOpenChange={open => { setShowAssetImport(open); if (!open) setSelectedImportAssets(new Set()); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>导入参考素材</DialogTitle>
+          </DialogHeader>
+          <Tabs value={assetImportTab} onValueChange={v => { setAssetImportTab(v as "library" | "project"); setSelectedImportAssets(new Set()); }}>
+            <TabsList className="w-full">
+              <TabsTrigger value="library" className="flex-1">素材库</TabsTrigger>
+              <TabsTrigger value="project" className="flex-1">项目文件</TabsTrigger>
+            </TabsList>
+
+            {/* ── Library Tab ── */}
+            <TabsContent value="library" className="mt-3 space-y-3">
+              <Input
+                placeholder="搜索素材名称…"
+                value={assetSearch}
+                onChange={e => setAssetSearch(e.target.value)}
+                className="h-8 text-sm"
+              />
+              <ScrollArea className="h-72">
+                {!allAssets ? (
+                  <div className="flex items-center justify-center h-full"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+                ) : (() => {
+                  const filtered = allAssets.filter(a =>
+                    a.fileUrl &&
+                    /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(a.fileUrl) &&
+                    (!assetSearch || a.name.toLowerCase().includes(assetSearch.toLowerCase()))
+                  );
+                  if (filtered.length === 0) return <p className="text-xs text-muted-foreground text-center py-8">素材库中暂无图片素材</p>;
+                  return (
+                    <div className="grid grid-cols-4 gap-2 pr-2">
+                      {filtered.map(a => {
+                        const key = `lib-${a.id}`;
+                        const selected = selectedImportAssets.has(key);
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            className={`relative aspect-square rounded overflow-hidden border-2 transition-colors ${
+                              selected ? "border-primary" : "border-transparent hover:border-border"
+                            }`}
+                            onClick={() => toggleImportAsset(key)}
+                          >
+                            <img src={a.thumbnailUrl ?? a.fileUrl} alt={a.name} className="w-full h-full object-cover" />
+                            {selected && (
+                              <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                <CheckCircle2 className="h-5 w-5 text-primary" />
+                              </div>
+                            )}
+                            <p className="absolute bottom-0 left-0 right-0 text-[9px] bg-black/50 text-white px-1 py-0.5 truncate">{a.name}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </ScrollArea>
+            </TabsContent>
+
+            {/* ── Project Files Tab ── */}
+            <TabsContent value="project" className="mt-3 space-y-3">
+              <Select value={assetImportProjectId} onValueChange={v => { setAssetImportProjectId(v); setSelectedImportAssets(new Set()); }}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="选择项目…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects?.map(p => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <ScrollArea className="h-64">
+                {!assetImportProjectId ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">请先选择项目</p>
+                ) : !projectDocImages ? (
+                  <div className="flex items-center justify-center h-full"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+                ) : projectDocImages.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">该项目暂无图片文件</p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2 pr-2">
+                    {projectDocImages.map(d => {
+                      const key = `doc-${d.id}`;
+                      const selected = selectedImportAssets.has(key);
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          className={`relative aspect-square rounded overflow-hidden border-2 transition-colors ${
+                            selected ? "border-primary" : "border-transparent hover:border-border"
+                          }`}
+                          onClick={() => toggleImportAsset(key)}
+                        >
+                          <img src={d.fileUrl!} alt={d.title} className="w-full h-full object-cover" />
+                          {selected && (
+                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                              <CheckCircle2 className="h-5 w-5 text-primary" />
+                            </div>
+                          )}
+                          <p className="absolute bottom-0 left-0 right-0 text-[9px] bg-black/50 text-white px-1 py-0.5 truncate">{d.title}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <span className="text-xs text-muted-foreground">已选 {selectedImportAssets.size} 张</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowAssetImport(false)}>取消</Button>
+              <Button size="sm" onClick={handleConfirmAssetImport} disabled={selectedImportAssets.size === 0}>
+                导入选中的图片
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

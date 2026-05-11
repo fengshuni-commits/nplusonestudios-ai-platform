@@ -1625,10 +1625,19 @@ const documentsRouter = router({
       await db.deleteDocument(input.id);
       return { success: true };
     }),
+  // List image files from a project (for presentation asset import)
+  listImagesByProject: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      const docs = await db.listDocumentsByProject(input.projectId);
+      return docs.filter(d => {
+        if (!d.fileUrl) return false;
+        const url = d.fileUrl.toLowerCase();
+        return /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?|#|$)/.test(url);
+      });
+    }),
 });
-
 // ─── Assets ──────────────────────────────────────────────
-
 const assetsRouter = router({
   list: protectedProcedure
     .input(z.object({ category: z.string().optional(), search: z.string().optional() }).optional())
