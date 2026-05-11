@@ -1204,9 +1204,9 @@ export default function MediaLayout() {
           />
         </div>
       </div>
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-h-0">
         {/* Left Panel */}
-        <div className="w-72 border-r border-border flex flex-col shrink-0 bg-background">
+        <div className="w-72 border-r border-border flex flex-col shrink-0 bg-background overflow-y-auto">
           {/* Style Packs */}
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-3">
