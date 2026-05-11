@@ -15,7 +15,7 @@ import { ArrowLeft, Plus, Calendar, Save, X, Trash2,
   ExternalLink, Check, Layers, RefreshCw, Copy, ArrowRight, Download, Loader2,
   Presentation, Users, UserPlus, UserMinus, Crown, User, Link2Off,
   Sparkles, ChevronDown, ChevronUp, Pencil, BarChart3, Edit2, Upload, FolderOpen, Mic, Eye, Maximize2, CheckCircle2,
-  Edit,
+  Edit, Play, Video,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
@@ -521,7 +521,7 @@ function ProjectInfoTab({
 // ═══════════════════════════════════════════════════════════
 
 // Category definitions for grouping modules
-const CATEGORY_DESIGN = ["ai_render"];
+const CATEGORY_DESIGN = ["ai_render", "ai_video"];
 const CATEGORY_DOCUMENT = ["benchmark_report", "benchmark_ppt", "meeting_minutes"];
 const CATEGORY_MEDIA = ["media_xiaohongshu", "media_wechat", "media_instagram"];
 
@@ -818,21 +818,39 @@ function ProjectDocumentsTab({
             <span className="text-xs text-muted-foreground">{designItems.length} 张</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {designItems.map((item: any) => (
+              {designItems.map((item: any) => {
+                const isVideo = item.module === 'ai_video';
+                const vParams = isVideo ? (typeof item.inputParams === 'string' ? JSON.parse(item.inputParams || '{}') : (item.inputParams || {})) : {};
+                const videoUrl = isVideo ? (vParams as any)?.videoUrl as string | undefined : undefined;
+                return (
               <div key={item.id} className="group relative aspect-square rounded-lg overflow-hidden bg-muted border border-border/40 hover:border-primary/50 transition-all hover:shadow-md">
-                {/* Thumbnail - clickable to open edit chain */}
+                {/* Thumbnail - clickable */}
                 <div
                   className="absolute inset-0 cursor-pointer"
-                  onClick={() => { setSelectedRootId(item.id); setDetailOpen(true); }}
+                  onClick={() => {
+                    if (isVideo && videoUrl) {
+                      setVideoLightbox({ src: videoUrl, label: item.title || 'AI 视频' });
+                    } else {
+                      setSelectedRootId(item.id); setDetailOpen(true);
+                    }
+                  }}
                 >
                   {item.outputUrl ? (
                     <img src={item.outputUrl} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
+                      {isVideo ? <Video className="h-8 w-8 text-muted-foreground/30" /> : <ImageIcon className="h-8 w-8 text-muted-foreground/30" />}
                     </div>
                   )}
                 </div>
+                {/* Video play icon overlay */}
+                {isVideo && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="h-10 w-10 rounded-full bg-black/50 flex items-center justify-center group-hover:bg-black/70 transition-colors">
+                      <Play className="h-5 w-5 text-white fill-white ml-0.5" />
+                    </div>
+                  </div>
+                )}
                 {/* Hover overlay with creator info */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                   <div className="absolute bottom-0 left-0 right-0 p-2">
@@ -844,8 +862,8 @@ function ProjectDocumentsTab({
                 </div>
                 {/* Action buttons - only visible on hover */}
                 <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  {/* Zoom button */}
-                  {item.outputUrl && (
+                  {/* Zoom/play button */}
+                  {item.outputUrl && !isVideo && (
                     <Button
                       size="icon" variant="secondary"
                       className="h-6 w-6 rounded-full bg-black/60 hover:bg-black/80 text-white border-0"
@@ -887,7 +905,8 @@ function ProjectDocumentsTab({
                   )}
                 </div>
               </div>
-            ))}
+                );
+              })}
           </div>
         </div>
       )}

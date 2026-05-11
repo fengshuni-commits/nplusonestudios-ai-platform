@@ -2613,3 +2613,6 @@
 
 ## Bug 修复：项目文档里 AI 视频链接打开是图片
 - [x] ProjectDetail.tsx 文档列表中 ai_video 模块的查看按钮改为全屏视频播放，从 inputParams.videoUrl 读取视频地址
+
+## 功能优化：项目文档中 AI 视频以缩略图卡片形式展示
+- [x] ProjectDetail.tsx 中 ai_video 从文档列表移到设计辅助网格区域，以缩略图卡片形式显示（封面图+播放图标+悬停操作）
