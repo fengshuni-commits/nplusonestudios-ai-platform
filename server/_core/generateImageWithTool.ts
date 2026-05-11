@@ -345,7 +345,7 @@ export async function generateImageWithTool(
       let aspectRatio = config.aspectRatio || "1:1";
       let imageSize = config.imageSize || "1K";
 
-      // Override with opts.size if provided (e.g. "1024x768" → "4:3")
+      // Override with opts.size if provided (e.g. "2048x2048" → aspectRatio + imageSize)
       if (genOpts.size) {
         const [w, h] = genOpts.size.split("x").map(Number);
         if (w && h) {
@@ -356,6 +356,13 @@ export async function generateImageWithTool(
           else if (ratio < 0.6) aspectRatio = "9:16";
           else if (ratio < 0.85) aspectRatio = "3:4";
           else aspectRatio = "1:1";
+
+          // Map max dimension to Gemini imageSize token
+          // Gemini supports: "0.5K", "1K" (default), "2K", "4K"
+          const maxDim = Math.max(w, h);
+          if (maxDim >= 3072) imageSize = "4K";
+          else if (maxDim >= 1536) imageSize = "2K";
+          else imageSize = "1K";
         }
       }
 
