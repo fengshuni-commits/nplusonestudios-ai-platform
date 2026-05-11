@@ -17,7 +17,7 @@ export interface VideoGenerationInput {
   mode: "text-to-video" | "image-to-video";
   prompt: string;
   duration: number; // 5 或 10 秒
-  resolution?: "720p" | "1080p"; // 视频分辨率
+  resolution?: "480p" | "720p" | "1080p"; // 视频分辨率
   inputImageUrl?: string; // 图生视频时的首帧图
   toolId?: number;
   tool?: {

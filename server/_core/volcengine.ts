@@ -681,7 +681,7 @@ export interface SeedanceVideoRequest {
   mode: "text-to-video" | "image-to-video";
   prompt: string;
   duration: 5 | 10;
-  resolution?: "720p" | "1080p";
+  resolution?: "480p" | "720p" | "1080p";
   ratio?: string;
   inputImageUrl?: string;
   generateAudio?: boolean;

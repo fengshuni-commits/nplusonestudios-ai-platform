@@ -38,8 +38,23 @@ export default function VideoGeneration() {
   const [mode, setMode] = useState<"text-to-video" | "image-to-video">("text-to-video");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState(5);
-  const [resolution, setResolution] = useState<"720p" | "1080p">("1080p");
+  const [resolution, setResolution] = useState<"480p" | "720p" | "1080p">("720p");
   const [selectedToolId, setSelectedToolId] = useState<number | undefined>();
+  // Query selected tool to determine supported resolutions
+  const { data: selectedTool } = trpc.aiTools.getById.useQuery(
+    { id: selectedToolId! },
+    { enabled: !!selectedToolId }
+  );
+  // Determine available resolutions based on tool model name
+  // Seedance 2.0 Fast: max 720p; others (1.5 Pro, 2.0 standard): up to 1080p
+  const isFastModel = selectedTool ? /fast/i.test((selectedTool as any).name || "") : false;
+  const availableResolutions: Array<"480p" | "720p" | "1080p"> = isFastModel
+    ? ["480p", "720p"]
+    : ["480p", "720p", "1080p"];
+  // Auto-downgrade resolution if current selection exceeds model capability
+  useEffect(() => {
+    if (isFastModel && resolution === "1080p") setResolution("720p");
+  }, [isFastModel, resolution]);
   const [inputImageUrl, setInputImageUrl] = useState("");
   const [inputImagePreview, setInputImagePreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -340,7 +355,7 @@ export default function VideoGeneration() {
               <div className="space-y-2">
                 <Label>分辨率</Label>
                 <div className="flex gap-2">
-                  {(["720p", "1080p"] as const).map((r) => (
+                  {availableResolutions.map((r) => (
                     <button
                       key={r}
                       type="button"
@@ -458,7 +473,7 @@ export default function VideoGeneration() {
               <div className="space-y-2">
                 <Label>分辨率</Label>
                 <div className="flex gap-2">
-                  {(["720p", "1080p"] as const).map((r) => (
+                  {availableResolutions.map((r) => (
                     <button
                       key={r}
                       type="button"

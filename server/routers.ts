@@ -7079,7 +7079,7 @@ export const appRouter = router({system: systemRouter,
           duration: z.number().min(1).max(8),
           toolId: z.number(),
           inputImageUrl: z.string().optional(),
-          resolution: z.enum(["720p", "1080p"]).optional(),
+          resolution: z.enum(["480p", "720p", "1080p"]).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
