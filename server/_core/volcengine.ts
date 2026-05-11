@@ -810,3 +810,147 @@ export async function querySeedanceVideoTask(
     return { status: "failed", errorMessage: message, progress: 0 };
   }
 }
+
+// ─── Veo 3 (PiAPI) ─────────────────────────────────────────────
+
+const VEO3_PIAPI_BASE = "https://api.piapi.ai/api/v1/task";
+
+export interface Veo3VideoRequest {
+  mode: "text-to-video" | "image-to-video";
+  prompt: string;
+  negativePrompt?: string;
+  aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
+  duration?: "4s" | "6s" | "8s";
+  resolution?: "720p" | "1080p";
+  generateAudio?: boolean;
+  inputImageUrl?: string;
+  /** task_type: "veo3-video" | "veo3-video-fast" */
+  taskType?: "veo3-video" | "veo3-video-fast";
+}
+
+/**
+ * 提交 Veo 3 视频生成任务（PiAPI）
+ */
+export async function submitVeo3VideoTask(
+  piApiKey: string,
+  request: Veo3VideoRequest
+): Promise<VideoSubmitResponse> {
+  const taskType = request.taskType ?? "veo3-video-fast";
+  const isI2V = request.mode === "image-to-video" && !!request.inputImageUrl;
+
+  const input: Record<string, unknown> = {
+    prompt: request.prompt || " ",
+    aspect_ratio: request.aspectRatio ?? "16:9",
+    duration: request.duration ?? "8s",
+    resolution: request.resolution ?? "720p",
+    generate_audio: request.generateAudio ?? false,
+  };
+
+  if (request.negativePrompt) {
+    input.negative_prompt = request.negativePrompt;
+  }
+
+  if (isI2V) {
+    input.image_url = request.inputImageUrl;
+    // image-to-video: aspect_ratio can be "auto"
+    if (!request.aspectRatio) input.aspect_ratio = "auto";
+  }
+
+  const body = {
+    model: "veo3",
+    task_type: taskType,
+    input,
+  };
+
+  try {
+    const resp = await fetch(VEO3_PIAPI_BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": piApiKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000),
+    });
+
+    const json = (await resp.json()) as Record<string, unknown>;
+
+    if (!resp.ok) {
+      const errMsg =
+        (json.message as string) ||
+        JSON.stringify(json).substring(0, 200);
+      throw new Error(`Veo3 API 错误 (${resp.status}): ${errMsg}`);
+    }
+
+    const data = json.data as Record<string, unknown> | undefined;
+    const taskId = data?.task_id as string | undefined;
+    if (!taskId) throw new Error("Veo3 API 未返回任务 ID");
+
+    return { taskId, status: "pending" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    return { taskId: "", status: "failed", errorMessage: message };
+  }
+}
+
+/**
+ * 查询 Veo 3 视频生成任务状态（PiAPI）
+ */
+export async function queryVeo3VideoTask(
+  piApiKey: string,
+  taskId: string
+): Promise<VideoStatusResponse> {
+  try {
+    const resp = await fetch(`${VEO3_PIAPI_BASE}/${taskId}`, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": piApiKey,
+      },
+      signal: AbortSignal.timeout(30000),
+    });
+
+    const json = (await resp.json()) as Record<string, unknown>;
+
+    if (!resp.ok) {
+      const errMsg =
+        (json.message as string) ||
+        JSON.stringify(json).substring(0, 200);
+      throw new Error(`Veo3 查询错误 (${resp.status}): ${errMsg}`);
+    }
+
+    const data = json.data as Record<string, unknown> | undefined;
+    const status = data?.status as string | undefined;
+    const output = data?.output as Record<string, unknown> | undefined;
+    const videoUrl = output?.video as string | undefined;
+    const errorObj = data?.error as Record<string, unknown> | undefined;
+    const errorMessage = errorObj?.message as string | undefined;
+
+    let mappedStatus: VideoStatusResponse["status"];
+    let progress: number;
+
+    if (status === "completed") {
+      mappedStatus = "completed";
+      progress = 100;
+    } else if (status === "failed") {
+      mappedStatus = "failed";
+      progress = 0;
+    } else if (status === "pending") {
+      mappedStatus = "pending";
+      progress = 10;
+    } else {
+      // processing / starting / retry
+      mappedStatus = "processing";
+      progress = 50;
+    }
+
+    return {
+      status: mappedStatus,
+      videoUrl,
+      progress,
+      errorMessage: mappedStatus === "failed" ? (errorMessage || "Veo3 任务失败") : undefined,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    return { status: "failed", errorMessage: message, progress: 0 };
+  }
+}

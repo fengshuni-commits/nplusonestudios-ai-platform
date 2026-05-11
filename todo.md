@@ -2620,3 +2620,8 @@
 ## 功能：AI 视频增加 480p 分辨率选项
 - [x] 前端 AI 视频工具增加 480p 选项，并根据模型（Fast 最高 720p，标准版最高 1080p）动态限制可选分辨率
 - [x] 后端 resolution 参数支持 480p 并正确传递给 Seedance API
+
+## 功能：接入 Veo 3 视频生成工具
+- [x] 调研 Veo 3 API 接入方式（PiAPI）和参数规格
+- [x] 实现后端 Veo 3 生成逻辑（submitVeo3VideoTask + queryVeo3VideoTask，支持文生视频和图生视频）
+- [x] 前端视频生成工具支持 Veo 3：时长按鈕改为 4s/6s/8s，分辨率限制为 720p/1080p，选择 Veo3 工具时自动适配

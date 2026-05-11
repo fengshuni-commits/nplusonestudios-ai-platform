@@ -9,6 +9,8 @@ import {
   submitSeedanceVideoTask,
   querySeedanceVideoTask,
   getSeedanceModelId,
+  submitVeo3VideoTask,
+  queryVeo3VideoTask,
   type VideoSubmitResponse,
   type VideoStatusResponse,
 } from "./volcengine";
@@ -54,6 +56,10 @@ export async function generateVideoWithTool(
 
   if (toolName.includes("jimeng") || toolName.includes("即梦")) {
     return generateVideoWithJimeng(input);
+  }
+
+  if (toolName.includes("veo")) {
+    return generateVideoWithVeo3(input);
   }
 
   if (toolName.includes("runway")) {
@@ -167,6 +173,10 @@ export async function queryVideoTaskStatus(
     return queryJimengVideoStatus(taskId, tool, mode);
   }
 
+  if (toolName.includes("veo")) {
+    return queryVeo3VideoStatus(taskId, tool);
+  }
+
   throw new Error(`不支持的视频生成工具: ${tool.name}`);
 }
 
@@ -192,6 +202,72 @@ async function querySeedanceVideoStatus(
   }
 
   return querySeedanceVideoTask(arkApiKey, taskId);
+}
+
+/**
+ * Veo 3 视频生成实现（PiAPI）
+ * 工具配置：apiKeyEncrypted 存储 PiAPI Key，configJson.taskType 可指定 veo3-video 或 veo3-video-fast
+ */
+async function generateVideoWithVeo3(
+  input: VideoGenerationInput
+): Promise<VideoGenerationOutput> {
+  const { decryptApiKey } = await import("./crypto");
+
+  if (!input.tool?.apiKeyEncrypted) {
+    throw new Error("Veo3 工具配置不完整（缺少 PiAPI Key）");
+  }
+
+  const piApiKey = decryptApiKey(input.tool.apiKeyEncrypted);
+  if (!piApiKey) {
+    throw new Error("无法解密 Veo3 PiAPI Key");
+  }
+
+  const taskType = (input.tool.configJson?.taskType as "veo3-video" | "veo3-video-fast") ?? "veo3-video-fast";
+
+  // Map duration number to string format
+  const durationMap: Record<number, "4s" | "6s" | "8s"> = { 4: "4s", 5: "4s", 6: "6s", 8: "8s", 10: "8s" };
+  const durationStr = durationMap[input.duration] ?? "8s";
+
+  const result: VideoSubmitResponse = await submitVeo3VideoTask(piApiKey, {
+    mode: input.mode,
+    prompt: input.prompt,
+    duration: durationStr,
+    resolution: (input.resolution as "720p" | "1080p") ?? "720p",
+    aspectRatio: "16:9",
+    generateAudio: false,
+    inputImageUrl: input.inputImageUrl,
+    taskType,
+  });
+
+  return {
+    taskId: result.taskId,
+    status: result.status,
+    errorMessage: result.errorMessage,
+  };
+}
+
+/**
+ * 查询 Veo3 任务状态
+ */
+async function queryVeo3VideoStatus(
+  taskId: string,
+  tool: {
+    apiKeyEncrypted?: string;
+    configJson?: Record<string, unknown>;
+  }
+): Promise<VideoStatusResponse> {
+  const { decryptApiKey } = await import("./crypto");
+
+  if (!tool.apiKeyEncrypted) {
+    throw new Error("Veo3 工具配置不完整（缺少 PiAPI Key）");
+  }
+
+  const piApiKey = decryptApiKey(tool.apiKeyEncrypted);
+  if (!piApiKey) {
+    throw new Error("无法解密 Veo3 PiAPI Key");
+  }
+
+  return queryVeo3VideoTask(piApiKey, taskId);
 }
 
 /**

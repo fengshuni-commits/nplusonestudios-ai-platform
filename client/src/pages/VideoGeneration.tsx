@@ -46,15 +46,27 @@ export default function VideoGeneration() {
     { enabled: !!selectedToolId }
   );
   // Determine available resolutions based on tool model name
-  // Seedance 2.0 Fast: max 720p; others (1.5 Pro, 2.0 standard): up to 1080p
+  // Seedance 2.0 Fast: max 720p; others (1.5 Pro, 2.0 standard, Veo3): up to 1080p
   const isFastModel = selectedTool ? /fast/i.test((selectedTool as any).name || "") : false;
+  const isVeo3 = selectedTool ? /veo/i.test((selectedTool as any).name || "") : false;
   const availableResolutions: Array<"480p" | "720p" | "1080p"> = isFastModel
     ? ["480p", "720p"]
+    : isVeo3
+    ? ["720p", "1080p"]
     : ["480p", "720p", "1080p"];
+  // Veo3 supports 4s/6s/8s durations; Seedance supports 5s/10s
+  const isVeo3Tool = isVeo3;
+  const availableDurations: number[] = isVeo3Tool ? [4, 6, 8] : [5, 10];
   // Auto-downgrade resolution if current selection exceeds model capability
   useEffect(() => {
     if (isFastModel && resolution === "1080p") setResolution("720p");
-  }, [isFastModel, resolution]);
+    if (isVeo3 && resolution === "480p") setResolution("720p");
+  }, [isFastModel, isVeo3, resolution]);
+  // Auto-adjust duration when switching tools
+  useEffect(() => {
+    if (isVeo3Tool && ![4, 6, 8].includes(duration)) setDuration(8);
+    if (!isVeo3Tool && ![5, 10].includes(duration)) setDuration(5);
+  }, [isVeo3Tool]);
   const [inputImageUrl, setInputImageUrl] = useState("");
   const [inputImagePreview, setInputImagePreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -346,10 +358,15 @@ export default function VideoGeneration() {
               </div>
               <div className="space-y-2">
                 <Label>视频时长 *</Label>
-                <div className="flex items-center gap-2">
-                  <input type="range" min="5" max="10" step="5" value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
-                  <span className="text-sm font-medium w-12">{duration}秒</span>
+                <div className="flex gap-2">
+                  {availableDurations.map((d) => (
+                    <button key={d} type="button" onClick={() => setDuration(d)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        duration === d
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+                      }`}>{d}秒</button>
+                  ))}
                 </div>
               </div>
               <div className="space-y-2">
@@ -464,10 +481,15 @@ export default function VideoGeneration() {
               </div>
               <div className="space-y-2">
                 <Label>视频时长 *</Label>
-                <div className="flex items-center gap-2">
-                  <input type="range" min="5" max="10" step="5" value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value))} className="flex-1" />
-                  <span className="text-sm font-medium w-12">{duration}秒</span>
+                <div className="flex gap-2">
+                  {availableDurations.map((d) => (
+                    <button key={d} type="button" onClick={() => setDuration(d)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        duration === d
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:border-foreground hover:text-foreground"
+                      }`}>{d}秒</button>
+                  ))}
                 </div>
               </div>
               <div className="space-y-2">
