@@ -2631,3 +2631,7 @@
 - [x] 后端： updateProgress 过程增加自动完成逻辑（progress=100 且 reviewerId 为空时自动设置 status='done' + completedAt）
 - [x] 后端： reviewDeliverable 审核通过时已自动设置 status='done'（原有逻辑正确）
 - [x] 前端： submitProgress 回调检查 autoCompleted 标志，自动更新 UI 状态并弹出成功提示
+
+## Bug 修复：项目状态修改保存失败
+- [x] 排查项目状态修改的后端过程（updateProject/updateStatus）和错误日志
+- [x] 修复：projects.update 和 projects.create 的 Zod 枚举加入 "paused" 选项

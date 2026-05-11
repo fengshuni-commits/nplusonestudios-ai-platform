@@ -784,7 +784,7 @@ const projectsRouter = router({
       businessGoal: z.string().optional(),
       clientProfile: z.string().optional(),
       projectOverview: z.string().optional(),
-      status: z.enum(["planning", "design", "construction", "completed", "archived"]).optional(),
+      status: z.enum(["planning", "design", "construction", "paused", "completed", "archived"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       return db.createProject({ ...input, createdBy: ctx.user.id });
@@ -801,7 +801,7 @@ const projectsRouter = router({
       businessGoal: z.string().optional(),
       clientProfile: z.string().optional(),
       projectOverview: z.string().optional(),
-      status: z.enum(["planning", "design", "construction", "completed", "archived"]).optional(),
+      status: z.enum(["planning", "design", "construction", "paused", "completed", "archived"]).optional(),
       phase: z.enum(["concept", "schematic", "development", "documentation", "bidding", "construction", "closeout"]).optional(),
     }))
     .mutation(async ({ input }) => {
