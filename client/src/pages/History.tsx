@@ -1975,13 +1975,31 @@ export default function HistoryPage() {
                     复制
                   </Button>
                 )}
-                {displayContentItem?.outputUrl && displayContentItem?.module !== 'layout_design' && (
+                {displayContentItem?.module === 'ai_video' ? (() => {
+                  const vParams = typeof displayContentItem.inputParams === 'string'
+                    ? JSON.parse(displayContentItem.inputParams || '{}')
+                    : (displayContentItem.inputParams as Record<string, unknown> | null) || {};
+                  const videoDownloadUrl = (vParams as any)?.videoUrl as string | undefined;
+                  return videoDownloadUrl ? (
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = videoDownloadUrl;
+                        a.download = `${displayContentItem.title || 'video'}.mp4`;
+                        a.target = '_blank';
+                        a.click();
+                      }}>
+                      <Download className="h-3 w-3 mr-1" />
+                      下载视频
+                    </Button>
+                  ) : null;
+                })() : displayContentItem?.outputUrl && displayContentItem?.module !== 'layout_design' ? (
                   <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
                     onClick={() => window.open(displayContentItem.outputUrl, "_blank")}>
                     <Download className="h-3 w-3 mr-1" />
                     下载
                   </Button>
-                )}
+                ) : null}
 
               </div>
             </div>

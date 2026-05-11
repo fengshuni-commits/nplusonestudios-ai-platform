@@ -2604,3 +2604,6 @@
 - [x] 修复 routers.ts video.getStatus：视频完成时把 permanentVideoUrl 传给 syncVideoProxyEntry
 - [x] 修复 routers.ts history.getById：ai_video 记录若 inputParams 无 videoUrl，自动从 video_history 表补查
 - [x] 修复 History.tsx：新增 VideoDetailView 组件，优先读 inputParams.videoUrl 播放视频，outputUrl 仅作封面图
+
+## Bug 修复：AI 视频历史记录下载按钮打开的是图片而非视频
+- [x] 修复 History.tsx 弹窗下载按钮：ai_video 模块从 inputParams.videoUrl 获取视频地址，下载 .mp4 文件
