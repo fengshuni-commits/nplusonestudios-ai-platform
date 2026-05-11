@@ -41,6 +41,7 @@ import { downloadImageAsBase64, searchPexelsImages } from "./scraper";
 import { pdfToImages } from "./pdfToImages";
 import { designBriefsRouter } from "./designBriefsRouter";
 import { directorRouter } from "./directorRouter";
+import { presentationProjectsRouter } from "./presentationRouter";
 
 // ─── Meeting Minutes Prompts Router ─────────────────────────────────────────
 const meetingMinutesPromptsRouter = router({
@@ -7398,6 +7399,7 @@ export const appRouter = router({system: systemRouter,
   meetingMinutesPrompts: meetingMinutesPromptsRouter,
   designBriefPrompts: designBriefPromptsRouter,
   director: directorRouter,
+  presentationProjects: presentationProjectsRouter,
 });
 export type AppRouter = typeof appRouter;
 

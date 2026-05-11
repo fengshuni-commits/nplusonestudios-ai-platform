@@ -2649,3 +2649,47 @@
 ## Bug 修复：演示文稿文件转换图片位置偏移（二次修复）
 - [x] 分析 pptxgenjs sizing:cover 对竖版图片的处理方式（cover 会居中裁切，导致内容偏移）
 - [x] 修复：单张图片页面用精确英寸尺寸（x:0, y:0, w:slideW, h:slideH）直接展开，不使用 sizing 属性，彻底消除偏移和裁切
+
+## 重构：演示文稿板块全新工作流
+### 工作流：项目描述 → AI提示词生成 → 图文排版生成 → 可编辑PPT导出
+
+**数据库设计**
+- [ ] 新增 presentation_projects 表（id, userId, projectId, title, description, designThoughts, targetPages, status, createdAt）
+- [ ] 新增 presentation_assets 表（id, presentationId, fileUrl, fileName, mimeType, order）
+- [ ] 新增 presentation_slides 表（id, presentationId, order, prompt, imageUrl, status, textElements JSON, regenerateCount）
+- [ ] 执行数据库迁移
+
+**后端**
+- [ ] presentations.create / get / list / delete CRUD
+- [ ] presentations.generatePrompts：AI 根据描述+素材生成每页提示词
+- [ ] presentations.updateSlidePrompt：用户编辑单页提示词
+- [ ] presentations.generateSlideImage：根据提示词+素材生成整页图文排版图片（含文字坐标存储）
+- [ ] presentations.updateSlideText：用户修改文字后 inpainting 局部重绘
+- [ ] presentations.regenerateSlide：整页重新生成
+- [ ] presentations.exportPptx：读取精确坐标生成可编辑 PPTX
+
+**前端**
+- [ ] 演示文稿主页：项目列表 + 新建入口
+- [ ] Step 1 输入页：项目描述、设计思路、目标页数、素材上传
+- [ ] Step 2 提示词审核页：每页提示词卡片，可编辑/增删页面
+- [ ] Step 3 图文排版生成页：每页生成预览，文字编辑、局部重绘、整页重生成
+- [ ] Step 4 导出页：下载 PPTX + 整合现有文件转换功能入口
+
+## 演示文稿重构进度更新
+- [x] 新增 presentation_projects 表
+- [x] 新增 presentation_assets 表
+- [x] 新增 presentation_slides 表
+- [x] 执行数据库迁移（0056_white_dreadnoughts.sql）
+- [ ] 后端 presentationRouter.ts：CRUD + AI 生成流程
+- [ ] 前端 Presentation.tsx：4步骤向导 UI
+
+## 演示文稿模块重构（2026-05-11）
+- [x] 新建 presentationRouter.ts — 全新 AI 驱动工作流后端（create/list/get/delete/generatePrompts/updateSlidePrompt/addSlide/deleteSlide/generateAllSlides/generateSlideImage/regenerateSlide/exportPptx）
+- [x] 注册 presentationProjectsRouter 到 appRouter
+- [x] 新建 4 步向导 UI（Presentation.tsx）
+  - [x] Step 1: 项目信息输入（标题、描述、设计思路、目标页数、素材上传、项目导入）
+  - [x] Step 2: AI 提示词审核（每页可编辑、可增删、可重新生成全部）
+  - [x] Step 3: 图像生成预览（实时轮询、单页重新生成、进度条）
+  - [x] Step 4: 导出 PPTX（含文件转换入口）
+- [x] 保留文件转换功能（作为弹窗，可从列表页和 Step 4 访问）
+- [x] 编写 vitest 测试（5 项全部通过）

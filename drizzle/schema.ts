@@ -953,3 +953,51 @@ export const directorWorkspaceItems = mysqlTable("director_workspace_items", {
 });
 export type DirectorWorkspaceItem = typeof directorWorkspaceItems.$inferSelect;
 export type InsertDirectorWorkspaceItem = typeof directorWorkspaceItems.$inferInsert;
+
+// ─── Presentation Projects (演示文稿项目) ─────────────────
+export const presentationProjects = mysqlTable("presentation_projects", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId"), // optional link to main project
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  designThoughts: text("designThoughts"),
+  targetPages: int("targetPages").default(10),
+  status: mysqlEnum("status", ["draft", "prompts_ready", "generating", "review", "done"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PresentationProject = typeof presentationProjects.$inferSelect;
+export type InsertPresentationProject = typeof presentationProjects.$inferInsert;
+
+// ─── Presentation Assets (演示文稿素材) ──────────────────
+export const presentationAssets = mysqlTable("presentation_assets", {
+  id: int("id").autoincrement().primaryKey(),
+  presentationId: int("presentationId").notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  fileName: varchar("fileName", { length: 256 }),
+  mimeType: varchar("mimeType", { length: 64 }),
+  sortOrder: int("sortOrder").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PresentationAsset = typeof presentationAssets.$inferSelect;
+export type InsertPresentationAsset = typeof presentationAssets.$inferInsert;
+
+// ─── Presentation Slides (演示文稿幻灯片) ────────────────
+export const presentationSlides = mysqlTable("presentation_slides", {
+  id: int("id").autoincrement().primaryKey(),
+  presentationId: int("presentationId").notNull(),
+  slideOrder: int("slideOrder").notNull(),
+  prompt: text("prompt"), // AI-generated or user-edited prompt for this slide
+  imageUrl: text("imageUrl"), // generated full-page image
+  status: mysqlEnum("status", ["pending", "generating", "done", "error"]).default("pending").notNull(),
+  // textElements stores array of {text, x, y, w, h, fontSize, color, fontFamily, bold, align}
+  // coordinates are percentages (0-100) relative to slide dimensions
+  textElements: json("textElements"),
+  regenerateCount: int("regenerateCount").default(0),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PresentationSlide = typeof presentationSlides.$inferSelect;
+export type InsertPresentationSlide = typeof presentationSlides.$inferInsert;

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Presentation,
+import {
+  Presentation as PresentationIcon,
   ImageIcon,
   X,
   Download,
@@ -22,6 +23,17 @@ import { Presentation,
   Upload,
   FileText,
   CheckCircle2,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Edit3,
+  ArrowLeft,
+  ArrowRight,
+  LayoutGrid,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -42,8 +54,18 @@ import { FeedbackButtons } from "@/components/FeedbackButtons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type GenerationStage = "structuring" | "generating_images" | "building_pptx" | "done" | "pdf_converting" | "inpainting" | "";
+type WizardStep = 1 | 2 | 3 | 4;
 
+type UploadedAsset = {
+  file: File;
+  previewUrl: string;
+  uploadedUrl?: string;
+  uploading?: boolean;
+  error?: string;
+};
+
+// File convert mode types (preserved from old implementation)
+type GenerationStage = "structuring" | "generating_images" | "building_pptx" | "done" | "pdf_converting" | "inpainting" | "";
 const STAGE_LABELS: Record<GenerationStage, string> = {
   structuring: "AI 正在规划幻灯片结构…",
   generating_images: "正在获取配图…",
@@ -53,283 +75,544 @@ const STAGE_LABELS: Record<GenerationStage, string> = {
   inpainting: "AI 正在处理图片…",
   "": "正在初始化…",
 };
-
-// ─── Image Upload Preview ─────────────────────────────────────────────────────
-
-type UploadedImage = {
+type UploadedFile = {
   file: File;
   previewUrl: string;
   uploadedUrl?: string;
   uploading?: boolean;
   error?: string;
+  fileType: "pdf" | "image";
 };
 
-// ─── History Item ─────────────────────────────────────────────────────────────
+// ─── Step Indicator ───────────────────────────────────────────────────────────
 
-type HistoryItem = {
-  id: number;
-  title: string;
-  summary: string | null;
-  outputUrl: string | null;
-  createdAt: Date;
-  modelName: string | null;
-};
+function StepIndicator({ current, total }: { current: WizardStep; total: number }) {
+  const steps = [
+    { n: 1, label: "项目信息" },
+    { n: 2, label: "提示词审核" },
+    { n: 3, label: "生成预览" },
+    { n: 4, label: "导出" },
+  ];
+  return (
+    <div className="flex items-center gap-0 mb-6">
+      {steps.map((s, i) => (
+        <div key={s.n} className="flex items-center flex-1">
+          <div className="flex flex-col items-center flex-1">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 transition-colors ${
+              current === s.n
+                ? "bg-primary border-primary text-primary-foreground"
+                : current > s.n
+                ? "bg-primary/20 border-primary/40 text-primary"
+                : "bg-background border-border text-muted-foreground"
+            }`}>
+              {current > s.n ? <CheckCircle2 className="h-4 w-4" /> : s.n}
+            </div>
+            <span className={`text-[10px] mt-1 font-medium ${current === s.n ? "text-primary" : "text-muted-foreground"}`}>
+              {s.label}
+            </span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className={`h-0.5 flex-1 mx-1 mb-4 transition-colors ${current > s.n ? "bg-primary/40" : "bg-border"}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Slide Card (Step 2 - Prompt Review) ─────────────────────────────────────
+
+function SlidePromptCard({
+  slide,
+  index,
+  total,
+  onUpdate,
+  onDelete,
+}: {
+  slide: { id: number; slideOrder: number; prompt: string | null; status: string };
+  index: number;
+  total: number;
+  onUpdate: (id: number, prompt: string) => void;
+  onDelete: (id: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [localPrompt, setLocalPrompt] = useState(slide.prompt ?? "");
+
+  useEffect(() => {
+    setLocalPrompt(slide.prompt ?? "");
+  }, [slide.prompt]);
+
+  const handleSave = () => {
+    onUpdate(slide.id, localPrompt);
+    setEditing(false);
+  };
+
+  return (
+    <Card className="py-0 gap-0">
+      <CardContent className="p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            第 {index + 1} 页 / 共 {total} 页
+          </Badge>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => setEditing(!editing)}
+            >
+              <Edit3 className="h-3 w-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 hover:text-destructive"
+              onClick={() => onDelete(slide.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+
+        {editing ? (
+          <div className="space-y-2">
+            <Textarea
+              value={localPrompt}
+              onChange={e => setLocalPrompt(e.target.value)}
+              rows={4}
+              className="text-xs resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button size="sm" className="h-7 text-xs" onClick={handleSave}>保存</Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                setLocalPrompt(slide.prompt ?? "");
+                setEditing(false);
+              }}>取消</Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">
+            {slide.prompt || <span className="italic">（无提示词）</span>}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Slide Preview Card (Step 3 - Generation Review) ─────────────────────────
+
+function SlidePreviewCard({
+  slide,
+  index,
+  total,
+  onRegenerate,
+  onView,
+}: {
+  slide: { id: number; slideOrder: number; prompt: string | null; imageUrl: string | null; status: string; errorMessage?: string | null };
+  index: number;
+  total: number;
+  onRegenerate: (id: number) => void;
+  onView: (slide: any) => void;
+}) {
+  const isGenerating = slide.status === "generating";
+  const isDone = slide.status === "done";
+  const isError = slide.status === "error";
+
+  return (
+    <Card className="py-0 gap-0 overflow-hidden">
+      {/* Image area */}
+      <div
+        className="relative bg-muted aspect-video cursor-pointer group"
+        onClick={() => isDone && onView(slide)}
+      >
+        {isDone && slide.imageUrl ? (
+          <img
+            src={slide.imageUrl}
+            alt={`Slide ${index + 1}`}
+            className="w-full h-full object-cover"
+          />
+        ) : isGenerating ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-xs text-muted-foreground">生成中…</span>
+          </div>
+        ) : isError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3">
+            <AlertCircle className="h-6 w-6 text-destructive" />
+            <span className="text-xs text-destructive text-center line-clamp-2">
+              {slide.errorMessage || "生成失败"}
+            </span>
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs text-muted-foreground">待生成</span>
+          </div>
+        )}
+
+        {/* Overlay on hover */}
+        {isDone && (
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <Eye className="h-6 w-6 text-white" />
+          </div>
+        )}
+
+        {/* Slide number badge */}
+        <div className="absolute top-1.5 left-1.5">
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-black/60 text-white border-0">
+            {index + 1} / {total}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <CardContent className="p-2">
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-[10px] text-muted-foreground truncate flex-1">
+            {slide.prompt?.split("\n")[0] ?? ""}
+          </p>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 shrink-0"
+            onClick={() => onRegenerate(slide.id)}
+            disabled={isGenerating}
+            title="重新生成"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PresentationPage() {
+  // ── Wizard state ──────────────────────────────────────────────────────────
+  const [step, setStep] = useState<WizardStep>(1);
+  const [activePresentationId, setActivePresentationId] = useState<number | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Form state
+  // ── Step 1: Input form ────────────────────────────────────────────────────
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [description, setDescription] = useState("");
+  const [designThoughts, setDesignThoughts] = useState("");
+  const [targetPages, setTargetPages] = useState(10);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [uploadedAssets, setUploadedAssets] = useState<UploadedAsset[]>([]);
+  const assetInputRef = useRef<HTMLInputElement>(null);
 
-  // AI tool selection
-  const [selectedToolId, setSelectedToolId] = useState<number | undefined>(undefined);
+  // ── Step 2: Prompt review ─────────────────────────────────────────────────
+  const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);
 
-  // Layout pack selection
-  const [selectedLayoutPackId, setSelectedLayoutPackId] = useState<number | undefined>(undefined);
-  const { data: layoutPacks = [] } = trpc.layoutPacks.list.useQuery();
-  const doneLayoutPacks = (layoutPacks as any[]).filter((p: any) => p.status === "done");
+  // ── Step 3: Image generation ──────────────────────────────────────────────
+  const [imageToolId, setImageToolId] = useState<number | undefined>(undefined);
+  const [planToolId, setPlanToolId] = useState<number | undefined>(undefined);
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [viewingSlide, setViewingSlide] = useState<any | null>(null);
+  const [pollingActive, setPollingActive] = useState(false);
 
-  // Generation state
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState(0);
-  const [generationStage, setGenerationStage] = useState<GenerationStage>("");
-  const [pdfCurrentPage, setPdfCurrentPage] = useState<number | null>(null);
-  const [pdfTotalPages, setPdfTotalPages] = useState<number | null>(null);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [resultTitle, setResultTitle] = useState<string | null>(null);
-  const [resultSlideCount, setResultSlideCount] = useState<number | null>(null);
-  const [resultSlides, setResultSlides] = useState<Array<{ title: string; subtitle: string; bullets: string[]; layout: string; imageUrl?: string; styleGuide?: any }>>([]); 
-  const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [resultPageImages, setResultPageImages] = useState<string[]>([]);
-  const [resultPageSummaries, setResultPageSummaries] = useState<Array<{ texts: string[]; imageCount: number }>>([]);
-  const [isFileConvertResult, setIsFileConvertResult] = useState(false);
-  const [previewPageIndex, setPreviewPageIndex] = useState(0);
-  const [resultPreviewImages, setResultPreviewImages] = useState<string[]>([]); // Real PPTX slide screenshots
-  const [resultHistoryId, setResultHistoryId] = useState<number | undefined>();
+  // ── Step 4: Export ────────────────────────────────────────────────────────
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
 
-  // History
-  const [historyExpanded, setHistoryExpanded] = useState(false);
-
-  // Project import dialog
-  const [showProjectImport, setShowProjectImport] = useState(false);
-
-  // Queries
-  const { data: projects } = trpc.projects.list.useQuery();
-  const { data: historyData, refetch: refetchHistory } = trpc.history.list.useQuery(
-    { module: "presentation", limit: 10 },
-    { enabled: historyExpanded }
-  );
-  const uploadMutation = trpc.upload.file.useMutation();
-  const generateMutation = trpc.presentation.generate.useMutation();
-  const convertFromFileMutation = trpc.presentation.convertFromFile.useMutation();
-
-  // ── File convert mode state ──────────────────────────────────────────────
-  type ConvertMode = "text" | "file";
-  const [convertMode, setConvertMode] = useState<ConvertMode>("file");
-
-  type UploadedFile = {
-    file: File;
-    previewUrl: string; // for images; empty for PDF
-    uploadedUrl?: string;
-    uploading?: boolean;
-    error?: string;
-    fileType: "pdf" | "image";
-  };
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  // ── File convert mode (preserved legacy) ─────────────────────────────────
+  const [showFileConvert, setShowFileConvert] = useState(false);
   const [convertTitle, setConvertTitle] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [inpaintToolId, setInpaintToolId] = useState<number | undefined>(undefined);
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertJobId, setConvertJobId] = useState<string | null>(null);
+  const [convertProgress, setConvertProgress] = useState(0);
+  const [convertStage, setConvertStage] = useState<GenerationStage>("");
+  const [convertResultUrl, setConvertResultUrl] = useState<string | null>(null);
+  const [convertError, setConvertError] = useState<string | null>(null);
   const fileConvertInputRef = useRef<HTMLInputElement>(null);
 
-  // Poll job status
-  const { data: jobStatus } = trpc.presentation.status.useQuery(
-    { jobId: jobId! },
+  // ── Project list dialog ───────────────────────────────────────────────────
+  const [showProjectImport, setShowProjectImport] = useState(false);
+
+  // ── Presentation list ─────────────────────────────────────────────────────
+  const [showList, setShowList] = useState(true);
+
+  // ── Queries & Mutations ───────────────────────────────────────────────────
+  const { data: projects } = trpc.projects.list.useQuery();
+  const uploadMutation = trpc.upload.file.useMutation();
+  const createMutation = trpc.presentationProjects.create.useMutation();
+  const generatePromptsMutation = trpc.presentationProjects.generatePrompts.useMutation();
+  const updateSlidePromptMutation = trpc.presentationProjects.updateSlidePrompt.useMutation();
+  const addSlideMutation = trpc.presentationProjects.addSlide.useMutation();
+  const deleteSlideMutation = trpc.presentationProjects.deleteSlide.useMutation();
+  const generateAllMutation = trpc.presentationProjects.generateAllSlides.useMutation();
+  const generateOneMutation = trpc.presentationProjects.generateSlideImage.useMutation();
+  const regenerateMutation = trpc.presentationProjects.regenerateSlide.useMutation();
+  const exportPptxMutation = trpc.presentationProjects.exportPptx.useMutation();
+  const deletePresentationMutation = trpc.presentationProjects.delete.useMutation();
+  const convertFromFileMutation = trpc.presentation.convertFromFile.useMutation();
+
+  const { data: presentationList, refetch: refetchList } = trpc.presentationProjects.list.useQuery();
+  const { data: presentationData, refetch: refetchPresentation } = trpc.presentationProjects.get.useQuery(
+    { id: activePresentationId! },
+    { enabled: !!activePresentationId }
+  );
+
+  // Poll for slide generation status
+  const { data: polledData } = trpc.presentationProjects.get.useQuery(
+    { id: activePresentationId! },
     {
-      enabled: !!jobId && isGenerating,
-      refetchInterval: isGenerating ? 2000 : false,
+      enabled: !!activePresentationId && pollingActive,
+      refetchInterval: pollingActive ? 3000 : false,
     }
+  );
+
+  // Check if any slides are still generating
+  useEffect(() => {
+    if (!polledData) return;
+    const slides = polledData.slides ?? [];
+    const anyGenerating = slides.some((s: any) => s.status === "generating" || s.status === "pending");
+    if (!anyGenerating) {
+      setPollingActive(false);
+      setIsGeneratingAll(false);
+      refetchPresentation();
+    }
+  }, [polledData, refetchPresentation]);
+
+  // Poll for file convert job
+  const { data: convertJobStatus } = trpc.presentation.status.useQuery(
+    { jobId: convertJobId! },
+    { enabled: !!convertJobId && isConverting, refetchInterval: isConverting ? 2000 : false }
   );
 
   useEffect(() => {
-    if (!jobStatus) return;
-    if (jobStatus.status === "processing") {
-      setGenerationProgress(jobStatus.progress || 0);
-      setGenerationStage((jobStatus.stage as GenerationStage) || "");
-      // Update PDF page progress if available
-      if (jobStatus.stage === "pdf_converting" && (jobStatus as any).totalPages) {
-        setPdfCurrentPage((jobStatus as any).currentPage ?? null);
-        setPdfTotalPages((jobStatus as any).totalPages ?? null);
-      } else {
-        setPdfCurrentPage(null);
-        setPdfTotalPages(null);
-      }
-    } else if (jobStatus.status === "done") {
-      setIsGenerating(false);
-      setGenerationProgress(100);
-      setGenerationStage("done");
-      setResultUrl(jobStatus.url || null);
-      setResultTitle(jobStatus.title || null);
-      setResultSlideCount(jobStatus.slideCount || null);
-      setResultSlides((jobStatus.slides as any) || []);
-      setResultHistoryId((jobStatus as any).historyId ?? undefined);
-      setPreviewSlideIndex(0);
-      // Save real PPTX preview images (LibreOffice-rendered screenshots)
-      const previewImgs = (jobStatus as any).previewImages as string[] | undefined;
-      if (previewImgs && previewImgs.length > 0) {
-        setResultPreviewImages(previewImgs);
-        setPreviewSlideIndex(0);
-      } else {
-        setResultPreviewImages([]);
-      }
-      // Save page images and summaries for file convert comparison panel
-      const pageImgs = (jobStatus as any).pageImages as string[] | undefined;
-      const pageSums = (jobStatus as any).pageSummaries as Array<{ texts: string[]; imageCount: number }> | undefined;
-      if (pageImgs && pageImgs.length > 0) {
-        setResultPageImages(pageImgs);
-        setResultPageSummaries(pageSums || []);
-        setIsFileConvertResult(true);
-        setPreviewPageIndex(0);
-      } else {
-        setResultPageImages([]);
-        setResultPageSummaries([]);
-        setIsFileConvertResult(false);
-      }
-      setJobId(null);
-      refetchHistory();
-      toast.success(`演示文稿生成完成，共 ${jobStatus.slideCount} 页幻灯片`);
-    } else if (jobStatus.status === "failed") {
-      setIsGenerating(false);
-      setGenerationError(jobStatus.error || "生成失败，请重试");
-      setJobId(null);
-      toast.error(`生成失败：${jobStatus.error}`);
+    if (!convertJobStatus) return;
+    if (convertJobStatus.status === "processing") {
+      setConvertProgress(convertJobStatus.progress || 0);
+      setConvertStage((convertJobStatus.stage as GenerationStage) || "");
+    } else if (convertJobStatus.status === "done") {
+      setIsConverting(false);
+      setConvertProgress(100);
+      setConvertStage("done");
+      setConvertResultUrl(convertJobStatus.url || null);
+      setConvertJobId(null);
+      toast.success("文件转换完成");
+    } else if (convertJobStatus.status === "failed") {
+      setIsConverting(false);
+      setConvertError(convertJobStatus.error || "转换失败");
+      setConvertJobId(null);
+      toast.error(`转换失败：${convertJobStatus.error}`);
     }
-  }, [jobStatus]);
+  }, [convertJobStatus]);
 
-  // Handle image file selection
-  const handleFileSelect = useCallback(async (files: FileList | null) => {
+  // ── Asset upload ──────────────────────────────────────────────────────────
+  const handleAssetSelect = useCallback(async (files: FileList | null) => {
     if (!files) return;
-    const newImages: UploadedImage[] = [];
-    for (let i = 0; i < Math.min(files.length, 8 - uploadedImages.length); i++) {
+    const newAssets: UploadedAsset[] = [];
+    for (let i = 0; i < Math.min(files.length, 10 - uploadedAssets.length); i++) {
       const file = files[i];
       if (!file.type.startsWith("image/")) continue;
       const previewUrl = URL.createObjectURL(file);
-      newImages.push({ file, previewUrl, uploading: true });
+      newAssets.push({ file, previewUrl, uploading: true });
     }
-    if (newImages.length === 0) return;
-    setUploadedImages(prev => [...prev, ...newImages]);
+    if (newAssets.length === 0) return;
+    setUploadedAssets(prev => [...prev, ...newAssets]);
 
-    // Upload each image
-    for (const img of newImages) {
+    for (const asset of newAssets) {
       try {
         const reader = new FileReader();
         const base64 = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = reject;
-          reader.readAsDataURL(img.file);
+          reader.readAsDataURL(asset.file);
         });
         const result = await uploadMutation.mutateAsync({
-          fileName: img.file.name,
-          contentType: img.file.type,
+          fileName: asset.file.name,
+          contentType: asset.file.type,
           fileData: base64.split(",")[1] || base64,
-          folder: "presentation-images",
+          folder: "presentation-assets",
         });
-        setUploadedImages(prev =>
+        setUploadedAssets(prev =>
           prev.map(p =>
-            p.previewUrl === img.previewUrl
+            p.previewUrl === asset.previewUrl
               ? { ...p, uploading: false, uploadedUrl: result.url }
               : p
           )
         );
-      } catch (err) {
-        setUploadedImages(prev =>
+      } catch {
+        setUploadedAssets(prev =>
           prev.map(p =>
-            p.previewUrl === img.previewUrl
+            p.previewUrl === asset.previewUrl
               ? { ...p, uploading: false, error: "上传失败" }
               : p
           )
         );
       }
     }
-  }, [uploadedImages.length, uploadMutation]);
+  }, [uploadedAssets.length, uploadMutation]);
 
-  const removeImage = (previewUrl: string) => {
-    setUploadedImages(prev => {
+  const removeAsset = (previewUrl: string) => {
+    setUploadedAssets(prev => {
       const img = prev.find(p => p.previewUrl === previewUrl);
       if (img) URL.revokeObjectURL(img.previewUrl);
       return prev.filter(p => p.previewUrl !== previewUrl);
     });
   };
 
-  // Import project info
+  // ── Import project info ───────────────────────────────────────────────────
   const handleImportProject = () => {
     if (!selectedProjectId) return;
     const project = projects?.find(p => String(p.id) === selectedProjectId);
     if (!project) return;
     const parts: string[] = [];
     if (project.name) parts.push(`项目名称：${project.name}`);
-    if (project.description) parts.push(`项目概况：${project.description}`);
     if (project.clientName) parts.push(`委托方：${project.clientName}`);
+    if (project.description) parts.push(`项目概况：${project.description}`);
     if (project.projectOverview) parts.push(`项目概况：${project.projectOverview}`);
-    setContent(prev => (prev ? prev + "\n\n" : "") + parts.join("\n"));
+    if (project.businessGoal) parts.push(`业务目标：${project.businessGoal}`);
+    setDescription(prev => (prev ? prev + "\n\n" : "") + parts.join("\n"));
     if (!title && project.name) setTitle(project.name);
     setShowProjectImport(false);
     toast.success("项目信息已导入");
   };
 
-  // Generate
-  const handleGenerate = async () => {
-    if (!title.trim()) {
-      toast.error("请填写演示标题");
-      return;
-    }
-    if (!content.trim()) {
-      toast.error("请填写演示内容描述");
-      return;
-    }
-    const pendingUploads = uploadedImages.filter(img => img.uploading);
-    if (pendingUploads.length > 0) {
-      toast.error("图片上传中，请稍候");
-      return;
-    }
+  // ── Step 1 → Step 2: Create presentation and generate prompts ─────────────
+  const handleCreateAndGeneratePrompts = async () => {
+    if (!title.trim()) { toast.error("请填写演示标题"); return; }
+    if (!description.trim()) { toast.error("请填写项目描述"); return; }
+    const pendingUploads = uploadedAssets.filter(a => a.uploading);
+    if (pendingUploads.length > 0) { toast.error("素材上传中，请稍候"); return; }
 
-    setIsGenerating(true);
-    setGenerationProgress(5);
-    setGenerationStage("structuring");
-    setGenerationError(null);
-    setResultUrl(null);
-    setResultTitle(null);
-    setResultSlideCount(null);
-
+    setIsGeneratingPrompts(true);
     try {
-      const imageUrls = uploadedImages
-        .filter(img => img.uploadedUrl)
-        .map(img => img.uploadedUrl!);
+      const assetUrls = uploadedAssets
+        .filter(a => a.uploadedUrl)
+        .map(a => ({ url: a.uploadedUrl!, fileName: a.file.name, mimeType: a.file.type }));
 
-      const result = await generateMutation.mutateAsync({
+      const created = await createMutation.mutateAsync({
         title: title.trim(),
-        content: content.trim(),
-        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
-        toolId: selectedToolId,
-        layoutPackId: selectedLayoutPackId,
+        description: description.trim(),
+        designThoughts: designThoughts.trim() || undefined,
+        targetPages,
+        assetUrls,
       });
-      setJobId(result.jobId);
+
+      setActivePresentationId(created.id);
+
+      // Generate prompts
+      await generatePromptsMutation.mutateAsync({ id: created.id });
+      await refetchPresentation();
+      setStep(2);
+      toast.success("AI 已生成幻灯片提示词，请检查并编辑");
     } catch (err: any) {
-      setIsGenerating(false);
-      setGenerationError(err?.message || "启动生成失败");
-      toast.error(`生成失败：${err?.message}`);
+      toast.error(`创建失败：${err?.message}`);
+    } finally {
+      setIsGeneratingPrompts(false);
     }
   };
 
-  const canGenerate = title.trim().length > 0 && content.trim().length > 0 && !isGenerating;
+  // ── Step 2 → Step 3: Start image generation ───────────────────────────────
+  const handleStartGeneration = async () => {
+    if (!activePresentationId) return;
+    setIsGeneratingAll(true);
+    setPollingActive(true);
+    try {
+      await generateAllMutation.mutateAsync({
+        id: activePresentationId,
+        imageToolId,
+        planToolId,
+      });
+      setStep(3);
+      toast.success("图像生成已启动，请等待完成");
+    } catch (err: any) {
+      setIsGeneratingAll(false);
+      setPollingActive(false);
+      toast.error(`启动生成失败：${err?.message}`);
+    }
+  };
 
-  // Handle file selection for convert mode
+  // ── Slide prompt update ───────────────────────────────────────────────────
+  const handleUpdateSlidePrompt = async (slideId: number, prompt: string) => {
+    if (!activePresentationId) return;
+    try {
+      await updateSlidePromptMutation.mutateAsync({
+        presentationId: activePresentationId,
+        slideId,
+        prompt,
+      });
+      await refetchPresentation();
+      toast.success("提示词已更新");
+    } catch (err: any) {
+      toast.error(`更新失败：${err?.message}`);
+    }
+  };
+
+  // ── Add slide ─────────────────────────────────────────────────────────────
+  const handleAddSlide = async () => {
+    if (!activePresentationId) return;
+    const slides = presentationData?.slides ?? [];
+    const lastOrder = slides.length > 0 ? slides[slides.length - 1].slideOrder : -1;
+    try {
+      await addSlideMutation.mutateAsync({
+        presentationId: activePresentationId,
+        prompt: "新增幻灯片",
+        insertAfterOrder: lastOrder,
+      });
+      await refetchPresentation();
+    } catch (err: any) {
+      toast.error(`添加失败：${err?.message}`);
+    }
+  };
+
+  // ── Delete slide ──────────────────────────────────────────────────────────
+  const handleDeleteSlide = async (slideId: number) => {
+    if (!activePresentationId) return;
+    try {
+      await deleteSlideMutation.mutateAsync({
+        presentationId: activePresentationId,
+        slideId,
+      });
+      await refetchPresentation();
+      toast.success("已删除");
+    } catch (err: any) {
+      toast.error(`删除失败：${err?.message}`);
+    }
+  };
+
+  // ── Regenerate single slide ───────────────────────────────────────────────
+  const handleRegenerateSlide = async (slideId: number) => {
+    if (!activePresentationId) return;
+    try {
+      await regenerateMutation.mutateAsync({
+        presentationId: activePresentationId,
+        slideId,
+        imageToolId,
+        planToolId,
+      });
+      setPollingActive(true);
+      toast.success("重新生成已启动");
+    } catch (err: any) {
+      toast.error(`重新生成失败：${err?.message}`);
+    }
+  };
+
+  // ── Export PPTX ───────────────────────────────────────────────────────────
+  const handleExportPptx = async () => {
+    if (!activePresentationId) return;
+    setIsExporting(true);
+    setExportUrl(null);
+    try {
+      const result = await exportPptxMutation.mutateAsync({ id: activePresentationId });
+      setExportUrl(result.url);
+      toast.success("PPTX 已生成，点击下载");
+    } catch (err: any) {
+      toast.error(`导出失败：${err?.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // ── File convert handlers (preserved) ────────────────────────────────────
   const handleFileConvertSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const newFiles: UploadedFile[] = [];
@@ -338,14 +621,11 @@ export default function PresentationPage() {
       const isPdf = file.type === "application/pdf";
       const isImage = file.type.startsWith("image/");
       if (!isPdf && !isImage) continue;
-      // Limit: 1 PDF or up to 20 images
       if (isPdf && uploadedFiles.some(f => f.fileType === "pdf")) {
-        toast.error("每次只能上传一个 PDF 文件");
-        continue;
+        toast.error("每次只能上传一个 PDF 文件"); continue;
       }
       if (uploadedFiles.length + newFiles.length >= 20) {
-        toast.error("最多支持 20 张图片");
-        break;
+        toast.error("最多支持 20 张图片"); break;
       }
       const previewUrl = isImage ? URL.createObjectURL(file) : "";
       newFiles.push({ file, previewUrl, uploading: true, fileType: isPdf ? "pdf" : "image" });
@@ -353,7 +633,6 @@ export default function PresentationPage() {
     if (newFiles.length === 0) return;
     setUploadedFiles(prev => [...prev, ...newFiles]);
 
-    // Upload each file
     for (const uf of newFiles) {
       try {
         const reader = new FileReader();
@@ -363,356 +642,247 @@ export default function PresentationPage() {
           reader.readAsDataURL(uf.file);
         });
         const result = await uploadMutation.mutateAsync({
-          fileName: uf.file.name,
-          contentType: uf.file.type,
-          fileData: base64.split(",")[1] || base64,
-          folder: "presentation-convert",
+          fileName: uf.file.name, contentType: uf.file.type,
+          fileData: base64.split(",")[1] || base64, folder: "presentation-convert",
         });
         setUploadedFiles(prev =>
           prev.map(p =>
             p.previewUrl === uf.previewUrl && p.file.name === uf.file.name
-              ? { ...p, uploading: false, uploadedUrl: result.url }
-              : p
+              ? { ...p, uploading: false, uploadedUrl: result.url } : p
           )
         );
       } catch {
         setUploadedFiles(prev =>
           prev.map(p =>
             p.previewUrl === uf.previewUrl && p.file.name === uf.file.name
-              ? { ...p, uploading: false, error: "上传失败" }
-              : p
+              ? { ...p, uploading: false, error: "上传失败" } : p
           )
         );
       }
     }
   }, [uploadedFiles, uploadMutation]);
 
-  const removeConvertFile = (idx: number) => {
-    setUploadedFiles(prev => {
-      const copy = [...prev];
-      const removed = copy.splice(idx, 1)[0];
-      if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl);
-      return copy;
-    });
-  };
-
   const handleConvertFromFile = async () => {
     const readyFiles = uploadedFiles.filter(f => f.uploadedUrl);
-    if (readyFiles.length === 0) {
-      toast.error("请先上传 PDF 或图片文件");
-      return;
-    }
-    const pendingUploads = uploadedFiles.filter(f => f.uploading);
-    if (pendingUploads.length > 0) {
-      toast.error("文件上传中，请稍候");
-      return;
-    }
-
+    if (readyFiles.length === 0) { toast.error("请先上传文件"); return; }
+    if (uploadedFiles.some(f => f.uploading)) { toast.error("文件上传中，请稍候"); return; }
     const hasPdf = readyFiles.some(f => f.fileType === "pdf");
     const fileType: "pdf" | "images" = hasPdf ? "pdf" : "images";
-    const fileUrls = readyFiles.map(f => f.uploadedUrl!);
-
-    setIsGenerating(true);
-    setGenerationProgress(5);
-    setGenerationStage("structuring");
-    setGenerationError(null);
-    setResultUrl(null);
-    setResultTitle(null);
-    setResultSlideCount(null);
-    setResultSlides([]);
-
+    setIsConverting(true);
+    setConvertProgress(5);
+    setConvertStage("structuring");
+    setConvertError(null);
+    setConvertResultUrl(null);
     try {
       const result = await convertFromFileMutation.mutateAsync({
-        fileUrls,
+        fileUrls: readyFiles.map(f => f.uploadedUrl!),
         fileType,
         title: convertTitle.trim() || undefined,
-        inpaintToolId: inpaintToolId,
+        inpaintToolId,
       });
-      setJobId(result.jobId);
+      setConvertJobId(result.jobId);
     } catch (err: any) {
-      setIsGenerating(false);
-      setGenerationError(err?.message || "启动转换失败");
+      setIsConverting(false);
+      setConvertError(err?.message || "启动转换失败");
       toast.error(`转换失败：${err?.message}`);
     }
   };
 
-  const canConvert = uploadedFiles.some(f => f.uploadedUrl) && !isGenerating;
+  // ── Open existing presentation ────────────────────────────────────────────
+  const handleOpenPresentation = async (id: number) => {
+    setActivePresentationId(id);
+    setShowList(false);
+    // Determine which step to resume at
+    const pres = (presentationList as any[])?.find((p: any) => p.id === id);
+    if (pres) {
+      if (pres.status === "draft") setStep(1);
+      else if (pres.status === "prompts_ready") setStep(2);
+      else if (pres.status === "generating" || pres.status === "review") setStep(3);
+      else if (pres.status === "done") setStep(4);
+      else setStep(2);
+    }
+  };
 
-  return (
-    <div className="pb-6 space-y-4">
-      {/* Tool selector row */}
-      <div className="flex items-center justify-end mb-2">
-        <AiToolSelector
-          capability="document"
-          value={selectedToolId}
-          onChange={setSelectedToolId}
-          label="AI 模型"
-          showBuiltIn={true}
-        />
-      </div>
+  // ── Delete presentation ───────────────────────────────────────────────────
+  const handleDeletePresentation = async (id: number) => {
+    try {
+      await deletePresentationMutation.mutateAsync({ id });
+      refetchList();
+      toast.success("已删除");
+    } catch (err: any) {
+      toast.error(`删除失败：${err?.message}`);
+    }
+  };
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Input Panel */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card className="py-0 gap-0">
-            <CardContent className="space-y-4 px-4 py-4">
-              {/* Mode Tab */}
-              <div className="flex rounded-lg border border-border overflow-hidden">
-                <button
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors ${
-                    convertMode === "file"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:bg-secondary/50"
-                  }`}
-                  onClick={() => setConvertMode("file")}
-                  disabled={isGenerating}
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  文件转换
-                </button>
-                <button
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors ${
-                    convertMode === "text"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:bg-secondary/50"
-                  }`}
-                  onClick={() => setConvertMode("text")}
-                  disabled={isGenerating}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  AI 创作
-                </button>
+  // ── Start new presentation ────────────────────────────────────────────────
+  const handleNewPresentation = () => {
+    setActivePresentationId(null);
+    setTitle("");
+    setDescription("");
+    setDesignThoughts("");
+    setTargetPages(10);
+    setUploadedAssets([]);
+    setExportUrl(null);
+    setStep(1);
+    setShowList(false);
+  };
+
+  // ── Current slides ────────────────────────────────────────────────────────
+  const slides = (presentationData?.slides ?? []) as any[];
+  const assets = (presentationData?.assets ?? []) as any[];
+  const doneSlides = slides.filter((s: any) => s.status === "done");
+  const generatingSlides = slides.filter((s: any) => s.status === "generating" || s.status === "pending");
+
+  // ── Render: List View ─────────────────────────────────────────────────────
+  if (showList) {
+    return (
+      <div className="pb-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">演示文稿</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">AI 驱动的全流程演示文稿生成</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFileConvert(true)}
+            >
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              文件转换
+            </Button>
+            <Button size="sm" onClick={handleNewPresentation}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              新建演示文稿
+            </Button>
+          </div>
+        </div>
+
+        {/* Presentation list */}
+        {(presentationList as any[] | undefined)?.length === 0 && (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <PresentationIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">还没有演示文稿</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-4">点击「新建演示文稿」开始创作</p>
+              <Button size="sm" onClick={handleNewPresentation}>
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                新建演示文稿
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(presentationList as any[] | undefined)?.map((pres: any) => (
+            <Card
+              key={pres.id}
+              className="py-0 gap-0 overflow-hidden cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => handleOpenPresentation(pres.id)}
+            >
+              {/* Cover image */}
+              <div className="relative aspect-video bg-muted">
+                {pres.coverImage ? (
+                  <img src={pres.coverImage} alt={pres.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <PresentationIcon className="h-8 w-8 text-muted-foreground/40" />
+                  </div>
+                )}
+                {/* Status badge */}
+                <div className="absolute top-2 right-2">
+                  <Badge
+                    variant="secondary"
+                    className={`text-[10px] px-1.5 py-0 ${
+                      pres.status === "done" ? "bg-green-500/20 text-green-700" :
+                      pres.status === "generating" ? "bg-primary/20 text-primary" :
+                      "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {pres.status === "draft" ? "草稿" :
+                     pres.status === "prompts_ready" ? "待生成" :
+                     pres.status === "generating" ? "生成中" :
+                     pres.status === "review" ? "审核中" :
+                     pres.status === "done" ? "已完成" : pres.status}
+                  </Badge>
+                </div>
               </div>
 
-              {/* ── FILE CONVERT MODE ── */}
-              {convertMode === "file" && (
-                <>
-                  {/* Title (optional) */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="convert-title" className="text-xs font-medium">
-                      文稿标题（可选）
-                    </Label>
-                    <Input
-                      id="convert-title"
-                      placeholder="如不填则自动使用文件名"
-                      value={convertTitle}
-                      onChange={e => setConvertTitle(e.target.value)}
-                      disabled={isGenerating}
-                      className="text-sm"
-                    />
-                  </div>
-
-                  {/* File upload zone */}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">
-                      上传文件 <span className="text-destructive">*</span>
-                    </Label>
-                    <div
-                      className="border-2 border-dashed border-border rounded-lg p-5 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                      onClick={() => fileConvertInputRef.current?.click()}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={e => {
-                        e.preventDefault();
-                        handleFileConvertSelect(e.dataTransfer.files);
-                      }}
-                    >
-                      <Upload className="h-7 w-7 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm font-medium text-foreground mb-0.5">点击或拖拽上传</p>
-                      <p className="text-xs text-muted-foreground">支持 PDF（自动识别每页）或多张图片</p>
-                    </div>
-                    <input
-                      ref={fileConvertInputRef}
-                      type="file"
-                      accept="application/pdf,image/*"
-                      multiple
-                      className="hidden"
-                      onChange={e => handleFileConvertSelect(e.target.files)}
-                    />
-
-                    {/* File list */}
-                    {uploadedFiles.length > 0 && (
-                      <div className="space-y-1.5 max-h-52 overflow-y-auto">
-                        {uploadedFiles.map((uf, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 p-2 rounded-md border border-border bg-secondary/20"
-                          >
-                            {uf.fileType === "pdf" ? (
-                              <FileText className="h-4 w-4 text-primary shrink-0" />
-                            ) : uf.previewUrl ? (
-                              <img src={uf.previewUrl} alt="" className="h-8 w-8 object-cover rounded shrink-0" />
-                            ) : (
-                              <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                            )}
-                            <span className="text-xs text-foreground truncate flex-1">{uf.file.name}</span>
-                            {uf.uploading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
-                            {uf.uploadedUrl && !uf.uploading && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
-                            {uf.error && <span className="text-xs text-destructive shrink-0">失败</span>}
-                            {!uf.uploading && (
-                              <button
-                                className="shrink-0 hover:text-destructive transition-colors"
-                                onClick={() => removeConvertFile(idx)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Inpainting tool selector */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">文字去除 AI（可选）</Label>
-                    <AiToolSelector
-                      capability={["image", "image_generation"]}
-                      value={inpaintToolId}
-                      onChange={setInpaintToolId}
-                      label="选择 AI 工具去除图片中的文字"
-                      showBuiltIn={false}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      选择后，AI 将自动去除图片中的文字并生成独立可编辑文本框；不选则直接叠加文本框
+              <CardContent className="p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium truncate">{pres.title}</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {pres.slideCount} 页 · {pres.doneCount} 张已生成
                     </p>
                   </div>
-
-                  {/* Info */}
-                  <div className="rounded-md bg-secondary/30 p-3 text-xs text-muted-foreground space-y-1">
-                    <p className="font-medium text-foreground">转换说明</p>
-                    <p>• 文字内容将提取为可编辑文本框</p>
-                    <p>• 选择文字去除 AI 后，原图中的文字将被 AI 修复去除</p>
-                    <p>• 多张独立图片分别嵌入，可单独移动和缩放</p>
-                    <p>• 单张复合插画作为整体图片嵌入</p>
-                    <p>• 处理时间约 1–3 分钟（每页需 AI 分析）</p>
-                  </div>
-
-                  {/* Convert button */}
                   <Button
-                    className="w-full"
-                    onClick={handleConvertFromFile}
-                    disabled={!canConvert}
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0 hover:text-destructive"
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleDeletePresentation(pres.id);
+                    }}
                   >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        转换中…
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        开始转换
-                      </>
-                    )}
+                    <Trash2 className="h-3 w-3" />
                   </Button>
-                </>
-              )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-              {/* ── TEXT / AI CREATE MODE ── */}
-              {convertMode === "text" && (
-                <>
-              {/* Project import */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                onClick={() => setShowProjectImport(true)}
-              >
-                <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
-                导入项目信息（可选）
-              </Button>
-
-              {/* Title */}
+        {/* File Convert Dialog */}
+        <Dialog open={showFileConvert} onOpenChange={setShowFileConvert}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>文件转换为 PPT</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="pres-title" className="text-xs font-medium">
-                  演示标题 <span className="text-destructive">*</span>
-                </Label>
+                <Label className="text-xs">文稿标题（可选）</Label>
                 <Input
-                  id="pres-title"
-                  placeholder="如：JPT 总部办公空间设计方案汇报"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  disabled={isGenerating}
+                  placeholder="如不填则自动使用文件名"
+                  value={convertTitle}
+                  onChange={e => setConvertTitle(e.target.value)}
+                  disabled={isConverting}
                   className="text-sm"
                 />
               </div>
 
-              {/* Content */}
-              <div className="space-y-1.5">
-                <Label htmlFor="pres-content" className="text-xs font-medium">
-                  演示内容描述 <span className="text-destructive">*</span>
-                </Label>
-                <Textarea
-                  id="pres-content"
-                  placeholder="描述演示文稿的主要内容，如：设计理念、空间布局方案、材料选择、项目亮点等。内容越详细，生成质量越高。"
-                  value={content}
-                  onChange={e => setContent(e.target.value)}
-                  disabled={isGenerating}
-                  rows={8}
-                  className="text-sm resize-none"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {content.length} 字 · 建议 100 字以上
-                </p>
-              </div>
-
-              {/* Image upload */}
               <div className="space-y-2">
-                <Label className="text-xs font-medium">
-                  项目图片（可选，最多 8 张）
-                </Label>
+                <Label className="text-xs">上传文件</Label>
                 <div
-                  className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-border rounded-lg p-5 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => fileConvertInputRef.current?.click()}
                   onDragOver={e => e.preventDefault()}
-                  onDrop={e => {
-                    e.preventDefault();
-                    handleFileSelect(e.dataTransfer.files);
-                  }}
+                  onDrop={e => { e.preventDefault(); handleFileConvertSelect(e.dataTransfer.files); }}
                 >
-                  <ImageIcon className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
-                  <p className="text-xs text-muted-foreground">
-                    点击或拖拽上传图片
-                  </p>
+                  <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">支持 PDF 或多张图片</p>
                 </div>
                 <input
-                  ref={fileInputRef}
+                  ref={fileConvertInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="application/pdf,image/*"
                   multiple
                   className="hidden"
-                  onChange={e => handleFileSelect(e.target.files)}
+                  onChange={e => handleFileConvertSelect(e.target.files)}
                 />
-
-                {/* Image previews */}
-                {uploadedImages.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {uploadedImages.map(img => (
-                      <div
-                        key={img.previewUrl}
-                        className="relative aspect-square rounded-md overflow-hidden border border-border bg-muted"
-                      >
-                        <img
-                          src={img.previewUrl}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                        {img.uploading && (
-                          <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
-                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                          </div>
-                        )}
-                        {img.error && (
-                          <div className="absolute inset-0 bg-destructive/20 flex items-center justify-center">
-                            <span className="text-xs text-destructive">失败</span>
-                          </div>
-                        )}
-                        {!img.uploading && !img.error && (
-                          <button
-                            className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5 hover:bg-background"
-                            onClick={() => removeImage(img.previewUrl)}
-                          >
-                            <X className="h-3 w-3 text-foreground" />
+                {uploadedFiles.length > 0 && (
+                  <div className="space-y-1 max-h-36 overflow-y-auto">
+                    {uploadedFiles.map((uf, idx) => (
+                      <div key={idx} className="flex items-center gap-2 p-1.5 rounded border border-border text-xs">
+                        {uf.fileType === "pdf" ? <FileText className="h-3.5 w-3.5 text-primary" /> :
+                          uf.previewUrl ? <img src={uf.previewUrl} alt="" className="h-6 w-6 object-cover rounded" /> :
+                          <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                        <span className="truncate flex-1">{uf.file.name}</span>
+                        {uf.uploading && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                        {uf.uploadedUrl && !uf.uploading && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                        {!uf.uploading && (
+                          <button onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))}>
+                            <X className="h-3 w-3" />
                           </button>
                         )}
                       </div>
@@ -721,748 +891,549 @@ export default function PresentationPage() {
                 )}
               </div>
 
-              {/* Layout Pack Selector */}
-              {doneLayoutPacks.length > 0 && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">版式包（可选）</Label>
-                  <Select
-                    value={selectedLayoutPackId ? String(selectedLayoutPackId) : "none"}
-                    onValueChange={(v) => setSelectedLayoutPackId(v === "none" ? undefined : Number(v))}
-                    disabled={isGenerating}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="使用默认版式" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">默认版式（N+1 STUDIOS 标准）</SelectItem>
-                      {doneLayoutPacks.map((pack: any) => (
-                        <SelectItem key={pack.id} value={String(pack.id)}>
-                          {pack.name}
-                          {pack.styleGuide?.styleKeywords?.length > 0 && (
-                            <span className="text-muted-foreground ml-1 text-[10px]">
-                              · {pack.styleGuide.styleKeywords.slice(0, 2).join("、")}
-                            </span>
-                          )}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedLayoutPackId && (
-                    <p className="text-[10px] text-muted-foreground">
-                      AI 将参考该版式包的设计风格生成 PPT
-                    </p>
-                  )}
+              <div className="space-y-1.5">
+                <Label className="text-xs">文字去除 AI（可选）</Label>
+                <AiToolSelector
+                  capability={["image", "image_generation"]}
+                  value={inpaintToolId}
+                  onChange={setInpaintToolId}
+                  label="选择 AI 工具去除图片中的文字"
+                  showBuiltIn={false}
+                />
+              </div>
+
+              {isConverting && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <span>{STAGE_LABELS[convertStage]}</span>
+                  </div>
+                  <Progress value={convertProgress} className="h-1.5" />
                 </div>
               )}
 
+              {convertResultUrl && (
+                <div className="flex items-center gap-2 p-2 rounded bg-green-50 border border-green-200">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span className="text-xs text-green-700 flex-1">转换完成</span>
+                  <Button size="sm" className="h-7 text-xs" asChild>
+                    <a href={convertResultUrl} download>
+                      <Download className="h-3 w-3 mr-1" />
+                      下载
+                    </a>
+                  </Button>
+                </div>
+              )}
 
-              {/* Generate button */}
+              {convertError && (
+                <p className="text-xs text-destructive">{convertError}</p>
+              )}
+
               <Button
                 className="w-full"
-                onClick={handleGenerate}
-                disabled={!canGenerate}
+                onClick={handleConvertFromFile}
+                disabled={isConverting || !uploadedFiles.some(f => f.uploadedUrl)}
               >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    生成中…
-                  </>
+                {isConverting ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />转换中…</>
                 ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    生成演示文稿
-                  </>
+                  <><Upload className="h-4 w-4 mr-2" />开始转换</>
                 )}
               </Button>
-                </>
-              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right: Result Panel */}
-        <div className="lg:col-span-3 space-y-4">
-          {/* Generation progress */}
-          {isGenerating && (
-            <Card>
-              <CardContent className="pt-6 pb-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-sm font-medium">
-                    {generationStage === "pdf_converting" && pdfTotalPages && pdfTotalPages > 0
-                      ? pdfCurrentPage && pdfCurrentPage > 0
-                        ? `正在解析第 ${pdfCurrentPage} / ${pdfTotalPages} 页…`
-                        : `正在读取 PDF（共 ${pdfTotalPages} 页）…`
-                      : STAGE_LABELS[generationStage]}
-                  </span>
-                </div>
-                <Progress value={generationProgress} className="h-2" />
-                {/* Per-page mini progress bar for PDF conversion */}
-                {generationStage === "pdf_converting" && pdfTotalPages && pdfTotalPages > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex gap-0.5 flex-wrap">
-                      {Array.from({ length: Math.min(pdfTotalPages, 40) }).map((_, i) => (
-                        <div
-                          key={i}
-                          className={`h-1.5 rounded-sm transition-colors ${
-                            pdfCurrentPage !== null && i < pdfCurrentPage
-                              ? "bg-primary"
-                              : "bg-muted-foreground/20"
-                          }`}
-                          style={{ width: `calc((100% - ${Math.min(pdfTotalPages, 40) - 1} * 2px) / ${Math.min(pdfTotalPages, 40)})` }}
-                        />
-                      ))}
-                    </div>
-                    {pdfTotalPages > 40 && (
-                      <p className="text-[10px] text-muted-foreground">
-                        仅显示前 40 页进度块，共 {pdfTotalPages} 页
-                      </p>
-                    )}
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {generationStage === "pdf_converting"
-                    ? "正在将 PDF 逐页转换为图片，大文件可能需要较长时间"
-                    : "生成通常需要 1–3 分钟，请耐心等待"}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Error */}
-          {generationError && !isGenerating && (
-            <Card className="border-destructive/50">
-              <CardContent className="pt-5 pb-4">
-                <p className="text-sm text-destructive">{generationError}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Result */}
-          {resultUrl && !isGenerating && (
-            <Card className="border-primary/30 bg-primary/5">
-              <CardContent className="pt-6 pb-5 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Presentation className="h-5 w-5 text-primary" />
-                      <span className="font-medium text-foreground">{resultTitle}</span>
-                    </div>
-                    {resultSlideCount && (
-                      <p className="text-sm text-muted-foreground">
-                        共 {resultSlideCount} 页幻灯片
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {resultHistoryId && (
-                      <FeedbackButtons module="presentation" historyId={resultHistoryId} compact />
-                    )}
-                    <Button asChild size="sm">
-                      <a href={resultUrl} download target="_blank" rel="noopener noreferrer">
-                        <FileDown className="h-4 w-4 mr-1.5" />
-                        下载 PPT
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-                <Separator />
-                {/* ── Real PPTX Slide Preview (LibreOffice-rendered screenshots) ── */}
-                {resultPreviewImages.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>
-                      <p className="text-xs text-muted-foreground">{previewSlideIndex + 1} / {resultPreviewImages.length} 页</p>
-                    </div>
-                    {/* Slide image */}
-                    <div className="relative w-full rounded-lg overflow-hidden border border-border bg-muted/20" style={{ aspectRatio: '16/9' }}>
-                      <img
-                        src={resultPreviewImages[previewSlideIndex]}
-                        alt={`幻灯片第 ${previewSlideIndex + 1} 页`}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    {/* Thumbnail strip */}
-                    <div className="flex gap-1.5 overflow-x-auto pb-1">
-                      {resultPreviewImages.map((imgUrl, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setPreviewSlideIndex(i)}
-                          className={`shrink-0 rounded overflow-hidden border-2 transition-all ${
-                            i === previewSlideIndex ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-80'
-                          }`}
-                          style={{ width: 72, height: 40.5 }}
-                        >
-                          <img src={imgUrl} alt={`第 ${i + 1} 页`} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                    {/* Navigation buttons */}
-                    <div className="flex items-center justify-center gap-2">
-                      <Button
-                        variant="outline" size="sm"
-                        disabled={previewSlideIndex === 0}
-                        onClick={() => setPreviewSlideIndex(i => Math.max(0, i - 1))}
-                      >
-                        上一页
-                      </Button>
-                      <span className="text-xs text-muted-foreground">{previewSlideIndex + 1} / {resultPreviewImages.length}</span>
-                      <Button
-                        variant="outline" size="sm"
-                        disabled={previewSlideIndex === resultPreviewImages.length - 1}
-                        onClick={() => setPreviewSlideIndex(i => Math.min(resultPreviewImages.length - 1, i + 1))}
-                      >
-                        下一页
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {/* File Convert: Original vs Recognized comparison (collapsible) */}
-                {isFileConvertResult && resultPageImages.length > 0 && resultPreviewImages.length > 0 && (
-                  <details className="group">
-                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors list-none flex items-center gap-1.5 py-1">
-                      <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-                      查看原始页面与识别内容对比
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-muted-foreground">原始页面 vs 识别内容</p>
-                        <p className="text-xs text-muted-foreground">{previewPageIndex + 1} / {resultPageImages.length} 页</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] text-muted-foreground font-medium">原始页面</p>
-                          <div className="rounded-lg overflow-hidden border border-border bg-muted/30" style={{ aspectRatio: '4/3', maxHeight: '240px' }}>
-                            <img src={resultPageImages[previewPageIndex]} alt={`第 ${previewPageIndex + 1} 页原图`} className="w-full h-full object-contain" />
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] text-muted-foreground font-medium">识别内容</p>
-                          <div className="rounded-lg border border-border bg-card p-3 space-y-2" style={{ minHeight: '120px' }}>
-                            {resultPageSummaries[previewPageIndex]?.texts.length > 0 ? (
-                              <div className="space-y-1.5">
-                                {resultPageSummaries[previewPageIndex].texts.map((t, ti) => (
-                                  <div key={ti} className="flex items-start gap-1.5">
-                                    <span className="text-primary mt-0.5 flex-shrink-0">·</span>
-                                    <span className="text-xs text-foreground leading-snug">{t}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground italic">本页无独立文字元素</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button variant="outline" size="sm" disabled={previewPageIndex === 0} onClick={() => setPreviewPageIndex(i => Math.max(0, i - 1))}>上一页</Button>
-                        <div className="flex gap-1">
-                          {resultPageImages.map((_, i) => (
-                            <button key={i} onClick={() => setPreviewPageIndex(i)}
-                              className={`h-1.5 rounded-full transition-all ${i === previewPageIndex ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/40'}`} />
-                          ))}
-                        </div>
-                        <Button variant="outline" size="sm" disabled={previewPageIndex === resultPageImages.length - 1} onClick={() => setPreviewPageIndex(i => Math.min(resultPageImages.length - 1, i + 1))}>下一页</Button>
-                      </div>
-                    </div>
-                  </details>
-                )}
-                {/* Fallback: AI-generated slide canvas (shown only if no real preview images yet) */}
-                {!isFileConvertResult && resultPreviewImages.length === 0 && resultSlides.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>
-                      <p className="text-xs text-muted-foreground">{previewSlideIndex + 1} / {resultSlides.length}</p>
-                    </div>
-                    {/* Slide canvas */}
-                    <div className="relative w-full rounded-lg overflow-hidden border border-border" style={{ aspectRatio: '16/9' }}>
-                      {(() => {
-                        const slide = resultSlides[previewSlideIndex];
-                        if (!slide) return null;
-                        const layout = slide.layout;
-
-                        // Dynamic colors from layout pack styleGuide
-                        const sg = slide.styleGuide;
-                        const cp = sg?.colorPalette || {};
-                        const hex = (v: string | undefined, fallback: string) => v ? v.replace(/^#/, '') : fallback;
-                        const PC = {
-                          charcoal: '#' + hex(cp.background, '1A1A2E'),
-                          warmGray: '#' + hex(cp.secondary, 'F5F0EB'),
-                          cream: '#' + hex(cp.background, 'FAF8F5'),
-                          copper: '#' + hex(cp.accent || cp.primary, 'B87333'),
-                          copperLight: '#' + hex(cp.primary, 'D4956B'),
-                          text: '#' + hex(cp.text, '2C2C2C'),
-                          textLight: '#' + hex(cp.text, '6B6560'),
-                          white: '#FFFFFF',
-                          divider: '#D4CFC8',
-                        };
-                        // For dark tone, swap bg colors
-                        if (sg?.tone === 'dark' && cp.background) {
-                          PC.charcoal = '#' + hex(cp.background, '1A1A2E');
-                          PC.warmGray = '#' + hex(cp.secondary || cp.background, '2D2D3F');
-                          PC.cream = '#' + hex(cp.secondary || cp.background, '2D2D3F');
-                          PC.text = '#' + hex(cp.text, 'E8E4DF');
-                          PC.textLight = '#' + hex(cp.text, 'A09890');
-                        } else if (sg?.tone === 'light' && cp.background) {
-                          PC.charcoal = '#' + hex(cp.secondary, '2C2C2C');
-                          PC.warmGray = '#' + hex(cp.background, 'F5F0EB');
-                          PC.cream = '#' + hex(cp.background, 'FAF8F5');
-                        }
-
-                        // ── cover ──────────────────────────────────────────
-                        if (layout === 'cover') return (
-                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.charcoal }}>
-                            {slide.imageUrl && (
-                              <>
-                                <img src={slide.imageUrl} alt="" className="absolute right-0 top-0 h-full w-1/2 object-cover" />
-                                <div className="absolute right-0 top-0 h-full w-[52%]" style={{ background: `linear-gradient(to right, ${PC.charcoal}, transparent)` }} />
-                              </>
-                            )}
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="absolute left-[8%] top-1/2 -translate-y-1/2 w-[50%] z-10">
-                              <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: PC.copper }} />
-                              <div className="pl-5">
-                                <h1 className="font-bold text-3xl leading-tight mb-3" style={{ color: PC.white }}>{slide.title}</h1>
-                                <p className="text-base mb-5" style={{ color: PC.copperLight }}>{slide.subtitle || '演示文稿'}</p>
-                                <div className="h-[2px] w-20 mb-4" style={{ backgroundColor: PC.copper }} />
-                                <p className="font-bold text-sm tracking-widest" style={{ color: PC.copper }}>N+1 STUDIOS</p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-
-                        // ── toc ──────────────────────────────────────────
-                        if (layout === 'toc') return (
-                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.cream }}>
-                            <div className="absolute left-0 top-0 bottom-0 w-[5px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="pl-10 pt-8 pr-8 w-full">
-                              <p className="text-xs font-bold tracking-[0.2em] mb-1" style={{ color: PC.copper }}>目录</p>
-                              <h2 className="font-bold text-xl mb-5" style={{ color: PC.text }}>{slide.title}</h2>
-                              <div className="space-y-3">
-                                {slide.bullets.map((b, bi) => (
-                                  <div key={bi} className="flex items-center gap-3">
-                                    <span className="font-bold text-lg w-7 flex-shrink-0" style={{ color: PC.copper }}>{String(bi + 1).padStart(2, '0')}</span>
-                                    <span className="text-sm" style={{ color: PC.text }}>{b}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        );
-
-                        // ── section_intro ──────────────────────────
-                        if (layout === 'section_intro') return (
-                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.warmGray }}>
-                            {slide.imageUrl && (
-                              <>
-                                <img src={slide.imageUrl} alt="" className="absolute right-0 top-0 h-full w-2/5 object-cover" />
-                                <div className="absolute right-0 top-0 h-full w-[45%]" style={{ background: `linear-gradient(to right, ${PC.warmGray}, transparent)` }} />
-                              </>
-                            )}
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="pl-10 pt-10 w-3/5 z-10">
-                              <h2 className="font-bold text-2xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
-                              {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.textLight }}>{slide.subtitle}</p>}
-                              <div className="h-[2px] w-14 mb-4" style={{ backgroundColor: PC.copper }} />
-                              <ul className="space-y-2">
-                                {slide.bullets.map((b, bi) => (
-                                  <li key={bi} className="flex items-start gap-2 text-xs" style={{ color: PC.text }}>
-                                    <span className="mt-1" style={{ color: PC.copper }}>—</span><span>{b}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        );
-
-                        // ── case_study ─────────────────────────────────
-                        if (layout === 'case_study') return (
-                          <div className="absolute inset-0 flex" style={{ backgroundColor: PC.cream }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            {slide.imageUrl ? (
-                              <>
-                                <div className="w-1/2 p-6 flex flex-col justify-start">
-                                  <h2 className="font-bold text-lg mb-1" style={{ color: PC.text }}>{slide.title}</h2>
-                                  {slide.subtitle && <p className="text-xs italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
-                                  <div className="h-[1px] mb-3" style={{ backgroundColor: PC.divider }} />
-                                  <ul className="space-y-2">
-                                    {slide.bullets.map((b, bi) => (
-                                      <li key={bi} className="flex items-start gap-2 text-xs" style={{ color: PC.text }}>
-                                        <span className="mt-0.5" style={{ color: PC.copper }}>▪</span><span>{b}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                                <div className="w-1/2 overflow-hidden">
-                                  <img src={slide.imageUrl} alt="" className="w-full h-full object-cover rounded-l-lg" />
-                                </div>
-                              </>
-                            ) : (
-                              <div className="p-8 w-full">
-                                <h2 className="font-bold text-xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
-                                {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
-                                <div className="h-[1px] mb-4" style={{ backgroundColor: PC.divider }} />
-                                <ul className="space-y-2.5">
-                                  {slide.bullets.map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.text }}>
-                                      <span className="mt-0.5" style={{ color: PC.copper }}>▪</span><span>{b}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        );
-
-                        // ── insight ──────────────────────────────────────────
-                        if (layout === 'insight') return (
-                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.warmGray }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            {slide.imageUrl ? (
-                              <>
-                                <div className="h-[52%] overflow-hidden">
-                                  <img src={slide.imageUrl} alt="" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="p-5 flex-1">
-                                  <h2 className="font-bold text-base mb-1" style={{ color: PC.text }}>{slide.title}</h2>
-                                  <div className="h-[2px] w-10 mb-2" style={{ backgroundColor: PC.copper }} />
-                                  <ul className="flex flex-wrap gap-x-4 gap-y-1">
-                                    {slide.bullets.map((b, bi) => (
-                                      <li key={bi} className="flex items-start gap-1.5 text-xs" style={{ color: PC.text }}>
-                                        <span style={{ color: PC.copper }}>▸</span><span>{b}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="p-8 flex flex-col justify-center h-full">
-                                <h2 className="font-bold text-2xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
-                                {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
-                                <div className="h-[2px] w-14 mb-4" style={{ backgroundColor: PC.copper }} />
-                                <ul className="space-y-2">
-                                  {slide.bullets.map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.text }}>
-                                      <span style={{ color: PC.copper }}>▸</span><span>{b}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        );
-
-                        // ── quote ──────────────────────────────────────────
-                        if (layout === 'quote') return (
-                          <div className="absolute inset-0 flex items-center" style={{ backgroundColor: PC.charcoal }}>
-                            {slide.imageUrl && (
-                              <>
-                                <img src={slide.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                                <div className="absolute inset-0" style={{ backgroundColor: `${PC.charcoal}B3` }} />
-                              </>
-                            )}
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="absolute left-[7%] top-[15%] bottom-[15%] w-[5px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="relative z-10 pl-16 pr-10">
-                              <div className="text-6xl font-bold leading-none mb-2 opacity-80" style={{ color: PC.copper }}>&ldquo;</div>
-                              <h2 className="font-bold text-2xl leading-relaxed mb-4" style={{ color: PC.white }}>{slide.title}</h2>
-                              {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
-                              {slide.bullets[0] && (
-                                <>
-                                  <div className="h-[1px] w-24 mb-3" style={{ backgroundColor: `${PC.copper}80` }} />
-                                  <p className="text-xs" style={{ color: PC.textLight }}>{slide.bullets[0]}</p>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-
-                        // ── comparison ─────────────────────────────────────
-                        if (layout === 'comparison') return (
-                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.cream }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="px-6 pt-4 pb-2 text-center">
-                              <h2 className="font-bold text-lg" style={{ color: PC.text }}>{slide.title}</h2>
-                              {slide.subtitle && <p className="text-xs italic" style={{ color: PC.textLight }}>{slide.subtitle}</p>}
-                            </div>
-                            <div className="flex flex-1 gap-0 px-4 pb-4">
-                              {/* Left */}
-                              <div className="flex-1 flex flex-col">
-                                <div className="text-white text-sm font-bold text-center py-1.5 rounded-t mb-2" style={{ backgroundColor: PC.copper }}>
-                                  {slide.bullets[0] || '方案 A'}
-                                </div>
-                                <ul className="space-y-1.5 flex-1">
-                                  {slide.bullets.slice(1, Math.ceil(slide.bullets.length / 2) + 1).map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-1.5 text-xs" style={{ color: PC.text }}>
-                                      <span className="mt-0.5" style={{ color: PC.copper }}>▸</span><span>{b}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                              {/* Divider */}
-                              <div className="w-[2px] mx-3 self-stretch" style={{ backgroundColor: PC.copper }} />
-                              {/* Right */}
-                              <div className="flex-1 flex flex-col">
-                                <div className="text-white text-sm font-bold text-center py-1.5 rounded-t mb-2" style={{ backgroundColor: PC.charcoal }}>
-                                  {slide.bullets[Math.ceil(slide.bullets.length / 2)] || '方案 B'}
-                                </div>
-                                <ul className="space-y-1.5 flex-1">
-                                  {slide.bullets.slice(Math.ceil(slide.bullets.length / 2) + 1).map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-1.5 text-xs" style={{ color: PC.text }}>
-                                      <span className="mt-0.5" style={{ color: PC.charcoal }}>▸</span><span>{b}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </div>
-                          </div>
-                        );
-
-                        // ── timeline ──────────────────────────────────────────
-                        if (layout === 'timeline') return (
-                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.charcoal }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="px-8 pt-5 pb-3">
-                              <h2 className="font-bold text-lg" style={{ color: PC.white }}>{slide.title}</h2>
-                              {slide.subtitle && <p className="text-xs italic" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
-                            </div>
-                            {/* Timeline */}
-                            <div className="flex-1 flex items-center px-6 pb-4">
-                              <div className="relative w-full">
-                                <div className="absolute top-1/2 left-0 right-0 h-[3px] -translate-y-1/2" style={{ backgroundColor: PC.copper }} />
-                                <div className="flex justify-around">
-                                  {slide.bullets.slice(0, 5).map((b, bi) => {
-                                    const parts = b.split(' — ');
-                                    const label = parts[0] || '';
-                                    const desc = parts[1] || b;
-                                    return (
-                                      <div key={bi} className="flex flex-col items-center gap-2 w-1/5">
-                                        <p className="text-xs font-bold text-center" style={{ color: PC.copper }}>{label}</p>
-                                        <div className="h-3 w-3 rounded-full z-10 flex-shrink-0" style={{ backgroundColor: PC.copper }} />
-                                        <p className="text-[10px] text-center leading-tight" style={{ color: PC.textLight }}>{desc}</p>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-
-                        // ── data_highlight ─────────────────────────────────
-                        if (layout === 'data_highlight') return (
-                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.charcoal }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="px-8 pt-5">
-                              <h2 className="font-bold text-lg" style={{ color: PC.white }}>{slide.title}</h2>
-                              {slide.subtitle && <p className="text-xs italic" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
-                              <div className="h-[1px] mt-2" style={{ backgroundColor: `${PC.copper}66` }} />
-                            </div>
-                            <div className="flex-1 flex items-center justify-center px-8 pb-4">
-                              <div className={`grid gap-4 w-full ${slide.bullets.length <= 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
-                                {slide.bullets.slice(0, 4).map((b, bi) => {
-                                  const parts = b.split(' — ');
-                                  const num = parts[0] || '';
-                                  const desc = parts[1] || b;
-                                  return (
-                                    <div key={bi} className="text-center">
-                                      <div className="font-bold text-4xl leading-none mb-1" style={{ color: PC.copper }}>{num}</div>
-                                      <div className="text-xs" style={{ color: PC.textLight }}>{desc}</div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        );
-
-                        // ── summary ──────────────────────────────────────────
-                        if (layout === 'summary') return (
-                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.charcoal }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="flex-1 flex flex-col justify-center px-12">
-                              <div className="absolute left-[8%] top-[12%] bottom-[20%] w-[3px]" style={{ backgroundColor: PC.copper }} />
-                              <div className="pl-6">
-                                <h2 className="font-bold text-2xl mb-2" style={{ color: PC.white }}>{slide.title}</h2>
-                                {slide.subtitle && <p className="text-sm italic mb-4" style={{ color: PC.copperLight }}>{slide.subtitle}</p>}
-                                <div className="h-[1px] mb-4" style={{ backgroundColor: `${PC.copper}66` }} />
-                                <ul className="space-y-2">
-                                  {slide.bullets.map((b, bi) => (
-                                    <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.textLight }}>
-                                      <span style={{ color: PC.copper }}>▸</span><span>{b}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </div>
-                            <div className="px-10 py-3 flex justify-between items-center" style={{ backgroundColor: PC.warmGray }}>
-                              <span className="font-bold text-sm tracking-widest" style={{ color: PC.copper }}>N+1 STUDIOS</span>
-                              <span className="text-xs" style={{ color: PC.textLight }}>感谢您的关注</span>
-                            </div>
-                          </div>
-                        );
-
-                        // ── default (fallback) ─────────────────────────────
-                        return (
-                          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: PC.cream }}>
-                            <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: PC.copper }} />
-                            <div className="p-8 flex flex-col justify-center h-full">
-                              <h2 className="font-bold text-xl mb-2" style={{ color: PC.text }}>{slide.title}</h2>
-                              {slide.subtitle && <p className="text-sm italic mb-3" style={{ color: PC.copper }}>{slide.subtitle}</p>}
-                              <div className="h-[2px] w-14 mb-4" style={{ backgroundColor: PC.copper }} />
-                              <ul className="space-y-2">
-                                {slide.bullets.map((b, bi) => (
-                                  <li key={bi} className="flex items-start gap-2 text-sm" style={{ color: PC.text }}>
-                                    <span style={{ color: PC.copper }}>—</span><span>{b}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    {/* Navigation */}
-                    <div className="flex items-center justify-center gap-2">
-                      <Button
-                        variant="outline" size="sm"
-                        disabled={previewSlideIndex === 0}
-                        onClick={() => setPreviewSlideIndex(i => Math.max(0, i - 1))}
-                      >
-                        上一页
-                      </Button>
-                      <div className="flex gap-1">
-                        {resultSlides.map((_, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setPreviewSlideIndex(i)}
-                            className={`h-1.5 rounded-full transition-all ${
-                              i === previewSlideIndex ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/40'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <Button
-                        variant="outline" size="sm"
-                        disabled={previewSlideIndex === resultSlides.length - 1}
-                        onClick={() => setPreviewSlideIndex(i => Math.min(resultSlides.length - 1, i + 1))}
-                      >
-                        下一页
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Empty state */}
-          {!isGenerating && !resultUrl && !generationError && (
-            <Card className="border border-dashed border-border bg-secondary/20">
-              <CardContent className="py-16 flex flex-col items-center gap-4 text-center">
-                <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <Presentation className="h-7 w-7 text-primary" />
-                </div>
-                <div className="space-y-1.5 max-w-xs">
-                  <h3 className="font-medium text-foreground">填写左侧参数，开始生成</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    AI 将根据你的描述自动规划幻灯片结构，搜索配图，生成可下载的 .pptx 文件
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Generation History */}
-          <Card>
-            <CardHeader
-              className="pb-3 cursor-pointer select-none"
-              onClick={() => setHistoryExpanded(v => !v)}
-            >
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  生成历史
-                </CardTitle>
-                {historyExpanded ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
-            </CardHeader>
-            {historyExpanded && (
-              <CardContent className="pt-0 space-y-2">
-                {!historyData || historyData.items.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    暂无生成记录
-                  </p>
-                ) : (
-                  historyData.items.map((item: HistoryItem) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-background hover:bg-secondary/30 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {item.title}
-                        </p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(item.createdAt).toLocaleString("zh-CN", {
-                              month: "numeric",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          {item.summary && (
-                            <span className="text-xs text-muted-foreground">
-                              · {item.summary}
-                            </span>
-                          )}
-                          {item.modelName && (
-                            <Badge variant="secondary" className="text-xs py-0 px-1.5 h-4">
-                              {item.modelName}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      {item.outputUrl && (
-                        <Button variant="ghost" size="sm" asChild className="shrink-0">
-                          <a
-                            href={item.outputUrl}
-                            download
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Download className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            )}
-          </Card>
+  // ── Render: Wizard ─────────────────────────────────────────────────────────
+  return (
+    <div className="pb-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => { setShowList(true); refetchList(); }}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h2 className="text-base font-semibold">{title || "新建演示文稿"}</h2>
+          <p className="text-xs text-muted-foreground">
+            {activePresentationId ? `ID: ${activePresentationId}` : "未保存"}
+          </p>
         </div>
       </div>
 
-      {/* Project Import Dialog */}
-      <Dialog open={showProjectImport} onOpenChange={setShowProjectImport}>
-        <DialogContent className="sm:max-w-md">
+      {/* Step indicator */}
+      <StepIndicator current={step} total={4} />
+
+      {/* ── STEP 1: Input Form ─────────────────────────────────────────────── */}
+      {step === 1 && (
+        <div className="max-w-2xl mx-auto space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">项目信息</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Import project */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => setShowProjectImport(true)}
+              >
+                <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
+                从项目看板导入信息（可选）
+              </Button>
+
+              {/* Title */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  演示标题 <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  placeholder="如：JPT 总部办公空间设计方案汇报"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  项目描述 <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  placeholder="描述项目背景、设计目标、空间类型、面积、主要功能区等。内容越详细，AI 生成质量越高。"
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  rows={5}
+                  className="text-sm resize-none"
+                />
+                <p className="text-xs text-muted-foreground">{description.length} 字</p>
+              </div>
+
+              {/* Design thoughts */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">设计思路（可选）</Label>
+                <Textarea
+                  placeholder="设计理念、风格方向、材料选择、亮点特色等"
+                  value={designThoughts}
+                  onChange={e => setDesignThoughts(e.target.value)}
+                  rows={3}
+                  className="text-sm resize-none"
+                />
+              </div>
+
+              {/* Target pages */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">目标页数</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={3}
+                    max={30}
+                    value={targetPages}
+                    onChange={e => setTargetPages(Math.max(3, Math.min(30, Number(e.target.value))))}
+                    className="w-24 text-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">页（AI 可适当增减）</span>
+                </div>
+              </div>
+
+              {/* Asset upload */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">参考素材（可选，最多 10 张）</Label>
+                <div
+                  className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                  onClick={() => assetInputRef.current?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); handleAssetSelect(e.dataTransfer.files); }}
+                >
+                  <ImageIcon className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+                  <p className="text-xs text-muted-foreground">点击或拖拽上传项目图片</p>
+                </div>
+                <input
+                  ref={assetInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => handleAssetSelect(e.target.files)}
+                />
+                {uploadedAssets.length > 0 && (
+                  <div className="grid grid-cols-5 gap-2">
+                    {uploadedAssets.map(asset => (
+                      <div key={asset.previewUrl} className="relative aspect-square rounded overflow-hidden border border-border bg-muted">
+                        <img src={asset.previewUrl} alt="" className="w-full h-full object-cover" />
+                        {asset.uploading && (
+                          <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                          </div>
+                        )}
+                        {!asset.uploading && !asset.error && (
+                          <button
+                            className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5 hover:bg-background"
+                            onClick={() => removeAsset(asset.previewUrl)}
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleCreateAndGeneratePrompts}
+                disabled={isGeneratingPrompts || !title.trim() || !description.trim()}
+              >
+                {isGeneratingPrompts ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />AI 正在规划幻灯片结构…</>
+                ) : (
+                  <><Sparkles className="h-4 w-4 mr-2" />下一步：AI 生成幻灯片提示词</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── STEP 2: Prompt Review ──────────────────────────────────────────── */}
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">AI 已生成 {slides.length} 页提示词</p>
+              <p className="text-xs text-muted-foreground">检查并编辑每页内容，可增删页面</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddSlide}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                添加页面
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!activePresentationId) return;
+                  setIsGeneratingPrompts(true);
+                  try {
+                    await generatePromptsMutation.mutateAsync({ id: activePresentationId });
+                    await refetchPresentation();
+                    toast.success("已重新生成提示词");
+                  } catch (err: any) {
+                    toast.error(`重新生成失败：${err?.message}`);
+                  } finally {
+                    setIsGeneratingPrompts(false);
+                  }
+                }}
+                disabled={isGeneratingPrompts}
+              >
+                {isGeneratingPrompts ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                重新生成
+              </Button>
+            </div>
+          </div>
+
+          {/* Tool selectors */}
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">图像生成工具</span>
+                  <AiToolSelector
+                    capability="image_generation"
+                    value={imageToolId}
+                    onChange={setImageToolId}
+                    label="图像生成"
+                    showBuiltIn={true}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Slide prompt cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {slides.map((slide: any, i: number) => (
+              <SlidePromptCard
+                key={slide.id}
+                slide={slide}
+                index={i}
+                total={slides.length}
+                onUpdate={handleUpdateSlidePrompt}
+                onDelete={handleDeleteSlide}
+              />
+            ))}
+          </div>
+
+          <div className="flex justify-between pt-2">
+            <Button variant="outline" onClick={() => setStep(1)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              上一步
+            </Button>
+            <Button
+              onClick={handleStartGeneration}
+              disabled={isGeneratingAll || slides.length === 0}
+            >
+              {isGeneratingAll ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中…</>
+              ) : (
+                <><Sparkles className="h-4 w-4 mr-2" />开始生成图像（{slides.length} 页）</>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 3: Image Generation Review ───────────────────────────────── */}
+      {step === 3 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">
+                {doneSlides.length} / {slides.length} 页已生成
+                {generatingSlides.length > 0 && (
+                  <span className="text-xs text-primary ml-2">
+                    <Loader2 className="h-3 w-3 inline animate-spin mr-1" />
+                    {generatingSlides.length} 页生成中…
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">点击图片预览，点击刷新图标重新生成</p>
+            </div>
+            <div className="flex gap-2">
+              {generatingSlides.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchPresentation()}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  刷新状态
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => setStep(4)}
+                disabled={doneSlides.length === 0}
+              >
+                <ArrowRight className="h-3.5 w-3.5 mr-1.5" />
+                下一步：导出
+              </Button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          {slides.length > 0 && (
+            <Progress value={(doneSlides.length / slides.length) * 100} className="h-1.5" />
+          )}
+
+          {/* Slide grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {slides.map((slide: any, i: number) => (
+              <SlidePreviewCard
+                key={slide.id}
+                slide={slide}
+                index={i}
+                total={slides.length}
+                onRegenerate={handleRegenerateSlide}
+                onView={setViewingSlide}
+              />
+            ))}
+          </div>
+
+          <div className="flex justify-between pt-2">
+            <Button variant="outline" onClick={() => setStep(2)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              返回编辑提示词
+            </Button>
+            <Button
+              onClick={() => setStep(4)}
+              disabled={doneSlides.length === 0}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              导出 PPTX
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 4: Export ─────────────────────────────────────────────────── */}
+      {step === 4 && (
+        <div className="max-w-2xl mx-auto space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">导出演示文稿</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Summary */}
+              <div className="rounded-md bg-secondary/30 p-3 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">演示标题</span>
+                  <span className="font-medium">{title || presentationData?.title}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">总页数</span>
+                  <span className="font-medium">{slides.length} 页</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">已生成</span>
+                  <span className="font-medium text-green-600">{doneSlides.length} 页</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">格式</span>
+                  <span className="font-medium">PPTX（16:9，可编辑文字）</span>
+                </div>
+              </div>
+
+              {/* Slide thumbnails preview */}
+              {doneSlides.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">幻灯片预览</p>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {doneSlides.map((slide: any, i: number) => (
+                      <div
+                        key={slide.id}
+                        className="shrink-0 w-32 aspect-video rounded overflow-hidden border border-border"
+                      >
+                        <img src={slide.imageUrl} alt={`Slide ${i + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Export button */}
+              {exportUrl ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 border border-green-200">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-800">PPTX 已生成</p>
+                      <p className="text-xs text-green-600">包含 {doneSlides.length} 张幻灯片，文字可在 PowerPoint 中编辑</p>
+                    </div>
+                  </div>
+                  <Button className="w-full" asChild>
+                    <a href={exportUrl} download>
+                      <Download className="h-4 w-4 mr-2" />
+                      下载 PPTX
+                    </a>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => { setExportUrl(null); }}
+                  >
+                    重新导出
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  className="w-full"
+                  onClick={handleExportPptx}
+                  disabled={isExporting || doneSlides.length === 0}
+                >
+                  {isExporting ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />正在构建 PPTX…</>
+                  ) : (
+                    <><FileDown className="h-4 w-4 mr-2" />导出为 PPTX（{doneSlides.length} 页）</>
+                  )}
+                </Button>
+              )}
+
+              <Separator />
+
+              {/* File convert alternative */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">其他选项</p>
+                <Button
+                  variant="outline"
+                  className="w-full text-xs"
+                  onClick={() => setShowFileConvert(true)}
+                >
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  上传 PDF / 图片转换为 PPT
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep(3)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              返回预览
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => { setShowList(true); refetchList(); }}
+            >
+              返回列表
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Slide viewer dialog ────────────────────────────────────────────── */}
+      <Dialog open={!!viewingSlide} onOpenChange={() => setViewingSlide(null)}>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>导入项目信息</DialogTitle>
+            <DialogTitle className="text-sm">
+              第 {viewingSlide ? viewingSlide.slideOrder + 1 : ""} 页
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              选择项目后，项目名称、概况、委托方等信息将自动填入演示内容描述。
-            </p>
+          {viewingSlide?.imageUrl && (
+            <div className="space-y-3">
+              <img
+                src={viewingSlide.imageUrl}
+                alt="Slide preview"
+                className="w-full rounded-md"
+              />
+              <p className="text-xs text-muted-foreground">{viewingSlide.prompt}</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    handleRegenerateSlide(viewingSlide.id);
+                    setViewingSlide(null);
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  重新生成
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Project import dialog ──────────────────────────────────────────── */}
+      <Dialog open={showProjectImport} onOpenChange={setShowProjectImport}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">导入项目信息</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择项目…" />
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="选择项目" />
               </SelectTrigger>
               <SelectContent>
                 {projects?.map(p => (
@@ -1472,14 +1443,111 @@ export default function PresentationPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowProjectImport(false)}>
-                取消
-              </Button>
-              <Button onClick={handleImportProject} disabled={!selectedProjectId}>
-                导入
-              </Button>
+            <Button className="w-full" size="sm" onClick={handleImportProject} disabled={!selectedProjectId}>
+              导入
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* File Convert Dialog (also accessible from wizard) */}
+      <Dialog open={showFileConvert} onOpenChange={setShowFileConvert}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>文件转换为 PPT</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">文稿标题（可选）</Label>
+              <Input
+                placeholder="如不填则自动使用文件名"
+                value={convertTitle}
+                onChange={e => setConvertTitle(e.target.value)}
+                disabled={isConverting}
+                className="text-sm"
+              />
             </div>
+            <div className="space-y-2">
+              <Label className="text-xs">上传文件</Label>
+              <div
+                className="border-2 border-dashed border-border rounded-lg p-5 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileConvertInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); handleFileConvertSelect(e.dataTransfer.files); }}
+              >
+                <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">支持 PDF 或多张图片</p>
+              </div>
+              <input
+                ref={fileConvertInputRef}
+                type="file"
+                accept="application/pdf,image/*"
+                multiple
+                className="hidden"
+                onChange={e => handleFileConvertSelect(e.target.files)}
+              />
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-1 max-h-36 overflow-y-auto">
+                  {uploadedFiles.map((uf, idx) => (
+                    <div key={idx} className="flex items-center gap-2 p-1.5 rounded border border-border text-xs">
+                      {uf.fileType === "pdf" ? <FileText className="h-3.5 w-3.5 text-primary" /> :
+                        uf.previewUrl ? <img src={uf.previewUrl} alt="" className="h-6 w-6 object-cover rounded" /> :
+                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span className="truncate flex-1">{uf.file.name}</span>
+                      {uf.uploading && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                      {uf.uploadedUrl && !uf.uploading && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                      {!uf.uploading && (
+                        <button onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">文字去除 AI（可选）</Label>
+              <AiToolSelector
+                capability={["image", "image_generation"]}
+                value={inpaintToolId}
+                onChange={setInpaintToolId}
+                label="选择 AI 工具去除图片中的文字"
+                showBuiltIn={false}
+              />
+            </div>
+            {isConverting && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  <span>{STAGE_LABELS[convertStage]}</span>
+                </div>
+                <Progress value={convertProgress} className="h-1.5" />
+              </div>
+            )}
+            {convertResultUrl && (
+              <div className="flex items-center gap-2 p-2 rounded bg-green-50 border border-green-200">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <span className="text-xs text-green-700 flex-1">转换完成</span>
+                <Button size="sm" className="h-7 text-xs" asChild>
+                  <a href={convertResultUrl} download>
+                    <Download className="h-3 w-3 mr-1" />下载
+                  </a>
+                </Button>
+              </div>
+            )}
+            {convertError && <p className="text-xs text-destructive">{convertError}</p>}
+            <Button
+              className="w-full"
+              onClick={handleConvertFromFile}
+              disabled={isConverting || !uploadedFiles.some(f => f.uploadedUrl)}
+            >
+              {isConverting ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />转换中…</>
+              ) : (
+                <><Upload className="h-4 w-4 mr-2" />开始转换</>
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
