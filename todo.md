@@ -2703,3 +2703,6 @@
 
 ## Bug 修复（2026-05-11）
 - [x] 图文排版页面：选择版式包后页面无法下滑（左侧面板缺少 overflow-y-auto + min-h-0）
+
+## Bug 修复（2026-05-11 续）
+- [x] 图文排版「排版规划模型」默认应为 Gemini 3.1，但页面显示为「内置 AI」（Gemini 3.1 capabilities 字段缺少 layout_plan 标签，已补充）
