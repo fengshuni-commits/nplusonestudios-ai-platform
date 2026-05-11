@@ -1593,7 +1593,7 @@ export default function MediaLayout() {
               <p className="text-muted-foreground text-sm">暂无页面数据</p>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0">
               {/* Page nav */}
               <div className="px-6 py-3 border-b border-border flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
@@ -1658,48 +1658,53 @@ export default function MediaLayout() {
                 </div>
               </div>
 
-              {/* Page preview */}
-              <div className="p-6 flex items-start justify-center overflow-y-auto flex-1">
-                <div className="w-full max-w-sm">
-                  {currentPageData && (
-                    <PageImageViewer
-                      page={currentPageData}
-                      aspectRatio={activeAspectRatio}
-                      onClickBlock={handleClickBlock}
-                      onDeleteBlock={(block) => {
-                        if (!activeJobId) return;
-                        if (!confirm(`确定删除文字块「${block.text.slice(0, 20)}${block.text.length > 20 ? "…" : ""}」？`)) return;
-                        deleteTextBlockMutation.mutate({
-                          jobId: activeJobId,
-                          pageIndex: currentPage,
-                          blockId: block.id,
-                        });
-                      }}
-                      inpaintingBlockId={inpaintingBlockId}
-                    />
-                  )}
+              {/* Main area: preview + right thumbnail strip */}
+              <div className="flex flex-1 min-h-0">
+                {/* Page preview */}
+                <div className="p-6 flex items-start justify-center overflow-y-auto flex-1">
+                  <div className="w-full max-w-sm">
+                    {currentPageData && (
+                      <PageImageViewer
+                        page={currentPageData}
+                        aspectRatio={activeAspectRatio}
+                        onClickBlock={handleClickBlock}
+                        onDeleteBlock={(block) => {
+                          if (!activeJobId) return;
+                          if (!confirm(`确定删除文字块「${block.text.slice(0, 20)}${block.text.length > 20 ? "…" : ""}」？`)) return;
+                          deleteTextBlockMutation.mutate({
+                            jobId: activeJobId,
+                            pageIndex: currentPage,
+                            blockId: block.id,
+                          });
+                        }}
+                        inpaintingBlockId={inpaintingBlockId}
+                      />
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Page strip */}
-              <div className="px-6 py-3 border-t border-border flex gap-2 overflow-x-auto shrink-0">
-                {pages.map((page, i) => {
-                  const thumbRatio = RATIO_CSS[activeAspectRatio] || "3/4";
-                  return (
-                    <div key={i} onClick={() => setCurrentPage(i)}
-                      className={`relative shrink-0 rounded overflow-hidden cursor-pointer border-2 transition-all ${
-                        i === currentPage ? "border-primary" : "border-transparent hover:border-border"
-                      }`}
-                      style={{ width: "56px", aspectRatio: thumbRatio }}>
-                      {(page.compositeImageUrl ?? page.imageUrl) ? (
-                        <img src={page.compositeImageUrl ?? page.imageUrl} alt="" className="w-full h-full object-fill" />
-                      ) : (
-                        <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
-                      )}
-                      <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-foreground/60 text-background px-1 rounded">{page.pageIndex + 1}</div>
-                    </div>
-                  );
-                })}
+                {/* Right thumbnail strip */}
+                {pages.length > 1 && (
+                  <div className="w-[72px] border-l border-border flex flex-col gap-2 overflow-y-auto py-3 px-2 shrink-0">
+                    {pages.map((page, i) => {
+                      const thumbRatio = RATIO_CSS[activeAspectRatio] || "3/4";
+                      return (
+                        <div key={i} onClick={() => setCurrentPage(i)}
+                          className={`relative w-full shrink-0 rounded overflow-hidden cursor-pointer border-2 transition-all ${
+                            i === currentPage ? "border-primary" : "border-transparent hover:border-border"
+                          }`}
+                          style={{ aspectRatio: thumbRatio }}>
+                          {(page.compositeImageUrl ?? page.imageUrl) ? (
+                            <img src={page.compositeImageUrl ?? page.imageUrl} alt="" className="w-full h-full object-fill" />
+                          ) : (
+                            <div className="w-full h-full" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
+                          )}
+                          <div className="absolute bottom-0.5 right-0.5 text-[8px] bg-foreground/60 text-background px-1 rounded">{page.pageIndex + 1}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
