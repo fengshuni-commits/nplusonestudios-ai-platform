@@ -2589,3 +2589,6 @@
 ## Bug 修复：AI 效果图 2048 分辨率实际只生成 1368
 - [x] 排查分辨率参数传递链路（前端选项值→后端 resolution 参数→generateImageWithTool→API size 参数）
 - [x] 修复 2048 分辨率选项：Gemini 分支现在根据 genOpts.size 的最大边长映射到正确的 imageSize token（≥1536→"2K"，≥3072→"4K"）
+
+## 分辨率选项简化
+- [x] 去掉高清 (1536px) 选项，只保留标准 (1024px) 和超高清 (2048px)

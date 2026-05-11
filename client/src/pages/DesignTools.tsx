@@ -670,7 +670,6 @@ export default function DesignTools() {
 
   const resolutions = [
     { value: "standard", label: "标准 (1024px)" },
-    { value: "hd", label: "高清 (1536px)" },
     { value: "ultra", label: "超高清 (2048px)" },
   ];
 
