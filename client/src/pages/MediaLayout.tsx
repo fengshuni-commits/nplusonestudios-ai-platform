@@ -1659,7 +1659,7 @@ export default function MediaLayout() {
               </div>
 
               {/* Page preview */}
-              <div className="p-6 flex items-start justify-center">
+              <div className="p-6 flex items-start justify-center overflow-y-auto flex-1">
                 <div className="w-full max-w-sm">
                   {currentPageData && (
                     <PageImageViewer

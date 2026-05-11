@@ -58,9 +58,10 @@ export function AiToolSelector({ category, capability, value, onChange, label, s
     // 优先：按 capability 读取对应默认工具
     let defaultToolId: number | undefined;
     if (filterKey && capabilityDefaults[filterKey] !== undefined) {
-      const capDefault = capabilityDefaults[filterKey];
+      // Use Number() to handle cases where DB returns string-typed integers
+      const capDefault = Number(capabilityDefaults[filterKey]);
       // 确认该工具在当前过滤列表中存在
-      const found = tools.find((t: any) => t.id === capDefault);
+      const found = tools.find((t: any) => Number(t.id) === capDefault);
       if (found) {
         defaultToolId = capDefault;
       }

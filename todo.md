@@ -2706,3 +2706,6 @@
 
 ## Bug 修复（2026-05-11 续）
 - [x] 图文排版「排版规划模型」默认应为 Gemini 3.1，但页面显示为「内置 AI」（Gemini 3.1 capabilities 字段缺少 layout_plan 标签，已补充）
+
+## Bug 修复（2026-05-11 续2）- [x] AiToolSelector 选择器直接显示「内置 AI」而非默认工具（capabilityDefaults toolId 类型不一致，用 Number() 统一比较）
+- [x] 图文排版右侧面板无法滚动（页面预览容器缺少 overflow-y-auto flex-1）
