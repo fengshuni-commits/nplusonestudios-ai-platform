@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 type AiToolSelectorProps = {
   /** @deprecated 使用 capability 代替；保留用于向后兼容 */
   category?: string;
-  /** 按能力标签过滤工具（如 "image_generation"、"rendering"、"document"） */
-  capability?: string;
+  /** 按能力标签过滤工具（如 "image_generation"、"rendering"、"document"），支持数组表示 OR 逻辑 */
+  capability?: string | string[];
   value?: number;
   onChange: (toolId: number | undefined) => void;
   label?: string;
@@ -18,10 +18,23 @@ type AiToolSelectorProps = {
 const BUILTIN_TOOL_ID = -1;
 
 export function AiToolSelector({ category, capability, value, onChange, label, showBuiltIn = true }: AiToolSelectorProps) {
-  const filterKey = capability || category;
-  const { data: tools } = trpc.aiTools.list.useQuery(
+  const filterKey = Array.isArray(capability) ? capability[0] : (capability || category);
+  const extraCapabilities = Array.isArray(capability) ? capability.slice(1) : [];
+  const { data: rawTools } = trpc.aiTools.list.useQuery(
     filterKey ? { capability: filterKey, activeOnly: true } : { activeOnly: true }
   );
+  // For array capability, also fetch tools matching extra capabilities and merge
+  const { data: extraTools } = trpc.aiTools.list.useQuery(
+    extraCapabilities.length > 0 ? { capability: extraCapabilities[0], activeOnly: true } : { activeOnly: false },
+    { enabled: extraCapabilities.length > 0 }
+  );
+  const tools = extraCapabilities.length > 0
+    ? (() => {
+        const all = [...(rawTools || []), ...(extraTools || [])];
+        const seen = new Set<number>();
+        return all.filter((t: any) => { if (seen.has(t.id)) return false; seen.add(t.id); return true; });
+      })()
+    : rawTools;
   // 获取按 capability 设置的默认工具映射
   const { data: capabilityDefaults } = trpc.aiTools.getCapabilityDefaults.useQuery();
   const [selectedValue, setSelectedValue] = useState<number | undefined>(value);

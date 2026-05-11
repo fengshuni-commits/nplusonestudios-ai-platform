@@ -2635,3 +2635,8 @@
 ## Bug 修复：项目状态修改保存失败
 - [x] 排查项目状态修改的后端过程（updateProject/updateStatus）和错误日志
 - [x] 修复：projects.update 和 projects.create 的 Zod 枚举加入 "paused" 选项
+
+## Bug 修复：演示文稿去除文字功能只显示即梦工具，Gemini 未出现
+- [x] 定位去除文字工具选择器的能力标签过滤逻辑
+- [x] 给 Gemini 3.1 加上 "image" 能力标签
+- [x] AiToolSelector 支持数组 capability （OR 逻辑），Presentation.tsx 使用 ["image", "image_generation"] 过滤

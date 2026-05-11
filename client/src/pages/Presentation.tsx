@@ -566,7 +566,7 @@ export default function PresentationPage() {
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">文字去除 AI（可选）</Label>
                     <AiToolSelector
-                      capability="image"
+                      capability={["image", "image_generation"]}
                       value={inpaintToolId}
                       onChange={setInpaintToolId}
                       label="选择 AI 工具去除图片中的文字"
