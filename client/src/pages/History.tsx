@@ -443,6 +443,38 @@ function BenchmarkChainItem({ content, isLast }: { content: string; isLast: bool
   );
 }
 
+function VideoDetailView({ item }: { item: any }) {
+  const videoParams = typeof item.inputParams === "string"
+    ? JSON.parse(item.inputParams || "{}")
+    : (item.inputParams as Record<string, unknown> | null) || {};
+  const videoSrc = (videoParams as any)?.videoUrl as string | undefined;
+  return (
+    <div className="space-y-4">
+      {videoSrc ? (
+        <video
+          src={videoSrc}
+          controls
+          autoPlay={false}
+          className="w-full rounded-lg bg-black"
+        />
+      ) : item.outputUrl ? (
+        <div className="space-y-2">
+          <img src={item.outputUrl} alt="封面" className="w-full rounded-lg object-cover" />
+          <p className="text-xs text-muted-foreground text-center">视频文件未找到，仅显示封面图</p>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">视频尚未生成完成或记录已丢失</p>
+      )}
+      {item?.summary && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">描述</p>
+          <p className="text-sm text-foreground/80 leading-relaxed">{item.summary}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TileCard({ item, onDelete, onOpenDetail, onLightbox, onNavigate, onImport, onAssociateProject, allProjects = [], isSelectMode = false, isSelected = false, onToggleSelect }: TileCardProps) {
   const cfg = MODULE_MAP[item.module] || {
     label: item.module,
@@ -2102,20 +2134,8 @@ export default function HistoryPage() {
                   );
                 })()}
               </div>
-            ) : displayContentItem?.module === "ai_video" && displayContentItem?.outputUrl ? (
-              <div className="space-y-4">
-                <video
-                  src={displayContentItem.outputUrl}
-                  controls
-                  className="w-full rounded-lg bg-black"
-                />
-                {displayContentItem?.summary && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">描述</p>
-                    <p className="text-sm text-foreground/80 leading-relaxed">{displayContentItem.summary}</p>
-                  </div>
-                )}
-              </div>
+            ) : displayContentItem?.module === "ai_video" ? (
+              <VideoDetailView item={displayContentItem} />
             ) : displayContentItem && ['media_xiaohongshu', 'media_wechat', 'media_instagram'].includes(displayContentItem.module) ? (
               <MediaContentView item={displayContentItem} onLightbox={(src, label) => setLightbox({ src, label })} />
             ) : displayContentItem?.module === 'meeting_minutes' && isEditingMinutes ? (

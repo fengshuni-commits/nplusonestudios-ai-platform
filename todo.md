@@ -2592,3 +2592,15 @@
 
 ## 分辨率选项简化
 - [x] 去掉高清 (1536px) 选项，只保留标准 (1024px) 和超高清 (2048px)
+
+## Bug 修复：AI 视频生成记录无法查看视频（只显示图片）
+- [ ] 排查视频生成记录存储字段（outputUrl 是否保存的是视频 URL 还是封面图 URL）
+- [ ] 排查前端历史记录展示逻辑（是否用 img 标签而非 video 标签渲染视频记录）
+- [ ] 修复：视频类型记录用 video 标签展示，支持播放
+
+## Bug 修复：AI 视频生成记录无法查看视频（只显示图片）
+- [x] 排查：syncVideoProxyEntry 只把 thumbnailUrl 存入 outputUrl，未存视频 URL
+- [x] 修复 db.ts syncVideoProxyEntry：新增 videoUrl 参数，存入 inputParams.videoUrl
+- [x] 修复 routers.ts video.getStatus：视频完成时把 permanentVideoUrl 传给 syncVideoProxyEntry
+- [x] 修复 routers.ts history.getById：ai_video 记录若 inputParams 无 videoUrl，自动从 video_history 表补查
+- [x] 修复 History.tsx：新增 VideoDetailView 组件，优先读 inputParams.videoUrl 播放视频，outputUrl 仅作封面图

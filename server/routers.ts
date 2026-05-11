@@ -3966,7 +3966,26 @@ const historyRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       // All records (including ai_video) are now in generation_history
-      return db.getGenerationHistoryById(input.id, ctx.user.id);
+      const item = await db.getGenerationHistoryById(input.id, ctx.user.id);
+      if (!item) return item;
+      // For ai_video records: enrich inputParams with videoUrl from video_history if not already present
+      if (item.module === "ai_video") {
+        const params = typeof item.inputParams === "string"
+          ? JSON.parse(item.inputParams as string)
+          : (item.inputParams as Record<string, unknown> | null) || {};
+        if (!(params as any).videoUrl && (params as any).videoHistoryId) {
+          try {
+            const videoRecord = await db.getVideoHistoryById((params as any).videoHistoryId, ctx.user.id);
+            if (videoRecord?.outputVideoUrl) {
+              const enrichedParams = { ...(params as Record<string, unknown>), videoUrl: videoRecord.outputVideoUrl };
+              return { ...item, inputParams: enrichedParams };
+            }
+          } catch (e) {
+            console.warn("[history.getById] Failed to enrich ai_video with videoUrl:", e);
+          }
+        }
+      }
+      return item;
     }),
   /** Get edit chain: all items sharing the same root ancestor */
   getEditChain: protectedProcedure
@@ -7201,6 +7220,8 @@ export const appRouter = router({system: systemRouter,
                 await db.syncVideoProxyEntry(record.id, ctx.user.id, {
                   status: ghStatus,
                   outputUrl: thumbnailUrl || undefined,
+                  // Store the actual video URL so the frontend can play it back
+                  videoUrl: apiStatus.status === "completed" ? (permanentVideoUrl || null) : undefined,
                 });
               } catch (syncErr) {
                 console.warn("[video.getStatus] proxy sync failed:", syncErr);

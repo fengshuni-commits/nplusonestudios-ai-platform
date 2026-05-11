@@ -2510,7 +2510,7 @@ export async function timeoutStaleGraphicLayoutJobs(timeoutMs = 15 * 60 * 1000) 
 export async function syncVideoProxyEntry(
   videoHistoryId: number,
   userId: number,
-  updates: { status?: "success" | "failed" | "processing"; outputUrl?: string | null }
+  updates: { status?: "success" | "failed" | "processing"; outputUrl?: string | null; videoUrl?: string | null }
 ) {
   const db = await getDb();
   if (!db) return;
@@ -2525,6 +2525,13 @@ export async function syncVideoProxyEntry(
   const setValues: Record<string, unknown> = {};
   if (updates.status !== undefined) setValues.status = updates.status;
   if (updates.outputUrl !== undefined) setValues.outputUrl = updates.outputUrl;
+  // Also persist videoUrl inside inputParams so the frontend can play back the video
+  if (updates.videoUrl !== undefined) {
+    const existingParams = typeof proxy.inputParams === "string"
+      ? JSON.parse(proxy.inputParams as string)
+      : (proxy.inputParams as Record<string, unknown> | null) || {};
+    setValues.inputParams = JSON.stringify({ ...existingParams, videoUrl: updates.videoUrl });
+  }
   if (Object.keys(setValues).length === 0) return;
   await db.update(generationHistory).set(setValues).where(eq(generationHistory.id, proxy.id));
 }
