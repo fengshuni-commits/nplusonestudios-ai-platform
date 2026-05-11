@@ -1141,12 +1141,16 @@ const tasksRouter = router({
       if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const { eq } = await import('drizzle-orm');
       const { tasks } = await import('../drizzle/schema');
+      const now = new Date();
+      // Auto-complete: if progress reaches 100% and no reviewer is set, mark as done
+      const shouldAutoComplete = input.progress === 100 && !task.reviewerId;
       await drizzleDb.update(tasks).set({
         progress: input.progress,
         progressNote: input.progressNote ?? null,
-        updatedAt: new Date(),
+        updatedAt: now,
+        ...(shouldAutoComplete ? { status: 'done', completedAt: now } : {}),
       }).where(eq(tasks.id, input.id));
-      return { success: true };
+      return { success: true, autoCompleted: shouldAutoComplete };
     }),
 
   approveTask: protectedProcedure

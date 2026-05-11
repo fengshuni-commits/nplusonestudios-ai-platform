@@ -2625,3 +2625,9 @@
 - [x] 调研 Veo 3 API 接入方式（PiAPI）和参数规格
 - [x] 实现后端 Veo 3 生成逻辑（submitVeo3VideoTask + queryVeo3VideoTask，支持文生视频和图生视频）
 - [x] 前端视频生成工具支持 Veo 3：时长按鈕改为 4s/6s/8s，分辨率限制为 720p/1080p，选择 Veo3 工具时自动适配
+
+## 功能：任务自动完成
+- [x] 排查任务表（tasks）的 progress、status、reviewerId、reviewStatus 字段结构
+- [x] 后端： updateProgress 过程增加自动完成逻辑（progress=100 且 reviewerId 为空时自动设置 status='done' + completedAt）
+- [x] 后端： reviewDeliverable 审核通过时已自动设置 status='done'（原有逻辑正确）
+- [x] 前端： submitProgress 回调检查 autoCompleted 标志，自动更新 UI 状态并弹出成功提示

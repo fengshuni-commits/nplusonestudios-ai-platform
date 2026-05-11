@@ -2363,10 +2363,15 @@ function TaskKanbanTab({ projectId }: { projectId: number }) {
                             progress: progressDraft ?? selectedTask.progress ?? 0,
                             progressNote: progressNoteDraft || undefined,
                           }, {
-                            onSuccess: () => {
-                              setSelectedTask({ ...selectedTask, progress: progressDraft ?? selectedTask.progress ?? 0 });
+                            onSuccess: (data: any) => {
+                              const newProgress = progressDraft ?? selectedTask.progress ?? 0;
+                              const newStatus = data?.autoCompleted ? 'done' : selectedTask.status;
+                              setSelectedTask({ ...selectedTask, progress: newProgress, status: newStatus });
                               setProgressDraft(null);
                               setProgressNoteDraft("");
+                              if (data?.autoCompleted) {
+                                toast.success("进度已达 100%，任务自动标记为已完成 ✓");
+                              }
                             }
                           });
                         }}
