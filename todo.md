@@ -2640,3 +2640,8 @@
 - [x] 定位去除文字工具选择器的能力标签过滤逻辑
 - [x] 给 Gemini 3.1 加上 "image" 能力标签
 - [x] AiToolSelector 支持数组 capability （OR 逻辑），Presentation.tsx 使用 ["image", "image_generation"] 过滤
+
+## Bug 修复：演示文稿文件转换图片裁切错位
+- [x] 排查文件转换图片裁切坐标计算逻辑（Y轴偏移导致内容偏上）
+- [x] 修复：单张图片页面直接用原图铺满整页，不再裁切；多张独立图片时加 1% padding 避免边缘截断
+- [x] 优化：将 sizing contain 改为 cover，减少独立图片块的分割感

@@ -5479,35 +5479,57 @@ async function generatePresentationFromFileInBackground(
 
       // Add image regions
       if (analysis.imageRegions && analysis.imageRegions.length > 0) {
-        for (const region of analysis.imageRegions) {
-          // Crop the region from the page image using sharp
-          try {
-            const sharp = (await import("sharp")).default;
-            const imgBuf = Buffer.from(pg.data, "base64");
-            const meta = await sharp(imgBuf).metadata();
-            const imgW = meta.width || 800;
-            const imgH = meta.height || 600;
-            const cropX = Math.round((region.x / 100) * imgW);
-            const cropY = Math.round((region.y / 100) * imgH);
-            const cropW = Math.max(1, Math.round((region.w / 100) * imgW));
-            const cropH = Math.max(1, Math.round((region.h / 100) * imgH));
-            const cropped = await sharp(imgBuf)
-              .extract({ left: cropX, top: cropY, width: Math.min(cropW, imgW - cropX), height: Math.min(cropH, imgH - cropY) })
-              .png().toBuffer();
-            const croppedB64 = cropped.toString("base64");
-            slide.addImage({
-              data: `data:image/png;base64,${croppedB64}`,
-              x: `${region.x}%`, y: `${region.y}%`,
-              w: `${region.w}%`, h: `${region.h}%`,
-              sizing: { type: "contain", w: `${region.w}%`, h: `${region.h}%` }
-            });
-          } catch (e) {
-            // Fallback: use full page image
-            slide.addImage({
-              data: `data:image/${pg.ext};base64,${pg.data}`,
-              x: `${region.x}%`, y: `${region.y}%`,
-              w: `${region.w}%`, h: `${region.h}%`
-            });
+        const regions = analysis.imageRegions;
+        // Strategy: if there's only one region covering most of the page (or not multiple images),
+        // use the full original image to avoid crop offset issues.
+        const isSingleFullPage = regions.length === 1 && regions[0].w > 50 && regions[0].h > 50;
+        const useFullImage = isSingleFullPage || !analysis.hasMultipleImages;
+
+        if (useFullImage) {
+          // Place the full original image covering the entire slide
+          slide.addImage({
+            data: `data:image/${pg.ext};base64,${pg.data}`,
+            x: "0%", y: "0%",
+            w: "100%", h: "100%",
+            sizing: { type: "cover", w: "100%", h: "100%" }
+          });
+        } else {
+          // Multiple independent images: crop each region with a small inward padding to avoid edge clipping
+          for (const region of regions) {
+            try {
+              const sharp = (await import("sharp")).default;
+              const imgBuf = Buffer.from(pg.data, "base64");
+              const meta = await sharp(imgBuf).metadata();
+              const imgW = meta.width || 800;
+              const imgH = meta.height || 600;
+              // Add 1% inward padding on each side to avoid edge clipping from AI coordinate imprecision
+              const PAD = 1;
+              const rx = Math.max(0, region.x + PAD);
+              const ry = Math.max(0, region.y + PAD);
+              const rw = Math.max(1, region.w - PAD * 2);
+              const rh = Math.max(1, region.h - PAD * 2);
+              const cropX = Math.round((rx / 100) * imgW);
+              const cropY = Math.round((ry / 100) * imgH);
+              const cropW = Math.max(1, Math.round((rw / 100) * imgW));
+              const cropH = Math.max(1, Math.round((rh / 100) * imgH));
+              const cropped = await sharp(imgBuf)
+                .extract({ left: cropX, top: cropY, width: Math.min(cropW, imgW - cropX), height: Math.min(cropH, imgH - cropY) })
+                .png().toBuffer();
+              const croppedB64 = cropped.toString("base64");
+              slide.addImage({
+                data: `data:image/png;base64,${croppedB64}`,
+                x: `${region.x}%`, y: `${region.y}%`,
+                w: `${region.w}%`, h: `${region.h}%`,
+                sizing: { type: "cover", w: `${region.w}%`, h: `${region.h}%` }
+              });
+            } catch (e) {
+              // Fallback: use full page image at region position
+              slide.addImage({
+                data: `data:image/${pg.ext};base64,${pg.data}`,
+                x: `${region.x}%`, y: `${region.y}%`,
+                w: `${region.w}%`, h: `${region.h}%`
+              });
+            }
           }
         }
       }
