@@ -928,6 +928,7 @@ export default function HistoryPage() {
   const [contentItem, setContentItem] = useState<any | null>(null);
   const [contentItemId, setContentItemId] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; label: string } | null>(null);
+  const [videoLightbox, setVideoLightbox] = useState<{ src: string; label: string } | null>(null);
   const [, navigate] = useLocation();
   // Layout design page carousel state
   const [layoutPageIndex, setLayoutPageIndex] = useState(0);
@@ -1979,18 +1980,12 @@ export default function HistoryPage() {
                   const vParams = typeof displayContentItem.inputParams === 'string'
                     ? JSON.parse(displayContentItem.inputParams || '{}')
                     : (displayContentItem.inputParams as Record<string, unknown> | null) || {};
-                  const videoDownloadUrl = (vParams as any)?.videoUrl as string | undefined;
-                  return videoDownloadUrl ? (
+                  const videoPlayUrl = (vParams as any)?.videoUrl as string | undefined;
+                  return videoPlayUrl ? (
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-                      onClick={() => {
-                        const a = document.createElement('a');
-                        a.href = videoDownloadUrl;
-                        a.download = `${displayContentItem.title || 'video'}.mp4`;
-                        a.target = '_blank';
-                        a.click();
-                      }}>
-                      <Download className="h-3 w-3 mr-1" />
-                      下载视频
+                      onClick={() => setVideoLightbox({ src: videoPlayUrl, label: displayContentItem.title || 'AI 视频' })}>
+                      <Maximize2 className="h-3 w-3 mr-1" />
+                      全屏播放
                     </Button>
                   ) : null;
                 })() : displayContentItem?.outputUrl && displayContentItem?.module !== 'layout_design' ? (
@@ -2312,6 +2307,39 @@ export default function HistoryPage() {
       {/* Lightbox */}
       {lightbox && (
         <Lightbox src={lightbox.src} label={lightbox.label} onClose={() => setLightbox(null)} />
+      )}
+
+      {/* Video Lightbox */}
+      {videoLightbox && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95"
+          onClick={(e) => { if (e.target === e.currentTarget) setVideoLightbox(null); }}>
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">
+            <span className="text-white/80 text-sm font-medium">{videoLightbox.label}</span>
+            <div className="flex items-center gap-1">
+              <button className="h-8 px-3 rounded-full bg-white/10 hover:bg-white/20 flex items-center gap-1.5 text-white text-xs transition-colors"
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = videoLightbox.src;
+                  a.download = `${videoLightbox.label}.mp4`;
+                  a.target = '_blank';
+                  a.click();
+                }} title="下载视频">
+                <Download className="h-3.5 w-3.5" />
+                <span>下载</span>
+              </button>
+              <button className="h-8 w-8 rounded-full bg-white/10 hover:bg-red-500/60 flex items-center justify-center text-white transition-colors ml-1"
+                onClick={() => setVideoLightbox(null)} title="关闭">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <video
+            src={videoLightbox.src}
+            controls
+            autoPlay
+            className="max-w-[92vw] max-h-[88vh] rounded-lg shadow-2xl"
+          />
+        </div>
       )}
     </div>
   );
