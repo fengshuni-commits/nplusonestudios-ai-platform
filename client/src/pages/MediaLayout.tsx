@@ -352,17 +352,31 @@ function StylePackCard({
 
 // ─── Page Image Viewer with Text Block Hotspots ───────────────────────────────
 
+// Resize handle positions: 8 cardinal + corner handles
+const HANDLES = [
+  { id: "n",  cursor: "n-resize",  top: -4,  left: "50%",  transform: "translateX(-50%)", w: 16, h: 8 },
+  { id: "s",  cursor: "s-resize",  bottom: -4, left: "50%", transform: "translateX(-50%)", w: 16, h: 8 },
+  { id: "w",  cursor: "w-resize",  top: "50%", left: -4,  transform: "translateY(-50%)", w: 8, h: 16 },
+  { id: "e",  cursor: "e-resize",  top: "50%", right: -4, transform: "translateY(-50%)", w: 8, h: 16 },
+  { id: "nw", cursor: "nw-resize", top: -4,  left: -4,  w: 10, h: 10 },
+  { id: "ne", cursor: "ne-resize", top: -4,  right: -4, w: 10, h: 10 },
+  { id: "sw", cursor: "sw-resize", bottom: -4, left: -4, w: 10, h: 10 },
+  { id: "se", cursor: "se-resize", bottom: -4, right: -4, w: 10, h: 10 },
+] as const;
+
 function PageImageViewer({
   page,
   aspectRatio,
   onClickBlock,
   onDeleteBlock,
+  onUpdateBlockPosition,
   inpaintingBlockId,
 }: {
   page: PageData;
   aspectRatio: string;
   onClickBlock: (block: TextBlock) => void;
   onDeleteBlock?: (block: TextBlock) => void;
+  onUpdateBlockPosition?: (block: TextBlock, x: number, y: number, width: number, height: number) => void;
   inpaintingBlockId?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -370,6 +384,18 @@ function PageImageViewer({
   const cssRatio = RATIO_CSS[aspectRatio] || "3/4";
   const imgW = page.imageSize?.width ?? 1024;
   const imgH = page.imageSize?.height ?? 1024;
+
+  // Drag/resize state
+  const [adjustingBlockId, setAdjustingBlockId] = useState<string | null>(null);
+  const [localRects, setLocalRects] = useState<Record<string, { x: number; y: number; width: number; height: number }>>({});
+  const dragRef = useRef<{
+    type: "move" | "resize";
+    handle?: string;
+    startMouseX: number;
+    startMouseY: number;
+    startRect: { x: number; y: number; width: number; height: number };
+  } | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const update = () => {
@@ -381,10 +407,52 @@ function PageImageViewer({
     return () => ro.disconnect();
   }, []);
 
-  const scale = containerW > 0 ? containerW / imgW : 1;
+  // Sync localRects when page data changes
+  useEffect(() => {
+    const rects: Record<string, { x: number; y: number; width: number; height: number }> = {};
+    (page.textBlocks ?? []).forEach(b => { rects[b.id] = { x: b.x, y: b.y, width: b.width, height: b.height }; });
+    setLocalRects(rects);
+  }, [page.textBlocks]);
 
-  // Display the composite image (with all text rendered) by default.
-  // Fall back to raw imageUrl if composite is not yet available.
+  const scale = containerW > 0 ? containerW / imgW : 1;
+  const getRect = (block: TextBlock) => localRects[block.id] ?? { x: block.x, y: block.y, width: block.width, height: block.height };
+
+  // Global mouse move/up for drag operations
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current || !adjustingBlockId) return;
+      const dx = (e.clientX - dragRef.current.startMouseX) / scale;
+      const dy = (e.clientY - dragRef.current.startMouseY) / scale;
+      const sr = dragRef.current.startRect;
+      let { x, y, width, height } = sr;
+      if (dragRef.current.type === "move") {
+        x = Math.max(0, Math.min(imgW - width, sr.x + dx));
+        y = Math.max(0, Math.min(imgH - height, sr.y + dy));
+      } else {
+        const h = dragRef.current.handle ?? "";
+        if (h.includes("n")) { const ny = Math.min(sr.y + sr.height - 10, sr.y + dy); height = sr.height - (ny - sr.y); y = ny; }
+        if (h.includes("s")) { height = Math.max(10, sr.height + dy); }
+        if (h.includes("w")) { const nx = Math.min(sr.x + sr.width - 10, sr.x + dx); width = sr.width - (nx - sr.x); x = nx; }
+        if (h.includes("e")) { width = Math.max(10, sr.width + dx); }
+        x = Math.max(0, x); y = Math.max(0, y);
+        width = Math.min(imgW - x, width); height = Math.min(imgH - y, height);
+      }
+      setLocalRects(prev => ({ ...prev, [adjustingBlockId]: { x, y, width, height } }));
+    };
+    const onMouseUp = () => {
+      if (!dragRef.current || !adjustingBlockId) return;
+      const rect = localRects[adjustingBlockId];
+      if (rect && onUpdateBlockPosition) {
+        const block = (page.textBlocks ?? []).find(b => b.id === adjustingBlockId);
+        if (block) onUpdateBlockPosition(block, Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), Math.round(rect.height));
+      }
+      dragRef.current = null;
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => { window.removeEventListener("mousemove", onMouseMove); window.removeEventListener("mouseup", onMouseUp); };
+  }, [adjustingBlockId, localRects, scale, imgW, imgH, onUpdateBlockPosition, page.textBlocks]);
+
   const displayImageUrl = page.compositeImageUrl ?? page.imageUrl;
 
   return (
@@ -392,72 +460,101 @@ function PageImageViewer({
       ref={containerRef}
       className="relative w-full rounded-xl overflow-hidden shadow-2xl"
       style={{ aspectRatio: cssRatio }}
+      onClick={(e) => {
+        if (adjustingBlockId && !(e.target as HTMLElement).closest('[data-block-id]')) setAdjustingBlockId(null);
+      }}
     >
-      {/* 整页图片 — 默认显示 compositeImageUrl（带文字），无则退化为纯背景图 */}
       {displayImageUrl ? (
-        <img
-          src={displayImageUrl}
-          alt={`第 ${page.pageIndex + 1} 页`}
-          className="absolute inset-0 w-full h-full object-fill"
-          draggable={false}
-        />
+        <img src={displayImageUrl} alt={`第 ${page.pageIndex + 1} 页`} className="absolute inset-0 w-full h-full object-fill" draggable={false} />
       ) : (
         <div className="absolute inset-0" style={{ backgroundColor: page.backgroundColor || "#1a1a1a" }} />
       )}
 
-      {/* 文字块热区——透明可点击区域，不显示 HTML 文字（文字已在图片中） */}
       {containerW > 0 && (page.textBlocks ?? []).map((block, blockIdx) => {
-        const left = block.x * scale;
-        const top = block.y * scale;
-        const width = block.width * scale;
-        const height = block.height * scale;
+        const rect = getRect(block);
+        const left = rect.x * scale;
+        const top = rect.y * scale;
+        const width = rect.width * scale;
+        const height = rect.height * scale;
         const isInpainting = inpaintingBlockId === block.id;
+        const isAdjusting = adjustingBlockId === block.id;
 
         return (
           <div
             key={block.id ? `${block.id}-${blockIdx}` : `block-${blockIdx}`}
-            onClick={() => onClickBlock(block)}
-            title={`点击编辑：${block.text}`}
-            className={`absolute group cursor-pointer transition-all ${
+            data-block-id={block.id}
+            className={`absolute group ${
               isInpainting
-                ? "ring-2 ring-primary animate-pulse bg-primary/10"
-                : "hover:ring-2 hover:ring-white/50 hover:bg-white/5"
+                ? "ring-2 ring-primary animate-pulse bg-primary/10 cursor-wait"
+                : isAdjusting
+                  ? "ring-2 ring-yellow-400 bg-yellow-400/10 cursor-move"
+                  : "hover:ring-2 hover:ring-white/50 hover:bg-white/5 cursor-pointer"
             } rounded`}
             style={{ left, top, width, height }}
+            onMouseDown={(e) => {
+              if (isInpainting) return;
+              if (isAdjusting) {
+                e.preventDefault(); e.stopPropagation();
+                dragRef.current = { type: "move", startMouseX: e.clientX, startMouseY: e.clientY, startRect: { ...rect } };
+                return;
+              }
+              longPressRef.current = setTimeout(() => { setAdjustingBlockId(block.id); longPressRef.current = null; }, 500);
+            }}
+            onMouseUp={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+            onMouseLeave={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+            onClick={(e) => {
+              if (isInpainting || isAdjusting) { e.stopPropagation(); return; }
+              onClickBlock(block);
+            }}
+            title={isAdjusting ? "拖动移位 | 拉伸边缘调整大小 | 点击空白处退出" : `长按调整位置 | 点击编辑：${block.text}`}
           >
-            {/* 加载中图标 */}
             {isInpainting && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Loader2 className="w-4 h-4 text-primary animate-spin" />
               </div>
             )}
 
-            {/* 悬停时显示编辑 + 删除图标 */}
-            {!isInpainting && (
+            {/* Adjust mode: 8 resize handles */}
+            {isAdjusting && (HANDLES as readonly typeof HANDLES[number][]).map(h => (
+              <div
+                key={h.id}
+                className="absolute bg-yellow-400 border border-yellow-600 rounded-sm z-20"
+                style={{
+                  width: h.w, height: h.h, cursor: h.cursor,
+                  ...('top' in h && h.top !== undefined ? { top: h.top } : {}),
+                  ...('bottom' in h && (h as any).bottom !== undefined ? { bottom: (h as any).bottom } : {}),
+                  ...('left' in h && h.left !== undefined ? { left: h.left } : {}),
+                  ...('right' in h && (h as any).right !== undefined ? { right: (h as any).right } : {}),
+                  ...('transform' in h && h.transform ? { transform: h.transform } : {}),
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault(); e.stopPropagation();
+                  dragRef.current = { type: "resize", handle: h.id, startMouseX: e.clientX, startMouseY: e.clientY, startRect: { ...rect } };
+                }}
+              />
+            ))}
+
+            {isAdjusting && (
+              <div className="absolute -top-5 left-0 px-1 py-0.5 rounded text-[9px] bg-yellow-400 text-black whitespace-nowrap z-20 pointer-events-none">
+                调整中 · {block.role}
+              </div>
+            )}
+
+            {!isInpainting && !isAdjusting && (
               <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <div
-                  className="w-4 h-4 rounded-full bg-primary flex items-center justify-center"
-                  title="编辑文字"
-                >
+                <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center" title="编辑文字">
                   <Pencil className="w-2 h-2 text-white" />
                 </div>
                 {onDeleteBlock && (
-                  <div
-                    className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-400 transition-colors"
-                    title="删除文字块"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteBlock(block);
-                    }}
-                  >
+                  <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-400 transition-colors" title="删除文字块"
+                    onClick={(e) => { e.stopPropagation(); onDeleteBlock(block); }}>
                     <X className="w-2 h-2 text-white" />
                   </div>
                 )}
               </div>
             )}
 
-            {/* 角色标签（悬停时显示） */}
-            {!isInpainting && (
+            {!isInpainting && !isAdjusting && (
               <div className="absolute bottom-full left-0 mb-0.5 px-1 py-0.5 rounded text-[9px] bg-foreground/80 text-background whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                 {block.role} · {block.text.slice(0, 20)}{block.text.length > 20 ? "…" : ""}
               </div>
@@ -767,6 +864,31 @@ export default function MediaLayout() {
   });
 
   const trpcUtils = trpc.useUtils();
+
+  const updateTextBlockPositionMutation = trpc.graphicLayout.updateTextBlockPosition.useMutation({
+    onMutate: async ({ jobId, pageIndex, blockId, x, y, width, height }) => {
+      await trpcUtils.graphicLayout.status.cancel({ id: jobId });
+      const previous = trpcUtils.graphicLayout.status.getData({ id: jobId });
+      trpcUtils.graphicLayout.status.setData({ id: jobId }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: (old.pages ?? []).map((p: any) =>
+            p.pageIndex !== pageIndex ? p
+              : { ...p, textBlocks: (p.textBlocks ?? []).map((b: any) => b.id === blockId ? { ...b, x, y, width, height } : b) }
+          ),
+        };
+      });
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      toast.error("保存位置失败：" + err.message);
+      if (context?.previous) trpcUtils.graphicLayout.status.setData({ id: _vars.jobId }, context.previous);
+    },
+    onSettled: (_data, _err, { jobId }) => {
+      trpcUtils.graphicLayout.status.invalidate({ id: jobId });
+    },
+  });
 
   const deleteTextBlockMutation = trpc.graphicLayout.deleteTextBlock.useMutation({
     onMutate: async ({ jobId, pageIndex, blockId }) => {
@@ -1677,6 +1799,15 @@ export default function MediaLayout() {
                             blockId: block.id,
                           });
                         }}
+                        onUpdateBlockPosition={(block, x, y, width, height) => {
+                          if (!activeJobId) return;
+                          updateTextBlockPositionMutation.mutate({
+                            jobId: activeJobId,
+                            pageIndex: currentPage,
+                            blockId: block.id,
+                            x, y, width, height,
+                          });
+                        }}
                         inpaintingBlockId={inpaintingBlockId}
                       />
                     )}
@@ -1996,7 +2127,7 @@ export default function MediaLayout() {
                 </Button>
                 <Button onClick={handleConfirmEdit} disabled={!newText.trim() || inpaintMutation.isPending || deleteTextBlockMutation.isPending}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
-                  {inpaintMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />重绘中...</> : "确认重绘"}
+                  {inpaintMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />修改中...</> : "确认修改"}
                 </Button>
               </div>
             </div>
