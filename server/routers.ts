@@ -11,7 +11,7 @@ import { generateImageWithTool } from "./_core/generateImageWithTool";
 import { generateGraphicLayoutAsync } from "./graphicLayoutService";
 import { generateVideoWithTool, queryVideoTaskStatus } from "./_core/generateVideoWithTool";
 import { transcribeAudio } from "./_core/voiceTranscription";
-import { transcribeFileWithVolcengine } from "./_core/volcengineTranscription";
+import { transcribeFileWithVolcengine, submitVolcTask, queryVolcTask } from "./_core/volcengineTranscription";
 import { decryptApiKey } from "./_core/crypto";
 import { storagePut } from "./storage";
 import { compositeMaskOnImage, cropToAspectRatio } from "./imageProcessor";
@@ -3411,6 +3411,62 @@ const meetingRouter = router({
         const msg = e instanceof Error ? e.message : String(e);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `音频识别失败: ${msg}` });
       }
+    }),
+
+  // ─── Async transcription: submit task, poll separately (avoids Cloud Run 180s timeout) ───
+  submitTranscribeTask: protectedProcedure
+    .input(z.object({
+      audioUrl: z.string(),
+      toolId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      let creds: { appId: string; accessToken: string } | undefined;
+      if (input.toolId) {
+        try {
+          const tool = await db.getAiToolById(input.toolId);
+          if (tool?.configJson && typeof tool.configJson === "object") {
+            const cfg = tool.configJson as Record<string, unknown>;
+            if (cfg.appId && cfg.accessToken) {
+              creds = { appId: String(cfg.appId), accessToken: String(cfg.accessToken) };
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      const { randomUUID } = await import("crypto");
+      const taskId = randomUUID();
+      console.log(`[meeting.submitTranscribeTask] submitting taskId=${taskId} url=${input.audioUrl}`);
+      await submitVolcTask(input.audioUrl, taskId, creds);
+      console.log(`[meeting.submitTranscribeTask] taskId=${taskId} submitted`);
+      return { taskId };
+    }),
+
+  pollTranscribeTask: protectedProcedure
+    .input(z.object({
+      taskId: z.string(),
+      toolId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      let creds: { appId: string; accessToken: string } | undefined;
+      if (input.toolId) {
+        try {
+          const tool = await db.getAiToolById(input.toolId);
+          if (tool?.configJson && typeof tool.configJson === "object") {
+            const cfg = tool.configJson as Record<string, unknown>;
+            if (cfg.appId && cfg.accessToken) {
+              creds = { appId: String(cfg.appId), accessToken: String(cfg.accessToken) };
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      const result = await queryVolcTask(input.taskId, creds);
+      if (!result.done) {
+        return { status: "processing" as const };
+      }
+      if (result.error) {
+        return { status: "error" as const, error: result.error };
+      }
+      const text = result.text ?? "";
+      return { status: "done" as const, text };
     }),
 
   generateMinutes: protectedProcedure

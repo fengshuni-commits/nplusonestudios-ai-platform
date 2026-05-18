@@ -43,7 +43,7 @@ function buildHeaders(taskId: string, creds?: { appId: string; accessToken: stri
  * Submit a transcription task.
  * Returns the task_id (same UUID we generated and passed in the header).
  */
-async function submitTask(audioUrl: string, taskId: string, creds?: { appId: string; accessToken: string }): Promise<void> {
+export async function submitVolcTask(audioUrl: string, taskId: string, creds?: { appId: string; accessToken: string }): Promise<void> {
   const format = detectFormat(audioUrl);
   const body = {
     user: { uid: "nplus1-platform" },
@@ -94,7 +94,7 @@ interface QueryResult {
 /**
  * Query the task status once.
  */
-async function queryTask(taskId: string, creds?: { appId: string; accessToken: string }): Promise<QueryResult> {
+export async function queryVolcTask(taskId: string, creds?: { appId: string; accessToken: string }): Promise<QueryResult> {
   const res = await fetch(`${BASE_URL}${QUERY_PATH}`, {
     method: "POST",
     headers: buildHeaders(taskId, creds),
@@ -137,12 +137,12 @@ export async function transcribeFileWithVolcengine(
   const { timeoutMs = 10 * 60 * 1000, pollIntervalMs = 5000, creds } = options;
   const taskId = randomUUID();
   console.log(`[VolcASR] Submitting task ${taskId} for ${audioUrl}`);
-  await submitTask(audioUrl, taskId, creds);
+  await submitVolcTask(audioUrl, taskId, creds);
   console.log(`[VolcASR] Task ${taskId} submitted, polling...`);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, pollIntervalMs));
-    const result = await queryTask(taskId, creds);
+    const result = await queryVolcTask(taskId, creds);
     if (!result.done) {
       console.log(`[VolcASR] Task ${taskId} still processing...`);
       continue;
