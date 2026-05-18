@@ -48,6 +48,8 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
   const streamRef = useRef<MediaStream | null>(null);
   const pausedRef = useRef(false);
   const recordingActiveRef = useRef(false); // true when recording is in progress
+  const audioContextMonitorRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsPingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sentence accumulator for wpgs (dynamic correction) mode
   const sentencesRef = useRef<Map<number, string>>(new Map());
@@ -138,13 +140,28 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
     }
   }, []);
 
+  const stopMonitors = useCallback(() => {
+    if (audioContextMonitorRef.current) {
+      clearInterval(audioContextMonitorRef.current);
+      audioContextMonitorRef.current = null;
+    }
+    if (wsPingTimerRef.current) {
+      clearInterval(wsPingTimerRef.current);
+      wsPingTimerRef.current = null;
+    }
+  }, []);
+
   // Cleanup on unmount only
   useEffect(() => {
-    return () => { closePreConnect(); };
-  }, [closePreConnect]);
+    return () => {
+      closePreConnect();
+      stopMonitors();
+    };
+  }, [closePreConnect, stopMonitors]);
 
   const stop = useCallback(() => {
     recordingActiveRef.current = false;
+    stopMonitors();
 
     // Send END signal to server
     const ws = wsRef.current ?? preConnectRef.current;
@@ -280,7 +297,31 @@ export function useStreamTranscribe(options: StreamTranscribeOptions): StreamTra
         ws.send(e.data as ArrayBuffer);
       }
     };
-  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage]);
+
+    // ── AudioContext auto-resume monitor ──────────────────────────────────
+    // Chrome may suspend the AudioContext when the tab is backgrounded or
+    // after extended periods. Poll every 5s and resume if suspended.
+    if (audioContextMonitorRef.current) clearInterval(audioContextMonitorRef.current);
+    audioContextMonitorRef.current = setInterval(() => {
+      const ctx = audioContextRef.current;
+      if (!ctx || !recordingActiveRef.current) return;
+      if (ctx.state === 'suspended') {
+        console.warn('[useStreamTranscribe] AudioContext suspended, resuming...');
+        ctx.resume().catch(() => {});
+      }
+    }, 5000);
+
+    // ── WebSocket ping keepalive ──────────────────────────────────────────
+    // Cloud Run has a 180s request timeout that can kill idle WS connections.
+    // Send a ping text message every 60s to keep the connection alive.
+    // The server ignores non-binary, non-END messages so this is safe.
+    if (wsPingTimerRef.current) clearInterval(wsPingTimerRef.current);
+    wsPingTimerRef.current = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN && recordingActiveRef.current) {
+        ws.send('PING');
+      }
+    }, 60000);
+  }, [toolId, buildWsUrl, closePreConnect, handleWsMessage, stopMonitors]);
 
   return { start, stop, pause, resume, isReady, isConnecting, streamingText };
 }

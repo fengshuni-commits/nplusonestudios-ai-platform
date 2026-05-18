@@ -6334,79 +6334,44 @@ const graphicLayoutRouter = router({
       const imgW: number = page.imageSize?.width ?? 1024;
       const imgH: number = page.imageSize?.height ?? 1365;
 
-      // 用红色覆盖层标记文字区域（与彩平图局部修改一致），让 AI 理解需要修改的范围
+      // Download original image and read actual dimensions
       let compositeB64: string;
-      let compositeMimeType = "image/png";
-      // Hoisted so actualWidth/actualHeight are available in the return value after the try block
+      const compositeMimeType = "image/png";
       let actualWidth: number = imgW;
       let actualHeight: number = imgH;
       try {
         const sharp = (await import("sharp")).default;
-        // 扩展重绘区域 20px 确保覆盖完整
-        const padding = 20;
-        // 先下载原图，再读取实际尺寸（DB 存储的 imageSize 可能与实际图片不一致）
         const imgResp = await fetch(originalImageUrl, { signal: AbortSignal.timeout(30000) });
         if (!imgResp.ok) throw new Error(`Failed to fetch original image: ${imgResp.status}`);
         const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
         const meta = await sharp(imgBuffer).metadata();
-        const actualW = meta.width ?? imgW;
-        const actualH = meta.height ?? imgH;
-        actualWidth = actualW;
-        actualHeight = actualH;
-        if (actualW !== imgW || actualH !== imgH) {
-          console.warn(`[inpaintTextBlock] DB imageSize (${imgW}x${imgH}) differs from actual (${actualW}x${actualH}), using actual`);
+        actualWidth = meta.width ?? imgW;
+        actualHeight = meta.height ?? imgH;
+        if (actualWidth !== imgW || actualHeight !== imgH) {
+          console.warn(`[inpaintTextBlock] DB imageSize (${imgW}x${imgH}) differs from actual (${actualWidth}x${actualHeight}), using actual`);
         }
-        // 防御性处理：DB JSON 中字段可能为 undefined/null
-        const bx = isFinite(Number(block.x)) ? Number(block.x) : 0;
-        const by = isFinite(Number(block.y)) ? Number(block.y) : 0;
-        const bw = isFinite(Number(block.width)) ? Number(block.width) : 0;
-        const bh = isFinite(Number(block.height)) ? Number(block.height) : 0;
-        const mx = Math.max(0, Math.round(bx) - padding);
-        const my = Math.max(0, Math.round(by) - padding);
-        const mw = Math.min(actualW - mx, Math.round(bw) + padding * 2);
-        const mh = Math.min(actualH - my, Math.round(bh) + padding * 2);
-
-        if (mw > 0 && mh > 0) {
-          // 创建半透明红色覆盖层（仅覆盖文字区域）
-          const overlayPixels = Buffer.alloc(mw * mh * 4);
-          for (let i = 0; i < mw * mh; i++) {
-            overlayPixels[i * 4] = 255;   // R
-            overlayPixels[i * 4 + 1] = 60;  // G
-            overlayPixels[i * 4 + 2] = 60;  // B
-            overlayPixels[i * 4 + 3] = 120; // A (半透明)
-          }
-          const overlay = await sharp(overlayPixels, { raw: { width: mw, height: mh, channels: 4 } })
-            .png()
-            .toBuffer();
-
-          // 合成：原图 + 红色覆盖层
-          const compositeBuffer = await sharp(imgBuffer)
-            .composite([{ input: overlay, left: mx, top: my, blend: "over" }])
-            .png()
-            .toBuffer();
-          compositeB64 = compositeBuffer.toString("base64");
-        } else {
-          // 文字块坐标超出图像边界，降级为直接使用原图
-          console.warn(`[inpaintTextBlock] block out of bounds (mx=${mx} my=${my} mw=${mw} mh=${mh}), using original image`);
-          compositeB64 = imgBuffer.toString("base64");
-        }
+        // Send original image directly — no red overlay to avoid AI retaining the annotation color
+        compositeB64 = imgBuffer.toString("base64");
       } catch (err) {
-        console.error("[inpaintTextBlock] Failed to generate red overlay composite:", err);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "生成标注图失败" });
+        console.error("[inpaintTextBlock] Failed to download original image:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "下载原始图片失败" });
       }
 
-      // Build inpainting prompt: ask AI to replace only the red-highlighted text area
+      // Build inpainting prompt: describe the region by coordinates so AI knows where to modify
+      const bx = isFinite(Number(block.x)) ? Math.round(Number(block.x)) : 0;
+      const by = isFinite(Number(block.y)) ? Math.round(Number(block.y)) : 0;
+      const bw = isFinite(Number(block.width)) ? Math.round(Number(block.width)) : 100;
+      const bh = isFinite(Number(block.height)) ? Math.round(Number(block.height)) : 40;
       const inpaintPrompt = [
-        `[INPAINTING INSTRUCTION] The image has a red-highlighted region marking the exact area to modify.`,
-        `ONLY redraw the content inside the red-highlighted region. Keep EVERYTHING outside it pixel-perfect unchanged.`,
-        `In the red region: render the following Chinese text with clean, legible typography:`,
-        `Text: "${input.newText}"`,
-        `Font size: approximately ${block.fontSize}px, color: ${block.color}, alignment: ${block.align}.`,
-        `Match the surrounding design language, background color, and visual style exactly.`,
-        `Do NOT add any extra elements, decorations, or text outside the red region.`,
+        `[TEXT EDIT INSTRUCTION] This is a design layout image (${actualWidth}x${actualHeight}px).`,
+        `Locate the text element at approximately x=${bx}, y=${by}, width=${bw}px, height=${bh}px.`,
+        `Replace ONLY that text with: "${input.newText}"`,
+        `Keep the same font size (~${block.fontSize}px), color (${block.color}), alignment (${block.align}), and typographic style.`,
+        `Keep ALL other elements in the image completely unchanged — same background, colors, layout, and all other text.`,
+        `Do NOT add any new elements or change anything outside the specified text region.`,
       ].join(" ");
 
-      // Call image API for inpainting (pass red-annotated composite image)
+      // Call image API for inpainting (pass original image without red overlay)
       const result = await generateImageWithTool({
         prompt: inpaintPrompt,
         originalImages: [

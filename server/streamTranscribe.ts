@@ -139,6 +139,8 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
         const isEnd = isString
           ? (data as string).trim() === "END"
           : (isSmall && (data as Buffer).toString().trim() === "END");
+        // Ignore PING keepalive messages from client
+        if (isString && (data as string).trim() === "PING") return;
         if (isEnd) {
           session.end();
           return;
@@ -422,6 +424,8 @@ export function registerStreamTranscribeWS(httpServer: HttpServer) {
       const isEnd = isString
         ? (data as string).trim() === "END"
         : (isSmall && (data as Buffer).toString().trim() === "END");
+      // Ignore PING keepalive messages from client
+      if (isString && (data as string).trim() === "PING") return;
 
       if (isEnd) {
         ended = true;
