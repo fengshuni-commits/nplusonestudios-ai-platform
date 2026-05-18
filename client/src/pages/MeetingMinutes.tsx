@@ -400,11 +400,12 @@ export default function MeetingMinutes() {
     setAudioFileName(validFiles.map(f => f.name).join(", "));
     setIsTranscribing(true);
 
-    const transcripts: string[] = [];
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i];
+    // Process all files in parallel
+    const transcripts: (string | null)[] = new Array(validFiles.length).fill(null);
+
+    const processFile = async (file: File, i: number) => {
       try {
-        // Update status to uploading
+        // Upload
         setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "uploading" } : item));
         const formData = new FormData();
         formData.append("file", file, file.name);
@@ -419,15 +420,14 @@ export default function MeetingMinutes() {
         }
         const uploadResult: { url: string; key: string } = await uploadResp.json();
 
-        // Update status to transcribing
+        // Submit transcription task
         setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "transcribing" } : item));
-        // Submit task (fast, just registers with Volcengine)
         const { taskId } = await submitTranscribeMutation.mutateAsync({
           audioUrl: uploadResult.url,
           toolId: fileToolId,
         });
-        // Poll until done (each poll is a short request, avoids Cloud Run 180s timeout)
-        let transcribedText = "";
+
+        // Poll until done
         const maxPolls = 120; // 120 * 5s = 10 minutes max
         for (let poll = 0; poll < maxPolls; poll++) {
           await new Promise(r => setTimeout(r, 5000));
@@ -436,22 +436,23 @@ export default function MeetingMinutes() {
             toolId: fileToolId,
           });
           if (pollResult.status === "done") {
-            transcribedText = pollResult.text || "";
+            transcripts[i] = pollResult.text || "";
             break;
           }
           if (pollResult.status === "error") {
             throw new Error(pollResult.error || "转写失败");
           }
-          // status === "processing", continue polling
         }
-        transcripts.push(transcribedText);
         setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "done" } : item));
       } catch (err) {
         const msg = err instanceof Error ? err.message : "未知错误";
         setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "error", error: msg } : item));
         toast.error(`「${file.name}」转写失败：${msg}`);
       }
-    }
+    };
+
+    // Launch all files concurrently
+    await Promise.all(validFiles.map((file, i) => processFile(file, i)));
 
     // Merge all transcripts
     const merged = transcripts.filter(Boolean).join("\n\n");
