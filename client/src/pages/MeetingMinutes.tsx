@@ -31,6 +31,9 @@ export default function MeetingMinutes() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioFileName, setAudioFileName] = useState("");
+  // Multi-file transcription queue
+  type FileTranscribeStatus = "pending" | "uploading" | "transcribing" | "done" | "error";
+  const [fileQueue, setFileQueue] = useState<{ name: string; status: FileTranscribeStatus; error?: string }[]>([]);
   const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
 
   // Live recording state
@@ -377,47 +380,69 @@ export default function MeetingMinutes() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const maxSize = 500 * 1024 * 1024; // 500MB
-    if (file.size > maxSize) {
-      toast.error("音频文件不能超过 500MB");
-      return;
+    const files = Array.from(e.target.files || []);
+    // Reset input so the same files can be re-selected if needed
+    e.target.value = "";
+    if (files.length === 0) return;
+    const maxSize = 500 * 1024 * 1024; // 500MB per file
+    for (const file of files) {
+      if (file.size > maxSize) {
+        toast.error(`「${file.name}」超过 500MB 限制，已跳过`);
+      }
     }
-    setAudioFileName(file.name);
+    const validFiles = files.filter(f => f.size <= maxSize);
+    if (validFiles.length === 0) return;
+
+    // Initialize queue
+    const initialQueue = validFiles.map(f => ({ name: f.name, status: "pending" as FileTranscribeStatus }));
+    setFileQueue(initialQueue);
+    setAudioFileName(validFiles.map(f => f.name).join(", "));
     setIsTranscribing(true);
-    try {
-      // Use FormData multipart upload to avoid Base64 memory overhead
-      const formData = new FormData();
-      formData.append("file", file, file.name);
-      const uploadResp = await fetch("/api/upload/meeting-audio", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!uploadResp.ok) {
-        const errBody = await uploadResp.json().catch(() => ({}));
-        throw new Error(errBody.error || `上传失败 (${uploadResp.status})`);
+
+    const transcripts: string[] = [];
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
+      try {
+        // Update status to uploading
+        setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "uploading" } : item));
+        const formData = new FormData();
+        formData.append("file", file, file.name);
+        const uploadResp = await fetch("/api/upload/meeting-audio", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!uploadResp.ok) {
+          const errBody = await uploadResp.json().catch(() => ({}));
+          throw new Error(errBody.error || `上传失败 (${uploadResp.status})`);
+        }
+        const uploadResult: { url: string; key: string } = await uploadResp.json();
+
+        // Update status to transcribing
+        setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "transcribing" } : item));
+        const transcribeResult = await transcribeMutation.mutateAsync({
+          audioUrl: uploadResult.url,
+          language: "zh",
+          toolId: fileToolId,
+        });
+        transcripts.push(transcribeResult.text || "");
+        setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "done" } : item));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "未知错误";
+        setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "error", error: msg } : item));
+        toast.error(`「${file.name}」转写失败：${msg}`);
       }
-      const uploadResult: { url: string; key: string } = await uploadResp.json();
-      const transcribeResult = await transcribeMutation.mutateAsync({
-        audioUrl: uploadResult.url,
-        language: "zh",
-        toolId: fileToolId,
-      });
-      if (transcribeResult.text) {
-        setTranscript(transcribeResult.text);
-        toast.success("音频转写完成");
-      } else {
-        toast.warning("转写完成，但未识别到有效内容");
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "未知错误";
-      toast.error(`音频处理失败：${msg}`);
-      console.error("[handleFileUpload] error:", err);
-    } finally {
-      setIsTranscribing(false);
     }
+
+    // Merge all transcripts
+    const merged = transcripts.filter(Boolean).join("\n\n");
+    if (merged) {
+      setTranscript(prev => prev ? prev + "\n\n" + merged : merged);
+      toast.success(`${transcripts.filter(Boolean).length} 个文件转写完成`);
+    } else {
+      toast.warning("转写完成，但未识别到有效内容");
+    }
+    setIsTranscribing(false);
   };
 
   const handleGenerate = async () => {
@@ -746,33 +771,58 @@ export default function MeetingMinutes() {
                 </div>
               ) : (
                 /* Upload mode */
-                <div>
+                <div className="space-y-2">
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm"
+                    multiple
                     className="hidden"
                     onChange={handleFileUpload}
                   />
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isTranscribing}
-                    className="w-full border-2 border-dashed border-border rounded-lg p-8 hover:border-primary/50 hover:bg-accent/30 transition-all flex flex-col items-center gap-3"
+                    className="w-full border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 hover:bg-accent/30 transition-all flex flex-col items-center gap-2"
                   >
-                    {isTranscribing ? (
+                    {isTranscribing && fileQueue.length > 0 ? (
                       <>
-                        <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                        <span className="text-sm text-muted-foreground">正在转写 {audioFileName}…</span>
+                        <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                        <span className="text-sm text-muted-foreground">
+                          正在处理 {fileQueue.filter(f => f.status === "done").length} / {fileQueue.length} 个文件…
+                        </span>
                       </>
                     ) : (
                       <>
-                        <Upload className="h-8 w-8 text-muted-foreground/40" />
+                        <Upload className="h-7 w-7 text-muted-foreground/40" />
                         <span className="text-sm text-muted-foreground">
-                          {audioFileName ? `已上传：${audioFileName}` : "点击上传音频文件（MP3, WAV, M4A，最大 16MB）"}
+                          点击上传音频文件（支持多选，MP3 / WAV / M4A，每个最大 500MB）
                         </span>
                       </>
                     )}
                   </button>
+                  {/* File queue progress list */}
+                  {fileQueue.length > 0 && (
+                    <div className="space-y-1">
+                      {fileQueue.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs px-1">
+                          {item.status === "pending" && <div className="h-2 w-2 rounded-full bg-muted-foreground/30 shrink-0" />}
+                          {item.status === "uploading" && <Loader2 className="h-3 w-3 text-blue-500 animate-spin shrink-0" />}
+                          {item.status === "transcribing" && <Loader2 className="h-3 w-3 text-primary animate-spin shrink-0" />}
+                          {item.status === "done" && <div className="h-2 w-2 rounded-full bg-green-500 shrink-0" />}
+                          {item.status === "error" && <div className="h-2 w-2 rounded-full bg-red-500 shrink-0" />}
+                          <span className="truncate text-muted-foreground flex-1" title={item.name}>{item.name}</span>
+                          <span className="shrink-0 text-muted-foreground/60">
+                            {item.status === "pending" && "等待"}
+                            {item.status === "uploading" && "上传中"}
+                            {item.status === "transcribing" && "转写中"}
+                            {item.status === "done" && "完成"}
+                            {item.status === "error" && `失败: ${item.error?.slice(0, 20) ?? ""}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
