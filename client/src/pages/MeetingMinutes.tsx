@@ -402,7 +402,9 @@ export default function MeetingMinutes() {
     setIsTranscribing(true);
 
     // Process all files in parallel
-    const transcripts: (string | null)[] = new Array(validFiles.length).fill(null);
+    // Each file updates transcript immediately when done (real-time display)
+    let doneCount = 0;
+    let errorCount = 0;
 
     const processFile = async (file: File, i: number) => {
       try {
@@ -430,6 +432,7 @@ export default function MeetingMinutes() {
 
         // Poll until done
         const maxPolls = 120; // 120 * 5s = 10 minutes max
+        let fileText = "";
         for (let poll = 0; poll < maxPolls; poll++) {
           await new Promise(r => setTimeout(r, 5000));
           const pollResult = await pollTranscribeMutation.mutateAsync({
@@ -437,7 +440,7 @@ export default function MeetingMinutes() {
             toolId: fileToolId,
           });
           if (pollResult.status === "done") {
-            transcripts[i] = pollResult.text || "";
+            fileText = pollResult.text || "";
             break;
           }
           if (pollResult.status === "error") {
@@ -445,22 +448,30 @@ export default function MeetingMinutes() {
           }
         }
         setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "done" } : item));
+        // 每个文件完成后立即追加到文本框（实时显示）
+        if (fileText.trim()) {
+          const prefix = validFiles.length > 1 ? `《${file.name}》
+` : "";
+          setTranscript(prev => {
+            const newText = prefix + fileText.trim();
+            return prev ? prev + "\n\n" + newText : newText;
+          });
+        }
+        doneCount++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "未知错误";
         setFileQueue(q => q.map((item, idx) => idx === i ? { ...item, status: "error", error: msg } : item));
         toast.error(`「${file.name}」转写失败：${msg}`);
+        errorCount++;
       }
     };
 
     // Launch all files concurrently
     await Promise.all(validFiles.map((file, i) => processFile(file, i)));
 
-    // Merge all transcripts
-    const merged = transcripts.filter(Boolean).join("\n\n");
-    if (merged) {
-      setTranscript(prev => prev ? prev + "\n\n" + merged : merged);
-      toast.success(`${transcripts.filter(Boolean).length} 个文件转写完成`);
-    } else {
+    if (doneCount > 0) {
+      toast.success(`${doneCount} 个文件转写完成`);
+    } else if (errorCount === 0) {
       toast.warning("转写完成，但未识别到有效内容");
     }
     setIsTranscribing(false);
