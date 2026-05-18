@@ -2727,3 +2727,6 @@
 
 ## Bug 修复（2026-05-18）
 - [x] 会议纪要现场转录：录制约 10 分钟后停止出字（前端 AudioContext 自动恢复 + WS ping 保活每 60s）
+
+## 功能改进（2026-05-18）
+- [x] 会议纪要文件转录：限制从 16MB 提高到 500MB（FormData multipart 替代 Base64 tRPC，新增 /api/upload/meeting-audio 端点）

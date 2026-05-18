@@ -379,43 +379,27 @@ export default function MeetingMinutes() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const maxSize = 16 * 1024 * 1024;
+    const maxSize = 500 * 1024 * 1024; // 500MB
     if (file.size > maxSize) {
-      toast.error("音频文件不能超过 16MB");
+      toast.error("音频文件不能超过 500MB");
       return;
     }
     setAudioFileName(file.name);
     setIsTranscribing(true);
     try {
-      // Read file as base64 using Promise to properly propagate errors
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const b64 = result.split(",")[1];
-          if (b64) resolve(b64);
-          else reject(new Error("Failed to read file as base64"));
-        };
-        reader.onerror = () => reject(reader.error || new Error("FileReader error"));
-        reader.readAsDataURL(file);
+      // Use FormData multipart upload to avoid Base64 memory overhead
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+      const uploadResp = await fetch("/api/upload/meeting-audio", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
-
-      // Infer content type from file extension if browser doesn't provide it
-      let contentType = file.type;
-      if (!contentType) {
-        const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-        const extMap: Record<string, string> = {
-          webm: "audio/webm", ogg: "audio/ogg", mp3: "audio/mpeg",
-          mp4: "audio/mp4", m4a: "audio/mp4", wav: "audio/wav",
-        };
-        contentType = extMap[ext] || "audio/webm";
+      if (!uploadResp.ok) {
+        const errBody = await uploadResp.json().catch(() => ({}));
+        throw new Error(errBody.error || `上传失败 (${uploadResp.status})`);
       }
-
-      const uploadResult = await uploadAudio.mutateAsync({
-        fileName: file.name,
-        fileData: base64,
-        contentType,
-      });
+      const uploadResult: { url: string; key: string } = await uploadResp.json();
       const transcribeResult = await transcribeMutation.mutateAsync({
         audioUrl: uploadResult.url,
         language: "zh",
@@ -458,16 +442,19 @@ export default function MeetingMinutes() {
         // Re-fetch the blob from the local Blob URL
         const response = await fetch(downloadUrl);
         const blob = await response.blob();
-        const base64 = await blobToBase64(blob);
         const ext = downloadMime.includes("ogg") ? "ogg" : downloadMime.includes("mp4") ? "mp4" : "webm";
         const dateStr = new Date().toISOString().slice(0, 10);
-        const uploadResult = await uploadAudio.mutateAsync({
-          fileName: `会议录音_${meetingTitle || dateStr}.${ext}`,
-          fileData: base64,
-          contentType: downloadMime,
+        const archiveFormData = new FormData();
+        archiveFormData.append("file", blob, `会议录音_${meetingTitle || dateStr}.${ext}`);
+        const archiveResp = await fetch("/api/upload/meeting-audio", {
+          method: "POST",
+          body: archiveFormData,
+          credentials: "include",
         });
-        audioUrl = uploadResult.url;
-        audioKey = uploadResult.key;
+        if (!archiveResp.ok) throw new Error(`录音归档失败 (${archiveResp.status})`);
+        const archiveResult: { url: string; key: string } = await archiveResp.json();
+        audioUrl = archiveResult.url;
+        audioKey = archiveResult.key;
       } catch {
         // Non-fatal: proceed without audio archive
         setIsArchiving(false);

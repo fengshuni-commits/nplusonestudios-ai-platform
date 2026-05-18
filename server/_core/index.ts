@@ -83,6 +83,33 @@ async function startServer() {
     }
   });
 
+  // ─── Meeting audio upload endpoint (multipart, up to 500MB) ───
+  const audioUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+  });
+  app.post("/api/upload/meeting-audio", audioUpload.single("file"), async (req: any, res: any) => {
+    try {
+      let user: any = null;
+      try {
+        user = await sdk.authenticateRequest(req);
+      } catch {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      const { originalname, mimetype, buffer } = req.file;
+      const { storagePut } = await import("../storage");
+      const { nanoid } = await import("nanoid");
+      const key = `audio/${nanoid()}-${originalname}`;
+      const { url } = await storagePut(key, buffer, mimetype);
+      return res.json({ url, key, fileName: originalname, contentType: mimetype });
+    } catch (err: any) {
+      console.error("[Upload] Meeting audio upload failed:", err);
+      return res.status(500).json({ error: err?.message || "Upload failed" });
+    }
+  });
+
   // ─── OpenAPI spec endpoint (no auth required) ───
   // IMPORTANT: Must be registered BEFORE the /api alias for openclawRouter
   app.get("/api/openapi.json", (req: any, res: any) => {
