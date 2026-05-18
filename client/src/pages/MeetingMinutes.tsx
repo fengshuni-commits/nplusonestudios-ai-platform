@@ -279,6 +279,7 @@ export default function MeetingMinutes() {
       confirmedTranscriptRef.current = "";
       sentenceMapRef.current.clear();
       setStreamingPartial("");
+      setTranscript(""); // Clear previous transcript for new session
       // Reset draft state for new recording session
       draftIdRef.current = undefined;
       setDraftId(undefined);
@@ -753,20 +754,22 @@ export default function MeetingMinutes() {
 
                   {/* Live transcript preview */}
                   {isRecordingActive && (
-                    <div className="text-xs bg-muted/40 rounded-md p-3 max-h-28 overflow-y-auto">
+                    <div className="text-xs bg-muted/40 rounded-md p-3 max-h-40 overflow-y-auto border border-border/50">
                       {transcript || streamingPartial ? (
                         <>
                           {transcript && (
-                            <span className="text-foreground/70">
-                              {transcript.slice(-300)}{transcript.length > 300 ? "…" : ""}
+                            <span className="text-foreground/80">
+                              {transcript.slice(-500)}{transcript.length > 500 ? "…" : ""}
                             </span>
                           )}
                           {streamingPartial && (
-                            <span className="text-muted-foreground/60 italic ml-1">{streamingPartial}…</span>
+                            <span className="text-primary/70 italic ml-1">{streamingPartial}…</span>
                           )}
                         </>
                       ) : (
-                        <span className="text-muted-foreground italic">转录文字将实时显示在这里…</span>
+                        <span className="text-muted-foreground italic">
+                          {streamTranscribe.isConnecting ? "实时转写连接中，请稍候…" : "转录文字将实时显示在这里…"}
+                        </span>
                       )}
                     </div>
                   )}
@@ -850,6 +853,18 @@ export default function MeetingMinutes() {
 
           <Card className="py-0 gap-0">
             <CardContent className="space-y-4 px-4 py-4">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  会议内容
+                </Label>
+                {isRecordingActive && (
+                  <span className="text-xs text-primary flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                    实时转写中
+                  </span>
+                )}
+              </div>
               <Textarea
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
