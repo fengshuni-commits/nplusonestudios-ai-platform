@@ -123,9 +123,51 @@ async function callGeminiImageApi(opts: {
   // text rendering instructions are not overridden by image content.
   const parts: any[] = [];
 
+  // Helper: compress image buffer to max 1024px on longest side (JPEG quality 85)
+  // This reduces upload size to Gemini significantly (e.g. 3MB → 200KB) without
+  // affecting generation quality, since Gemini internally resizes anyway.
+  const compressForGemini = async (buf: Buffer): Promise<{ data: string; mimeType: string }> => {
+    try {
+      const sharp = (await import("sharp")).default;
+      const meta = await sharp(buf).metadata();
+      const maxDim = 1024;
+      const w = meta.width || 0;
+      const h = meta.height || 0;
+      const needsResize = w > maxDim || h > maxDim;
+      const compressed = needsResize
+        ? await sharp(buf).resize(maxDim, maxDim, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer()
+        : await sharp(buf).jpeg({ quality: 85 }).toBuffer();
+      return { data: compressed.toString("base64"), mimeType: "image/jpeg" };
+    } catch {
+      // Fallback: return original as-is
+      return { data: buf.toString("base64"), mimeType: "image/jpeg" };
+    }
+  };
+
   // Add reference images with role labels before the main prompt
   if (referenceImages && referenceImages.length > 0) {
-    for (const img of referenceImages) {
+    // Download all reference images in parallel for speed
+    const downloadedImages = await Promise.all(
+      referenceImages.map(async (img) => {
+        if (img.b64Json) {
+          const buf = Buffer.from(img.b64Json, "base64");
+          const compressed = await compressForGemini(buf);
+          return { ...img, ...compressed };
+        } else if (img.url) {
+          const imgResp = await fetch(img.url, { signal: AbortSignal.timeout(30000) });
+          if (imgResp.ok) {
+            const buf = Buffer.from(await imgResp.arrayBuffer());
+            const compressed = await compressForGemini(buf);
+            return { ...img, ...compressed };
+          }
+        }
+        return null;
+      })
+    );
+
+    for (let i = 0; i < referenceImages.length; i++) {
+      const img = referenceImages[i];
+      const downloaded = downloadedImages[i];
       // Insert a role-label text part before each image so Gemini understands its purpose
       const roleLabel = img.role === "style_reference"
         ? "STYLE REFERENCE IMAGE (study the visual style, color palette, layout, typography, and design language — replicate this aesthetic in your output):"
@@ -133,20 +175,9 @@ async function callGeminiImageApi(opts: {
         ? "CONTENT IMAGE (incorporate this as a visual element in the layout — do NOT copy its composition or text):"
         : "REFERENCE IMAGE:";
       parts.push({ text: roleLabel });
-      let inlineData: { mimeType: string; data: string } | null = null;
-      if (img.b64Json) {
-        inlineData = { mimeType: img.mimeType || "image/jpeg", data: img.b64Json };
-      } else if (img.url) {
-        // Fetch the image and convert to base64
-        const imgResp = await fetch(img.url, { signal: AbortSignal.timeout(30000) });
-        if (imgResp.ok) {
-          const imgBuf = await imgResp.arrayBuffer();
-          const b64 = Buffer.from(imgBuf).toString("base64");
-          const mimeType = imgResp.headers.get("content-type") || img.mimeType || "image/jpeg";
-          inlineData = { mimeType, data: b64 };
-        }
+      if (downloaded) {
+        parts.push({ inlineData: { mimeType: downloaded.mimeType, data: downloaded.data } });
       }
-      if (inlineData) parts.push({ inlineData });
     }
   }
   // Main instruction prompt goes LAST — Gemini follows the final text instruction most strongly
@@ -533,15 +564,15 @@ export async function generateImageWithTool(
       throw new Error(`AI 工具「${tool.name}」的 provider「${provider}」暂不支持，请联系管理员检查工具配置。`);
     }
 
-    // Upload to S3
-    const { url } = await storagePut(
-      `generated/${Date.now()}-${modelName}.png`,
-      imageBuffer,
-      "image/png"
-    );
-
-    // Report success to key pool
-    await reportSuccess(toolId, _poolKeyId).catch(() => {});
+    // Upload to S3 and report key pool success in parallel
+    const [{ url }] = await Promise.all([
+      storagePut(
+        `generated/${Date.now()}-${modelName}.png`,
+        imageBuffer,
+        "image/png"
+      ),
+      reportSuccess(toolId, _poolKeyId).catch(() => {}),
+    ]);
 
     return { url, modelName: tool.name };
   } catch (err) {
