@@ -70,6 +70,14 @@ export default function DesignPlanning() {
     referenceCount: 5,
   });
   const [importedProjectId, setImportedProjectId] = useState<number | null>(null);
+  // Mode: 'benchmark' = 对标调研, 'research' = 前期研究
+  const [planningMode, setPlanningMode] = useState<'benchmark' | 'research'>('benchmark');
+  const [researchForm, setResearchForm] = useState({
+    siteAnalysis: "",
+    userProfile: "",
+    competitorSpace: "",
+    designTrend: "",
+  });
   const [report, setReport] = useState<string>("");
   const [reportHistoryId, setReportHistoryId] = useState<number | undefined>(undefined);
   const [generateElapsed, setGenerateElapsed] = useState(0);
@@ -276,15 +284,26 @@ export default function DesignPlanning() {
 
   const handleGenerate = () => {
     if (!form.projectName.trim()) { toast.error("请输入报告名称"); return; }
-    if (!form.requirements.trim()) { toast.error("请输入项目需求"); return; }
+    let requirements = form.requirements;
+    if (planningMode === 'research') {
+      const parts: string[] = [];
+      if (researchForm.siteAnalysis.trim()) parts.push(`【场地分析】\n${researchForm.siteAnalysis.trim()}`);
+      if (researchForm.userProfile.trim()) parts.push(`【使用者画像】\n${researchForm.userProfile.trim()}`);
+      if (researchForm.competitorSpace.trim()) parts.push(`【竞品空间】\n${researchForm.competitorSpace.trim()}`);
+      if (researchForm.designTrend.trim()) parts.push(`【设计趋势】\n${researchForm.designTrend.trim()}`);
+      if (parts.length === 0) { toast.error("请至少填写一个研究维度"); return; }
+      requirements = `请按以下四个维度进行系统性前期研究，每个维度单独成章，输出结构化研究报告：\n\n${parts.join('\n\n')}`;
+    } else {
+      if (!requirements.trim()) { toast.error("请输入项目需求"); return; }
+    }
     setIsGenerating(true);
-    setBenchmarkJobId(null); // clear any stale job
+    setBenchmarkJobId(null);
     setReport("");
     setChatHistory([]);
     setGenerateElapsed(0);
     if (generateTimerRef.current) clearInterval(generateTimerRef.current);
     generateTimerRef.current = setInterval(() => setGenerateElapsed(s => s + 1), 1000);
-    generateMutation.mutate({ ...form, toolId });
+    generateMutation.mutate({ ...form, requirements, toolId });
   };
 
   const projectTypes = [
@@ -317,25 +336,55 @@ export default function DesignPlanning() {
             {/* Input Panel */}
             <Card className="lg:col-span-2 py-0 gap-0">
               <CardContent className="space-y-4 px-4 py-4">
+                {/* Mode tabs */}
+                <div className="flex rounded-lg border p-0.5 bg-muted/40 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPlanningMode('benchmark')}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
+                      planningMode === 'benchmark'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    对标调研
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanningMode('research')}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${
+                      planningMode === 'research'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    前期研究
+                  </button>
+                </div>
+
                 {/* Import project info button */}
                 <ImportProjectInfo
                   selectedProjectId={importedProjectId}
                   onImport={(ctx: ProjectContext) => {
                     setImportedProjectId(ctx.project.id);
                     const newForm = { ...form };
-                    if (ctx.project.name) newForm.projectName = `${ctx.project.name}案例调研报告`;
-                    // Map project overview / business goal to requirements
+                    if (ctx.project.name) newForm.projectName = planningMode === 'research'
+                      ? `${ctx.project.name}前期研究报告`
+                      : `${ctx.project.name}案例调研报告`;
                     const reqParts: string[] = [];
                     if (ctx.project.companyProfile) reqParts.push(`公司概况：${ctx.project.companyProfile}`);
                     if (ctx.project.businessGoal) reqParts.push(`业务目标：${ctx.project.businessGoal}`);
                     if (ctx.project.clientProfile) reqParts.push(`客户情况：${ctx.project.clientProfile}`);
                     if (ctx.project.projectOverview) reqParts.push(`项目概况：${ctx.project.projectOverview}`);
-                    // Append custom fields
                     ctx.customFields.forEach(cf => {
                       if (cf.fieldValue) reqParts.push(`${cf.fieldName}：${cf.fieldValue}`);
                     });
                     if (reqParts.length > 0) {
-                      newForm.requirements = reqParts.join("\n");
+                      if (planningMode === 'research') {
+                        setResearchForm(prev => ({ ...prev, userProfile: reqParts.join('\n') }));
+                      } else {
+                        newForm.requirements = reqParts.join('\n');
+                      }
                     }
                     setForm(newForm);
                   }}
@@ -346,34 +395,84 @@ export default function DesignPlanning() {
                   <Input
                     value={form.projectName}
                     onChange={(e) => setForm({ ...form, projectName: e.target.value })}
-                    placeholder="例：某科技园区总部办公楼案例调研报告"
+                    placeholder={planningMode === 'research' ? '例：某科技园区总部办公楼前期研究报告' : '例：某科技园区总部办公楼案例调研报告'}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>项目需求与描述 *</Label>
-                  <Textarea
-                    value={form.requirements}
-                    onChange={(e) => setForm({ ...form, requirements: e.target.value })}
-                    placeholder="描述项目的核心需求、面积、功能要求、风格偏好等..."
-                    rows={5}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>对标案例数量</Label>
-                  <Select value={form.referenceCount.toString()} onValueChange={(v) => setForm({ ...form, referenceCount: parseInt(v) })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                        <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {planningMode === 'benchmark' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>项目需求与描述 *</Label>
+                      <Textarea
+                        value={form.requirements}
+                        onChange={(e) => setForm({ ...form, requirements: e.target.value })}
+                        placeholder="描述项目的核心需求、面积、功能要求、风格偏好等..."
+                        rows={5}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>对标案例数量</Label>
+                      <Select value={form.referenceCount.toString()} onValueChange={(v) => setForm({ ...form, referenceCount: parseInt(v) })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                            <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">按四个维度进行系统性前期研究，至少填写一个维度</p>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">场地分析</Label>
+                      <Textarea
+                        value={researchForm.siteAnalysis}
+                        onChange={(e) => setResearchForm(prev => ({ ...prev, siteAnalysis: e.target.value }))}
+                        placeholder="场地位置、周边环境、交通配套、场地限制与优势..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">使用者画像</Label>
+                      <Textarea
+                        value={researchForm.userProfile}
+                        onChange={(e) => setResearchForm(prev => ({ ...prev, userProfile: e.target.value }))}
+                        placeholder="主要使用群体、工作方式、行为特征、需求痛点..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">竞品空间</Label>
+                      <Textarea
+                        value={researchForm.competitorSpace}
+                        onChange={(e) => setResearchForm(prev => ({ ...prev, competitorSpace: e.target.value }))}
+                        placeholder="同类项目、行业标杆、希望对标的公司或案例..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">设计趋势</Label>
+                      <Textarea
+                        value={researchForm.designTrend}
+                        onChange={(e) => setResearchForm(prev => ({ ...prev, designTrend: e.target.value }))}
+                        placeholder="希望探索的设计方向、技术趋势、可持续性要求..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <Button onClick={handleGenerate} disabled={isGenerating || !toolId} className="w-full">
                   {isGenerating ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" />生成中… {generateElapsed > 0 && <span className="ml-1 opacity-70">({generateElapsed}s)</span>}</>
                   ) : (
-                    <><Sparkles className="h-4 w-4 mr-2" />生成调研报告</>
+                    <><Sparkles className="h-4 w-4 mr-2" />{planningMode === 'research' ? '生成前期研究报告' : '生成调研报告'}</>
                   )}
                 </Button>
                 {isGenerating && generateElapsed >= 10 && (
