@@ -509,7 +509,74 @@ function ProjectInfoTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Workflow Quick-Entry */}
+      <Card className="py-0 gap-0">
+        <CardHeader className="px-4 py-3 border-b">
+          <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            工作流快捷入口
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 py-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <WorkflowEntryCard
+              icon={<Mic className="h-4 w-4" />}
+              label="发起会议记录"
+              description="录音转写并生成纪要"
+              href={`/meeting?projectId=${projectId}`}
+              color="bg-emerald-50 text-emerald-700 border-emerald-200"
+            />
+            <WorkflowEntryCard
+              icon={<Compass className="h-4 w-4" />}
+              label="发起对标研究"
+              description="案例调研与分析"
+              href={`/design/planning?projectId=${projectId}`}
+              color="bg-blue-50 text-blue-700 border-blue-200"
+            />
+            <WorkflowEntryCard
+              icon={<Presentation className="h-4 w-4" />}
+              label="生成汇报"
+              description="方案汇报与演示文档"
+              href={`/design/presentation?projectId=${projectId}`}
+              color="bg-violet-50 text-violet-700 border-violet-200"
+            />
+            <WorkflowEntryCard
+              icon={<Megaphone className="h-4 w-4" />}
+              label="生成内容"
+              description="小红书、公众号等媒体内容"
+              href={`/media/xiaohongshu?projectId=${projectId}`}
+              color="bg-rose-50 text-rose-700 border-rose-200"
+            />
+          </div>
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+function WorkflowEntryCard({
+  icon, label, description, href, color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  href: string;
+  color: string;
+}) {
+  const [, navigate] = useLocation();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(href)}
+      className={`flex flex-col items-start gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-all hover:shadow-sm hover:scale-[1.01] ${color}`}
+    >
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <span className="text-xs font-medium">{label}</span>
+      </div>
+      <p className="text-[11px] opacity-70 leading-snug">{description}</p>
+    </button>
   );
 }
 

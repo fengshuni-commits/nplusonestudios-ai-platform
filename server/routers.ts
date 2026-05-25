@@ -3637,6 +3637,110 @@ const meetingRouter = router({
       await db.deleteDocument(input.id);
       return { success: true };
     }),
+
+  // Extract action items from meeting minutes using LLM
+  extractTasks: protectedProcedure
+    .input(z.object({
+      minutesContent: z.string(),
+      projectId: z.number().optional(),
+      toolId: z.number().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const response = await invokeLLMWithUserTool({
+        messages: [
+          {
+            role: "system",
+            content: `你是 N+1 STUDIOS 的项目管理助手。请从会议纪要中提取所有明确的待办事项和行动项。
+
+要求：
+- 只提取有明确责任人或截止时间的任务，或虽无明确责任人但属于团队必须跟进的事项
+- 每个任务包含：标题（简洁，15字以内）、描述（补充细节）、优先级（low/medium/high/urgent）、类别（design/construction/management/other）、截止日期（如有，格式 YYYY-MM-DD）
+- 如果没有明确的待办事项，返回空数组
+- 以 JSON 格式输出，不要有其他内容`,
+          },
+          {
+            role: "user",
+            content: `请从以下会议纪要中提取待办事项：
+
+${input.minutesContent}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "extracted_tasks",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                tasks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      description: { type: "string" },
+                      priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                      category: { type: "string", enum: ["design", "construction", "management", "other"] },
+                      dueDate: { type: "string" },
+                    },
+                    required: ["title", "description", "priority", "category", "dueDate"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["tasks"],
+              additionalProperties: false,
+            },
+          },
+        },
+      }, ctx.user.id, input.toolId);
+
+      let tasks: Array<{ title: string; description: string; priority: string; category: string; dueDate: string }> = [];
+      try {
+        const raw = typeof response.choices[0]?.message?.content === "string"
+          ? response.choices[0].message.content
+          : "";
+        const parsed = JSON.parse(raw);
+        tasks = parsed.tasks || [];
+      } catch {
+        tasks = [];
+      }
+
+      return { tasks };
+    }),
+
+  // Save extracted tasks to project kanban
+  saveExtractedTasks: protectedProcedure
+    .input(z.object({
+      projectId: z.number(),
+      tasks: z.array(z.object({
+        title: z.string(),
+        description: z.string().optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+        category: z.enum(["design", "construction", "management", "other"]).default("management"),
+        dueDate: z.string().optional(),
+      })),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const project = await db.getProjectById(input.projectId);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "项目不存在" });
+      const created = await Promise.all(
+        input.tasks.map(task =>
+          db.createTask({
+            projectId: input.projectId,
+            title: task.title,
+            description: task.description || undefined,
+            priority: task.priority as any,
+            category: task.category as any,
+            dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+            createdBy: ctx.user.id,
+            status: "todo",
+          })
+        )
+      );
+      return { count: created.length };
+    }),
 });
 // ─── Admin ────────────────────────────────────────────────
 

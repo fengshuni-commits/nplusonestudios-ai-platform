@@ -5,9 +5,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AiToolSelector } from "@/components/AiToolSelector";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText, Download, Edit2, Save, X } from "lucide-react";
+import { Loader2, Sparkles, Upload, Mic, MicOff, Copy, Square, Pause, Play, MapPin, Users, FileText, Download, Edit2, Save, X, CheckSquare, ListTodo, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useStreamTranscribe } from "@/hooks/useStreamTranscribe";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
@@ -50,6 +52,13 @@ export default function MeetingMinutes() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedMinutes, setEditedMinutes] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  // Task extraction state
+  type ExtractedTask = { title: string; description: string; priority: string; category: string; dueDate: string; selected: boolean };
+  const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
+  const [isExtractingTasks, setIsExtractingTasks] = useState(false);
+  const [showExtractedTasks, setShowExtractedTasks] = useState(false);
+  const [isSavingTasks, setIsSavingTasks] = useState(false);
+
   // Auto-save draft state
   const [draftId, setDraftId] = useState<number | undefined>(undefined);
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
@@ -140,6 +149,23 @@ export default function MeetingMinutes() {
   useEffect(() => { meetingDateRef.current = meetingDate; }, [meetingDate]);
   useEffect(() => { importedProjectIdRef.current = importedProjectId; }, [importedProjectId]);
   useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+
+  // Auto-import project from URL ?projectId= param
+  const [location] = useLocation();
+  const utils = trpc.useUtils();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get("projectId");
+    if (!pid) return;
+    const id = parseInt(pid, 10);
+    if (isNaN(id) || importedProjectId === id) return;
+    utils.projects.getProjectContext.fetch({ id }).then((ctx: any) => {
+      setImportedProjectId(ctx.project.id);
+      if (ctx.project.name) setProjectName(ctx.project.name);
+      toast.success(`已自动关联项目：${ctx.project.name}`);
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
   // Listen for load-meeting-draft event dispatched from History page
   useEffect(() => {
     const handler = (e: Event) => {
@@ -185,6 +211,72 @@ export default function MeetingMinutes() {
       toast.error(err.message || "生成失败");
     },
   });
+
+  const extractTasksMutation = trpc.meeting.extractTasks.useMutation({
+    onSuccess: (data) => {
+      const tasks = data.tasks.map((t: any) => ({ ...t, selected: true }));
+      setExtractedTasks(tasks);
+      setShowExtractedTasks(true);
+      setIsExtractingTasks(false);
+      if (tasks.length === 0) {
+        toast.info("未从纪要中识别到明确的待办事项");
+      } else {
+        toast.success(`识别到 ${tasks.length} 个待办事项`);
+      }
+    },
+    onError: (err) => {
+      setIsExtractingTasks(false);
+      toast.error(err.message || "任务提取失败");
+    },
+  });
+
+  const saveExtractedTasksMutation = trpc.meeting.saveExtractedTasks.useMutation({
+    onSuccess: (data) => {
+      setIsSavingTasks(false);
+      toast.success(`${data.count} 个任务已写入项目看板`);
+      setShowExtractedTasks(false);
+      setExtractedTasks([]);
+    },
+    onError: (err) => {
+      setIsSavingTasks(false);
+      toast.error(err.message || "保存任务失败");
+    },
+  });
+
+  const handleExtractTasks = () => {
+    if (!minutes.trim()) return;
+    setIsExtractingTasks(true);
+    setExtractedTasks([]);
+    setShowExtractedTasks(false);
+    extractTasksMutation.mutate({
+      minutesContent: minutes,
+      projectId: importedProjectId || undefined,
+      toolId: llmToolId,
+    });
+  };
+
+  const handleSaveTasksToKanban = () => {
+    if (!importedProjectId) {
+      toast.error("请先关联项目，才能写入任务看板");
+      return;
+    }
+    const selected = extractedTasks.filter(t => t.selected);
+    if (selected.length === 0) {
+      toast.error("请至少选择一个任务");
+      return;
+    }
+    setIsSavingTasks(true);
+    saveExtractedTasksMutation.mutate({
+      projectId: importedProjectId,
+      tasks: selected.map(t => ({
+        title: t.title,
+        description: t.description,
+        priority: t.priority as any,
+        category: t.category as any,
+        dueDate: t.dueDate || undefined,
+      })),
+    });
+  };
 
   // Helper: convert Blob to base64 string safely (avoids btoa RangeError on binary data)
   const blobToBase64 = useCallback((blob: Blob): Promise<string> => {
@@ -952,6 +1044,83 @@ export default function MeetingMinutes() {
                         <a href={`/projects/${importedProjectId}?tab=documents`} className="ml-auto underline underline-offset-2 hover:text-emerald-900 font-medium">查看文档库 →</a>
                       </div>
                     )}
+
+                    {/* Task Extraction */}
+                    <div className="space-y-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5"
+                        onClick={handleExtractTasks}
+                        disabled={isExtractingTasks}
+                      >
+                        {isExtractingTasks ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" />提取待办事项中…</>
+                        ) : (
+                          <><ListTodo className="h-3.5 w-3.5" />提取待办事项</>
+                        )}
+                      </Button>
+
+                      {showExtractedTasks && extractedTasks.length > 0 && (
+                        <div className="border rounded-md overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b">
+                            <span className="text-xs font-medium text-foreground">识别到 {extractedTasks.length} 个待办事项</span>
+                            <div className="flex gap-1.5">
+                              <button
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                                onClick={() => setExtractedTasks(ts => ts.map(t => ({ ...t, selected: true })))}
+                              >全选</button>
+                              <span className="text-muted-foreground">/</span>
+                              <button
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                                onClick={() => setExtractedTasks(ts => ts.map(t => ({ ...t, selected: false })))}
+                              >全不选</button>
+                            </div>
+                          </div>
+                          <div className="divide-y max-h-64 overflow-y-auto">
+                            {extractedTasks.map((task, idx) => (
+                              <div
+                                key={idx}
+                                className={`flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors ${task.selected ? '' : 'opacity-50'}`}
+                                onClick={() => setExtractedTasks(ts => ts.map((t, i) => i === idx ? { ...t, selected: !t.selected } : t))}
+                              >
+                                <div className={`mt-0.5 h-4 w-4 rounded border flex items-center justify-center shrink-0 ${task.selected ? 'bg-primary border-primary' : 'border-border'}`}>
+                                  {task.selected && <svg className="h-2.5 w-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-medium text-foreground">{task.title}</span>
+                                    <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${
+                                      task.priority === 'urgent' ? 'border-red-300 text-red-600' :
+                                      task.priority === 'high' ? 'border-orange-300 text-orange-600' :
+                                      task.priority === 'medium' ? 'border-yellow-300 text-yellow-600' :
+                                      'border-gray-200 text-gray-500'
+                                    }`}>{task.priority === 'urgent' ? '紧急' : task.priority === 'high' ? '高' : task.priority === 'medium' ? '中' : '低'}</Badge>
+                                    {task.dueDate && <span className="text-[10px] text-muted-foreground">{task.dueDate}</span>}
+                                  </div>
+                                  {task.description && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{task.description}</p>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="px-3 py-2 border-t bg-muted/20">
+                            <Button
+                              size="sm"
+                              className="w-full gap-1.5"
+                              onClick={handleSaveTasksToKanban}
+                              disabled={isSavingTasks || !importedProjectId || extractedTasks.filter(t => t.selected).length === 0}
+                            >
+                              {isSavingTasks ? (
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin" />写入看板中…</>
+                              ) : (
+                                <><CheckSquare className="h-3.5 w-3.5" />将选中任务写入项目看板 {!importedProjectId && <span className="text-xs opacity-70">(请先关联项目)</span>}</>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <FeedbackButtons module="meeting_minutes" historyId={minutesHistoryId} />
                   </div>
                 )}
