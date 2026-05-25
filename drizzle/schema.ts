@@ -1001,3 +1001,37 @@ export const presentationSlides = mysqlTable("presentation_slides", {
 });
 export type PresentationSlide = typeof presentationSlides.$inferSelect;
 export type InsertPresentationSlide = typeof presentationSlides.$inferInsert;
+
+// ─── Case Library (案例库) ────────────────────────────────
+export const caseLibrary = mysqlTable("case_library", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  // Project type: office / showroom / lab / residential / other
+  projectType: varchar("projectType", { length: 64 }),
+  // Style tags (comma-separated or JSON array stored as text)
+  styleTags: text("styleTags"),
+  // AI-extracted tags (JSON array)
+  aiTags: json("aiTags"),
+  // Area in sqm
+  areaSqm: int("areaSqm"),
+  // Client / company type
+  clientType: varchar("clientType", { length: 128 }),
+  // Cover image URL (S3)
+  coverImageUrl: text("coverImageUrl"),
+  // Additional image URLs (JSON array of S3 URLs)
+  imageUrls: json("imageUrls"),
+  // Source URL (external reference)
+  sourceUrl: text("sourceUrl"),
+  // Year of completion
+  completionYear: int("completionYear"),
+  // Designer / firm name
+  designerName: varchar("designerName", { length: 256 }),
+  // Whether AI tags have been generated
+  aiTagsGenerated: boolean("aiTagsGenerated").default(false).notNull(),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CaseLibraryItem = typeof caseLibrary.$inferSelect;
+export type InsertCaseLibraryItem = typeof caseLibrary.$inferInsert;

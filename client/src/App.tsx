@@ -37,6 +37,7 @@ import MediaPortfolio from "./pages/MediaPortfolio";
 import VideoGeneration from "./pages/VideoGeneration";
 import OpenClawIntegration from "./pages/OpenClawIntegration";
 import ApiDocs from "./pages/ApiDocs";
+import CaseLibrary from "./pages/CaseLibrary";
 
 function Router() {
   return (
@@ -72,6 +73,7 @@ function Router() {
         <Route path="/meeting" component={MeetingMinutes} />
         <Route path="/design/brief" component={DesignBrief} />
         <Route path="/design/analysis" component={DesignAnalysis} />
+        <Route path="/case-library" component={CaseLibrary} />
 
         {/* 媒体板块 */}
         <Route path="/media/xiaohongshu" component={MediaXiaohongshu} />

@@ -110,6 +110,29 @@ async function startServer() {
     }
   });
 
+  // ─── Case cover image upload endpoint ───
+  const coverUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  });
+  app.post("/api/upload/case-cover", coverUpload.single("file"), async (req: any, res: any) => {
+    try {
+      let user: any = null;
+      try { user = await sdk.authenticateRequest(req); } catch { /* ignore */ }
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      const { originalname, mimetype, buffer } = req.file;
+      const { storagePut } = await import("../storage");
+      const { nanoid } = await import("nanoid");
+      const key = `case-covers/${nanoid()}-${originalname}`;
+      const { url } = await storagePut(key, buffer, mimetype);
+      return res.json({ url, key, fileName: originalname, contentType: mimetype });
+    } catch (err: any) {
+      console.error("[Upload] Case cover upload failed:", err);
+      return res.status(500).json({ error: err?.message || "Upload failed" });
+    }
+  });
+
   // ─── OpenAPI spec endpoint (no auth required) ───
   // IMPORTANT: Must be registered BEFORE the /api alias for openclawRouter
   app.get("/api/openapi.json", (req: any, res: any) => {

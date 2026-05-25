@@ -7235,6 +7235,135 @@ const analysisImageRouter = router({
     }),
 });
 
+
+// ─── Case Library Router ────────────────────────────────────────────────
+import {
+  listCaseLibrary,
+  getCaseLibraryItem,
+  createCaseLibraryItem,
+  updateCaseLibraryItem,
+  deleteCaseLibraryItem,
+} from "./caseLibraryDb";
+
+export const caseLibraryRouter = router({
+  list: protectedProcedure
+    .input(z.object({
+      search: z.string().optional(),
+      projectType: z.string().optional(),
+      styleTag: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      return listCaseLibrary(input);
+    }),
+
+  get: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const item = await getCaseLibraryItem(input.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "案例不存在" });
+      return item;
+    }),
+
+  create: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1),
+      description: z.string().optional(),
+      projectType: z.string().optional(),
+      styleTags: z.string().optional(),
+      areaSqm: z.number().optional(),
+      clientType: z.string().optional(),
+      coverImageUrl: z.string().optional(),
+      imageUrls: z.array(z.string()).optional(),
+      sourceUrl: z.string().optional(),
+      completionYear: z.number().optional(),
+      designerName: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await createCaseLibraryItem({ ...input, createdBy: ctx.user.id });
+      return { success: true };
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().min(1).optional(),
+      description: z.string().optional(),
+      projectType: z.string().optional(),
+      styleTags: z.string().optional(),
+      areaSqm: z.number().optional(),
+      clientType: z.string().optional(),
+      coverImageUrl: z.string().optional(),
+      imageUrls: z.array(z.string()).optional(),
+      sourceUrl: z.string().optional(),
+      completionYear: z.number().optional(),
+      designerName: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateCaseLibraryItem(id, data);
+      return { success: true };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteCaseLibraryItem(input.id);
+      return { success: true };
+    }),
+
+  generateAiTags: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      toolId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const item = await getCaseLibraryItem(input.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "案例不存在" });
+
+      const prompt = `你是一位专业的建筑设计案例分析师。请根据以下案例信息，提取5-10个关键标签，用于案例检索和分类。
+
+案例名称：${item.title}
+项目类型：${item.projectType || "未指定"}
+描述：${item.description || "无"}
+设计师/事务所：${item.designerName || "未知"}
+面积：${item.areaSqm ? item.areaSqm + "㎡" : "未知"}
+甲方类型：${item.clientType || "未知"}
+完成年份：${item.completionYear || "未知"}
+风格标签：${item.styleTags || "无"}
+
+请返回一个JSON数组，包含5-10个标签字符串，每个标签2-6个汉字，涵盖：空间类型、设计风格、材料特点、空间特征、使用场景等维度。
+只返回JSON数组，不要其他内容。示例：["开放办公", "工业风格", "混凝土", "大跨度", "科技企业"]`;
+
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: "你是建筑设计案例分析专家，只输出JSON数组。" },
+          { role: "user", content: prompt },
+        ],
+        response_format: { type: "json_object" } as any,
+      });
+
+      let tags: string[] = [];
+      try {
+        const content = (response.choices[0]?.message?.content as string) || "[]";
+        // Try to parse as array directly or as object with array property
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          tags = parsed.filter((t: any) => typeof t === "string");
+        } else {
+          // Find first array value in the object
+          const arr = Object.values(parsed).find(Array.isArray);
+          if (arr) tags = (arr as any[]).filter((t: any) => typeof t === "string");
+        }
+      } catch {
+        tags = [];
+      }
+
+      await updateCaseLibraryItem(input.id, { aiTags: tags, aiTagsGenerated: true });
+      return { tags };
+    }),
+});
+
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -7570,6 +7699,6 @@ export const appRouter = router({system: systemRouter,
   designBriefPrompts: designBriefPromptsRouter,
   director: directorRouter,
   presentationProjects: presentationProjectsRouter,
+  caseLibrary: caseLibraryRouter,
 });
 export type AppRouter = typeof appRouter;
-

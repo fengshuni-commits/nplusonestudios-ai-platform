@@ -58,6 +58,8 @@ export default function MeetingMinutes() {
   const [isExtractingTasks, setIsExtractingTasks] = useState(false);
   const [showExtractedTasks, setShowExtractedTasks] = useState(false);
   const [isSavingTasks, setIsSavingTasks] = useState(false);
+  const [tasksSavedProjectId, setTasksSavedProjectId] = useState<number | null>(null);
+  const [tasksSavedCount, setTasksSavedCount] = useState(0);
 
   // Auto-save draft state
   const [draftId, setDraftId] = useState<number | undefined>(undefined);
@@ -233,9 +235,11 @@ export default function MeetingMinutes() {
   const saveExtractedTasksMutation = trpc.meeting.saveExtractedTasks.useMutation({
     onSuccess: (data) => {
       setIsSavingTasks(false);
-      toast.success(`${data.count} 个任务已写入项目看板`);
+      setTasksSavedCount(data.count);
+      setTasksSavedProjectId(importedProjectId);
       setShowExtractedTasks(false);
       setExtractedTasks([]);
+      toast.success(`${data.count} 个任务已写入项目看板`);
     },
     onError: (err) => {
       setIsSavingTasks(false);
@@ -1120,6 +1124,21 @@ export default function MeetingMinutes() {
                         </div>
                       )}
                     </div>
+
+                    {tasksSavedProjectId && tasksSavedCount > 0 && (
+                      <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <div className="flex items-center gap-2">
+                          <CheckSquare className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>{tasksSavedCount} 个任务已写入项目看板</span>
+                        </div>
+                        <a
+                          href={`/projects/${tasksSavedProjectId}?tab=tasks`}
+                          className="ml-4 shrink-0 font-medium underline underline-offset-2 hover:text-emerald-900"
+                        >
+                          查看项目看板 →
+                        </a>
+                      </div>
+                    )}
 
                     <FeedbackButtons module="meeting_minutes" historyId={minutesHistoryId} />
                   </div>

@@ -1,0 +1,20 @@
+CREATE TABLE `case_library` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`title` varchar(256) NOT NULL,
+	`description` text,
+	`projectType` varchar(64),
+	`styleTags` text,
+	`aiTags` json,
+	`areaSqm` int,
+	`clientType` varchar(128),
+	`coverImageUrl` text,
+	`imageUrls` json,
+	`sourceUrl` text,
+	`completionYear` int,
+	`designerName` varchar(256),
+	`aiTagsGenerated` boolean NOT NULL DEFAULT false,
+	`createdBy` int,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `case_library_id` PRIMARY KEY(`id`)
+);

@@ -43,6 +43,7 @@ import {
   Film,
   Activity,
   Layers,
+  Library,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
@@ -78,6 +79,7 @@ const menuSections: MenuSection[] = [
       { icon: FileText, label: "会议纪要", path: "/meeting", description: "录音转录，AI 自动生成结构化纪要" },
       { icon: FileText, label: "设计任务书", path: "/design/brief", description: "根据项目信息自动生成标准化任务书" },
       { icon: Compass, label: "案例调研", path: "/design/planning", description: "AI 生成对标案例分析报告" },
+      { icon: Library, label: "案例库", path: "/case-library", description: "积累自有案例，AI 自动提取标签，支持检索" },
     ],
   },
   {
