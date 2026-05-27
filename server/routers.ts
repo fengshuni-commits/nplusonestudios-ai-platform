@@ -2162,7 +2162,7 @@ const aiToolsRouter = router({
       const caps: string[] = Array.isArray(tool.capabilities) ? tool.capabilities : JSON.parse(tool.capabilities || "[]");
       // A tool is LLM-testable only if it has a chat-compatible capability AND has an API endpoint
       // Providers like jimeng/volcengine use proprietary APIs, not OpenAI-compatible chat endpoints
-      const NON_LLM_PROVIDERS = ["jimeng", "volcengine", "volcengine_speech", "xfyun", "seedance"];
+      const NON_LLM_PROVIDERS = ["jimeng", "volcengine", "volcengine_speech", "xfyun", "seedance", "deepbot"];
       const hasLLMCap = caps.some((c: string) => ["document", "analysis", "rendering", "chat"].includes(c));
       const hasLLMEndpoint = !!(tool.apiEndpoint as string)?.trim() && !NON_LLM_PROVIDERS.includes(tool.provider as string);
       const isLLMTool = hasLLMCap && hasLLMEndpoint;
