@@ -277,6 +277,7 @@ export async function generateImageWithTool(
   const _poolKeyId = poolKey.id;
 
   // Auto-detect provider from apiEndpoint if not explicitly set
+  // Also check tool name for deepbot/gpt-image-2
   let provider = tool.provider?.toLowerCase() || "";
   if (!provider) {
     const ep = tool.apiEndpoint || "";
@@ -284,6 +285,8 @@ export async function generateImageWithTool(
       provider = "qwen";
     } else if (ep.includes("generativelanguage.googleapis.com")) {
       provider = "gemini";
+    } else if (ep.includes("deepbot.plus")) {
+      provider = "deepbot";
     } else if (ep.includes("api.openai.com")) {
       provider = "openai";
     } else {
@@ -490,7 +493,74 @@ export async function generateImageWithTool(
         if (!b64) throw new Error(`OpenAI Images API returned no image data: ${JSON.stringify(genResult).substring(0, 300)}`);
         imageBuffer = Buffer.from(b64, "base64");
       }
-    } else if (provider === "jimeng" || provider === "volcengine") {
+    } else if (provider === "deepbot") {
+    // ── DeepBot gpt-image-2 API ──────────────────────────────────────────────
+    // Endpoint: POST https://deepbot.plus/tool/gpt4/v1/images/generations
+    // Auth: Authorization: Bearer API_KEY
+    // Returns: { data: [{ url: "..." }] }
+    const deepbotEndpoint = tool.apiEndpoint || "https://deepbot.plus/tool/gpt4/v1/images/generations";
+    const deepbotModel = config.modelName || "gpt-image-2";
+
+    // Supported sizes: 1024x1024, 1024x768, 768x1024, 1672x941, 941x1672
+    const DEEPBOT_VALID_SIZES = ["1024x1024", "1024x768", "768x1024", "1672x941", "941x1672"];
+    const deepbotSize = (genOpts.size && DEEPBOT_VALID_SIZES.includes(genOpts.size))
+      ? genOpts.size
+      : "1024x1024";
+
+    // Build image array: pass reference image URLs (max 5)
+    const imageArray: string[] = [];
+    if (genOpts.originalImages && genOpts.originalImages.length > 0) {
+      for (const img of genOpts.originalImages.slice(0, 5)) {
+        if (img.url) {
+          imageArray.push(img.url);
+        } else if (img.b64Json) {
+          // Pass as data URI
+          const mime = img.mimeType || "image/png";
+          imageArray.push(`data:${mime};base64,${img.b64Json}`);
+        }
+      }
+    }
+
+    const deepbotBody: Record<string, any> = {
+      model: deepbotModel,
+      prompt: genOpts.prompt,
+      image: imageArray,
+      size: deepbotSize,
+      response_format: "url",
+    };
+
+    const deepbotResp = await fetch(deepbotEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(deepbotBody),
+      signal: AbortSignal.timeout(180000), // 3 min timeout
+    });
+
+    if (!deepbotResp.ok) {
+      const detail = await deepbotResp.text().catch(() => "");
+      throw new Error(
+        `DeepBot gpt-image-2 API failed (${deepbotResp.status} ${deepbotResp.statusText})${detail ? ": " + detail.substring(0, 500) : ""}`
+      );
+    }
+
+    const deepbotResult = await deepbotResp.json();
+    const deepbotImageUrl: string | undefined = deepbotResult?.data?.[0]?.url;
+    if (!deepbotImageUrl) {
+      throw new Error(
+        `DeepBot gpt-image-2 returned no image URL. Response: ${JSON.stringify(deepbotResult).substring(0, 300)}`
+      );
+    }
+
+    // Download the returned image URL
+    const dbImgResp = await fetch(deepbotImageUrl, { signal: AbortSignal.timeout(60000) });
+    if (!dbImgResp.ok) {
+      throw new Error(`Failed to download DeepBot image (${dbImgResp.status})`);
+    }
+    imageBuffer = Buffer.from(await dbImgResp.arrayBuffer());
+  } else if (provider === "jimeng" || provider === "volcengine") {
       // 即梦 AI (火山引擎) 图像生成
       const volcengineConfig: VolcengineConfig = {
         accessKeyId: config.accessKeyId || "",

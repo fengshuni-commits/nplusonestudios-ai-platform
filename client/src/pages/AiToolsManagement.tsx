@@ -306,6 +306,8 @@ export default function AdminApiKeys() {
   const isXfyunTool = toolForm.name.toLowerCase().includes("讯飞") || toolForm.name.toLowerCase().includes("xfyun") || toolForm.apiEndpoint.includes("xfyun");
   // 检测是否为火山引擎语音工具（豆包语音）
   const isVolcengineSpeechTool = toolForm.name.toLowerCase().includes("豆包") || (toolForm.name.toLowerCase().includes("火山") && (toolForm.name.toLowerCase().includes("语音") || toolForm.name.toLowerCase().includes("asr") || toolForm.name.toLowerCase().includes("转写")));
+  // 检测是否为 DeepBot gpt-image-2 工具
+  const isDeepbotTool = toolForm.name.toLowerCase().includes("deepbot") || toolForm.name.toLowerCase().includes("gpt-image-2") || toolForm.name.toLowerCase().includes("gpt image 2") || toolForm.apiEndpoint.includes("deepbot.plus");
 
   // 实时预览推断能力
   const previewCapabilities = toolForm.name.trim()
@@ -551,6 +553,19 @@ export default function AdminApiKeys() {
                     />
                   </div>
                 </>
+              )}
+              {isDeepbotTool && (
+                <div className="rounded-md bg-primary/5 border border-primary/20 p-3 space-y-1.5">
+                  <p className="text-xs font-medium text-primary flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />DeepBot gpt-image-2 配置说明
+                  </p>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• API 端点填写：<code className="font-mono bg-muted px-1 rounded">https://deepbot.plus/tool/gpt4/v1/images/generations</code></li>
+                    <li>• 支持尺寸：1024×1024、1024×768、768×1024、1672×941、941×1672</li>
+                    <li>• 支持最多 5 张参考图（URL 数组传入）</li>
+                    <li>• API Key 即为 Bearer Token，填入下方 API Key 框</li>
+                  </ul>
+                </div>
               )}
               <div className="space-y-2">
                 <Label>备注名称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
@@ -1199,6 +1214,14 @@ export default function AdminApiKeys() {
                                 </div>
                               </div>
                             )}
+                          </div>
+                        )}
+                        {/* DeepBot gpt-image-2 信息展示 */}
+                        {(tool.name.toLowerCase().includes("deepbot") || tool.name.toLowerCase().includes("gpt-image-2") || tool.apiEndpoint?.includes("deepbot.plus")) && (
+                          <div className="rounded-md bg-primary/5 border border-primary/20 p-2.5 space-y-1">
+                            <p className="text-xs font-medium text-primary">DeepBot gpt-image-2</p>
+                            <p className="text-xs text-muted-foreground">支持尺寸：1024×1024 / 1024×768 / 768×1024 / 1672×941 / 941×1672</p>
+                            <p className="text-xs text-muted-foreground">最多传入 5 张参考图（URL 数组），返回图片直链</p>
                           </div>
                         )}
                         {/* 模型名称：仅 Gemini 工具显示 */}

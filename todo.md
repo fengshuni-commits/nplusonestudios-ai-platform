@@ -2767,3 +2767,10 @@
 
 ## 规范数据库接入（2026-05-25）
 - [x] P0：所长助手自动检索规范条文并引用（search_building_codes 工具 + 系统提示强制引用）
+
+## gpt-image-2 (DeepBot API) 集成
+- [x] generateImageWithTool.ts 新增 deepbot provider（URL 返回格式，多参考图数组）
+- [x] toolCapabilities.ts 已有 gpt-image-2 关键词规则（无需修改）
+- [x] AiToolsManagement.tsx 添加 DeepBot 工具检测逻辑，显示端点预填和说明
+- [x] 支持 5 种尺寸：1024x1024、1024x768、768x1024、1672x941、941x1672
+- [x] 最多传 5 张参考图（URL 数组格式）
