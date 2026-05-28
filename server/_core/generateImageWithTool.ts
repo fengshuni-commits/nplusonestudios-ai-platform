@@ -498,67 +498,112 @@ export async function generateImageWithTool(
         imageBuffer = Buffer.from(b64, "base64");
       }
     } else if (provider === "deepbot") {
-    // ── DeepBot gpt-image-2 API ──────────────────────────────────────────────
-    // Endpoint: POST https://deepbot.plus/tool/gpt4/v1/images/generations
+    // ── DeepBot gpt-image-2 API (Async Task Mode) ───────────────────────────
+    // Base URL: https://deepbot.plus/tool/gpt
+    // Step 1: POST /v1/images/generations → returns task_id
+    // Step 2: GET  /v1/tasks/{task_id}    → poll until completed
     // Auth: Authorization: Bearer API_KEY
-    // Returns: { data: [{ url: "..." }] }
-    const deepbotEndpoint = tool.apiEndpoint || "https://deepbot.plus/tool/gpt4/v1/images/generations";
-    const deepbotModel = config.modelName || "gpt-image-2";
+    const deepbotBase = (tool.apiEndpoint || "https://deepbot.plus/tool/gpt").replace(/\/v1\/.*$/, "").replace(/\/$/, "");
+    const deepbotSubmitUrl = `${deepbotBase}/v1/images/generations`;
+    const deepbotHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    };
 
-    // Supported sizes: 1024x1024, 1024x768, 768x1024, 1672x941, 941x1672
-    const DEEPBOT_VALID_SIZES = ["1024x1024", "1024x768", "768x1024", "1672x941", "941x1672"];
-    const deepbotSize = (genOpts.size && DEEPBOT_VALID_SIZES.includes(genOpts.size))
-      ? genOpts.size
-      : "1024x1024";
+    // Convert pixel size (e.g. "1024x1024") to DeepBot ratio format (e.g. "1:1")
+    // Supported ratios: 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16
+    let deepbotSize = "1:1";
+    if (genOpts.size) {
+      const [w, h] = genOpts.size.split("x").map(Number);
+      if (w && h) {
+        const r = w / h;
+        if (r > 1.7) deepbotSize = "16:9";
+        else if (r > 1.4) deepbotSize = "3:2";
+        else if (r > 1.1) deepbotSize = "4:3";
+        else if (r < 0.6) deepbotSize = "9:16";
+        else if (r < 0.75) deepbotSize = "2:3";
+        else if (r < 0.95) deepbotSize = "3:4";
+        else deepbotSize = "1:1";
+      } else if (genOpts.size.includes(":")) {
+        // Already in ratio format
+        deepbotSize = genOpts.size;
+      }
+    }
 
-    // Build image array: pass reference image URLs (max 5)
-    const imageArray: string[] = [];
+    // Build reference image URL list (max 10, URL only — no base64)
+    const deepbotImageUrls: string[] = [];
     if (genOpts.originalImages && genOpts.originalImages.length > 0) {
-      for (const img of genOpts.originalImages.slice(0, 5)) {
-        if (img.url) {
-          imageArray.push(img.url);
-        } else if (img.b64Json) {
-          // Pass as data URI
-          const mime = img.mimeType || "image/png";
-          imageArray.push(`data:${mime};base64,${img.b64Json}`);
-        }
+      for (const img of genOpts.originalImages.slice(0, 10)) {
+        if (img.url) deepbotImageUrls.push(img.url);
+        // base64 not supported by DeepBot API — skip silently
       }
     }
 
     const deepbotBody: Record<string, any> = {
-      model: deepbotModel,
+      model: "gpt-image-2",
       prompt: genOpts.prompt,
-      image: imageArray,
+      n: 1,
       size: deepbotSize,
-      response_format: "url",
+      resolution: "1k",
+      official_fallback: true,
     };
+    if (deepbotImageUrls.length > 0) deepbotBody.image_urls = deepbotImageUrls;
 
-    const deepbotResp = await fetch(deepbotEndpoint, {
+    // Step 1: Submit task
+    console.log(`[DeepBot] Submitting task to ${deepbotSubmitUrl}, size=${deepbotSize}`);
+    const deepbotSubmitResp = await fetch(deepbotSubmitUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: deepbotHeaders,
       body: JSON.stringify(deepbotBody),
-      signal: AbortSignal.timeout(180000), // 3 min timeout
+      signal: AbortSignal.timeout(30000),
     });
-
-    if (!deepbotResp.ok) {
-      const detail = await deepbotResp.text().catch(() => "");
+    if (!deepbotSubmitResp.ok) {
+      const detail = await deepbotSubmitResp.text().catch(() => "");
       throw new Error(
-        `DeepBot gpt-image-2 API failed (${deepbotResp.status} ${deepbotResp.statusText})${detail ? ": " + detail.substring(0, 500) : ""}`
+        `DeepBot gpt-image-2 submit failed (${deepbotSubmitResp.status} ${deepbotSubmitResp.statusText})${detail ? ": " + detail.substring(0, 500) : ""}`
       );
     }
+    const deepbotSubmitResult = await deepbotSubmitResp.json();
+    const deepbotTaskId: string | undefined = deepbotSubmitResult?.data?.[0]?.task_id;
+    if (!deepbotTaskId) {
+      throw new Error(
+        `DeepBot gpt-image-2 returned no task_id. Response: ${JSON.stringify(deepbotSubmitResult).substring(0, 300)}`
+      );
+    }
+    console.log(`[DeepBot] Task submitted: ${deepbotTaskId}`);
 
-    const deepbotResult = await deepbotResp.json();
-    const deepbotImageUrl: string | undefined = deepbotResult?.data?.[0]?.url;
+    // Step 2: Poll for result (wait 15s first, then poll every 4s, up to 150s total)
+    const deepbotPollUrl = `${deepbotBase}/v1/tasks/${deepbotTaskId}`;
+    await new Promise(r => setTimeout(r, 15000));
+    let deepbotImageUrl: string | undefined;
+    for (let i = 0; i < 35; i++) {
+      const pollResp = await fetch(deepbotPollUrl, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!pollResp.ok) {
+        console.warn(`[DeepBot] Poll ${i + 1} failed: HTTP ${pollResp.status}`);
+        await new Promise(r => setTimeout(r, 4000));
+        continue;
+      }
+      const pollResult = await pollResp.json();
+      const status: string = pollResult?.data?.status;
+      console.log(`[DeepBot] Poll ${i + 1}: status=${status}`);
+      if (status === "completed") {
+        deepbotImageUrl = pollResult?.data?.result?.images?.[0]?.url?.[0];
+        break;
+      } else if (status === "failed") {
+        const errMsg = pollResult?.data?.error?.message || JSON.stringify(pollResult).substring(0, 200);
+        throw new Error(`DeepBot gpt-image-2 task failed: ${errMsg}`);
+      }
+      await new Promise(r => setTimeout(r, 4000));
+    }
     if (!deepbotImageUrl) {
-      throw new Error(
-        `DeepBot gpt-image-2 returned no image URL. Response: ${JSON.stringify(deepbotResult).substring(0, 300)}`
-      );
+      throw new Error(`DeepBot gpt-image-2 task timed out or returned no image URL (task_id: ${deepbotTaskId})`);
     }
+    console.log(`[DeepBot] Image URL: ${deepbotImageUrl}`);
 
-    // Download the returned image URL
+    // Download the returned image
     const dbImgResp = await fetch(deepbotImageUrl, { signal: AbortSignal.timeout(60000) });
     if (!dbImgResp.ok) {
       throw new Error(`Failed to download DeepBot image (${dbImgResp.status})`);
