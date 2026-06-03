@@ -1,4 +1,5 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { sdk } from "./_core/sdk";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
@@ -20,6 +21,7 @@ import { nanoid } from "nanoid";
 import { searchCaseStudies, searchCaseStudyImages } from "./tavily";
 import { notifyOwner } from "./_core/notification";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 // pptxgenjs ESM/CJS interop: lazy-load to handle all runtime environments
 import { createRequire } from "module";
 let _PptxGenJS: any = null;
@@ -7374,6 +7376,64 @@ export const appRouter = router({system: systemRouter,
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    emailRegister: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        name: z.string().min(1).max(64),
+        password: z.string().min(8).max(128),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Check if email already registered
+        const existing = await db.getUserByEmail(input.email);
+        if (existing) {
+          throw new TRPCError({ code: "CONFLICT", message: "该邮箱已注册" });
+        }
+        const passwordHash = await bcrypt.hash(input.password, 12);
+        const { id, openId } = await db.createEmailUser({
+          email: input.email,
+          name: input.name,
+          passwordHash,
+        });
+        // Create session so they can see the pending-approval page
+        const sessionToken = await sdk.createSessionToken(openId, {
+          name: input.name,
+          expiresInMs: ONE_YEAR_MS,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        // Notify owner of new registration
+        await notifyOwner({
+          title: "新用户注册申请",
+          content: `${input.name}（${input.email}）刚刚注册了账号，请前往「管理 → 团队管理」审批。`,
+        }).catch(() => {});
+        return { status: "pending_approval" as const };
+      }),
+    emailLogin: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const user = await db.getUserByEmail(input.email);
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "邮箱或密码错误" });
+        }
+        const valid = await bcrypt.compare(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "邮箱或密码错误" });
+        }
+        // Create session
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "",
+          expiresInMs: ONE_YEAR_MS,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        if (!user.approved) {
+          return { status: "pending_approval" as const };
+        }
+        return { status: "ok" as const };
+      }),
   }),
   dashboard: dashboardRouter,
   projects: projectsRouter,

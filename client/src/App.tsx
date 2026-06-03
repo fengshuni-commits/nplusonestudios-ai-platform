@@ -26,6 +26,7 @@ import MediaXiaohongshu from "./pages/MediaXiaohongshu";
 import MediaWechat from "./pages/MediaWechat";
 import MediaInstagram from "./pages/MediaInstagram";
 import PendingApproval from "./pages/PendingApproval";
+import EmailAuth from "./pages/EmailAuth";
 import Home from "./pages/Home";
 import DesignBrief from "./pages/DesignBrief";
 import Director from "./pages/Director";
@@ -44,6 +45,8 @@ function Router() {
     <Switch>
       {/* 等待审批页面（不需要 DashboardLayout） */}
       <Route path="/pending-approval" component={PendingApproval} />
+      {/* 邮箱注册/登录页面 */}
+      <Route path="/auth" component={EmailAuth} />
       {/* 公开 API 文档（不需要登录） */}
       <Route path="/api-docs" component={ApiDocs} />
 

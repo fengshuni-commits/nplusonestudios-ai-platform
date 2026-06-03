@@ -2774,3 +2774,12 @@
 - [x] AiToolsManagement.tsx 添加 DeepBot 工具检测逻辑，显示端点预填和说明
 - [x] 支持 5 种尺寸：1024x1024、1024x768、768x1024、1672x941、941x1672
 - [x] 最多传 5 张参考图（URL 数组格式）
+
+## 邮箱注册登录（替代 Manus OAuth）
+
+- [x] users 表新增 passwordHash 字段，迁移 schema
+- [x] 后端：emailRegister / emailLogin tRPC 接口 + db helpers（bcryptjs 加密）
+- [x] 前端：EmailAuth 页面（注册+登录 tab），DashboardLayout 登录屏改为邮箱登录为主
+- [x] 注册后跳转 pending-approval 页，管理员在 AdminTeam 批准
+- [x] 注册成功后自动通知 owner
+- [x] Vitest 测试：4 项通过

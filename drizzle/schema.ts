@@ -14,6 +14,7 @@ export const users = mysqlTable("users", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
   approved: boolean("approved").default(false).notNull(),
+  passwordHash: varchar("passwordHash", { length: 256 }),
 });
 
 export type User = typeof users.$inferSelect;

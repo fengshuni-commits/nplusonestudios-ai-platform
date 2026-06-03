@@ -176,23 +176,28 @@ export default function DashboardLayout({
               请登录以访问工作平台
             </p>
             <Button
-              onClick={() => {
-                window.location.href = getLoginUrl();
-              }}
+              onClick={() => { window.location.href = "/auth"; }}
               size="lg"
               className="w-full"
             >
-              登录
+              邮箱登录 / 注册
             </Button>
+            {/* Divider */}
+            <div className="relative w-full">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">或</span>
+              </div>
+            </div>
             <Button
-              onClick={() => {
-                window.location.href = getRegisterUrl();
-              }}
-              size="lg"
-              variant="outline"
-              className="w-full bg-transparent"
+              onClick={() => { window.location.href = getLoginUrl(); }}
+              size="sm"
+              variant="ghost"
+              className="w-full text-muted-foreground hover:text-foreground"
             >
-              注册新账号
+              使用 Manus 账号登录
             </Button>
             <p className="text-xs text-muted-foreground text-center leading-relaxed px-2">
               注册后需等待管理员审批，审批通过后方可使用平台功能

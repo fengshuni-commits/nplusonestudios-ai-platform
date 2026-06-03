@@ -2686,3 +2686,45 @@ export async function updateDesignBriefPrompt(
     return { id: Number((result as any).insertId), type, label: data.label ?? label, prompt: data.prompt };
   }
 }
+
+
+// ─── Email Auth Helpers ──────────────────────────────────
+
+export async function getUserByEmail(email: string) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return undefined;
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  });
+}
+
+export async function createEmailUser(data: {
+  email: string;
+  name: string;
+  passwordHash: string;
+}) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    // Use email as openId for email-registered users (prefixed to avoid collision)
+    const openId = `email:${data.email}`;
+    const result = await db.insert(users).values({
+      openId,
+      email: data.email,
+      name: data.name,
+      passwordHash: data.passwordHash,
+      loginMethod: "email",
+      approved: false,
+      lastSignedIn: new Date(),
+    });
+    const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+    return { id: Number(insertId), openId };
+  });
+}
+
+export async function updateUserPasswordHash(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
