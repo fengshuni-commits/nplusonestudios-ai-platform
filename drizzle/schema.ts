@@ -1088,7 +1088,9 @@ export const expenseItems = mysqlTable("expense_items", {
   description: varchar("description", { length: 512 }).notNull(),
   // 金额（单位：分）
   amount: int("amount").notNull(),
-  // 发票文件 URL（S3）
+  // 发票文件列表（JSON 数组，每项 {url, fileName, amount?}）
+  invoicesJson: text("invoicesJson"), // JSON string of {url, fileName, amount?}[]
+  // 保留旧字段兼容（废弃，新数据用 invoicesJson）
   invoiceUrl: text("invoiceUrl"),
   invoiceFileName: varchar("invoiceFileName", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

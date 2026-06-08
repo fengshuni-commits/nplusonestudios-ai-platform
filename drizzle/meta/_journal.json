@@ -428,6 +428,13 @@
       "when": 1780900598031,
       "tag": "0060_salty_morlocks",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1780901970279,
+      "tag": "0061_short_green_goblin",
+      "breakpoints": true
     }
   ]
 }

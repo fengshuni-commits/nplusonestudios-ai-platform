@@ -7384,7 +7384,54 @@ const expenseRouter = router({
       const buffer = Buffer.from(input.fileData, "base64");
       const key = `expense-invoices/${nanoid()}-${input.fileName}`;
       const { url } = await storagePut(key, buffer, input.contentType);
-      return { url, key };
+
+      // Try OCR to detect invoice amount
+      let detectedAmount: number | null = null;
+      try {
+        const isImage = input.contentType.startsWith("image/");
+        const isPdf = input.contentType === "application/pdf";
+        if (isImage || isPdf) {
+          const contentPart = isImage
+            ? { type: "image_url" as const, image_url: { url, detail: "high" as const } }
+            : { type: "file_url" as const, file_url: { url, mime_type: "application/pdf" as const } };
+          const ocrResult = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: '你是发票金额识别助手。从发票图片中提取价税合计金额（中文发票中的"价税合计"或"合计金额"或最大的金额数字）。只返回 JSON，格式：{"amount": 123.45}。如果无法识别则返回 {"amount": null}。',
+              },
+              {
+                role: "user",
+                content: [
+                  { type: "text" as const, text: "请识别这张发票的金额。" },
+                  contentPart,
+                ],
+              },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "invoice_amount",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: { amount: { type: ["number", "null"] } },
+                  required: ["amount"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          const parsed = JSON.parse(ocrResult.choices[0].message.content as string);
+          if (typeof parsed.amount === "number" && parsed.amount > 0) {
+            detectedAmount = parsed.amount;
+          }
+        }
+      } catch {
+        // OCR failure is non-fatal
+      }
+
+      return { url, key, detectedAmount };
     }),
 
   /** Submit a new expense report */
@@ -7401,6 +7448,12 @@ const expenseRouter = router({
         amount: z.number().positive(), // 元，前端输入，后端转分
         projectId: z.number().int().positive(), // 必填
         projectName: z.string().optional(),
+        invoices: z.array(z.object({
+          url: z.string(),
+          fileName: z.string(),
+          amount: z.number().nullable().optional(),
+        })).optional(), // multiple invoices per item
+        // legacy single invoice fields (kept for backward compat)
         invoiceUrl: z.string().optional(),
         invoiceFileName: z.string().optional(),
       })).min(1),
@@ -7422,6 +7475,11 @@ const expenseRouter = router({
           amount: Math.round(item.amount * 100), // 元 → 分
           projectId: item.projectId,
           projectName: item.projectName ?? null,
+          invoicesJson: item.invoices && item.invoices.length > 0
+            ? JSON.stringify(item.invoices)
+            : item.invoiceUrl
+              ? JSON.stringify([{ url: item.invoiceUrl, fileName: item.invoiceFileName ?? "invoice" }])
+              : null,
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
         })),

@@ -313,9 +313,24 @@ export default function AdminExpense() {
                         <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</td>
                         <td className="px-3 py-2 text-right font-medium">¥{(item.amount / 100).toFixed(2)}</td>
                         <td className="px-3 py-2 text-center">
-                          {item.invoiceUrl ? (
-                            <a href={item.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">查看</a>
-                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                          {(() => {
+                            const invs: { url: string; fileName: string; amount?: number | null }[] =
+                              (item as any).invoicesJson
+                                ? (() => { try { return JSON.parse((item as any).invoicesJson); } catch { return []; } })()
+                                : item.invoiceUrl
+                                  ? [{ url: item.invoiceUrl, fileName: "发票" }]
+                                  : [];
+                            return invs.length > 0 ? (
+                              <div className="flex flex-col gap-0.5">
+                                {invs.map((inv, i) => (
+                                  <a key={i} href={inv.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                    发票{invs.length > 1 ? i + 1 : ""}
+                                    {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : <span className="text-muted-foreground text-xs">—</span>;
+                          })()}
                         </td>
                       </tr>
                     ))}

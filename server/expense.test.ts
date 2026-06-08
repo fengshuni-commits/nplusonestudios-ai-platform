@@ -79,12 +79,16 @@ describe("expense router", () => {
           category: "transport_local",
           description: "打车去甲方现场",
           amount: 58.5,
+          projectId: 1, // test project id
+          projectName: "测试项目",
         },
         {
           expenseDate: "2026-01-15",
           category: "meals",
           description: "工作餐",
           amount: 120,
+          projectId: 1,
+          projectName: "测试项目",
         },
       ],
     });

@@ -28,16 +28,22 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
   draft: { label: "草稿", variant: "outline" },
 };
 
+type InvoiceFile = {
+  url: string;
+  fileName: string;
+  amount: number | null; // OCR detected amount
+};
+
 type ExpenseItem = {
   id: string;
   expenseDate: string;
   category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
   description: string;
-  amount: string;
+  amount: string; // manually editable, auto-filled from invoice OCR
   projectId: string; // required
-  invoiceUrl?: string;
-  invoiceFileName?: string;
+  invoices: InvoiceFile[];
   uploading?: boolean;
+  amountAutoFilled?: boolean; // whether amount was auto-filled by OCR
 };
 
 function newItem(): ExpenseItem {
@@ -48,6 +54,7 @@ function newItem(): ExpenseItem {
     description: "",
     amount: "",
     projectId: "",
+    invoices: [],
   };
 }
 
@@ -107,13 +114,39 @@ export default function Expense() {
         reader.onerror = rej;
         reader.readAsDataURL(file);
       });
-      const { url } = await uploadInvoice.mutateAsync({
+      const result = await uploadInvoice.mutateAsync({
         fileName: file.name,
         fileData: base64,
         contentType: file.type,
       });
-      updateItem(itemId, { invoiceUrl: url, invoiceFileName: file.name, uploading: false });
-      toast.success("发票上传成功");
+      const newInvoice: InvoiceFile = {
+        url: result.url,
+        fileName: file.name,
+        amount: (result as any).detectedAmount ?? null,
+      };
+      setItems(prev => prev.map(item => {
+        if (item.id !== itemId) return item;
+        const updatedInvoices = [...item.invoices, newInvoice];
+        // Auto-fill amount: sum of all detected invoice amounts
+        const detectedAmounts = updatedInvoices
+          .map(inv => inv.amount)
+          .filter((a): a is number => typeof a === 'number' && a > 0);
+        const autoAmount = detectedAmounts.length > 0
+          ? detectedAmounts.reduce((s, a) => s + a, 0).toFixed(2)
+          : item.amount;
+        return {
+          ...item,
+          invoices: updatedInvoices,
+          uploading: false,
+          amount: autoAmount,
+          amountAutoFilled: detectedAmounts.length > 0,
+        };
+      }));
+      if ((result as any).detectedAmount) {
+        toast.success(`发票上传成功，识别金额：¥${(result as any).detectedAmount.toFixed(2)}`);
+      } else {
+        toast.success("发票上传成功（未识别到金额，请手动填写）");
+      }
     } catch {
       updateItem(itemId, { uploading: false });
       toast.error("发票上传失败");
@@ -145,8 +178,7 @@ export default function Expense() {
             amount: parseFloat(item.amount),
             projectId: parseInt(item.projectId),
             projectName: proj?.name ?? proj?.clientNameDisplay ?? undefined,
-            invoiceUrl: item.invoiceUrl,
-            invoiceFileName: item.invoiceFileName,
+            invoices: item.invoices.length > 0 ? item.invoices : undefined,
           };
         }),
       });
@@ -282,27 +314,43 @@ export default function Expense() {
                         e.target.value = "";
                       }}
                     />
-                    {item.invoiceUrl ? (
-                      <div className="flex items-center gap-1 text-xs text-primary">
-                        <Paperclip className="w-3 h-3 flex-shrink-0" />
-                        <a href={item.invoiceUrl} target="_blank" rel="noopener noreferrer" className="truncate max-w-[100px] hover:underline">
-                          {item.invoiceFileName ?? "发票"}
-                        </a>
-                        <button onClick={() => updateItem(item.id, { invoiceUrl: undefined, invoiceFileName: undefined })} className="text-muted-foreground hover:text-destructive ml-auto">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-xs h-8"
-                        disabled={item.uploading}
-                        onClick={() => fileInputRefs.current[item.id]?.click()}
-                      >
-                        {item.uploading ? "上传中…" : <><Upload className="w-3 h-3 mr-1" />上传发票</>}
-                      </Button>
-                    )}
+                    {/* Uploaded invoices list */}
+                    <div className="space-y-1">
+                      {item.invoices.map((inv, idx) => (
+                        <div key={idx} className="flex items-center gap-1 text-xs text-primary bg-primary/5 rounded px-1.5 py-0.5">
+                          <Paperclip className="w-3 h-3 flex-shrink-0" />
+                          <a href={inv.url} target="_blank" rel="noopener noreferrer" className="truncate max-w-[80px] hover:underline flex-1">
+                            {inv.fileName}
+                          </a>
+                          {inv.amount != null && (
+                            <span className="text-green-600 font-medium flex-shrink-0">¥{inv.amount.toFixed(2)}</span>
+                          )}
+                          <button
+                            onClick={() => {
+                              const updated = item.invoices.filter((_, i) => i !== idx);
+                              const detectedAmounts = updated.map(i => i.amount).filter((a): a is number => typeof a === 'number' && a > 0);
+                              updateItem(item.id, {
+                                invoices: updated,
+                                amount: detectedAmounts.length > 0 ? detectedAmounts.reduce((s, a) => s + a, 0).toFixed(2) : item.amount,
+                              });
+                            }}
+                            className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Upload button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs h-7 mt-1"
+                      disabled={item.uploading}
+                      onClick={() => fileInputRefs.current[item.id]?.click()}
+                    >
+                      {item.uploading ? "识别中…" : <><Upload className="w-3 h-3 mr-1" />{item.invoices.length > 0 ? "继续添加" : "上传发票"}</>}
+                    </Button>
                   </div>
                   <Button
                     variant="ghost"
@@ -408,11 +456,25 @@ export default function Expense() {
                         <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</td>
                         <td className="px-3 py-2 text-right font-medium">¥{(item.amount / 100).toFixed(2)}</td>
                         <td className="px-3 py-2 text-center">
-                          {item.invoiceUrl ? (
-                            <a href={item.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
-                              查看
-                            </a>
-                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                          {(() => {
+                            // Parse invoicesJson if available, fallback to invoiceUrl
+                            const invs: { url: string; fileName: string; amount?: number | null }[] =
+                              (item as any).invoicesJson
+                                ? (() => { try { return JSON.parse((item as any).invoicesJson); } catch { return []; } })()
+                                : item.invoiceUrl
+                                  ? [{ url: item.invoiceUrl, fileName: (item as any).invoiceFileName ?? "发票" }]
+                                  : [];
+                            return invs.length > 0 ? (
+                              <div className="flex flex-col gap-0.5">
+                                {invs.map((inv, i) => (
+                                  <a key={i} href={inv.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                    发票{invs.length > 1 ? i + 1 : ""}
+                                    {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : <span className="text-muted-foreground text-xs">—</span>;
+                          })()}
                         </td>
                       </tr>
                     ))}
