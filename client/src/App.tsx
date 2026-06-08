@@ -39,6 +39,8 @@ import VideoGeneration from "./pages/VideoGeneration";
 import OpenClawIntegration from "./pages/OpenClawIntegration";
 import ApiDocs from "./pages/ApiDocs";
 import CaseLibrary from "./pages/CaseLibrary";
+import Expense from "./pages/Expense";
+import AdminExpense from "./pages/AdminExpense";
 
 function Router() {
   return (
@@ -85,6 +87,9 @@ function Router() {
         <Route path="/media/layout" component={MediaLayout} />
         <Route path="/media/portfolio" component={MediaPortfolio} />
 
+        {/* 报销板块 */}
+        <Route path="/expense" component={Expense} />
+
         {/* 历史板块 */}
         <Route path="/history" component={HistoryPage} />
 
@@ -98,6 +103,7 @@ function Router() {
         <Route path="/admin/case-sources" component={AdminCaseSources} />
         <Route path="/admin/settings" component={AdminSettings} />
         <Route path="/admin/feedback" component={AdminFeedback} />
+        <Route path="/admin/expense" component={AdminExpense} />
 
         <Route component={NotFound} />
       </Switch>

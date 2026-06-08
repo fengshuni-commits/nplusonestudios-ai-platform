@@ -1036,3 +1036,59 @@ export const caseLibrary = mysqlTable("case_library", {
 });
 export type CaseLibraryItem = typeof caseLibrary.$inferSelect;
 export type InsertCaseLibraryItem = typeof caseLibrary.$inferInsert;
+
+// ─── Expense Reports (报销单) ─────────────────────────────
+export const expenseReports = mysqlTable("expense_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  // 提交人
+  userId: int("userId").notNull(),
+  submitterName: varchar("submitterName", { length: 128 }),
+  // 关联项目（可选，null 表示公司公共费用）
+  projectId: int("projectId"),
+  projectName: varchar("projectName", { length: 256 }),
+  // 报销单标题/用途
+  purpose: varchar("purpose", { length: 512 }).notNull(),
+  // 报销期间
+  periodStart: timestamp("periodStart"),
+  periodEnd: timestamp("periodEnd"),
+  // 总金额（由后端汇总 expense_items 计算）
+  totalAmount: int("totalAmount").default(0).notNull(), // 单位：分，避免浮点
+  // 状态
+  status: mysqlEnum("status", ["draft", "submitted", "approved", "rejected"]).default("submitted").notNull(),
+  // 审批人
+  reviewedBy: int("reviewedBy"),
+  reviewedAt: timestamp("reviewedAt"),
+  reviewNote: text("reviewNote"),
+  // 备注
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ExpenseReport = typeof expenseReports.$inferSelect;
+export type InsertExpenseReport = typeof expenseReports.$inferInsert;
+
+// ─── Expense Items (报销明细行) ───────────────────────────
+export const expenseItems = mysqlTable("expense_items", {
+  id: int("id").autoincrement().primaryKey(),
+  reportId: int("reportId").notNull(),
+  // 费用日期
+  expenseDate: timestamp("expenseDate").notNull(),
+  // 费用类别
+  category: mysqlEnum("category", [
+    "transport_local",   // 市内交通
+    "transport_travel",  // 出差（机票/火车/酒店）
+    "office_supplies",   // 办公杂费（水电/消耗品）
+    "meals",             // 餐费
+    "other",             // 其他
+  ]).notNull(),
+  // 摘要
+  description: varchar("description", { length: 512 }).notNull(),
+  // 金额（单位：分）
+  amount: int("amount").notNull(),
+  // 发票文件 URL（S3）
+  invoiceUrl: text("invoiceUrl"),
+  invoiceFileName: varchar("invoiceFileName", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ExpenseItem = typeof expenseItems.$inferSelect;
+export type InsertExpenseItem = typeof expenseItems.$inferInsert;

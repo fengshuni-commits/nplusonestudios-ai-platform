@@ -44,6 +44,7 @@ import {
   Activity,
   Layers,
   Library,
+  Receipt,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
@@ -116,6 +117,14 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
+    id: "expense",
+    label: "报销",
+    icon: Receipt,
+    items: [
+      { icon: Receipt, label: "费用报销", path: "/expense", description: "提交报销申请，上传发票，关联项目" },
+    ],
+  },
+  {
     id: "admin",
     label: "管理",
     icon: Settings,
@@ -129,6 +138,7 @@ const menuSections: MenuSection[] = [
       { icon: Globe, label: "案例来源", path: "/admin/case-sources", description: "管理案例调研抓取来源网站" },
       { icon: BarChart3, label: "反馈分析", path: "/admin/feedback", description: "各模块满意度统计与趋势" },
       { icon: Activity, label: "调用统计", path: "/admin/ai-stats", description: "AI 工具调用量与费用统计" },
+      { icon: Receipt, label: "报销管理", path: "/admin/expense", description: "审批报销申请，查看项目支出成本统计" },
     ],
   },
   {

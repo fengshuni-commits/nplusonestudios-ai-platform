@@ -2783,3 +2783,15 @@
 - [x] 注册后跳转 pending-approval 页，管理员在 AdminTeam 批准
 - [x] 注册成功后自动通知 owner
 - [x] Vitest 测试：4 项通过
+
+## 线上报销系统
+
+- [x] Schema: expense_reports 表（报销单头）+ expense_items 表（费用明细行）
+- [x] Schema: 费用类别枚举（市内交通/出差/办公杂费/餐费/其他）
+- [x] 后端: expenseRouter - submit/list/getById/review/projectStats
+- [x] 后端: 发票文件上传到 S3
+- [x] 前端: Expense.tsx 页面 - 填写报销单 + 上传发票 + 选择项目 + 我的申请列表
+- [x] 前端: AdminExpense.tsx 页面 - 审批列表 + 项目支出成本统计
+- [x] 侧边栏: 在品牌板块下方添加「报销」入口
+- [x] 后台管理板块: 增加「报销管理」入口
+- [x] Vitest 测试: 8 项全部通过

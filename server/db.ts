@@ -32,6 +32,8 @@ import {
   analysisImageJobs,
   designBriefs, InsertDesignBrief,
   designBriefInputs, InsertDesignBriefInput,
+  expenseReports, InsertExpenseReport,
+  expenseItems, InsertExpenseItem,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -2727,4 +2729,160 @@ export async function updateUserPasswordHash(userId: number, passwordHash: strin
   const db = await getDb();
   if (!db) return;
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
+
+// ─── Expense Helpers ─────────────────────────────────────
+export async function createExpenseReport(data: {
+  userId: number;
+  submitterName?: string;
+  projectId?: number | null;
+  projectName?: string | null;
+  purpose: string;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  note?: string | null;
+  items: Array<{
+    expenseDate: Date;
+    category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
+    description: string;
+    amount: number; // 分
+    invoiceUrl?: string | null;
+    invoiceFileName?: string | null;
+  }>;
+}) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const totalAmount = data.items.reduce((sum, item) => sum + item.amount, 0);
+    const reportResult = await db.insert(expenseReports).values({
+      userId: data.userId,
+      submitterName: data.submitterName ?? null,
+      projectId: data.projectId ?? null,
+      projectName: data.projectName ?? null,
+      purpose: data.purpose,
+      periodStart: data.periodStart ?? null,
+      periodEnd: data.periodEnd ?? null,
+      totalAmount,
+      status: "submitted",
+      note: data.note ?? null,
+    });
+    const reportId = Number((reportResult as any)[0]?.insertId ?? (reportResult as any).insertId);
+    if (data.items.length > 0) {
+      await db.insert(expenseItems).values(
+        data.items.map(item => ({
+          reportId,
+          expenseDate: item.expenseDate,
+          category: item.category,
+          description: item.description,
+          amount: item.amount,
+          invoiceUrl: item.invoiceUrl ?? null,
+          invoiceFileName: item.invoiceFileName ?? null,
+        }))
+      );
+    }
+    return { id: reportId, totalAmount };
+  });
+}
+
+export async function getExpenseReports(opts: {
+  userId?: number;
+  status?: string;
+  projectId?: number;
+  limit?: number;
+  offset?: number;
+}) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return { reports: [], total: 0 };
+    const conditions = [];
+    if (opts.userId) conditions.push(eq(expenseReports.userId, opts.userId));
+    if (opts.status) conditions.push(eq(expenseReports.status, opts.status as any));
+    if (opts.projectId) conditions.push(eq(expenseReports.projectId, opts.projectId));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const [reports, countResult] = await Promise.all([
+      db.select().from(expenseReports)
+        .where(whereClause)
+        .orderBy(desc(expenseReports.createdAt))
+        .limit(opts.limit ?? 20)
+        .offset(opts.offset ?? 0),
+      db.select({ count: sql<number>`count(*)` }).from(expenseReports).where(whereClause),
+    ]);
+    return { reports, total: Number(countResult[0]?.count ?? 0) };
+  });
+}
+
+export async function getExpenseReportById(id: number) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return null;
+    const [report, items] = await Promise.all([
+      db.select().from(expenseReports).where(eq(expenseReports.id, id)).limit(1),
+      db.select().from(expenseItems).where(eq(expenseItems.reportId, id)).orderBy(expenseItems.expenseDate),
+    ]);
+    if (!report[0]) return null;
+    return { ...report[0], items };
+  });
+}
+
+export async function updateExpenseReportStatus(id: number, status: "approved" | "rejected", reviewedBy: number, reviewNote?: string) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db.update(expenseReports).set({
+      status,
+      reviewedBy,
+      reviewedAt: new Date(),
+      reviewNote: reviewNote ?? null,
+    }).where(eq(expenseReports.id, id));
+  });
+}
+
+export async function getProjectExpenseStats(opts?: { projectId?: number; year?: number }) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const conditions = [eq(expenseReports.status, "approved")];
+    if (opts?.projectId) conditions.push(eq(expenseReports.projectId, opts.projectId));
+    if (opts?.year) {
+      const start = new Date(`${opts.year}-01-01`);
+      const end = new Date(`${opts.year + 1}-01-01`);
+      conditions.push(sql`${expenseReports.createdAt} >= ${start} AND ${expenseReports.createdAt} < ${end}`);
+    }
+    // Group by project
+    const rows = await db.select({
+      projectId: expenseReports.projectId,
+      projectName: expenseReports.projectName,
+      totalAmount: sql<number>`SUM(${expenseReports.totalAmount})`,
+      reportCount: sql<number>`COUNT(*)`,
+    })
+      .from(expenseReports)
+      .where(and(...conditions))
+      .groupBy(expenseReports.projectId, expenseReports.projectName)
+      .orderBy(sql`SUM(${expenseReports.totalAmount}) DESC`);
+    return rows;
+  });
+}
+
+export async function getExpenseCategoryStats(opts?: { projectId?: number; year?: number }) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const reportConditions = [eq(expenseReports.status, "approved")];
+    if (opts?.projectId) reportConditions.push(eq(expenseReports.projectId, opts.projectId));
+    if (opts?.year) {
+      const start = new Date(`${opts.year}-01-01`);
+      const end = new Date(`${opts.year + 1}-01-01`);
+      reportConditions.push(sql`${expenseReports.createdAt} >= ${start} AND ${expenseReports.createdAt} < ${end}`);
+    }
+    const rows = await db.select({
+      category: expenseItems.category,
+      totalAmount: sql<number>`SUM(${expenseItems.amount})`,
+      itemCount: sql<number>`COUNT(*)`,
+    })
+      .from(expenseItems)
+      .innerJoin(expenseReports, eq(expenseItems.reportId, expenseReports.id))
+      .where(and(...reportConditions))
+      .groupBy(expenseItems.category);
+    return rows;
+  });
 }

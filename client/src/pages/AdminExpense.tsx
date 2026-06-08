@@ -1,0 +1,367 @@
+import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { CheckCircle, XCircle, FileText, BarChart3, TrendingUp } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  transport_local: "市内交通",
+  transport_travel: "出差",
+  office_supplies: "办公杂费",
+  meals: "餐费",
+  other: "其他",
+};
+
+const CATEGORY_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe"];
+
+const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  submitted: { label: "待审批", variant: "secondary" },
+  approved: { label: "已批准", variant: "default" },
+  rejected: { label: "已拒绝", variant: "destructive" },
+  draft: { label: "草稿", variant: "outline" },
+};
+
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = [currentYear, currentYear - 1, currentYear - 2];
+
+export default function AdminExpense() {
+  const utils = trpc.useUtils();
+
+  // ── State ──────────────────────────────────────────────
+  const [statusFilter, setStatusFilter] = useState<string>("submitted");
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const [statsYear, setStatsYear] = useState<number>(currentYear);
+
+  // ── Queries ────────────────────────────────────────────
+  const { data: reportsData, refetch: refetchReports } = trpc.expense.list.useQuery({
+    status: statusFilter === "all" ? undefined : statusFilter,
+    limit: 100,
+  });
+  const reports = reportsData?.reports ?? [];
+
+  const { data: detailReport } = trpc.expense.getById.useQuery(
+    { id: detailId! },
+    { enabled: detailId !== null }
+  );
+
+  const { data: statsData } = trpc.expense.projectStats.useQuery({ year: statsYear });
+
+  // ── Mutations ──────────────────────────────────────────
+  const reviewMutation = trpc.expense.review.useMutation({
+    onSuccess: (_, vars) => {
+      toast.success(vars.action === "approved" ? "已批准报销申请" : "已拒绝报销申请");
+      setDetailId(null);
+      setReviewNote("");
+      refetchReports();
+      utils.expense.list.invalidate();
+    },
+    onError: (e) => toast.error("操作失败：" + e.message),
+  });
+
+  const handleReview = async (action: "approved" | "rejected") => {
+    if (!detailId) return;
+    setReviewing(true);
+    try {
+      await reviewMutation.mutateAsync({ id: detailId, action, reviewNote: reviewNote || undefined });
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  // ── Stats derived data ─────────────────────────────────
+  const byProject = (statsData?.byProject ?? []).map((row: any) => ({
+    name: row.projectName ?? "公司公共费用",
+    amount: Number(row.totalAmount) / 100,
+    count: Number(row.reportCount),
+  }));
+
+  const byCategory = (statsData?.byCategory ?? []).map((row: any) => ({
+    name: CATEGORY_LABELS[row.category] ?? row.category,
+    amount: Number(row.totalAmount) / 100,
+    count: Number(row.itemCount),
+  }));
+
+  const totalApproved = byProject.reduce((s: number, r: any) => s + r.amount, 0);
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">报销管理</h1>
+        <p className="text-muted-foreground text-sm mt-1">审批报销申请，查看项目支出统计</p>
+      </div>
+
+      <Tabs defaultValue="review">
+        <TabsList>
+          <TabsTrigger value="review">审批队列</TabsTrigger>
+          <TabsTrigger value="stats">项目成本统计</TabsTrigger>
+        </TabsList>
+
+        {/* ── Review Tab ── */}
+        <TabsContent value="review" className="pt-4 space-y-4">
+          <div className="flex items-center gap-3">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="submitted">待审批</SelectItem>
+                <SelectItem value="approved">已批准</SelectItem>
+                <SelectItem value="rejected">已拒绝</SelectItem>
+                <SelectItem value="all">全部</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground">{reports.length} 条</span>
+          </div>
+
+          {reports.length === 0 && (
+            <div className="text-center py-16 text-muted-foreground">
+              <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>暂无{statusFilter === "submitted" ? "待审批" : ""}报销申请</p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {reports.map((report: any) => {
+              const statusInfo = STATUS_LABELS[report.status] ?? STATUS_LABELS.submitted;
+              return (
+                <Card
+                  key={report.id}
+                  className="cursor-pointer hover:bg-accent/40 transition-colors"
+                  onClick={() => { setDetailId(report.id); setReviewNote(""); }}
+                >
+                  <CardContent className="py-4 flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{report.purpose}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        <span className="font-medium">{report.submitterName ?? "未知"}</span>
+                        {report.projectName ? ` · ${report.projectName}` : " · 公司公共费用"}
+                        {" · "}
+                        {new Date(report.createdAt).toLocaleDateString("zh-CN")}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="font-semibold text-sm">¥{(report.totalAmount / 100).toFixed(2)}</span>
+                      <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        {/* ── Stats Tab ── */}
+        <TabsContent value="stats" className="pt-4 space-y-6">
+          <div className="flex items-center gap-3">
+            <Select value={String(statsYear)} onValueChange={v => setStatsYear(Number(v))}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {YEAR_OPTIONS.map(y => (
+                  <SelectItem key={y} value={String(y)}>{y} 年</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="text-sm text-muted-foreground">
+              已批准报销总额：<span className="font-semibold text-foreground">¥{totalApproved.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* By project bar chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" /> 各项目支出（元）
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {byProject.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-sm">暂无数据</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={byProject} margin={{ top: 4, right: 8, bottom: 40, left: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `¥${v}`} />
+                      <Tooltip formatter={(v: any) => [`¥${Number(v).toFixed(2)}`, "金额"]} />
+                      <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* By category pie chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" /> 费用类别分布
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {byCategory.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-sm">暂无数据</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={byCategory}
+                        dataKey="amount"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={90}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {byCategory.map((_: any, i: number) => (
+                          <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: any) => [`¥${Number(v).toFixed(2)}`, "金额"]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Project breakdown table */}
+          {byProject.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">项目支出明细</CardTitle></CardHeader>
+              <CardContent>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 font-medium text-muted-foreground">项目</th>
+                      <th className="text-right py-2 font-medium text-muted-foreground">报销单数</th>
+                      <th className="text-right py-2 font-medium text-muted-foreground">已批准金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byProject.map((row: any, i: number) => (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="py-2">{row.name}</td>
+                        <td className="py-2 text-right text-muted-foreground">{row.count} 份</td>
+                        <td className="py-2 text-right font-semibold">¥{row.amount.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-semibold bg-muted/30">
+                      <td className="py-2 text-muted-foreground">合计</td>
+                      <td className="py-2 text-right text-muted-foreground">{byProject.reduce((s: number, r: any) => s + r.count, 0)} 份</td>
+                      <td className="py-2 text-right">¥{totalApproved.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Detail / Review Dialog */}
+      <Dialog open={detailId !== null} onOpenChange={open => !open && setDetailId(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>报销单详情</DialogTitle>
+          </DialogHeader>
+          {detailReport && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">提交人：</span>{detailReport.submitterName ?? "—"}</div>
+                <div><span className="text-muted-foreground">项目：</span>{detailReport.projectName ?? "公司公共费用"}</div>
+                <div className="col-span-2"><span className="text-muted-foreground">用途：</span>{detailReport.purpose}</div>
+                <div><span className="text-muted-foreground">提交时间：</span>{new Date(detailReport.createdAt).toLocaleString("zh-CN")}</div>
+                <div><span className="text-muted-foreground">状态：</span>
+                  <Badge variant={STATUS_LABELS[detailReport.status]?.variant ?? "secondary"} className="ml-1">
+                    {STATUS_LABELS[detailReport.status]?.label ?? detailReport.status}
+                  </Badge>
+                </div>
+                {detailReport.reviewNote && (
+                  <div className="col-span-2"><span className="text-muted-foreground">审批意见：</span>{detailReport.reviewNote}</div>
+                )}
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">日期</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">摘要</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">类别</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">金额</th>
+                      <th className="text-center px-3 py-2 font-medium text-muted-foreground">发票</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailReport.items.map((item: any) => (
+                      <tr key={item.id} className="border-t">
+                        <td className="px-3 py-2 text-muted-foreground">{new Date(item.expenseDate).toLocaleDateString("zh-CN")}</td>
+                        <td className="px-3 py-2">{item.description}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</td>
+                        <td className="px-3 py-2 text-right font-medium">¥{(item.amount / 100).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-center">
+                          {item.invoiceUrl ? (
+                            <a href={item.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">查看</a>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t bg-muted/30 font-semibold">
+                      <td colSpan={3} className="px-3 py-2 text-right text-muted-foreground">合计</td>
+                      <td className="px-3 py-2 text-right">¥{(detailReport.totalAmount / 100).toFixed(2)}</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {detailReport.status === "submitted" && (
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="审批意见（可选）"
+                    value={reviewNote}
+                    onChange={e => setReviewNote(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            {detailReport?.status === "submitted" && (
+              <>
+                <Button
+                  variant="destructive"
+                  onClick={() => handleReview("rejected")}
+                  disabled={reviewing}
+                >
+                  <XCircle className="w-4 h-4 mr-1" /> 拒绝
+                </Button>
+                <Button
+                  onClick={() => handleReview("approved")}
+                  disabled={reviewing}
+                >
+                  <CheckCircle className="w-4 h-4 mr-1" /> 批准
+                </Button>
+              </>
+            )}
+            <Button variant="outline" onClick={() => setDetailId(null)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

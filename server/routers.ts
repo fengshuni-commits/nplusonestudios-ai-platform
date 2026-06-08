@@ -7366,6 +7366,125 @@ export const caseLibraryRouter = router({
 });
 
 
+// ─── Expense Router ─────────────────────────────────────────────────────
+const expenseRouter = router({
+  /** Upload an invoice file to S3 */
+  uploadInvoice: protectedProcedure
+    .input(z.object({
+      fileName: z.string(),
+      fileData: z.string(), // base64
+      contentType: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.fileData, "base64");
+      const key = `expense-invoices/${nanoid()}-${input.fileName}`;
+      const { url } = await storagePut(key, buffer, input.contentType);
+      return { url, key };
+    }),
+
+  /** Submit a new expense report */
+  submit: protectedProcedure
+    .input(z.object({
+      projectId: z.number().optional(),
+      projectName: z.string().optional(),
+      purpose: z.string().min(1).max(512),
+      periodStart: z.string().optional(), // ISO date string
+      periodEnd: z.string().optional(),
+      note: z.string().optional(),
+      items: z.array(z.object({
+        expenseDate: z.string(), // ISO date string
+        category: z.enum(["transport_local", "transport_travel", "office_supplies", "meals", "other"]),
+        description: z.string().min(1).max(512),
+        amount: z.number().positive(), // 元，前端输入，后端转分
+        invoiceUrl: z.string().optional(),
+        invoiceFileName: z.string().optional(),
+      })).min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await db.createExpenseReport({
+        userId: ctx.user.id,
+        submitterName: ctx.user.name ?? undefined,
+        projectId: input.projectId ?? null,
+        projectName: input.projectName ?? null,
+        purpose: input.purpose,
+        periodStart: input.periodStart ? new Date(input.periodStart) : null,
+        periodEnd: input.periodEnd ? new Date(input.periodEnd) : null,
+        note: input.note ?? null,
+        items: input.items.map(item => ({
+          expenseDate: new Date(item.expenseDate),
+          category: item.category,
+          description: item.description,
+          amount: Math.round(item.amount * 100), // 元 → 分
+          invoiceUrl: item.invoiceUrl ?? null,
+          invoiceFileName: item.invoiceFileName ?? null,
+        })),
+      });
+      // Notify admin
+      await notifyOwner({
+        title: "新报销申请",
+        content: `${ctx.user.name ?? "成员"} 提交了报销申请：${input.purpose}，金额 ¥${(result.totalAmount / 100).toFixed(2)}`,
+      }).catch(() => {});
+      return result;
+    }),
+
+  /** List expense reports (my own, or all for admin) */
+  list: protectedProcedure
+    .input(z.object({
+      mine: z.boolean().optional(),
+      status: z.string().optional(),
+      projectId: z.number().optional(),
+      limit: z.number().optional(),
+      offset: z.number().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const isAdmin = ctx.user.role === "admin";
+      const userId = (input.mine || !isAdmin) ? ctx.user.id : undefined;
+      return db.getExpenseReports({
+        userId,
+        status: input.status,
+        projectId: input.projectId,
+        limit: input.limit ?? 20,
+        offset: input.offset ?? 0,
+      });
+    }),
+
+  /** Get a single expense report with items */
+  getById: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const report = await db.getExpenseReportById(input.id);
+      if (!report) throw new TRPCError({ code: "NOT_FOUND", message: "报销单不存在" });
+      // Non-admin can only see their own
+      if (ctx.user.role !== "admin" && report.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return report;
+    }),
+
+  /** Admin: approve or reject */
+  review: adminProcedure
+    .input(z.object({
+      id: z.number(),
+      action: z.enum(["approved", "rejected"]),
+      reviewNote: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.updateExpenseReportStatus(input.id, input.action, ctx.user.id, input.reviewNote);
+      return { success: true };
+    }),
+
+  /** Admin: project cost statistics */
+  projectStats: adminProcedure
+    .input(z.object({ year: z.number().optional(), projectId: z.number().optional() }))
+    .query(async ({ input }) => {
+      const [byProject, byCategory] = await Promise.all([
+        db.getProjectExpenseStats({ year: input.year, projectId: input.projectId }),
+        db.getExpenseCategoryStats({ year: input.year, projectId: input.projectId }),
+      ]);
+      return { byProject, byCategory };
+    }),
+});
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -7760,5 +7879,6 @@ export const appRouter = router({system: systemRouter,
   director: directorRouter,
   presentationProjects: presentationProjectsRouter,
   caseLibrary: caseLibraryRouter,
+  expense: expenseRouter,
 });
 export type AppRouter = typeof appRouter;
