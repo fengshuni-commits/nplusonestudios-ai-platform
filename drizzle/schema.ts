@@ -1071,6 +1071,9 @@ export type InsertExpenseReport = typeof expenseReports.$inferInsert;
 export const expenseItems = mysqlTable("expense_items", {
   id: int("id").autoincrement().primaryKey(),
   reportId: int("reportId").notNull(),
+  // 承担项目（必填）
+  projectId: int("projectId").notNull(),
+  projectName: varchar("projectName", { length: 256 }),
   // 费用日期
   expenseDate: timestamp("expenseDate").notNull(),
   // 费用类别

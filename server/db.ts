@@ -242,7 +242,7 @@ export async function updateUserRole(userId: number, role: "user" | "admin") {
 
 // ─── Projects ────────────────────────────────────────────
 
-export async function listProjects(opts?: { search?: string; status?: string | string[] }) {
+export async function listProjects(opts?: { search?: string; status?: string | string[]; userId?: number }) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
@@ -254,6 +254,10 @@ export async function listProjects(opts?: { search?: string; status?: string | s
     } else if (statuses.length > 1) {
       conditions.push(inArray(projects.status, statuses as any[]));
     }
+  }
+  // Filter to projects where user is a member or creator
+  if (opts?.userId) {
+    conditions.push(sql`(${projects.id} IN (SELECT projectId FROM project_members WHERE userId = ${opts.userId}) OR ${projects.createdBy} = ${opts.userId})`);
   }
   const rows = await db.select().from(projects).where(conditions.length > 0 ? and(...conditions) : undefined).orderBy(desc(projects.updatedAt));
   if (rows.length === 0) return [];
@@ -2746,6 +2750,8 @@ export async function createExpenseReport(data: {
     category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
     description: string;
     amount: number; // 分
+    projectId: number;
+    projectName?: string | null;
     invoiceUrl?: string | null;
     invoiceFileName?: string | null;
   }>;
@@ -2775,6 +2781,8 @@ export async function createExpenseReport(data: {
           category: item.category,
           description: item.description,
           amount: item.amount,
+          projectId: item.projectId,
+          projectName: item.projectName ?? null,
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
         }))

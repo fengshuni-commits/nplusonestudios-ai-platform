@@ -34,6 +34,7 @@ type ExpenseItem = {
   category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
   description: string;
   amount: string;
+  projectId: string; // required
   invoiceUrl?: string;
   invoiceFileName?: string;
   uploading?: boolean;
@@ -46,6 +47,7 @@ function newItem(): ExpenseItem {
     category: "transport_local",
     description: "",
     amount: "",
+    projectId: "",
   };
 }
 
@@ -55,7 +57,6 @@ export default function Expense() {
 
   // ── Submit form state ──────────────────────────────────
   const [purpose, setPurpose] = useState("");
-  const [projectId, setProjectId] = useState<string>("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [note, setNote] = useState("");
@@ -68,7 +69,8 @@ export default function Expense() {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // ── Queries ────────────────────────────────────────────
-  const { data: projects = [] } = trpc.projects.list.useQuery({});
+  // Only show projects the current user is a member of
+  const { data: projects = [] } = trpc.projects.list.useQuery({ memberOnly: true });
 
   const { data: myReports, refetch: refetchReports } = trpc.expense.list.useQuery({ mine: true, limit: 50 });
   const { data: detailReport } = trpc.expense.getById.useQuery(
@@ -81,7 +83,7 @@ export default function Expense() {
   const submitReport = trpc.expense.submit.useMutation({
     onSuccess: () => {
       toast.success("报销申请已提交，等待审批");
-      setPurpose(""); setProjectId(""); setPeriodStart(""); setPeriodEnd(""); setNote("");
+      setPurpose(""); setPeriodStart(""); setPeriodEnd(""); setNote("");
       setItems([newItem()]);
       refetchReports();
       utils.expense.list.invalidate();
@@ -124,25 +126,29 @@ export default function Expense() {
     if (!purpose.trim()) { toast.error("请填写报销用途"); return; }
     const validItems = items.filter(i => i.description.trim() && parseFloat(i.amount) > 0);
     if (validItems.length === 0) { toast.error("请至少填写一条有效的费用明细"); return; }
+    const missingProject = validItems.find(i => !i.projectId);
+    if (missingProject) { toast.error("每条费用明细必须选择承担项目"); return; }
 
     setSubmitting(true);
     try {
-      const selectedProject = (projects as any[]).find((p: any) => p.id === parseInt(projectId));
       await submitReport.mutateAsync({
         purpose,
-        projectId: selectedProject?.id,
-        projectName: selectedProject?.name,
         periodStart: periodStart || undefined,
         periodEnd: periodEnd || undefined,
         note: note || undefined,
-        items: validItems.map(item => ({
-          expenseDate: item.expenseDate,
-          category: item.category,
-          description: item.description,
-          amount: parseFloat(item.amount),
-          invoiceUrl: item.invoiceUrl,
-          invoiceFileName: item.invoiceFileName,
-        })),
+        items: validItems.map(item => {
+          const proj = (projects as any[]).find((p: any) => p.id === parseInt(item.projectId));
+          return {
+            expenseDate: item.expenseDate,
+            category: item.category,
+            description: item.description,
+            amount: parseFloat(item.amount),
+            projectId: parseInt(item.projectId),
+            projectName: proj?.name ?? proj?.clientNameDisplay ?? undefined,
+            invoiceUrl: item.invoiceUrl,
+            invoiceFileName: item.invoiceFileName,
+          };
+        }),
       });
     } finally {
       setSubmitting(false);
@@ -176,22 +182,7 @@ export default function Expense() {
                   onChange={e => setPurpose(e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>承担项目</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择项目（可选，不选则为公司公共费用）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">公司公共费用（不关联项目）</SelectItem>
-                    {(projects as any[]).map((p: any) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.name}{p.clientName ? ` · ${p.clientName}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+
               <div className="space-y-1.5">
                 <Label>报销期间</Label>
                 <div className="flex gap-2 items-center">
@@ -217,11 +208,11 @@ export default function Expense() {
             </CardHeader>
             <CardContent className="space-y-3">
               {/* Header row */}
-              <div className="hidden md:grid grid-cols-[120px_1fr_160px_100px_140px_40px] gap-2 text-xs text-muted-foreground px-1">
-                <span>日期</span><span>摘要</span><span>费用类别</span><span>金额（元）</span><span>发票</span><span />
+              <div className="hidden md:grid grid-cols-[110px_1fr_1fr_140px_90px_120px_36px] gap-2 text-xs text-muted-foreground px-1">
+                <span>日期</span><span>摘要</span><span>承担项目 <span className="text-destructive">*</span></span><span>费用类别</span><span>金额（元）</span><span>发票</span><span />
               </div>
               {items.map((item, idx) => (
-                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[120px_1fr_160px_100px_140px_40px] gap-2 items-center border rounded-lg p-3 md:p-2 md:border-0 md:rounded-none md:border-b last:border-b-0">
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-[110px_1fr_1fr_140px_90px_120px_36px] gap-2 items-center border rounded-lg p-3 md:p-2 md:border-0 md:rounded-none md:border-b last:border-b-0">
                   <div className="space-y-1 md:space-y-0">
                     <Label className="md:hidden text-xs text-muted-foreground">日期</Label>
                     <Input type="date" value={item.expenseDate} onChange={e => updateItem(item.id, { expenseDate: e.target.value })} className="text-sm" />
@@ -234,6 +225,24 @@ export default function Expense() {
                       onChange={e => updateItem(item.id, { description: e.target.value })}
                       className="text-sm"
                     />
+                  </div>
+                  <div className="space-y-1 md:space-y-0">
+                    <Label className="md:hidden text-xs text-muted-foreground">承担项目 <span className="text-destructive">*</span></Label>
+                    <Select value={item.projectId} onValueChange={v => updateItem(item.id, { projectId: v })}>
+                      <SelectTrigger className={`text-sm ${!item.projectId ? 'border-destructive/50' : ''}`}>
+                        <SelectValue placeholder="选择项目…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(projects as any[]).length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">您尚未加入任何项目</div>
+                        )}
+                        {(projects as any[]).map((p: any) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}{p.clientNameDisplay ? ` · ${p.clientNameDisplay}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1 md:space-y-0">
                     <Label className="md:hidden text-xs text-muted-foreground">费用类别</Label>

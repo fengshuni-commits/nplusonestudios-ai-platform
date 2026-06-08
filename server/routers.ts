@@ -764,9 +764,14 @@ const dashboardRouter = router({
 
 const projectsRouter = router({
   list: protectedProcedure
-    .input(z.object({ search: z.string().optional(), status: z.union([z.string(), z.array(z.string())]).optional() }).optional())
-    .query(async ({ input }) => {
-      return db.listProjects(input);
+    .input(z.object({
+      search: z.string().optional(),
+      status: z.union([z.string(), z.array(z.string())]).optional(),
+      memberOnly: z.boolean().optional(), // if true, only return projects the current user is a member of
+    }).optional())
+    .query(async ({ input, ctx }) => {
+      const userId = input?.memberOnly ? ctx.user.id : undefined;
+      return db.listProjects({ ...input, userId });
     }),
 
   getById: protectedProcedure
@@ -7385,8 +7390,6 @@ const expenseRouter = router({
   /** Submit a new expense report */
   submit: protectedProcedure
     .input(z.object({
-      projectId: z.number().optional(),
-      projectName: z.string().optional(),
       purpose: z.string().min(1).max(512),
       periodStart: z.string().optional(), // ISO date string
       periodEnd: z.string().optional(),
@@ -7396,6 +7399,8 @@ const expenseRouter = router({
         category: z.enum(["transport_local", "transport_travel", "office_supplies", "meals", "other"]),
         description: z.string().min(1).max(512),
         amount: z.number().positive(), // 元，前端输入，后端转分
+        projectId: z.number().int().positive(), // 必填
+        projectName: z.string().optional(),
         invoiceUrl: z.string().optional(),
         invoiceFileName: z.string().optional(),
       })).min(1),
@@ -7404,8 +7409,8 @@ const expenseRouter = router({
       const result = await db.createExpenseReport({
         userId: ctx.user.id,
         submitterName: ctx.user.name ?? undefined,
-        projectId: input.projectId ?? null,
-        projectName: input.projectName ?? null,
+        projectId: null,
+        projectName: null,
         purpose: input.purpose,
         periodStart: input.periodStart ? new Date(input.periodStart) : null,
         periodEnd: input.periodEnd ? new Date(input.periodEnd) : null,
@@ -7415,6 +7420,8 @@ const expenseRouter = router({
           category: item.category,
           description: item.description,
           amount: Math.round(item.amount * 100), // 元 → 分
+          projectId: item.projectId,
+          projectName: item.projectName ?? null,
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
         })),
