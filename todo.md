@@ -2795,3 +2795,9 @@
 - [x] 侧边栏: 在品牌板块下方添加「报销」入口
 - [x] 后台管理板块: 增加「报销管理」入口
 - [x] Vitest 测试: 8 项全部通过
+
+## 报销管理导出功能
+
+- [x] 安装 exceljs 和 jszip 依赖
+- [x] 后端：expense.export tRPC procedure（生成 Excel 费用清单 + 发票 ZIP 压缩包，返回 S3 URL）
+- [x] 前端：AdminExpense 增加多选复选框 + 导出按鈕（选择已审批报销单后导出）

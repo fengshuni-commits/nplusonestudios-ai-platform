@@ -7,9 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, FileText, BarChart3, TrendingUp } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { CheckCircle, XCircle, FileText, BarChart3, TrendingUp, Download, FileSpreadsheet, Archive } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const CATEGORY_LABELS: Record<string, string> = {
   transport_local: "市内交通",
@@ -40,11 +41,14 @@ export default function AdminExpense() {
   const [reviewNote, setReviewNote] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [statsYear, setStatsYear] = useState<number>(currentYear);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<{ excelUrl: string; zipUrl: string; reportCount: number; totalAmount: number; invoiceCount: number } | null>(null);
 
   // ── Queries ────────────────────────────────────────────
   const { data: reportsData, refetch: refetchReports } = trpc.expense.list.useQuery({
     status: statusFilter === "all" ? undefined : statusFilter,
-    limit: 100,
+    limit: 200,
   });
   const reports = reportsData?.reports ?? [];
 
@@ -67,6 +71,14 @@ export default function AdminExpense() {
     onError: (e) => toast.error("操作失败：" + e.message),
   });
 
+  const exportMutation = trpc.expense.export.useMutation({
+    onSuccess: (data) => {
+      setExportResult(data);
+      toast.success(`导出成功：${data.reportCount} 份报销单，${data.invoiceCount} 张发票`);
+    },
+    onError: (e) => toast.error("导出失败：" + e.message),
+  });
+
   const handleReview = async (action: "approved" | "rejected") => {
     if (!detailId) return;
     setReviewing(true);
@@ -74,6 +86,38 @@ export default function AdminExpense() {
       await reviewMutation.mutateAsync({ id: detailId, action, reviewNote: reviewNote || undefined });
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("请先勾选要导出的报销单");
+      return;
+    }
+    setExporting(true);
+    setExportResult(null);
+    try {
+      await exportMutation.mutateAsync({ reportIds: Array.from(selectedIds) });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const toggleSelect = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === reports.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(reports.map((r: any) => r.id)));
     }
   };
 
@@ -92,11 +136,15 @@ export default function AdminExpense() {
 
   const totalApproved = byProject.reduce((s: number, r: any) => s + r.amount, 0);
 
+  const approvedSelected = reports.filter((r: any) => selectedIds.has(r.id) && r.status === "approved");
+  const allSelected = reports.length > 0 && selectedIds.size === reports.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < reports.length;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">报销管理</h1>
-        <p className="text-muted-foreground text-sm mt-1">审批报销申请，查看项目支出统计</p>
+        <p className="text-muted-foreground text-sm mt-1">审批报销申请，查看项目支出统计，导出费用清单</p>
       </div>
 
       <Tabs defaultValue="review">
@@ -107,8 +155,9 @@ export default function AdminExpense() {
 
         {/* ── Review Tab ── */}
         <TabsContent value="review" className="pt-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setSelectedIds(new Set()); }}>
               <SelectTrigger className="w-36">
                 <SelectValue />
               </SelectTrigger>
@@ -120,7 +169,64 @@ export default function AdminExpense() {
               </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground">{reports.length} 条</span>
+
+            {/* Select all */}
+            {reports.length > 0 && (
+              <div className="flex items-center gap-1.5 ml-2">
+                <Checkbox
+                  checked={allSelected}
+                  ref={el => { if (el) (el as any).indeterminate = someSelected; }}
+                  onCheckedChange={toggleSelectAll}
+                  id="select-all"
+                />
+                <label htmlFor="select-all" className="text-sm cursor-pointer select-none">
+                  全选
+                </label>
+              </div>
+            )}
+
+            {/* Export button */}
+            {selectedIds.size > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExport}
+                disabled={exporting}
+                className="ml-auto gap-1.5"
+              >
+                <Download className="w-4 h-4" />
+                {exporting ? "生成中…" : `导出已选 (${selectedIds.size})`}
+              </Button>
+            )}
           </div>
+
+          {/* Export result card */}
+          {exportResult && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-sm mb-1">
+                      导出完成：{exportResult.reportCount} 份报销单 · {exportResult.invoiceCount} 张发票 · 合计 ¥{(exportResult.totalAmount / 100).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">文件已生成，点击下载（链接 24 小时内有效）</p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={exportResult.excelUrl} download target="_blank" rel="noopener noreferrer" className="gap-1.5">
+                        <FileSpreadsheet className="w-4 h-4" /> 费用清单 .xlsx
+                      </a>
+                    </Button>
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={exportResult.zipUrl} download target="_blank" rel="noopener noreferrer" className="gap-1.5">
+                        <Archive className="w-4 h-4" /> 发票压缩包 .zip
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {reports.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">
@@ -132,13 +238,29 @@ export default function AdminExpense() {
           <div className="space-y-3">
             {reports.map((report: any) => {
               const statusInfo = STATUS_LABELS[report.status] ?? STATUS_LABELS.submitted;
+              const isSelected = selectedIds.has(report.id);
               return (
                 <Card
                   key={report.id}
-                  className="cursor-pointer hover:bg-accent/40 transition-colors"
+                  className={`cursor-pointer hover:bg-accent/40 transition-colors ${isSelected ? "ring-2 ring-primary/50 bg-primary/5" : ""}`}
                   onClick={() => { setDetailId(report.id); setReviewNote(""); }}
                 >
-                  <CardContent className="py-4 flex items-center justify-between gap-4">
+                  <CardContent className="py-4 flex items-center gap-3">
+                    {/* Checkbox */}
+                    <div onClick={e => toggleSelect(report.id, e)} className="flex-shrink-0">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => {
+                          setSelectedIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(report.id)) next.delete(report.id);
+                            else next.add(report.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
+
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{report.purpose}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
@@ -157,6 +279,16 @@ export default function AdminExpense() {
               );
             })}
           </div>
+
+          {/* Selection summary */}
+          {selectedIds.size > 0 && (
+            <div className="text-sm text-muted-foreground pt-1">
+              已选 {selectedIds.size} 份，其中已批准 {approvedSelected.length} 份
+              {approvedSelected.length < selectedIds.size && (
+                <span className="text-amber-600 ml-1">（未批准的报销单也会包含在导出中）</span>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Stats Tab ── */}

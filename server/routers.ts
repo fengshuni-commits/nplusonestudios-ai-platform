@@ -7555,6 +7555,199 @@ const expenseRouter = router({
       ]);
       return { byProject, byCategory };
     }),
+
+  /** Admin: export selected approved reports as Excel + invoice ZIP */
+  export: adminProcedure
+    .input(z.object({
+      reportIds: z.array(z.number()).min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const ExcelJS = (await import("exceljs")).default;
+      const JSZip = (await import("jszip")).default;
+
+      const CATEGORY_LABELS: Record<string, string> = {
+        transport_local: "市内交通",
+        transport_travel: "出差（机票/火车/酒店）",
+        office_supplies: "办公杂费",
+        meals: "餐费",
+        other: "其他",
+      };
+
+      // Fetch all reports with items
+      const reports = await Promise.all(
+        input.reportIds.map(id => db.getExpenseReportById(id))
+      );
+      const validReports = reports.filter((r): r is NonNullable<typeof r> => r !== null);
+
+      // ── Build Excel ────────────────────────────────────────────────
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "N+1 STUDIOS";
+      const sheet = workbook.addWorksheet("费用清单");
+
+      // Header style
+      const headerFill = {
+        type: "pattern" as const,
+        pattern: "solid" as const,
+        fgColor: { argb: "FF2D2D2D" },
+      };
+      const headerFont = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+
+      sheet.columns = [
+        { header: "报销单ID", key: "reportId", width: 10 },
+        { header: "提交人", key: "submitter", width: 12 },
+        { header: "报销用途", key: "purpose", width: 30 },
+        { header: "报销期间", key: "period", width: 20 },
+        { header: "费用日期", key: "expenseDate", width: 12 },
+        { header: "费用类别", key: "category", width: 16 },
+        { header: "摘要", key: "description", width: 30 },
+        { header: "承担项目", key: "projectName", width: 20 },
+        { header: "金额（元）", key: "amount", width: 12 },
+        { header: "发票数量", key: "invoiceCount", width: 10 },
+        { header: "审批状态", key: "status", width: 10 },
+        { header: "审批备注", key: "reviewNote", width: 20 },
+      ];
+
+      // Style header row
+      const headerRow = sheet.getRow(1);
+      headerRow.eachCell(cell => {
+        cell.fill = headerFill;
+        cell.font = headerFont;
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = {
+          bottom: { style: "thin", color: { argb: "FF888888" } },
+        };
+      });
+      headerRow.height = 22;
+
+      let rowIndex = 2;
+      for (const report of validReports) {
+        const periodStr = report.periodStart && report.periodEnd
+          ? `${new Date(report.periodStart).toLocaleDateString("zh-CN")} ~ ${new Date(report.periodEnd).toLocaleDateString("zh-CN")}`
+          : "";
+        for (const item of report.items) {
+          const invoices: { url: string; fileName: string }[] = item.invoicesJson
+            ? (() => { try { return JSON.parse(item.invoicesJson as string); } catch { return []; } })()
+            : item.invoiceUrl ? [{ url: item.invoiceUrl, fileName: item.invoiceFileName ?? "invoice" }] : [];
+
+          const row = sheet.addRow({
+            reportId: report.id,
+            submitter: report.submitterName ?? "",
+            purpose: report.purpose,
+            period: periodStr,
+            expenseDate: new Date(item.expenseDate).toLocaleDateString("zh-CN"),
+            category: CATEGORY_LABELS[item.category] ?? item.category,
+            description: item.description,
+            projectName: (item as any).projectName ?? "",
+            amount: (item.amount / 100).toFixed(2),
+            invoiceCount: invoices.length,
+            status: report.status === "approved" ? "已批准" : report.status === "rejected" ? "已拒绝" : "待审批",
+            reviewNote: report.reviewNote ?? "",
+          });
+          row.getCell("amount").numFmt = "#,##0.00";
+          row.getCell("amount").alignment = { horizontal: "right" };
+          // Zebra striping
+          if (rowIndex % 2 === 0) {
+            row.eachCell(cell => {
+              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7F7F7" } };
+            });
+          }
+          rowIndex++;
+        }
+        // Subtotal row per report
+        const subtotalRow = sheet.addRow({
+          reportId: "",
+          submitter: "",
+          purpose: `小计（${report.purpose}）`,
+          period: "",
+          expenseDate: "",
+          category: "",
+          description: "",
+          projectName: "",
+          amount: (report.totalAmount / 100).toFixed(2),
+          invoiceCount: "",
+          status: "",
+          reviewNote: "",
+        });
+        subtotalRow.getCell("amount").numFmt = "#,##0.00";
+        subtotalRow.getCell("amount").alignment = { horizontal: "right" };
+        subtotalRow.eachCell(cell => {
+          cell.font = { bold: true };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2FF" } };
+        });
+        rowIndex++;
+      }
+
+      // Grand total row
+      const grandTotal = validReports.reduce((s, r) => s + r.totalAmount, 0);
+      const totalRow = sheet.addRow({
+        reportId: "", submitter: "", purpose: "合计",
+        period: "", expenseDate: "", category: "", description: "",
+        projectName: "",
+        amount: (grandTotal / 100).toFixed(2),
+        invoiceCount: "", status: "", reviewNote: "",
+      });
+      totalRow.getCell("amount").numFmt = "#,##0.00";
+      totalRow.getCell("amount").alignment = { horizontal: "right" };
+      totalRow.eachCell(cell => {
+        cell.font = { bold: true, size: 11 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2D2D2D" } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      });
+
+      const excelBuffer = await workbook.xlsx.writeBuffer();
+
+      // ── Build invoice ZIP ──────────────────────────────────────────
+      const zip = new JSZip();
+      const invoiceFolder = zip.folder("发票")!;
+
+      let invoiceSeq = 1;
+      for (const report of validReports) {
+        for (const item of report.items) {
+          const invoices: { url: string; fileName: string }[] = item.invoicesJson
+            ? (() => { try { return JSON.parse(item.invoicesJson as string); } catch { return []; } })()
+            : item.invoiceUrl ? [{ url: item.invoiceUrl, fileName: item.invoiceFileName ?? "invoice" }] : [];
+
+          for (const inv of invoices) {
+            try {
+              const resp = await fetch(inv.url);
+              if (!resp.ok) continue;
+              const arrayBuf = await resp.arrayBuffer();
+              const ext = inv.fileName.includes(".") ? inv.fileName.split(".").pop() : "jpg";
+              const safeName = `${String(invoiceSeq).padStart(3, "0")}_${report.id}_${item.description.slice(0, 10).replace(/[^\w\u4e00-\u9fa5]/g, "_")}.${ext}`;
+              invoiceFolder.file(safeName, arrayBuf);
+              invoiceSeq++;
+            } catch {
+              // skip failed downloads
+            }
+          }
+        }
+      }
+
+      const zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+
+      // ── Upload both to S3 ──────────────────────────────────────────
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const [excelResult, zipResult] = await Promise.all([
+        storagePut(
+          `expense-exports/${nanoid()}-费用清单-${timestamp}.xlsx`,
+          Buffer.from(excelBuffer),
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        storagePut(
+          `expense-exports/${nanoid()}-发票-${timestamp}.zip`,
+          zipBuffer,
+          "application/zip"
+        ),
+      ]);
+
+      return {
+        excelUrl: excelResult.url,
+        zipUrl: zipResult.url,
+        reportCount: validReports.length,
+        totalAmount: grandTotal,
+        invoiceCount: invoiceSeq - 1,
+      };
+    }),
 });
 
 // ─── Main Router ─────────────────────────────────────────────────────────
