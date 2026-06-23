@@ -7538,6 +7538,13 @@ const expenseRouter = router({
       return { success: true };
     }),
 
+  /** Current user: my own expense stats */
+  myStats: protectedProcedure
+    .input(z.object({ year: z.number().optional() }))
+    .query(async ({ input, ctx }) => {
+      return db.getUserExpenseStats({ userId: ctx.user.id, year: input.year });
+    }),
+
   /** Admin: project cost statistics */
   projectStats: adminProcedure
     .input(z.object({ year: z.number().optional(), projectId: z.number().optional() }))

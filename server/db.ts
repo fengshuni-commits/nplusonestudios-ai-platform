@@ -2894,3 +2894,69 @@ export async function getExpenseCategoryStats(opts?: { projectId?: number; year?
     return rows;
   });
 }
+
+export async function getUserExpenseStats(opts: { userId: number; year?: number }) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return { byProject: [], byCategory: [], totalApproved: 0, totalSubmitted: 0 };
+
+    const yearConditions: any[] = [];
+    if (opts.year) {
+      const start = new Date(`${opts.year}-01-01`);
+      const end = new Date(`${opts.year + 1}-01-01`);
+      yearConditions.push(sql`${expenseReports.createdAt} >= ${start} AND ${expenseReports.createdAt} < ${end}`);
+    }
+
+    const approvedConditions = [
+      eq(expenseReports.userId, opts.userId),
+      eq(expenseReports.status, "approved"),
+      ...yearConditions,
+    ];
+
+    const allConditions = [
+      eq(expenseReports.userId, opts.userId),
+      ...yearConditions,
+    ];
+
+    const [byProject, byCategory, totals] = await Promise.all([
+      // By project (approved only, from items)
+      db.select({
+        projectId: expenseItems.projectId,
+        projectName: expenseItems.projectName,
+        totalAmount: sql<number>`SUM(${expenseItems.amount})`,
+        itemCount: sql<number>`COUNT(*)`,
+      })
+        .from(expenseItems)
+        .innerJoin(expenseReports, eq(expenseItems.reportId, expenseReports.id))
+        .where(and(...approvedConditions))
+        .groupBy(expenseItems.projectId, expenseItems.projectName)
+        .orderBy(sql`SUM(${expenseItems.amount}) DESC`),
+
+      // By category (approved only, from items)
+      db.select({
+        category: expenseItems.category,
+        totalAmount: sql<number>`SUM(${expenseItems.amount})`,
+        itemCount: sql<number>`COUNT(*)`,
+      })
+        .from(expenseItems)
+        .innerJoin(expenseReports, eq(expenseItems.reportId, expenseReports.id))
+        .where(and(...approvedConditions))
+        .groupBy(expenseItems.category),
+
+      // Total amounts
+      db.select({
+        status: expenseReports.status,
+        total: sql<number>`SUM(${expenseReports.totalAmount})`,
+        count: sql<number>`COUNT(*)`,
+      })
+        .from(expenseReports)
+        .where(and(...allConditions))
+        .groupBy(expenseReports.status),
+    ]);
+
+    const totalApproved = totals.find(r => r.status === "approved")?.total ?? 0;
+    const totalSubmitted = totals.find(r => r.status === "submitted")?.total ?? 0;
+
+    return { byProject, byCategory, totalApproved, totalSubmitted };
+  });
+}
