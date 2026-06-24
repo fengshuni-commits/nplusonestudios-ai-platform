@@ -7787,7 +7787,7 @@ const expenseRouter = router({
       const report = await db.getExpenseReportById(input.id);
       if (!report) throw new TRPCError({ code: "NOT_FOUND", message: "报销单不存在" });
 
-      const ExcelJS = await import("exceljs");
+      const ExcelJS = (await import("exceljs")).default;
       const JSZip = (await import("jszip")).default;
       const { storagePut: storagePutSingle } = await import("./storage");
 
