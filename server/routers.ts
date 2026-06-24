@@ -7460,6 +7460,8 @@ const expenseRouter = router({
         // 滴滴行程报销单
         didiTripReceiptUrl: z.string().optional(),
         didiTripReceiptFileName: z.string().optional(),
+        // 修正金额（可选，单位：元）
+        correctionAmount: z.number().positive().optional(),
       })).min(1),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -7478,6 +7480,7 @@ const expenseRouter = router({
           category: item.category,
           description: item.description,
           amount: Math.round(item.amount * 100), // 元 → 分
+          correctionAmount: item.correctionAmount != null ? Math.round(item.correctionAmount * 100) : null,
           projectId: item.projectId,
           projectName: item.projectName ?? null,
           invoicesJson: item.invoices && item.invoices.length > 0
@@ -7621,6 +7624,7 @@ const expenseRouter = router({
         { header: "摘要", key: "description", width: 30 },
         { header: "承担项目", key: "projectName", width: 20 },
         { header: "金额（元）", key: "amount", width: 12 },
+        { header: "修正金额（元）", key: "correctionAmount", width: 14 },
         { header: "发票数量", key: "invoiceCount", width: 10 },
         { header: "滴滴行程单", key: "hasDidi", width: 12 },
         { header: "审批状态", key: "status", width: 10 },
@@ -7661,6 +7665,7 @@ const expenseRouter = router({
             description: item.description,
             projectName: (item as any).projectName ?? "",
             amount: (item.amount / 100).toFixed(2),
+            correctionAmount: (item as any).correctionAmount != null ? ((item as any).correctionAmount / 100).toFixed(2) : "",
             invoiceCount: invoices.length,
             hasDidi: hasDidiReceipt ? "✔ 已上传" : "",
             status: report.status === "approved" ? "已批准" : report.status === "rejected" ? "已拒绝" : "待审批",
@@ -7804,6 +7809,7 @@ const expenseRouter = router({
         { header: "摘要", key: "desc", width: 24 },
         { header: "承担项目", key: "project", width: 16 },
         { header: "金额（元）", key: "amount", width: 12 },
+        { header: "修正金额（元）", key: "correctionAmount", width: 14 },
         { header: "发票", key: "invoice", width: 20 },
         { header: "滴滴行程单", key: "didiReceipt", width: 14 },
       ];
@@ -7813,7 +7819,7 @@ const expenseRouter = router({
 
       const CATEGORY_LABELS: Record<string, string> = {
         transport_local: "市内交通", travel_flight: "出差机票",
-        travel_train: "出差火车/高铁", travel_hotel: "出差酒店",
+        travel_train: "出差火车/高鐵", travel_hotel: "出差酒店",
         office_supplies: "办公杂费", meals: "餐费", other: "其他",
       };
 
@@ -7825,6 +7831,8 @@ const expenseRouter = router({
           : item.invoiceUrl ? [{ url: item.invoiceUrl, filename: item.invoiceFileName ?? "发票" }] : [];
         const invoiceLabel = invoices.map((inv, i) => `发票${i + 1}: ${inv.filename}`).join("\n");
         const didiReceiptName = (item as any).didiTripReceiptUrl ? ((item as any).didiTripReceiptFileName ?? "行程报销单") : "";
+        const corrAmt = (item as any).correctionAmount;
+        const effectiveAmount = corrAmt != null ? corrAmt : item.amount;
         sheet.addRow({
           seq: seq++,
           submitter: report.submitterName,
@@ -7836,13 +7844,14 @@ const expenseRouter = router({
           desc: item.description,
           project: item.projectName ?? "",
           amount: (item.amount / 100).toFixed(2),
+          correctionAmount: corrAmt != null ? (corrAmt / 100).toFixed(2) : "",
           invoice: invoiceLabel,
           didiReceipt: didiReceiptName,
         });
-        subtotal += item.amount;
+        subtotal += effectiveAmount;
       }
       // Subtotal row
-      const subtotalRow = sheet.addRow({ seq: "", submitter: "", purpose: "", period: "", date: "", category: "", desc: "小计", project: "", amount: (subtotal / 100).toFixed(2), invoice: "" });
+      const subtotalRow = sheet.addRow({ seq: "", submitter: "", purpose: "", period: "", date: "", category: "", desc: "小计", project: "", amount: "", correctionAmount: (subtotal / 100).toFixed(2), invoice: "" });
       subtotalRow.font = { bold: true };
       subtotalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7FAFC" } };
 

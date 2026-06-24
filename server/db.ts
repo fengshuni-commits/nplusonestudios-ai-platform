@@ -2758,12 +2758,14 @@ export async function createExpenseReport(data: {
     invoicesJson?: string | null;
     didiTripReceiptUrl?: string | null;
     didiTripReceiptFileName?: string | null;
+    correctionAmount?: number | null; // 分
   }>;
 }) {
   return withRetry(async () => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
-    const totalAmount = data.items.reduce((sum, item) => sum + item.amount, 0);
+    // totalAmount uses correctionAmount when provided, otherwise item.amount
+    const totalAmount = data.items.reduce((sum, item) => sum + (item.correctionAmount ?? item.amount), 0);
     const reportResult = await db.insert(expenseReports).values({
       userId: data.userId,
       submitterName: data.submitterName ?? null,
@@ -2786,6 +2788,7 @@ export async function createExpenseReport(data: {
           category: item.category,
           description: item.description,
           amount: item.amount,
+          correctionAmount: item.correctionAmount ?? null,
           projectId: item.projectId,
           projectName: item.projectName ?? null,
           invoiceUrl: item.invoiceUrl ?? null,

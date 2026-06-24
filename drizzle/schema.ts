@@ -1090,6 +1090,8 @@ export const expenseItems = mysqlTable("expense_items", {
   description: varchar("description", { length: 512 }).notNull(),
   // 金额（单位：分）
   amount: int("amount").notNull(),
+  // 修正金额（单位：分，可选；发票金额与实际报销金额不符时填写）
+  correctionAmount: int("correctionAmount"),
   // 发票文件列表（JSON 数组，每项 {url, fileName, amount?}）
   invoicesJson: text("invoicesJson"), // JSON string of {url, fileName, amount?}[]
   // 保留旧字段兼容（废弃，新数据用 invoicesJson）

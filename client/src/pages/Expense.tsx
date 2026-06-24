@@ -42,9 +42,10 @@ type InvoiceFile = {
 type ExpenseItem = {
   id: string;
   expenseDate: string;
-  category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
+  category: "" | "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
   description: string;
   amount: string;
+  correctionAmount: string; // 修正金额（元，可选）
   projectId: string;
   invoices: InvoiceFile[];
   uploading?: boolean;
@@ -65,9 +66,10 @@ function newItem(): ExpenseItem {
   return {
     id: Math.random().toString(36).slice(2),
     expenseDate: new Date().toISOString().slice(0, 10),
-    category: "transport_local",
+    category: "",
     description: "",
     amount: "",
+    correctionAmount: "",
     projectId: "",
     invoices: [],
   };
@@ -217,6 +219,8 @@ export default function Expense() {
     if (!purpose.trim()) { toast.error("请填写报销用途"); return; }
     const validItems = items.filter(i => i.description.trim() && parseFloat(i.amount) > 0);
     if (validItems.length === 0) { toast.error("请至少填写一条有效的费用明细（需有摘要且金额>0）"); return; }
+    const missingCategory = validItems.find(i => !i.category);
+    if (missingCategory) { toast.error("请为每条费用明细选择费用类别"); return; }
     const missingProject = validItems.find(i => !i.projectId);
     if (missingProject) { toast.error("每条费用明细必须选择承担项目"); return; }
     // Warn if DiDi invoice without trip receipt
@@ -237,9 +241,10 @@ export default function Expense() {
           const proj = (projects as any[]).find((p: any) => p.id === parseInt(item.projectId));
           return {
             expenseDate: item.expenseDate,
-            category: item.category,
+            category: item.category as "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other",
             description: item.description,
             amount: parseFloat(item.amount),
+            correctionAmount: item.correctionAmount ? parseFloat(item.correctionAmount) : undefined,
             projectId: parseInt(item.projectId),
             projectName: proj?.name ?? proj?.clientNameDisplay ?? undefined,
             invoices: item.invoices.length > 0 ? item.invoices : undefined,
@@ -329,16 +334,18 @@ export default function Expense() {
 
               return (
                 <div key={item.id} className="border rounded-lg p-3 space-y-2.5 relative">
-                  {/* Row 1: date + category + amount (read-only if auto-filled) */}
-                  <div className="grid grid-cols-[120px_1fr_90px_28px] gap-2 items-end">
+                  {/* Row 1: date + category + amount (read-only if auto-filled) + correction */}
+                  <div className="grid grid-cols-[110px_1fr_90px_90px_28px] gap-2 items-end">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">日期</Label>
                       <Input type="date" value={item.expenseDate} onChange={e => updateItem(item.id, { expenseDate: e.target.value })} className="text-xs h-8" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">费用类别</Label>
+                      <Label className="text-xs text-muted-foreground">费用类别 <span className="text-destructive">*</span></Label>
                       <Select value={item.category} onValueChange={v => updateItem(item.id, { category: v as any })}>
-                        <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className={`text-xs h-8 ${!item.category ? "border-destructive/50" : ""}`}>
+                          <SelectValue placeholder="请选择…" />
+                        </SelectTrigger>
                         <SelectContent>
                           {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
                             <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
@@ -365,6 +372,19 @@ export default function Expense() {
                         min="0"
                         step="0.01"
                         title={hasAllInvoiceAmounts ? "金额由发票自动计算，如需修改请删除发票后重新上传" : undefined}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">修正金额</Label>
+                      <Input
+                        type="number"
+                        placeholder="可选"
+                        value={item.correctionAmount}
+                        onChange={e => updateItem(item.id, { correctionAmount: e.target.value })}
+                        className="text-xs h-8"
+                        min="0"
+                        step="0.01"
+                        title="发票金额与实际报销金额不符时，在此填写实际报销金额"
                       />
                     </div>
                     <Button
