@@ -122,10 +122,16 @@ export default function AdminExpense() {
   };
 
   // ── Stats derived data ─────────────────────────────────
+  const byPerson = (statsData?.byPerson ?? []).map((row: any) => ({
+    name: row.submitterName ?? `用户${row.userId}`,
+    amount: Number(row.totalAmount) / 100,
+    count: Number(row.reportCount),
+  }));
+
   const byProject = (statsData?.byProject ?? []).map((row: any) => ({
     name: row.projectName ?? "公司公共费用",
     amount: Number(row.totalAmount) / 100,
-    count: Number(row.reportCount),
+    count: Number(row.itemCount),
   }));
 
   const byCategory = (statsData?.byCategory ?? []).map((row: any) => ({
@@ -134,7 +140,7 @@ export default function AdminExpense() {
     count: Number(row.itemCount),
   }));
 
-  const totalApproved = byProject.reduce((s: number, r: any) => s + r.amount, 0);
+  const totalApproved = Number(statsData?.totalApproved ?? 0) / 100;
 
   const approvedSelected = reports.filter((r: any) => selectedIds.has(r.id) && r.status === "approved");
   const allSelected = reports.length > 0 && selectedIds.size === reports.length;
@@ -309,25 +315,26 @@ export default function AdminExpense() {
             </div>
           </div>
 
+          {/* Row 1: By person + By category */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* By project bar chart */}
+            {/* By person bar chart */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" /> 各项目支出（元）
+                  <BarChart3 className="w-4 h-4" /> 按报销人支出
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {byProject.length === 0 ? (
+                {byPerson.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground text-sm">暂无数据</div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={byProject} margin={{ top: 4, right: 8, bottom: 40, left: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" interval={0} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `¥${v}`} />
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={byPerson} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `¥${v}`} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={60} />
                       <Tooltip formatter={(v: any) => [`¥${Number(v).toFixed(2)}`, "金额"]} />
-                      <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="amount" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -345,7 +352,7 @@ export default function AdminExpense() {
                 {byCategory.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground text-sm">暂无数据</div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={260}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <PieChart>
                       <Pie
                         data={byCategory}
@@ -353,7 +360,7 @@ export default function AdminExpense() {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={90}
+                        outerRadius={85}
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
@@ -369,37 +376,96 @@ export default function AdminExpense() {
             </Card>
           </div>
 
-          {/* Project breakdown table */}
-          {byProject.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">项目支出明细</CardTitle></CardHeader>
-              <CardContent>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 font-medium text-muted-foreground">项目</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">报销单数</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">已批准金额</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {byProject.map((row: any, i: number) => (
-                      <tr key={i} className="border-b last:border-0">
-                        <td className="py-2">{row.name}</td>
-                        <td className="py-2 text-right text-muted-foreground">{row.count} 份</td>
-                        <td className="py-2 text-right font-semibold">¥{row.amount.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+          {/* Row 2: By project bar chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" /> 按承担项目支出
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {byProject.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-sm">暂无数据</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={byProject} margin={{ top: 4, right: 8, bottom: 48, left: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `¥${v}`} />
+                    <Tooltip formatter={(v: any) => [`¥${Number(v).toFixed(2)}`, "金额"]} />
+                    <Bar dataKey="amount" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tables row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Person breakdown table */}
+            {byPerson.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle className="text-base">报销人明细</CardTitle></CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 font-medium text-muted-foreground">姓名</th>
+                        <th className="text-right py-2 font-medium text-muted-foreground">报销单数</th>
+                        <th className="text-right py-2 font-medium text-muted-foreground">已批准金额</th>
                       </tr>
-                    ))}
-                    <tr className="font-semibold bg-muted/30">
-                      <td className="py-2 text-muted-foreground">合计</td>
-                      <td className="py-2 text-right text-muted-foreground">{byProject.reduce((s: number, r: any) => s + r.count, 0)} 份</td>
-                      <td className="py-2 text-right">¥{totalApproved.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-          )}
+                    </thead>
+                    <tbody>
+                      {byPerson.map((row: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-2">{row.name}</td>
+                          <td className="py-2 text-right text-muted-foreground">{row.count} 份</td>
+                          <td className="py-2 text-right font-semibold">¥{row.amount.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))}
+                      <tr className="font-semibold bg-muted/30">
+                        <td className="py-2 text-muted-foreground">合计</td>
+                        <td className="py-2 text-right text-muted-foreground">{byPerson.reduce((s: number, r: any) => s + r.count, 0)} 份</td>
+                        <td className="py-2 text-right">¥{totalApproved.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Project breakdown table */}
+            {byProject.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle className="text-base">项目支出明细</CardTitle></CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 font-medium text-muted-foreground">项目</th>
+                        <th className="text-right py-2 font-medium text-muted-foreground">费用条数</th>
+                        <th className="text-right py-2 font-medium text-muted-foreground">已批准金额</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {byProject.map((row: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-2">{row.name}</td>
+                          <td className="py-2 text-right text-muted-foreground">{row.count} 条</td>
+                          <td className="py-2 text-right font-semibold">¥{row.amount.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))}
+                      <tr className="font-semibold bg-muted/30">
+                        <td className="py-2 text-muted-foreground">合计</td>
+                        <td className="py-2 text-right text-muted-foreground">{byProject.reduce((s: number, r: any) => s + r.count, 0)} 条</td>
+                        <td className="py-2 text-right">¥{byProject.reduce((s: number, r: any) => s + r.amount, 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 

@@ -7545,15 +7545,11 @@ const expenseRouter = router({
       return db.getUserExpenseStats({ userId: ctx.user.id, year: input.year });
     }),
 
-  /** Admin: project cost statistics */
+  /** Admin: full cost statistics (by person, by project, by category) */
   projectStats: adminProcedure
-    .input(z.object({ year: z.number().optional(), projectId: z.number().optional() }))
+    .input(z.object({ year: z.number().optional() }))
     .query(async ({ input }) => {
-      const [byProject, byCategory] = await Promise.all([
-        db.getProjectExpenseStats({ year: input.year, projectId: input.projectId }),
-        db.getExpenseCategoryStats({ year: input.year, projectId: input.projectId }),
-      ]);
-      return { byProject, byCategory };
+      return db.getAdminExpenseStats({ year: input.year });
     }),
 
   /** Admin: export selected approved reports as Excel + invoice ZIP */

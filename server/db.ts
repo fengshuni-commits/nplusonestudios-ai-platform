@@ -2960,3 +2960,58 @@ export async function getUserExpenseStats(opts: { userId: number; year?: number 
     return { byProject, byCategory, totalApproved, totalSubmitted };
   });
 }
+
+export async function getAdminExpenseStats(opts?: { year?: number }) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return { byPerson: [], byProject: [], byCategory: [], totalApproved: 0 };
+
+    const yearConds: any[] = [eq(expenseReports.status, "approved")];
+    if (opts?.year) {
+      const start = new Date(`${opts.year}-01-01`);
+      const end = new Date(`${opts.year + 1}-01-01`);
+      yearConds.push(sql`${expenseReports.createdAt} >= ${start} AND ${expenseReports.createdAt} < ${end}`);
+    }
+
+    const [byPerson, byProject, byCategory] = await Promise.all([
+      // By person (from approved reports)
+      db.select({
+        userId: expenseReports.userId,
+        submitterName: expenseReports.submitterName,
+        totalAmount: sql<number>`SUM(${expenseReports.totalAmount})`,
+        reportCount: sql<number>`COUNT(*)`,
+      })
+        .from(expenseReports)
+        .where(and(...yearConds))
+        .groupBy(expenseReports.userId, expenseReports.submitterName)
+        .orderBy(sql`SUM(${expenseReports.totalAmount}) DESC`),
+
+      // By project (from approved items, per-item projectId)
+      db.select({
+        projectId: expenseItems.projectId,
+        projectName: expenseItems.projectName,
+        totalAmount: sql<number>`SUM(${expenseItems.amount})`,
+        itemCount: sql<number>`COUNT(*)`,
+      })
+        .from(expenseItems)
+        .innerJoin(expenseReports, eq(expenseItems.reportId, expenseReports.id))
+        .where(and(...yearConds))
+        .groupBy(expenseItems.projectId, expenseItems.projectName)
+        .orderBy(sql`SUM(${expenseItems.amount}) DESC`),
+
+      // By category (from approved items)
+      db.select({
+        category: expenseItems.category,
+        totalAmount: sql<number>`SUM(${expenseItems.amount})`,
+        itemCount: sql<number>`COUNT(*)`,
+      })
+        .from(expenseItems)
+        .innerJoin(expenseReports, eq(expenseItems.reportId, expenseReports.id))
+        .where(and(...yearConds))
+        .groupBy(expenseItems.category),
+    ]);
+
+    const totalApproved = byPerson.reduce((s, r) => s + Number(r.totalAmount), 0);
+    return { byPerson, byProject, byCategory, totalApproved };
+  });
+}

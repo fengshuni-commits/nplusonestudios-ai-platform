@@ -149,8 +149,11 @@ describe("expense router", () => {
   it("admin should get project stats", async () => {
     const caller = appRouter.createCaller(createContext(adminUser));
     const result = await caller.expense.projectStats({ year: 2026 });
+    expect(result.byPerson).toBeInstanceOf(Array);
     expect(result.byProject).toBeInstanceOf(Array);
     expect(result.byCategory).toBeInstanceOf(Array);
+    // The approved report should appear in byPerson stats
+    expect(result.byPerson.length).toBeGreaterThan(0);
   });
 
   it("non-admin should not access review procedure", async () => {
