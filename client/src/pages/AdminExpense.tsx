@@ -139,7 +139,11 @@ export default function AdminExpense() {
   const bulkListExportMutation = trpc.expense.export.useMutation({
     onSuccess: (data) => {
       setBulkListExportResult(data);
-      toast.success(`导出成功：${data.reportCount} 份报销单`);
+      // Auto-download both files
+      const ts = new Date().toISOString().slice(0, 10);
+      const a1 = document.createElement("a"); a1.href = data.excelUrl; a1.download = `费用清单-${ts}.xlsx`; a1.target = "_blank"; document.body.appendChild(a1); a1.click(); document.body.removeChild(a1);
+      setTimeout(() => { const a2 = document.createElement("a"); a2.href = data.zipUrl; a2.download = `发票-${ts}.zip`; a2.target = "_blank"; document.body.appendChild(a2); a2.click(); document.body.removeChild(a2); }, 500);
+      toast.success(`导出成功：${data.reportCount} 份报销单，文件已开始下载`);
     },
     onError: (e) => toast.error("导出失败：" + e.message),
   });
@@ -203,12 +207,26 @@ export default function AdminExpense() {
     deleteMutation.mutate({ ids: Array.from(listSelected) });
   };
 
-  const handleSingleExport = async (id: number) => {
+  const triggerDownload = (url: string, filename: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleSingleExport = async (id: number, reportPurpose?: string) => {
     setSingleExporting(prev => new Set(prev).add(id));
     try {
       const result = await exportSingleMutation.mutateAsync({ id });
       setSingleExportResults(prev => ({ ...prev, [id]: { excelUrl: result.excelUrl, zipUrl: result.zipUrl } }));
-      toast.success("导出成功");
+      // Auto-download both files
+      const safeName = (reportPurpose ?? String(id)).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "_").slice(0, 20);
+      triggerDownload(result.excelUrl, `费用清单-${safeName}.xlsx`);
+      setTimeout(() => triggerDownload(result.zipUrl, `发票-${safeName}.zip`), 500);
+      toast.success("导出成功，文件已开始下载");
     } finally {
       setSingleExporting(prev => { const next = new Set(prev); next.delete(id); return next; });
     }
@@ -548,7 +566,7 @@ export default function AdminExpense() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => handleSingleExport(report.id)}
+                                onClick={() => handleSingleExport(report.id, report.purpose)}
                                 disabled={isExporting}
                                 className="h-7 px-2 gap-1 text-xs"
                               >
