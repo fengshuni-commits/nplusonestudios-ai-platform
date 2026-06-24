@@ -2801,3 +2801,10 @@
 - [x] 安装 exceljs 和 jszip 依赖
 - [x] 后端：expense.export tRPC procedure（生成 Excel 费用清单 + 发票 ZIP 压缩包，返回 S3 URL）
 - [x] 前端：AdminExpense 增加多选复选框 + 导出按鈕（选择已审批报销单后导出）
+
+## 报销管理 - 完整报销列表
+
+- [x] 后端：deleteReports 接口（批量删除，admin only）
+- [x] 后端：exportSingle 接口（单笔报销导出 Excel + 发票 ZIP）
+- [x] 后端：listAll 接口（全量列表，支持状态/日期筛选）
+- [x] 前端：AdminExpense 新增「报销列表」tab，支持筛选（状态/报销人/日期）、多选、删除、单笔导出、批量导出

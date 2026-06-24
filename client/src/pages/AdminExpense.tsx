@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,11 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, FileText, BarChart3, TrendingUp, Download, FileSpreadsheet, Archive } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import {
+  CheckCircle, XCircle, FileText, BarChart3, TrendingUp,
+  Download, FileSpreadsheet, Archive, Trash2, List, Search,
+} from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell,
+} from "recharts";
 
 const CATEGORY_LABELS: Record<string, string> = {
   transport_local: "市内交通",
@@ -35,15 +42,29 @@ const YEAR_OPTIONS = [currentYear, currentYear - 1, currentYear - 2];
 export default function AdminExpense() {
   const utils = trpc.useUtils();
 
-  // ── State ──────────────────────────────────────────────
+  // ── Review tab state ───────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<string>("submitted");
   const [detailId, setDetailId] = useState<number | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [reviewing, setReviewing] = useState(false);
-  const [statsYear, setStatsYear] = useState<number>(currentYear);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<{ excelUrl: string; zipUrl: string; reportCount: number; totalAmount: number; invoiceCount: number } | null>(null);
+
+  // ── Stats tab state ────────────────────────────────────
+  const [statsYear, setStatsYear] = useState<number>(currentYear);
+
+  // ── List tab state ─────────────────────────────────────
+  const [listStatus, setListStatus] = useState<string>("all");
+  const [listSearch, setListSearch] = useState("");
+  const [listDateFrom, setListDateFrom] = useState("");
+  const [listDateTo, setListDateTo] = useState("");
+  const [listSelected, setListSelected] = useState<Set<number>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [singleExportResults, setSingleExportResults] = useState<Record<number, { excelUrl: string; zipUrl: string }>>({});
+  const [singleExporting, setSingleExporting] = useState<Set<number>>(new Set());
+  const [bulkListExporting, setBulkListExporting] = useState(false);
+  const [bulkListExportResult, setBulkListExportResult] = useState<{ excelUrl: string; zipUrl: string; reportCount: number; totalAmount: number; invoiceCount: number } | null>(null);
 
   // ── Queries ────────────────────────────────────────────
   const { data: reportsData, refetch: refetchReports } = trpc.expense.list.useQuery({
@@ -58,6 +79,27 @@ export default function AdminExpense() {
   );
 
   const { data: statsData } = trpc.expense.projectStats.useQuery({ year: statsYear });
+
+  // List tab query
+  const listQueryInput = useMemo(() => ({
+    status: listStatus === "all" ? undefined : listStatus,
+    dateFrom: listDateFrom || undefined,
+    dateTo: listDateTo || undefined,
+    limit: 200,
+  }), [listStatus, listDateFrom, listDateTo]);
+
+  const { data: listData, refetch: refetchList } = trpc.expense.listAll.useQuery(listQueryInput);
+  const allListReports = listData?.reports ?? [];
+
+  // Client-side name search filter
+  const listReports = useMemo(() => {
+    if (!listSearch.trim()) return allListReports;
+    const q = listSearch.trim().toLowerCase();
+    return allListReports.filter((r: any) =>
+      (r.submitterName ?? "").toLowerCase().includes(q) ||
+      (r.purpose ?? "").toLowerCase().includes(q)
+    );
+  }, [allListReports, listSearch]);
 
   // ── Mutations ──────────────────────────────────────────
   const reviewMutation = trpc.expense.review.useMutation({
@@ -79,6 +121,30 @@ export default function AdminExpense() {
     onError: (e) => toast.error("导出失败：" + e.message),
   });
 
+  const deleteMutation = trpc.expense.deleteReports.useMutation({
+    onSuccess: (data) => {
+      toast.success(`已删除 ${data.deleted} 份报销单`);
+      setListSelected(new Set());
+      setDeleteConfirmOpen(false);
+      refetchList();
+      utils.expense.listAll.invalidate();
+    },
+    onError: (e) => toast.error("删除失败：" + e.message),
+  });
+
+  const exportSingleMutation = trpc.expense.exportSingle.useMutation({
+    onError: (e) => toast.error("导出失败：" + e.message),
+  });
+
+  const bulkListExportMutation = trpc.expense.export.useMutation({
+    onSuccess: (data) => {
+      setBulkListExportResult(data);
+      toast.success(`导出成功：${data.reportCount} 份报销单`);
+    },
+    onError: (e) => toast.error("导出失败：" + e.message),
+  });
+
+  // ── Handlers ───────────────────────────────────────────
   const handleReview = async (action: "approved" | "rejected") => {
     if (!detailId) return;
     setReviewing(true);
@@ -90,10 +156,7 @@ export default function AdminExpense() {
   };
 
   const handleExport = async () => {
-    if (selectedIds.size === 0) {
-      toast.error("请先勾选要导出的报销单");
-      return;
-    }
+    if (selectedIds.size === 0) { toast.error("请先勾选要导出的报销单"); return; }
     setExporting(true);
     setExportResult(null);
     try {
@@ -107,17 +170,58 @@ export default function AdminExpense() {
     e.stopPropagation();
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === reports.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(reports.map((r: any) => r.id)));
+    if (selectedIds.size === reports.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(reports.map((r: any) => r.id)));
+  };
+
+  // List tab handlers
+  const toggleListSelect = (id: number) => {
+    setListSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleListSelectAll = () => {
+    if (listSelected.size === listReports.length) setListSelected(new Set());
+    else setListSelected(new Set(listReports.map((r: any) => r.id)));
+  };
+
+  const handleDeleteSelected = () => {
+    if (listSelected.size === 0) return;
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    deleteMutation.mutate({ ids: Array.from(listSelected) });
+  };
+
+  const handleSingleExport = async (id: number) => {
+    setSingleExporting(prev => new Set(prev).add(id));
+    try {
+      const result = await exportSingleMutation.mutateAsync({ id });
+      setSingleExportResults(prev => ({ ...prev, [id]: { excelUrl: result.excelUrl, zipUrl: result.zipUrl } }));
+      toast.success("导出成功");
+    } finally {
+      setSingleExporting(prev => { const next = new Set(prev); next.delete(id); return next; });
+    }
+  };
+
+  const handleBulkListExport = async () => {
+    if (listSelected.size === 0) { toast.error("请先勾选要导出的报销单"); return; }
+    setBulkListExporting(true);
+    setBulkListExportResult(null);
+    try {
+      await bulkListExportMutation.mutateAsync({ reportIds: Array.from(listSelected) });
+    } finally {
+      setBulkListExporting(false);
     }
   };
 
@@ -146,6 +250,9 @@ export default function AdminExpense() {
   const allSelected = reports.length > 0 && selectedIds.size === reports.length;
   const someSelected = selectedIds.size > 0 && selectedIds.size < reports.length;
 
+  const listAllSelected = listReports.length > 0 && listSelected.size === listReports.length;
+  const listSomeSelected = listSelected.size > 0 && listSelected.size < listReports.length;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div>
@@ -156,6 +263,7 @@ export default function AdminExpense() {
       <Tabs defaultValue="review">
         <TabsList>
           <TabsTrigger value="review">审批队列</TabsTrigger>
+          <TabsTrigger value="list"><List className="w-3.5 h-3.5 mr-1.5" />报销列表</TabsTrigger>
           <TabsTrigger value="stats">项目成本统计</TabsTrigger>
         </TabsList>
 
@@ -176,7 +284,6 @@ export default function AdminExpense() {
             </Select>
             <span className="text-sm text-muted-foreground">{reports.length} 条</span>
 
-            {/* Select all */}
             {reports.length > 0 && (
               <div className="flex items-center gap-1.5 ml-2">
                 <Checkbox
@@ -185,28 +292,18 @@ export default function AdminExpense() {
                   onCheckedChange={toggleSelectAll}
                   id="select-all"
                 />
-                <label htmlFor="select-all" className="text-sm cursor-pointer select-none">
-                  全选
-                </label>
+                <label htmlFor="select-all" className="text-sm cursor-pointer select-none">全选</label>
               </div>
             )}
 
-            {/* Export button */}
             {selectedIds.size > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleExport}
-                disabled={exporting}
-                className="ml-auto gap-1.5"
-              >
+              <Button size="sm" variant="outline" onClick={handleExport} disabled={exporting} className="ml-auto gap-1.5">
                 <Download className="w-4 h-4" />
                 {exporting ? "生成中…" : `导出已选 (${selectedIds.size})`}
               </Button>
             )}
           </div>
 
-          {/* Export result card */}
           {exportResult && (
             <Card className="border-primary/30 bg-primary/5">
               <CardContent className="py-4">
@@ -252,21 +349,18 @@ export default function AdminExpense() {
                   onClick={() => { setDetailId(report.id); setReviewNote(""); }}
                 >
                   <CardContent className="py-4 flex items-center gap-3">
-                    {/* Checkbox */}
                     <div onClick={e => toggleSelect(report.id, e)} className="flex-shrink-0">
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => {
                           setSelectedIds(prev => {
                             const next = new Set(prev);
-                            if (next.has(report.id)) next.delete(report.id);
-                            else next.add(report.id);
+                            if (next.has(report.id)) next.delete(report.id); else next.add(report.id);
                             return next;
                           });
                         }}
                       />
                     </div>
-
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{report.purpose}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
@@ -286,13 +380,197 @@ export default function AdminExpense() {
             })}
           </div>
 
-          {/* Selection summary */}
           {selectedIds.size > 0 && (
             <div className="text-sm text-muted-foreground pt-1">
               已选 {selectedIds.size} 份，其中已批准 {approvedSelected.length} 份
               {approvedSelected.length < selectedIds.size && (
                 <span className="text-amber-600 ml-1">（未批准的报销单也会包含在导出中）</span>
               )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── List Tab ── */}
+        <TabsContent value="list" className="pt-4 space-y-4">
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={listStatus} onValueChange={v => { setListStatus(v); setListSelected(new Set()); }}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="submitted">待审批</SelectItem>
+                <SelectItem value="approved">已批准</SelectItem>
+                <SelectItem value="rejected">已拒绝</SelectItem>
+                <SelectItem value="draft">草稿</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="搜索报销人/事由"
+                value={listSearch}
+                onChange={e => setListSearch(e.target.value)}
+                className="pl-8 w-48"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">从</span>
+              <Input type="date" value={listDateFrom} onChange={e => setListDateFrom(e.target.value)} className="w-36 text-sm" />
+              <span className="text-xs text-muted-foreground">到</span>
+              <Input type="date" value={listDateTo} onChange={e => setListDateTo(e.target.value)} className="w-36 text-sm" />
+            </div>
+
+            <span className="text-sm text-muted-foreground">{listReports.length} 条</span>
+
+            {/* Bulk actions */}
+            <div className="ml-auto flex items-center gap-2">
+              {listSelected.size > 0 && (
+                <>
+                  <Button size="sm" variant="outline" onClick={handleBulkListExport} disabled={bulkListExporting} className="gap-1.5">
+                    <Download className="w-4 h-4" />
+                    {bulkListExporting ? "生成中…" : `批量导出 (${listSelected.size})`}
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={handleDeleteSelected} className="gap-1.5">
+                    <Trash2 className="w-4 h-4" />
+                    删除 ({listSelected.size})
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Bulk export result */}
+          {bulkListExportResult && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm font-medium">
+                    导出完成：{bulkListExportResult.reportCount} 份 · 合计 ¥{(bulkListExportResult.totalAmount / 100).toFixed(2)}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={bulkListExportResult.excelUrl} download target="_blank" rel="noopener noreferrer" className="gap-1.5">
+                        <FileSpreadsheet className="w-4 h-4" /> .xlsx
+                      </a>
+                    </Button>
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={bulkListExportResult.zipUrl} download target="_blank" rel="noopener noreferrer" className="gap-1.5">
+                        <Archive className="w-4 h-4" /> .zip
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Table */}
+          {listReports.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>暂无报销记录</p>
+            </div>
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="w-10 px-3 py-2.5">
+                      <Checkbox
+                        checked={listAllSelected}
+                        ref={el => { if (el) (el as any).indeterminate = listSomeSelected; }}
+                        onCheckedChange={toggleListSelectAll}
+                      />
+                    </th>
+                    <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">报销人</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">报销事由</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">提交时间</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">金额</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">状态</th>
+                    <th className="text-center px-3 py-2.5 font-medium text-muted-foreground">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listReports.map((report: any) => {
+                    const statusInfo = STATUS_LABELS[report.status] ?? STATUS_LABELS.submitted;
+                    const isSelected = listSelected.has(report.id);
+                    const exportRes = singleExportResults[report.id];
+                    const isExporting = singleExporting.has(report.id);
+                    return (
+                      <tr
+                        key={report.id}
+                        className={`border-t hover:bg-accent/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                      >
+                        <td className="px-3 py-2.5">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleListSelect(report.id)}
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 font-medium whitespace-nowrap">
+                          {report.submitterName ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5 max-w-xs">
+                          <div className="truncate">{report.purpose}</div>
+                          {report.projectName && (
+                            <div className="text-xs text-muted-foreground truncate">{report.projectName}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">
+                          {new Date(report.createdAt).toLocaleDateString("zh-CN")}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
+                          ¥{(report.totalAmount / 100).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {exportRes ? (
+                              <>
+                                <Button size="sm" variant="ghost" asChild className="h-7 px-2 gap-1 text-xs">
+                                  <a href={exportRes.excelUrl} download target="_blank" rel="noopener noreferrer">
+                                    <FileSpreadsheet className="w-3.5 h-3.5" /> xlsx
+                                  </a>
+                                </Button>
+                                <Button size="sm" variant="ghost" asChild className="h-7 px-2 gap-1 text-xs">
+                                  <a href={exportRes.zipUrl} download target="_blank" rel="noopener noreferrer">
+                                    <Archive className="w-3.5 h-3.5" /> zip
+                                  </a>
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleSingleExport(report.id)}
+                                disabled={isExporting}
+                                className="h-7 px-2 gap-1 text-xs"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                {isExporting ? "…" : "导出"}
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => { setListSelected(new Set([report.id])); setDeleteConfirmOpen(true); }}
+                              className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </TabsContent>
@@ -315,9 +593,7 @@ export default function AdminExpense() {
             </div>
           </div>
 
-          {/* Row 1: By person + By category */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* By person bar chart */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -341,7 +617,6 @@ export default function AdminExpense() {
               </CardContent>
             </Card>
 
-            {/* By category pie chart */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -376,7 +651,6 @@ export default function AdminExpense() {
             </Card>
           </div>
 
-          {/* Row 2: By project bar chart */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -400,9 +674,7 @@ export default function AdminExpense() {
             </CardContent>
           </Card>
 
-          {/* Tables row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Person breakdown table */}
             {byPerson.length > 0 && (
               <Card>
                 <CardHeader><CardTitle className="text-base">报销人明细</CardTitle></CardHeader>
@@ -434,7 +706,6 @@ export default function AdminExpense() {
               </Card>
             )}
 
-            {/* Project breakdown table */}
             {byProject.length > 0 && (
               <Card>
                 <CardHeader><CardTitle className="text-base">项目支出明细</CardTitle></CardHeader>
@@ -556,22 +827,33 @@ export default function AdminExpense() {
           <DialogFooter className="gap-2">
             {detailReport?.status === "submitted" && (
               <>
-                <Button
-                  variant="destructive"
-                  onClick={() => handleReview("rejected")}
-                  disabled={reviewing}
-                >
+                <Button variant="destructive" onClick={() => handleReview("rejected")} disabled={reviewing}>
                   <XCircle className="w-4 h-4 mr-1" /> 拒绝
                 </Button>
-                <Button
-                  onClick={() => handleReview("approved")}
-                  disabled={reviewing}
-                >
+                <Button onClick={() => handleReview("approved")} disabled={reviewing}>
                   <CheckCircle className="w-4 h-4 mr-1" /> 批准
                 </Button>
               </>
             )}
             <Button variant="outline" onClick={() => setDetailId(null)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            即将删除 <span className="font-semibold text-foreground">{listSelected.size}</span> 份报销单及其所有明细记录，此操作不可撤销。
+          </p>
+          <DialogFooter className="gap-2 mt-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>取消</Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? "删除中…" : "确认删除"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

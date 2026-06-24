@@ -3015,3 +3015,55 @@ export async function getAdminExpenseStats(opts?: { year?: number }) {
     return { byPerson, byProject, byCategory, totalApproved };
   });
 }
+
+export async function deleteExpenseReports(ids: number[]) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    // Delete items first (foreign key), then reports
+    await db.delete(expenseItems).where(inArray(expenseItems.reportId, ids));
+    await db.delete(expenseReports).where(inArray(expenseReports.id, ids));
+  });
+}
+
+export async function listAllExpenseReports(opts?: {
+  status?: string;
+  submitterId?: number;
+  projectId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return { reports: [], total: 0 };
+    const conditions: ReturnType<typeof eq>[] = [];
+    if (opts?.status && opts.status !== "all") {
+      const validStatuses = ["draft", "submitted", "approved", "rejected"] as const;
+      const s = opts.status as typeof validStatuses[number];
+      if (validStatuses.includes(s)) {
+        conditions.push(eq(expenseReports.status, s));
+      }
+    }
+    if (opts?.submitterId) conditions.push(eq(expenseReports.userId, opts.submitterId));
+    if (opts?.projectId) conditions.push(eq(expenseReports.projectId, opts.projectId));
+    if (opts?.dateFrom) {
+      conditions.push(sql`${expenseReports.createdAt} >= ${new Date(opts.dateFrom)}`);
+    }
+    if (opts?.dateTo) {
+      const end = new Date(opts.dateTo);
+      end.setDate(end.getDate() + 1);
+      conditions.push(sql`${expenseReports.createdAt} < ${end}`);
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const [reports, countResult] = await Promise.all([
+      db.select().from(expenseReports).where(where)
+        .orderBy(desc(expenseReports.createdAt))
+        .limit(opts?.limit ?? 50)
+        .offset(opts?.offset ?? 0),
+      db.select({ count: sql<number>`COUNT(*)` }).from(expenseReports).where(where),
+    ]);
+    return { reports, total: Number(countResult[0]?.count ?? 0) };
+  });
+}
