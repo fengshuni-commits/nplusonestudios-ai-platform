@@ -2745,6 +2745,7 @@ export async function createExpenseReport(data: {
   periodStart?: Date | null;
   periodEnd?: Date | null;
   note?: string | null;
+  payeeName?: string | null;
   items: Array<{
     expenseDate: Date;
     category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
@@ -2754,6 +2755,9 @@ export async function createExpenseReport(data: {
     projectName?: string | null;
     invoiceUrl?: string | null;
     invoiceFileName?: string | null;
+    invoicesJson?: string | null;
+    didiTripReceiptUrl?: string | null;
+    didiTripReceiptFileName?: string | null;
   }>;
 }) {
   return withRetry(async () => {
@@ -2771,6 +2775,7 @@ export async function createExpenseReport(data: {
       totalAmount,
       status: "submitted",
       note: data.note ?? null,
+      payeeName: data.payeeName ?? null,
     });
     const reportId = Number((reportResult as any)[0]?.insertId ?? (reportResult as any).insertId);
     if (data.items.length > 0) {
@@ -2785,6 +2790,9 @@ export async function createExpenseReport(data: {
           projectName: item.projectName ?? null,
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
+          invoicesJson: item.invoicesJson ?? null,
+          didiTripReceiptUrl: item.didiTripReceiptUrl ?? null,
+          didiTripReceiptFileName: item.didiTripReceiptFileName ?? null,
         }))
       );
     }

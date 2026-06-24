@@ -435,6 +435,13 @@
       "when": 1780901970279,
       "tag": "0061_short_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1782315598196,
+      "tag": "0062_thankful_chamber",
+      "breakpoints": true
     }
   ]
 }

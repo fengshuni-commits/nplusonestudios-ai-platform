@@ -10,10 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Trash2, Upload, FileText, X, Paperclip } from "lucide-react";
+import { Plus, Trash2, Upload, FileText, X, Paperclip, Car } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -48,8 +48,18 @@ type ExpenseItem = {
   projectId: string;
   invoices: InvoiceFile[];
   uploading?: boolean;
-  amountAutoFilled?: boolean;
+  // DiDi trip receipt
+  didiTripReceiptUrl?: string;
+  didiTripReceiptFileName?: string;
+  uploadingDidi?: boolean;
 };
+
+/** Detect if any invoice in the list is a DiDi invoice by filename or URL */
+function hasDidiInvoice(invoices: InvoiceFile[]): boolean {
+  return invoices.some(inv =>
+    /滴滴|didi/i.test(inv.fileName) || /didi/i.test(inv.url)
+  );
+}
 
 function newItem(): ExpenseItem {
   return {
@@ -71,6 +81,7 @@ export default function Expense() {
 
   // ── Submit form state ──────────────────────────────────
   const [purpose, setPurpose] = useState("");
+  const [payeeName, setPayeeName] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [note, setNote] = useState("");
@@ -82,6 +93,7 @@ export default function Expense() {
   const [detailId, setDetailId] = useState<number | null>(null);
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const didiFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // ── Queries ────────────────────────────────────────────
   const { data: projects = [] } = trpc.projects.list.useQuery({ memberOnly: true });
@@ -97,7 +109,7 @@ export default function Expense() {
   const submitReport = trpc.expense.submit.useMutation({
     onSuccess: () => {
       toast.success("报销申请已提交，等待审批");
-      setPurpose(""); setPeriodStart(""); setPeriodEnd(""); setNote("");
+      setPurpose(""); setPayeeName(""); setPeriodStart(""); setPeriodEnd(""); setNote("");
       setItems([newItem()]);
       refetchReports();
       utils.expense.list.invalidate();
@@ -113,6 +125,7 @@ export default function Expense() {
   const removeItem = (id: string) =>
     setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== id) : prev);
 
+  /** Upload a regular invoice file */
   const handleInvoiceUpload = async (itemId: string, file: File) => {
     updateItem(itemId, { uploading: true });
     try {
@@ -135,18 +148,19 @@ export default function Expense() {
       setItems(prev => prev.map(item => {
         if (item.id !== itemId) return item;
         const updatedInvoices = [...item.invoices, newInvoice];
+        // Auto-calculate amount from all invoice detected amounts
         const detectedAmounts = updatedInvoices
           .map(inv => inv.amount)
           .filter((a): a is number => typeof a === "number" && a > 0);
         const autoAmount = detectedAmounts.length > 0
           ? detectedAmounts.reduce((s, a) => s + a, 0).toFixed(2)
           : item.amount;
-        return { ...item, invoices: updatedInvoices, uploading: false, amount: autoAmount, amountAutoFilled: detectedAmounts.length > 0 };
+        return { ...item, invoices: updatedInvoices, uploading: false, amount: autoAmount };
       }));
       if ((result as any).detectedAmount) {
         toast.success(`发票上传成功，识别金额：¥${(result as any).detectedAmount.toFixed(2)}`);
       } else {
-        toast.success("发票上传成功（未识别到金额，请手动填写）");
+        toast.success("发票上传成功（未识别到金额）");
       }
     } catch {
       updateItem(itemId, { uploading: false });
@@ -154,18 +168,68 @@ export default function Expense() {
     }
   };
 
+  /** Upload a DiDi trip receipt (行程报销单) */
+  const handleDidiReceiptUpload = async (itemId: string, file: File) => {
+    updateItem(itemId, { uploadingDidi: true });
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((res, rej) => {
+        reader.onload = () => res((reader.result as string).split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadInvoice.mutateAsync({
+        fileName: file.name,
+        fileData: base64,
+        contentType: file.type,
+      });
+      updateItem(itemId, {
+        uploadingDidi: false,
+        didiTripReceiptUrl: result.url,
+        didiTripReceiptFileName: file.name,
+      });
+      toast.success("行程报销单上传成功");
+    } catch {
+      updateItem(itemId, { uploadingDidi: false });
+      toast.error("行程报销单上传失败");
+    }
+  };
+
+  /** Recalculate amount from invoices when one is removed */
+  const removeInvoice = (itemId: string, idx: number) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const updated = item.invoices.filter((_, i) => i !== idx);
+      const detectedAmounts = updated.map(i => i.amount).filter((a): a is number => typeof a === "number" && a > 0);
+      return {
+        ...item,
+        invoices: updated,
+        amount: detectedAmounts.length > 0
+          ? detectedAmounts.reduce((s, a) => s + a, 0).toFixed(2)
+          : "",
+      };
+    }));
+  };
+
   const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
   const handleSubmit = async () => {
     if (!purpose.trim()) { toast.error("请填写报销用途"); return; }
     const validItems = items.filter(i => i.description.trim() && parseFloat(i.amount) > 0);
-    if (validItems.length === 0) { toast.error("请至少填写一条有效的费用明细"); return; }
+    if (validItems.length === 0) { toast.error("请至少填写一条有效的费用明细（需有摘要且金额>0）"); return; }
     const missingProject = validItems.find(i => !i.projectId);
     if (missingProject) { toast.error("每条费用明细必须选择承担项目"); return; }
+    // Warn if DiDi invoice without trip receipt
+    const missingDidi = validItems.find(i => hasDidiInvoice(i.invoices) && !i.didiTripReceiptUrl);
+    if (missingDidi) {
+      toast.error("检测到滴滴发票，请上传对应的行程报销单后再提交");
+      return;
+    }
     setSubmitting(true);
     try {
       await submitReport.mutateAsync({
         purpose,
+        payeeName: payeeName.trim() || undefined,
         periodStart: periodStart || undefined,
         periodEnd: periodEnd || undefined,
         note: note || undefined,
@@ -179,6 +243,8 @@ export default function Expense() {
             projectId: parseInt(item.projectId),
             projectName: proj?.name ?? proj?.clientNameDisplay ?? undefined,
             invoices: item.invoices.length > 0 ? item.invoices : undefined,
+            didiTripReceiptUrl: item.didiTripReceiptUrl,
+            didiTripReceiptFileName: item.didiTripReceiptFileName,
           };
         }),
       });
@@ -224,6 +290,15 @@ export default function Expense() {
               />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs">收款人姓名</Label>
+              <Input
+                placeholder="填写实际收款人姓名"
+                value={payeeName}
+                onChange={e => setPayeeName(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs">报销期间</Label>
               <div className="flex gap-2 items-center">
                 <Input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} className="flex-1 text-sm" />
@@ -247,131 +322,187 @@ export default function Expense() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {items.map((item) => (
-              <div key={item.id} className="border rounded-lg p-3 space-y-2.5 relative">
-                {/* Row 1: date + category + amount */}
-                <div className="grid grid-cols-[120px_1fr_90px_28px] gap-2 items-end">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">日期</Label>
-                    <Input type="date" value={item.expenseDate} onChange={e => updateItem(item.id, { expenseDate: e.target.value })} className="text-xs h-8" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">费用类别</Label>
-                    <Select value={item.category} onValueChange={v => updateItem(item.id, { category: v as any })}>
-                      <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-                          <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">金额（元）</Label>
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      value={item.amount}
-                      onChange={e => updateItem(item.id, { amount: e.target.value, amountAutoFilled: false })}
-                      className="text-xs h-8"
-                      min="0"
-                      step="0.01"
-                    />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-7 text-muted-foreground hover:text-destructive self-end"
-                    onClick={() => removeItem(item.id)}
-                    disabled={items.length === 1}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+            {items.map((item) => {
+              const isDidi = hasDidiInvoice(item.invoices);
+              const hasAllInvoiceAmounts = item.invoices.length > 0 &&
+                item.invoices.every(inv => typeof inv.amount === "number" && inv.amount > 0);
 
-                {/* Row 2: description + project */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">摘要</Label>
-                    <Input
-                      placeholder="写清楚几张票据"
-                      value={item.description}
-                      onChange={e => updateItem(item.id, { description: e.target.value })}
-                      className="text-xs h-8"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">承担项目 <span className="text-destructive">*</span></Label>
-                    <Select value={item.projectId} onValueChange={v => updateItem(item.id, { projectId: v })}>
-                      <SelectTrigger className={`text-xs h-8 ${!item.projectId ? "border-destructive/50" : ""}`}>
-                        <SelectValue placeholder="选择项目…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(projects as any[]).length === 0 && (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">您尚未加入任何项目</div>
+              return (
+                <div key={item.id} className="border rounded-lg p-3 space-y-2.5 relative">
+                  {/* Row 1: date + category + amount (read-only if auto-filled) */}
+                  <div className="grid grid-cols-[120px_1fr_90px_28px] gap-2 items-end">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">日期</Label>
+                      <Input type="date" value={item.expenseDate} onChange={e => updateItem(item.id, { expenseDate: e.target.value })} className="text-xs h-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">费用类别</Label>
+                      <Select value={item.category} onValueChange={v => updateItem(item.id, { category: v as any })}>
+                        <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                            <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                        金额（元）
+                        {hasAllInvoiceAmounts && (
+                          <span className="text-green-600 font-normal">（自动）</span>
                         )}
-                        {(projects as any[]).map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)} className="text-xs">
-                            {p.name}{p.clientNameDisplay ? ` · ${p.clientNameDisplay}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Row 3: invoices */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">发票</Label>
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="hidden"
-                    ref={el => { fileInputRefs.current[item.id] = el; }}
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (file) handleInvoiceUpload(item.id, file);
-                      e.target.value = "";
-                    }}
-                  />
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    {item.invoices.map((inv, idx) => (
-                      <div key={idx} className="flex items-center gap-1 text-xs text-primary bg-primary/5 rounded px-1.5 py-0.5 max-w-[160px]">
-                        <Paperclip className="w-3 h-3 flex-shrink-0" />
-                        <a href={inv.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline flex-1">
-                          {inv.fileName}
-                        </a>
-                        {inv.amount != null && (
-                          <span className="text-green-600 font-medium flex-shrink-0">¥{inv.amount.toFixed(2)}</span>
-                        )}
-                        <button
-                          onClick={() => {
-                            const updated = item.invoices.filter((_, i) => i !== idx);
-                            const detectedAmounts = updated.map(i => i.amount).filter((a): a is number => typeof a === "number" && a > 0);
-                            updateItem(item.id, {
-                              invoices: updated,
-                              amount: detectedAmounts.length > 0 ? detectedAmounts.reduce((s, a) => s + a, 0).toFixed(2) : item.amount,
-                            });
-                          }}
-                          className="text-muted-foreground hover:text-destructive flex-shrink-0 ml-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                      </Label>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={item.amount}
+                        readOnly={hasAllInvoiceAmounts}
+                        onChange={e => {
+                          if (!hasAllInvoiceAmounts) updateItem(item.id, { amount: e.target.value });
+                        }}
+                        className={`text-xs h-8 ${hasAllInvoiceAmounts ? "bg-muted/60 cursor-not-allowed text-muted-foreground" : ""}`}
+                        min="0"
+                        step="0.01"
+                        title={hasAllInvoiceAmounts ? "金额由发票自动计算，如需修改请删除发票后重新上传" : undefined}
+                      />
+                    </div>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-xs px-2"
-                      disabled={item.uploading}
-                      onClick={() => fileInputRefs.current[item.id]?.click()}
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-7 text-muted-foreground hover:text-destructive self-end"
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length === 1}
                     >
-                      {item.uploading ? "识别中…" : <><Upload className="w-3 h-3 mr-1" />{item.invoices.length > 0 ? "继续添加" : "上传发票"}</>}
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
+
+                  {/* Row 2: description + project */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">摘要</Label>
+                      <Input
+                        placeholder="费用说明"
+                        value={item.description}
+                        onChange={e => updateItem(item.id, { description: e.target.value })}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">承担项目 <span className="text-destructive">*</span></Label>
+                      <Select value={item.projectId} onValueChange={v => updateItem(item.id, { projectId: v })}>
+                        <SelectTrigger className={`text-xs h-8 ${!item.projectId ? "border-destructive/50" : ""}`}>
+                          <SelectValue placeholder="选择项目…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(projects as any[]).length === 0 && (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">您尚未加入任何项目</div>
+                          )}
+                          {(projects as any[]).map((p: any) => (
+                            <SelectItem key={p.id} value={String(p.id)} className="text-xs">
+                              {p.name}{p.clientNameDisplay ? ` · ${p.clientNameDisplay}` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Row 3: invoices */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">发票</Label>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      ref={el => { fileInputRefs.current[item.id] = el; }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleInvoiceUpload(item.id, file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {item.invoices.map((inv, idx) => (
+                        <div key={idx} className="flex items-center gap-1 text-xs text-primary bg-primary/5 rounded px-1.5 py-0.5 max-w-[180px]">
+                          <Paperclip className="w-3 h-3 flex-shrink-0" />
+                          <a href={inv.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline flex-1">
+                            {inv.fileName}
+                          </a>
+                          {inv.amount != null && (
+                            <span className="text-green-600 font-medium flex-shrink-0">¥{inv.amount.toFixed(2)}</span>
+                          )}
+                          <button
+                            onClick={() => removeInvoice(item.id, idx)}
+                            className="text-muted-foreground hover:text-destructive flex-shrink-0 ml-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-xs px-2"
+                        disabled={item.uploading}
+                        onClick={() => fileInputRefs.current[item.id]?.click()}
+                      >
+                        {item.uploading ? "识别中…" : <><Upload className="w-3 h-3 mr-1" />{item.invoices.length > 0 ? "继续添加" : "上传发票"}</>}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Row 4: DiDi trip receipt (only shown when DiDi invoice detected) */}
+                  {isDidi && (
+                    <div className="space-y-1 border-t pt-2 mt-1">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Car className="w-3.5 h-3.5 text-orange-500" />
+                        <span>滴滴行程报销单 <span className="text-destructive">*</span></span>
+                        <span className="text-muted-foreground font-normal">（检测到滴滴发票，需上传匹配金额的行程报销单）</span>
+                      </Label>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        ref={el => { didiFileInputRefs.current[item.id] = el; }}
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleDidiReceiptUpload(item.id, file);
+                          e.target.value = "";
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
+                        {item.didiTripReceiptUrl ? (
+                          <div className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 dark:bg-orange-950/30 rounded px-1.5 py-0.5 max-w-[220px]">
+                            <Car className="w-3 h-3 flex-shrink-0" />
+                            <a href={item.didiTripReceiptUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline flex-1">
+                              {item.didiTripReceiptFileName ?? "行程报销单"}
+                            </a>
+                            <button
+                              onClick={() => updateItem(item.id, { didiTripReceiptUrl: undefined, didiTripReceiptFileName: undefined })}
+                              className="text-muted-foreground hover:text-destructive flex-shrink-0 ml-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs px-2 border-orange-300 text-orange-600 hover:bg-orange-50"
+                            disabled={item.uploadingDidi}
+                            onClick={() => didiFileInputRefs.current[item.id]?.click()}
+                          >
+                            {item.uploadingDidi ? "上传中…" : <><Upload className="w-3 h-3 mr-1" />上传行程报销单</>}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Total */}
             <div className="flex justify-end pt-1 border-t">
@@ -517,6 +648,9 @@ export default function Expense() {
                     {STATUS_LABELS[detailReport.status]?.label ?? detailReport.status}
                   </Badge>
                 </div>
+                {(detailReport as any).payeeName && (
+                  <div><span className="text-muted-foreground">收款人：</span>{(detailReport as any).payeeName}</div>
+                )}
                 <div><span className="text-muted-foreground">提交时间：</span>{new Date(detailReport.createdAt).toLocaleString("zh-CN")}</div>
                 {detailReport.reviewNote && (
                   <div className="col-span-2"><span className="text-muted-foreground">审批意见：</span>{detailReport.reviewNote}</div>
@@ -531,39 +665,45 @@ export default function Expense() {
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">类别</th>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">项目</th>
                       <th className="text-right px-3 py-2 font-medium text-muted-foreground text-xs">金额</th>
-                      <th className="text-center px-3 py-2 font-medium text-muted-foreground text-xs">发票</th>
+                      <th className="text-center px-3 py-2 font-medium text-muted-foreground text-xs">附件</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detailReport.items.map(item => (
-                      <tr key={item.id} className="border-t">
-                        <td className="px-3 py-2 text-muted-foreground text-xs">{new Date(item.expenseDate).toLocaleDateString("zh-CN")}</td>
-                        <td className="px-3 py-2 text-xs">{item.description}</td>
-                        <td className="px-3 py-2 text-muted-foreground text-xs">{CATEGORY_LABELS[item.category] ?? item.category}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">{(item as any).projectName ?? "—"}</td>
-                        <td className="px-3 py-2 text-right font-medium text-xs">¥{(item.amount / 100).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-center">
-                          {(() => {
-                            const invs: { url: string; fileName: string; amount?: number | null }[] =
-                              (item as any).invoicesJson
-                                ? (() => { try { return JSON.parse((item as any).invoicesJson); } catch { return []; } })()
-                                : item.invoiceUrl
-                                  ? [{ url: item.invoiceUrl, fileName: (item as any).invoiceFileName ?? "发票" }]
-                                  : [];
-                            return invs.length > 0 ? (
-                              <div className="flex flex-col gap-0.5">
-                                {invs.map((inv, i) => (
-                                  <a key={i} href={inv.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
-                                    发票{invs.length > 1 ? i + 1 : ""}
-                                    {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
-                                  </a>
-                                ))}
-                              </div>
-                            ) : <span className="text-muted-foreground text-xs">—</span>;
-                          })()}
-                        </td>
-                      </tr>
-                    ))}
+                    {detailReport.items.map(item => {
+                      const invs: { url: string; fileName: string; amount?: number | null }[] =
+                        (item as any).invoicesJson
+                          ? (() => { try { return JSON.parse((item as any).invoicesJson); } catch { return []; } })()
+                          : (item as any).invoiceUrl
+                            ? [{ url: (item as any).invoiceUrl, fileName: (item as any).invoiceFileName ?? "发票" }]
+                            : [];
+                      const didiUrl = (item as any).didiTripReceiptUrl;
+                      const didiName = (item as any).didiTripReceiptFileName ?? "行程报销单";
+                      return (
+                        <tr key={item.id} className="border-t">
+                          <td className="px-3 py-2 text-muted-foreground text-xs">{new Date(item.expenseDate).toLocaleDateString("zh-CN")}</td>
+                          <td className="px-3 py-2 text-xs">{item.description}</td>
+                          <td className="px-3 py-2 text-muted-foreground text-xs">{CATEGORY_LABELS[item.category] ?? item.category}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{(item as any).projectName ?? "—"}</td>
+                          <td className="px-3 py-2 text-right font-medium text-xs">¥{(item.amount / 100).toFixed(2)}</td>
+                          <td className="px-3 py-2 text-center">
+                            <div className="flex flex-col gap-0.5 items-center">
+                              {invs.map((inv, i) => (
+                                <a key={i} href={inv.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                  发票{invs.length > 1 ? i + 1 : ""}
+                                  {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
+                                </a>
+                              ))}
+                              {didiUrl && (
+                                <a href={didiUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline text-xs flex items-center gap-0.5">
+                                  <Car className="w-3 h-3" />{didiName}
+                                </a>
+                              )}
+                              {invs.length === 0 && !didiUrl && <span className="text-muted-foreground text-xs">—</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     <tr className="border-t bg-muted/30 font-semibold">
                       <td colSpan={4} className="px-3 py-2 text-right text-muted-foreground text-xs">合计</td>
                       <td className="px-3 py-2 text-right text-xs">¥{(detailReport.totalAmount / 100).toFixed(2)}</td>

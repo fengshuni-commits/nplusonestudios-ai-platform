@@ -1059,6 +1059,8 @@ export const expenseReports = mysqlTable("expense_reports", {
   reviewedBy: int("reviewedBy"),
   reviewedAt: timestamp("reviewedAt"),
   reviewNote: text("reviewNote"),
+  // 收款人
+  payeeName: varchar("payeeName", { length: 128 }),
   // 备注
   note: text("note"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1093,6 +1095,9 @@ export const expenseItems = mysqlTable("expense_items", {
   // 保留旧字段兼容（废弃，新数据用 invoicesJson）
   invoiceUrl: text("invoiceUrl"),
   invoiceFileName: varchar("invoiceFileName", { length: 256 }),
+  // 滴滴行程报销单（当发票为滴滴发票时需上传）
+  didiTripReceiptUrl: text("didiTripReceiptUrl"),
+  didiTripReceiptFileName: varchar("didiTripReceiptFileName", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type ExpenseItem = typeof expenseItems.$inferSelect;

@@ -7441,6 +7441,7 @@ const expenseRouter = router({
       periodStart: z.string().optional(), // ISO date string
       periodEnd: z.string().optional(),
       note: z.string().optional(),
+      payeeName: z.string().max(128).optional(),
       items: z.array(z.object({
         expenseDate: z.string(), // ISO date string
         category: z.enum(["transport_local", "transport_travel", "office_supplies", "meals", "other"]),
@@ -7456,6 +7457,9 @@ const expenseRouter = router({
         // legacy single invoice fields (kept for backward compat)
         invoiceUrl: z.string().optional(),
         invoiceFileName: z.string().optional(),
+        // 滴滴行程报销单
+        didiTripReceiptUrl: z.string().optional(),
+        didiTripReceiptFileName: z.string().optional(),
       })).min(1),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -7468,6 +7472,7 @@ const expenseRouter = router({
         periodStart: input.periodStart ? new Date(input.periodStart) : null,
         periodEnd: input.periodEnd ? new Date(input.periodEnd) : null,
         note: input.note ?? null,
+        payeeName: input.payeeName ?? null,
         items: input.items.map(item => ({
           expenseDate: new Date(item.expenseDate),
           category: item.category,
@@ -7482,6 +7487,8 @@ const expenseRouter = router({
               : null,
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
+          didiTripReceiptUrl: item.didiTripReceiptUrl ?? null,
+          didiTripReceiptFileName: item.didiTripReceiptFileName ?? null,
         })),
       });
       // Notify admin
@@ -7606,6 +7613,7 @@ const expenseRouter = router({
       sheet.columns = [
         { header: "报销单ID", key: "reportId", width: 10 },
         { header: "提交人", key: "submitter", width: 12 },
+        { header: "收款人", key: "payeeName", width: 12 },
         { header: "报销用途", key: "purpose", width: 30 },
         { header: "报销期间", key: "period", width: 20 },
         { header: "费用日期", key: "expenseDate", width: 12 },
@@ -7614,6 +7622,7 @@ const expenseRouter = router({
         { header: "承担项目", key: "projectName", width: 20 },
         { header: "金额（元）", key: "amount", width: 12 },
         { header: "发票数量", key: "invoiceCount", width: 10 },
+        { header: "滴滴行程单", key: "hasDidi", width: 12 },
         { header: "审批状态", key: "status", width: 10 },
         { header: "审批备注", key: "reviewNote", width: 20 },
       ];
@@ -7640,9 +7649,11 @@ const expenseRouter = router({
             ? (() => { try { return JSON.parse(item.invoicesJson as string); } catch { return []; } })()
             : item.invoiceUrl ? [{ url: item.invoiceUrl, fileName: item.invoiceFileName ?? "invoice" }] : [];
 
+          const hasDidiReceipt = !!(item as any).didiTripReceiptUrl;
           const row = sheet.addRow({
             reportId: report.id,
             submitter: report.submitterName ?? "",
+            payeeName: (report as any).payeeName ?? "",
             purpose: report.purpose,
             period: periodStr,
             expenseDate: new Date(item.expenseDate).toLocaleDateString("zh-CN"),
@@ -7651,6 +7662,7 @@ const expenseRouter = router({
             projectName: (item as any).projectName ?? "",
             amount: (item.amount / 100).toFixed(2),
             invoiceCount: invoices.length,
+            hasDidi: hasDidiReceipt ? "✔ 已上传" : "",
             status: report.status === "approved" ? "已批准" : report.status === "rejected" ? "已拒绝" : "待审批",
             reviewNote: report.reviewNote ?? "",
           });
@@ -7784,6 +7796,7 @@ const expenseRouter = router({
       sheet.columns = [
         { header: "序号", key: "seq", width: 6 },
         { header: "报销人", key: "submitter", width: 12 },
+        { header: "收款人", key: "payeeName", width: 12 },
         { header: "报销事由", key: "purpose", width: 24 },
         { header: "报销期间", key: "period", width: 16 },
         { header: "日期", key: "date", width: 12 },
@@ -7792,6 +7805,7 @@ const expenseRouter = router({
         { header: "承担项目", key: "project", width: 16 },
         { header: "金额（元）", key: "amount", width: 12 },
         { header: "发票", key: "invoice", width: 20 },
+        { header: "滴滴行程单", key: "didiReceipt", width: 14 },
       ];
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -7810,9 +7824,11 @@ const expenseRouter = router({
           ? JSON.parse(item.invoicesJson as string)
           : item.invoiceUrl ? [{ url: item.invoiceUrl, filename: item.invoiceFileName ?? "发票" }] : [];
         const invoiceLabel = invoices.map((inv, i) => `发票${i + 1}: ${inv.filename}`).join("\n");
+        const didiReceiptName = (item as any).didiTripReceiptUrl ? ((item as any).didiTripReceiptFileName ?? "行程报销单") : "";
         sheet.addRow({
           seq: seq++,
           submitter: report.submitterName,
+          payeeName: (report as any).payeeName ?? "",
           purpose: report.purpose,
           period: `${report.periodStart} ~ ${report.periodEnd}`,
           date: item.expenseDate,
@@ -7821,6 +7837,7 @@ const expenseRouter = router({
           project: item.projectName ?? "",
           amount: (item.amount / 100).toFixed(2),
           invoice: invoiceLabel,
+          didiReceipt: didiReceiptName,
         });
         subtotal += item.amount;
       }
@@ -7845,8 +7862,20 @@ const expenseRouter = router({
             const resp = await fetch(inv.url);
             if (resp.ok) {
               const buf = await resp.arrayBuffer();
-              const ext = inv.filename.split(".").pop() ?? "jpg";
               zip.file(`${String(invoiceSeq).padStart(3, "0")}_${inv.filename}`, buf);
+              invoiceSeq++;
+            }
+          } catch { /* skip failed */ }
+        }
+        // Also include DiDi trip receipt if present
+        const didiUrl = (item as any).didiTripReceiptUrl;
+        const didiFileName = (item as any).didiTripReceiptFileName ?? "行程报销单.pdf";
+        if (didiUrl) {
+          try {
+            const resp = await fetch(didiUrl);
+            if (resp.ok) {
+              const buf = await resp.arrayBuffer();
+              zip.file(`滴滴行程单_${String(invoiceSeq).padStart(3, "0")}_${didiFileName}`, buf);
               invoiceSeq++;
             }
           } catch { /* skip failed */ }

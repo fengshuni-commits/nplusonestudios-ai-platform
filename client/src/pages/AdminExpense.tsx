@@ -752,6 +752,9 @@ export default function AdminExpense() {
                 <div><span className="text-muted-foreground">提交人：</span>{detailReport.submitterName ?? "—"}</div>
                 <div><span className="text-muted-foreground">项目：</span>{detailReport.projectName ?? "公司公共费用"}</div>
                 <div className="col-span-2"><span className="text-muted-foreground">用途：</span>{detailReport.purpose}</div>
+                {(detailReport as any).payeeName && (
+                  <div><span className="text-muted-foreground">收款人：</span>{(detailReport as any).payeeName}</div>
+                )}
                 <div><span className="text-muted-foreground">提交时间：</span>{new Date(detailReport.createdAt).toLocaleString("zh-CN")}</div>
                 <div><span className="text-muted-foreground">状态：</span>
                   <Badge variant={STATUS_LABELS[detailReport.status]?.variant ?? "secondary"} className="ml-1">
@@ -789,7 +792,9 @@ export default function AdminExpense() {
                                 : item.invoiceUrl
                                   ? [{ url: item.invoiceUrl, fileName: "发票" }]
                                   : [];
-                            return invs.length > 0 ? (
+                            const didiUrl = (item as any).didiTripReceiptUrl;
+                            const didiName = (item as any).didiTripReceiptFileName ?? "行程报销单";
+                            return (
                               <div className="flex flex-col gap-0.5">
                                 {invs.map((inv, i) => (
                                   <a key={i} href={inv.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
@@ -797,8 +802,14 @@ export default function AdminExpense() {
                                     {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
                                   </a>
                                 ))}
+                                {didiUrl && (
+                                  <a href={didiUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline text-xs">
+                                    🚖 {didiName}
+                                  </a>
+                                )}
+                                {invs.length === 0 && !didiUrl && <span className="text-muted-foreground text-xs">—</span>}
                               </div>
-                            ) : <span className="text-muted-foreground text-xs">—</span>;
+                            );
                           })()}
                         </td>
                       </tr>
