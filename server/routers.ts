@@ -7956,6 +7956,24 @@ export const appRouter = router({system: systemRouter,
         }).catch(() => {});
         return { status: "pending_approval" as const };
       }),
+    updateName: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(64).trim(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await db.updateUserName(ctx.user.id, input.name);
+        // Refresh session cookie so ctx.user.name is updated immediately
+        const updatedUser = await db.getUserById(ctx.user.id);
+        if (updatedUser) {
+          const sessionToken = await sdk.createSessionToken(updatedUser.openId, {
+            name: updatedUser.name || "",
+            expiresInMs: ONE_YEAR_MS,
+          });
+          const cookieOptions = getSessionCookieOptions(ctx.req);
+          ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        }
+        return { success: true, name: input.name };
+      }),
     emailLogin: publicProcedure
       .input(z.object({
         email: z.string().email(),

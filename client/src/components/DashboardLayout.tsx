@@ -45,6 +45,7 @@ import {
   Layers,
   Library,
   Receipt,
+  Pencil,
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
@@ -52,6 +53,9 @@ import { HelpGuide } from "./HelpGuide";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Input } from "./ui/input";
 
 type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -225,10 +229,23 @@ export default function DashboardLayout({
 
 function IconSidebarLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const utils = trpc.useUtils();
   const [location, setLocation] = useLocation();
   // Track session time for usage statistics
   useSessionTracker();
   const isAdmin = user?.role === "admin";
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const updateNameMutation = trpc.auth.updateName.useMutation({
+    onSuccess: (data) => {
+      toast.success(`账号名已更新为「${data.name}」`);
+      utils.auth.me.invalidate();
+      setRenameOpen(false);
+    },
+    onError: (err) => {
+      toast.error(err.message || "更新失败，请重试");
+    },
+  });
   const [expanded, setExpanded] = useState(() => {
     try {
       return localStorage.getItem("sidebar-expanded") === "true";
@@ -463,27 +480,76 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="end" className="w-48">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium truncate">{user?.name || "用户"}</p>
-                <p className="text-xs text-muted-foreground truncate">{user?.email || ""}</p>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setLocation("/admin/settings")}
-                className="cursor-pointer"
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                <span>设置</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={logout}
-                className="cursor-pointer text-destructive focus:text-destructive"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>退出登录</span>
-              </DropdownMenuItem>
+            <DropdownMenuContent side="right" align="end" className="w-52">
+              {renameOpen ? (
+                <div className="px-2 py-2 space-y-1.5">
+                  <p className="text-xs text-muted-foreground">修改账号名</p>
+                  <Input
+                    autoFocus
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && renameValue.trim()) {
+                        updateNameMutation.mutate({ name: renameValue.trim() });
+                      }
+                      if (e.key === "Escape") setRenameOpen(false);
+                    }}
+                    placeholder="输入新名字"
+                    className="h-7 text-xs"
+                    maxLength={64}
+                  />
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      className="h-6 text-xs flex-1"
+                      disabled={!renameValue.trim() || updateNameMutation.isPending}
+                      onClick={() => updateNameMutation.mutate({ name: renameValue.trim() })}
+                    >
+                      {updateNameMutation.isPending ? "保存中…" : "确认"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs"
+                      onClick={() => setRenameOpen(false)}
+                    >
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="px-2 py-1.5">
+                    <p className="text-sm font-medium truncate">{user?.name || "用户"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email || ""}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => { setRenameValue(user?.name || ""); setRenameOpen(true); }}
+                    className="cursor-pointer"
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    <span>修改账号名</span>
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem
+                      onClick={() => setLocation("/admin/settings")}
+                      className="cursor-pointer"
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>设置</span>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={logout}
+                    className="cursor-pointer text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>退出登录</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

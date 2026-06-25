@@ -240,6 +240,12 @@ export async function updateUserRole(userId: number, role: "user" | "admin") {
   await db.update(users).set({ role }).where(eq(users.id, userId));
 }
 
+export async function updateUserName(userId: number, name: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ name }).where(eq(users.id, userId));
+}
+
 // ─── Projects ────────────────────────────────────────────
 
 export async function listProjects(opts?: { search?: string; status?: string | string[]; userId?: number }) {
