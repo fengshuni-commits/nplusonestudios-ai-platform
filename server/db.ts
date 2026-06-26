@@ -1440,6 +1440,59 @@ export async function listGroupedHistory(userId: number, opts?: { module?: strin
 }
 
 
+// ─── Admin: All-user history ──────────────────────────
+/**
+ * Admin-only: list generation history for ALL users, with user info joined.
+ * Supports filtering by userId, module, date range, and text search.
+ */
+export async function listAllGenerationHistory(opts?: {
+  userId?: number;
+  module?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0 };
+
+  const limit = opts?.limit || 50;
+  const offset = opts?.offset || 0;
+
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (opts?.userId) conditions.push(eq(generationHistory.userId, opts.userId) as any);
+  if (opts?.module) conditions.push(eq(generationHistory.module, opts.module) as any);
+  if (opts?.dateFrom) conditions.push(sql`${generationHistory.createdAt} >= ${opts.dateFrom}` as any);
+  if (opts?.dateTo) conditions.push(sql`${generationHistory.createdAt} <= ${opts.dateTo}` as any);
+  if (opts?.search) conditions.push(like(generationHistory.title, `%${opts.search}%`) as any);
+  // Only show root items for chain-based modules to avoid duplicates
+  conditions.push(sql`((${generationHistory.module} != 'ai_render' AND ${generationHistory.module} != 'benchmark_report') OR ${generationHistory.parentId} IS NULL)` as any);
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const rows = await db.select({
+    ...getTableColumns(generationHistory),
+    userName: users.name,
+    userEmail: users.email,
+    projectName: projects.name,
+  }).from(generationHistory)
+    .leftJoin(users, eq(generationHistory.userId, users.id))
+    .leftJoin(projects, eq(generationHistory.projectId, projects.id))
+    .where(where)
+    .orderBy(desc(generationHistory.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  const countResult = await db.select({ count: sql<number>`count(*)` })
+    .from(generationHistory)
+    .leftJoin(users, eq(generationHistory.userId, users.id))
+    .leftJoin(projects, eq(generationHistory.projectId, projects.id))
+    .where(where);
+
+  return { items: rows, total: countResult[0]?.count || 0 };
+}
+
 // ─── Feedback Helpers ──────────────────────────────────
 export async function createFeedback(data: InsertFeedback) {
   const db = await getDb();

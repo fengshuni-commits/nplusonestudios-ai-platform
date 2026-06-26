@@ -3902,6 +3902,28 @@ const adminRouter = router({
     return db.getMemberAiStats();
   }),
 
+  listAllHistory: adminProcedure
+    .input(z.object({
+      userId: z.number().optional(),
+      module: z.string().optional(),
+      dateFrom: z.string().optional(), // ISO date string
+      dateTo: z.string().optional(),   // ISO date string
+      search: z.string().optional(),
+      limit: z.number().min(1).max(200).optional(),
+      offset: z.number().min(0).optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      return db.listAllGenerationHistory({
+        userId: input?.userId,
+        module: input?.module,
+        dateFrom: input?.dateFrom ? new Date(input.dateFrom) : undefined,
+        dateTo: input?.dateTo ? new Date(input.dateTo + "T23:59:59") : undefined,
+        search: input?.search,
+        limit: input?.limit || 50,
+        offset: input?.offset || 0,
+      });
+    }),
+
   analyzePerformance: adminProcedure
     .input(z.object({
       statsJson: z.string(),

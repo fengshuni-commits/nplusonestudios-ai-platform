@@ -143,6 +143,7 @@ const menuSections: MenuSection[] = [
       { icon: BarChart3, label: "反馈分析", path: "/admin/feedback", description: "各模块满意度统计与趋势" },
       { icon: Activity, label: "调用统计", path: "/admin/ai-stats", description: "AI 工具调用量与费用统计" },
       { icon: Receipt, label: "报销管理", path: "/admin/expense", description: "审批报销申请，查看项目支出成本统计" },
+      { icon: History, label: "生成成果看板", path: "/admin/history", description: "查看所有成员的 AI 生成历史记录" },
     ],
   },
   {

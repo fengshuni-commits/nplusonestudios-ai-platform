@@ -41,6 +41,7 @@ import ApiDocs from "./pages/ApiDocs";
 import CaseLibrary from "./pages/CaseLibrary";
 import Expense from "./pages/Expense";
 import AdminExpense from "./pages/AdminExpense";
+import AdminHistory from "./pages/AdminHistory";
 
 function Router() {
   return (
@@ -104,6 +105,7 @@ function Router() {
         <Route path="/admin/settings" component={AdminSettings} />
         <Route path="/admin/feedback" component={AdminFeedback} />
         <Route path="/admin/expense" component={AdminExpense} />
+        <Route path="/admin/history" component={AdminHistory} />
 
         <Route component={NotFound} />
       </Switch>
