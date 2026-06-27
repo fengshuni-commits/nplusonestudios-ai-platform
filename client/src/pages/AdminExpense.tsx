@@ -791,6 +791,7 @@ export default function AdminExpense() {
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground">日期</th>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground">摘要</th>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground">类别</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">承担项目</th>
                       <th className="text-right px-3 py-2 font-medium text-muted-foreground">金额</th>
                       <th className="text-center px-3 py-2 font-medium text-muted-foreground">发票</th>
                     </tr>
@@ -801,7 +802,12 @@ export default function AdminExpense() {
                         <td className="px-3 py-2 text-muted-foreground">{new Date(item.expenseDate).toLocaleDateString("zh-CN")}</td>
                         <td className="px-3 py-2">{item.description}</td>
                         <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</td>
-                        <td className="px-3 py-2 text-right font-medium">¥{(item.amount / 100).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-muted-foreground text-xs">{item.projectName ?? "公司公共费用"}</td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          {item.correctionAmount != null
+                            ? <><span className="line-through text-muted-foreground text-xs mr-1">¥{(item.amount / 100).toFixed(2)}</span>¥{(item.correctionAmount / 100).toFixed(2)}</>  
+                            : <>¥{(item.amount / 100).toFixed(2)}</>}
+                        </td>
                         <td className="px-3 py-2 text-center">
                           {(() => {
                             const invs: { url: string; fileName: string; amount?: number | null }[] =
@@ -833,7 +839,7 @@ export default function AdminExpense() {
                       </tr>
                     ))}
                     <tr className="border-t bg-muted/30 font-semibold">
-                      <td colSpan={3} className="px-3 py-2 text-right text-muted-foreground">合计</td>
+                      <td colSpan={4} className="px-3 py-2 text-right text-muted-foreground">合计</td>
                       <td className="px-3 py-2 text-right">¥{(detailReport.totalAmount / 100).toFixed(2)}</td>
                       <td />
                     </tr>
