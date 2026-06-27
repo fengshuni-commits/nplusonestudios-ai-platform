@@ -21,6 +21,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   transport_travel: "出差（机票/火车/酒店）",
   office_supplies: "办公杂费",
   meals: "餐费",
+  project_purchase: "项目采购",
   other: "其他",
 };
 
@@ -42,7 +43,7 @@ type InvoiceFile = {
 type ExpenseItem = {
   id: string;
   expenseDate: string;
-  category: "" | "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
+  category: "" | "transport_local" | "transport_travel" | "office_supplies" | "meals" | "project_purchase" | "other";
   description: string;
   amount: string;
   correctionAmount: string; // 修正金额（元，可选）
@@ -241,7 +242,7 @@ export default function Expense() {
           const proj = (projects as any[]).find((p: any) => p.id === parseInt(item.projectId));
           return {
             expenseDate: item.expenseDate,
-            category: item.category as "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other",
+            category: item.category as "transport_local" | "transport_travel" | "office_supplies" | "meals" | "project_purchase" | "other",
             description: item.description,
             amount: parseFloat(item.amount),
             correctionAmount: item.correctionAmount ? parseFloat(item.correctionAmount) : undefined,

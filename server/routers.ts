@@ -7466,7 +7466,7 @@ const expenseRouter = router({
       payeeName: z.string().max(128).optional(),
       items: z.array(z.object({
         expenseDate: z.string(), // ISO date string
-        category: z.enum(["transport_local", "transport_travel", "office_supplies", "meals", "other"]),
+        category: z.enum(["transport_local", "transport_travel", "office_supplies", "meals", "project_purchase", "other"]),
         description: z.string().min(1).max(512),
         amount: z.number().positive(), // 元，前端输入，后端转分
         projectId: z.number().int().positive(), // 必填

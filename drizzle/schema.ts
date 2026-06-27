@@ -1084,6 +1084,7 @@ export const expenseItems = mysqlTable("expense_items", {
     "transport_travel",  // 出差（机票/火车/酒店）
     "office_supplies",   // 办公杂费（水电/消耗品）
     "meals",             // 餐费
+    "project_purchase",  // 项目采购
     "other",             // 其他
   ]).notNull(),
   // 摘要

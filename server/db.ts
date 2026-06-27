@@ -2807,7 +2807,7 @@ export async function createExpenseReport(data: {
   payeeName?: string | null;
   items: Array<{
     expenseDate: Date;
-    category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other";
+    category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "project_purchase" | "other";
     description: string;
     amount: number; // 分
     projectId: number;

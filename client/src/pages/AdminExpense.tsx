@@ -24,6 +24,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   transport_travel: "出差",
   office_supplies: "办公杂费",
   meals: "餐费",
+  project_purchase: "项目采购",
   other: "其他",
 };
 

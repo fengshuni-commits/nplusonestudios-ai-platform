@@ -1,0 +1,1 @@
+ALTER TABLE `expense_items` MODIFY COLUMN `category` enum('transport_local','transport_travel','office_supplies','meals','project_purchase','other') NOT NULL;
