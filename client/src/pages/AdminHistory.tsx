@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import DashboardLayout from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -288,8 +287,7 @@ export default function AdminHistory() {
   const hasFilters = search || moduleFilter !== "all" || userFilter !== "all" || dateFrom || dateTo;
 
   return (
-    <DashboardLayout>
-      <div className="p-6 space-y-5">
+    <div className="p-6 space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -413,14 +411,12 @@ export default function AdminHistory() {
             </Button>
           </div>
         )}
-      </div>
-
       {/* Detail Dialog */}
       <DetailDialog
         item={selectedItem}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
       />
-    </DashboardLayout>
+    </div>
   );
 }
