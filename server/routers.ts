@@ -7880,6 +7880,8 @@ const expenseRouter = router({
       const excelBuffer = await workbook.xlsx.writeBuffer();
       const timestamp = new Date().toISOString().slice(0, 10);
       const safeName = report.purpose.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "_").slice(0, 20);
+      // subtotal is in fen at this point; convert to yuan for filename
+      const amountYuan = (subtotal / 100).toFixed(2);
 
       // Build ZIP of invoices
       const zip = new JSZip();
@@ -7916,12 +7918,12 @@ const expenseRouter = router({
 
       const [excelResult, zipResult] = await Promise.all([
         storagePutSingle(
-          `expense-exports/${report.id}-${safeName}-${timestamp}.xlsx`,
+          `expense-exports/${report.id}-${safeName}-${amountYuan}元-${timestamp}.xlsx`,
           Buffer.from(excelBuffer),
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
         storagePutSingle(
-          `expense-exports/${report.id}-发票-${timestamp}.zip`,
+          `expense-exports/${report.id}-发票-${amountYuan}元-${timestamp}.zip`,
           zipBuffer,
           "application/zip"
         ),

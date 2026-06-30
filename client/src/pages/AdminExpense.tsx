@@ -142,8 +142,9 @@ export default function AdminExpense() {
       setBulkListExportResult(data);
       // Auto-download both files
       const ts = new Date().toISOString().slice(0, 10);
-      const a1 = document.createElement("a"); a1.href = data.excelUrl; a1.download = `费用清单-${ts}.xlsx`; a1.target = "_blank"; document.body.appendChild(a1); a1.click(); document.body.removeChild(a1);
-      setTimeout(() => { const a2 = document.createElement("a"); a2.href = data.zipUrl; a2.download = `发票-${ts}.zip`; a2.target = "_blank"; document.body.appendChild(a2); a2.click(); document.body.removeChild(a2); }, 500);
+      const bulkAmountLabel = data.totalAmount != null ? `_${(data.totalAmount / 100).toFixed(2)}元` : "";
+      const a1 = document.createElement("a"); a1.href = data.excelUrl; a1.download = `费用清单-${ts}${bulkAmountLabel}.xlsx`; a1.target = "_blank"; document.body.appendChild(a1); a1.click(); document.body.removeChild(a1);
+      setTimeout(() => { const a2 = document.createElement("a"); a2.href = data.zipUrl; a2.download = `发票-${ts}${bulkAmountLabel}.zip`; a2.target = "_blank"; document.body.appendChild(a2); a2.click(); document.body.removeChild(a2); }, 500);
       toast.success(`导出成功：${data.reportCount} 份报销单，文件已开始下载`);
     },
     onError: (e) => toast.error("导出失败：" + e.message),
@@ -225,8 +226,9 @@ export default function AdminExpense() {
       setSingleExportResults(prev => ({ ...prev, [id]: { excelUrl: result.excelUrl, zipUrl: result.zipUrl } }));
       // Auto-download both files
       const safeName = (reportPurpose ?? String(id)).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "_").slice(0, 20);
-      triggerDownload(result.excelUrl, `费用清单-${safeName}.xlsx`);
-      setTimeout(() => triggerDownload(result.zipUrl, `发票-${safeName}.zip`), 500);
+      const amountLabel = result.totalAmount != null ? `_${(result.totalAmount / 100).toFixed(2)}元` : "";
+      triggerDownload(result.excelUrl, `费用清单-${safeName}${amountLabel}.xlsx`);
+      setTimeout(() => triggerDownload(result.zipUrl, `发票-${safeName}${amountLabel}.zip`), 500);
       toast.success("导出成功，文件已开始下载");
     } finally {
       setSingleExporting(prev => { const next = new Set(prev); next.delete(id); return next; });
