@@ -7848,10 +7848,10 @@ const expenseRouter = router({
       let seq = 1;
       let subtotal = 0;
       for (const item of report.items) {
-        const invoices: Array<{ url: string; filename: string }> = item.invoicesJson
+        const invoices: Array<{ url: string; fileName: string }> = item.invoicesJson
           ? JSON.parse(item.invoicesJson as string)
-          : item.invoiceUrl ? [{ url: item.invoiceUrl, filename: item.invoiceFileName ?? "发票" }] : [];
-        const invoiceLabel = invoices.map((inv, i) => `发票${i + 1}: ${inv.filename}`).join("\n");
+          : item.invoiceUrl ? [{ url: item.invoiceUrl, fileName: item.invoiceFileName ?? "发票" }] : [];
+        const invoiceLabel = invoices.map((inv, i) => `发票${i + 1}: ${inv.fileName}`).join("\n");
         const didiReceiptName = (item as any).didiTripReceiptUrl ? ((item as any).didiTripReceiptFileName ?? "行程报销单") : "";
         const corrAmt = (item as any).correctionAmount;
         const effectiveAmount = corrAmt != null ? corrAmt : item.amount;
@@ -7885,15 +7885,15 @@ const expenseRouter = router({
       const zip = new JSZip();
       let invoiceSeq = 1;
       for (const item of report.items) {
-        const invoices: Array<{ url: string; filename: string }> = item.invoicesJson
+        const invoices: Array<{ url: string; fileName: string }> = item.invoicesJson
           ? JSON.parse(item.invoicesJson as string)
-          : item.invoiceUrl ? [{ url: item.invoiceUrl, filename: item.invoiceFileName ?? "发票.jpg" }] : [];
+          : item.invoiceUrl ? [{ url: item.invoiceUrl, fileName: item.invoiceFileName ?? "发票.jpg" }] : [];
         for (const inv of invoices) {
           try {
             const resp = await fetch(inv.url);
             if (resp.ok) {
               const buf = await resp.arrayBuffer();
-              zip.file(`${String(invoiceSeq).padStart(3, "0")}_${inv.filename}`, buf);
+              zip.file(`${String(invoiceSeq).padStart(3, "0")}_${inv.fileName}`, buf);
               invoiceSeq++;
             }
           } catch { /* skip failed */ }
