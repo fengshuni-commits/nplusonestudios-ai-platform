@@ -7946,8 +7946,52 @@ const expenseRouter = router({
         "office_supplies", "meals", "other", "project_purchase",
       ]),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // 1. Fetch the item + its report + submitter before updating
+      const drizzleDb = await db.getDb();
+      if (!drizzleDb) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { eq } = await import("drizzle-orm");
+      const { expenseItems: expItemsTable, expenseReports: expReportsTable, directorConversations } = await import("../drizzle/schema");
+
+      const [item] = await drizzleDb.select().from(expItemsTable).where(eq(expItemsTable.id, input.itemId)).limit(1);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "明细不存在" });
+
+      const [report] = await drizzleDb.select().from(expReportsTable).where(eq(expReportsTable.id, item.reportId)).limit(1);
+      if (!report) throw new TRPCError({ code: "NOT_FOUND", message: "报销单不存在" });
+
+      const CATEGORY_LABELS_LOCAL: Record<string, string> = {
+        transport_local: "市内交通",
+        transport_travel: "出差",
+        office_supplies: "办公杂费",
+        meals: "餐费",
+        project_purchase: "项目采购",
+        other: "其他",
+      };
+      const oldLabel = CATEGORY_LABELS_LOCAL[item.category] ?? item.category;
+      const newLabel = CATEGORY_LABELS_LOCAL[input.category] ?? input.category;
+
+      // 2. Apply the category update
       await db.updateExpenseItemCategory(input.itemId, input.category);
+
+      // 3. Send a director (所长) assistant message to the submitter if category actually changed
+      if (item.category !== input.category) {
+        try {
+          const adminUser = await db.getUserById(ctx.user.id);
+          const adminName = adminUser?.name ?? "管理员";
+          const notifyMessage = `你好！管理员 ${adminName} 刚刚将你「${report.purpose}」报销单中「${item.description}」这笔费用的类别，从「${oldLabel}」调整为了「${newLabel}」。下次填写报销单时，请注意选择正确的费用类别，这样有助于财务统计的准确性。如有疑问欢迎随时来问我 😊`;
+          await drizzleDb.insert(directorConversations).values({
+            userId: report.userId,
+            role: "assistant",
+            content: notifyMessage,
+            toolCalls: null,
+            toolCallId: null,
+          });
+        } catch (e) {
+          // Non-fatal: log but don't fail the mutation
+          console.error("[updateItemCategory] Failed to send director notification:", e);
+        }
+      }
+
       return { success: true };
     }),
 });
