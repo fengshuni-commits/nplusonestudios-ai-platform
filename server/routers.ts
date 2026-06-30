@@ -7936,6 +7936,20 @@ const expenseRouter = router({
         totalAmount: subtotal,
       };
     }),
+
+  /** Admin: update the category of a single expense item */
+  updateItemCategory: adminProcedure
+    .input(z.object({
+      itemId: z.number(),
+      category: z.enum([
+        "transport_local", "transport_travel",
+        "office_supplies", "meals", "other", "project_purchase",
+      ]),
+    }))
+    .mutation(async ({ input }) => {
+      await db.updateExpenseItemCategory(input.itemId, input.category);
+      return { success: true };
+    }),
 });
 
 // ─── Main Router ─────────────────────────────────────────────────────────

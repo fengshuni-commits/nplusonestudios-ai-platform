@@ -3137,3 +3137,14 @@ export async function listAllExpenseReports(opts?: {
     return { reports, total: Number(countResult[0]?.count ?? 0) };
   });
 }
+
+export async function updateExpenseItemCategory(
+  itemId: number,
+  category: "transport_local" | "transport_travel" | "office_supplies" | "meals" | "other" | "project_purchase"
+) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db.update(expenseItems).set({ category }).where(eq(expenseItems.id, itemId));
+  });
+}

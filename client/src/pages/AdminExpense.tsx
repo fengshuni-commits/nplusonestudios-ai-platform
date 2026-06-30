@@ -137,6 +137,17 @@ export default function AdminExpense() {
     onError: (e) => toast.error("导出失败：" + e.message),
   });
 
+  const [editingCategoryItemId, setEditingCategoryItemId] = useState<number | null>(null);
+
+  const updateItemCategoryMutation = trpc.expense.updateItemCategory.useMutation({
+    onSuccess: () => {
+      toast.success("费用类别已更新");
+      setEditingCategoryItemId(null);
+      utils.expense.getById.invalidate({ id: detailId! });
+    },
+    onError: (e) => toast.error("更新失败：" + e.message),
+  });
+
   const bulkListExportMutation = trpc.expense.export.useMutation({
     onSuccess: (data) => {
       setBulkListExportResult(data);
@@ -804,7 +815,38 @@ export default function AdminExpense() {
                       <tr key={item.id} className="border-t">
                         <td className="px-3 py-2 text-muted-foreground">{new Date(item.expenseDate).toLocaleDateString("zh-CN")}</td>
                         <td className="px-3 py-2">{item.description}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</td>
+                        <td className="px-3 py-2">
+                          {detailReport.status === "approved" ? (
+                            editingCategoryItemId === item.id ? (
+                              <Select
+                                value={item.category}
+                                onValueChange={(val) => {
+                                  updateItemCategoryMutation.mutate({ itemId: item.id, category: val as any });
+                                }}
+                                onOpenChange={(open) => { if (!open) setEditingCategoryItemId(null); }}
+                              >
+                                <SelectTrigger className="h-7 text-xs w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <button
+                                onClick={() => setEditingCategoryItemId(item.id)}
+                                className="text-sm text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                                title="点击修改类别"
+                              >
+                                {CATEGORY_LABELS[item.category] ?? item.category}
+                              </button>
+                            )
+                          ) : (
+                            <span className="text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-muted-foreground text-xs">{item.projectName ?? "公司公共费用"}</td>
                         <td className="px-3 py-2 text-right font-medium">
                           {item.correctionAmount != null
