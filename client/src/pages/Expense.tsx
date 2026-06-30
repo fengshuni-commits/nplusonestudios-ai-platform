@@ -92,6 +92,10 @@ export default function Expense() {
   const [submitting, setSubmitting] = useState(false);
   const [statsYear, setStatsYear] = useState(currentYear);
 
+  // ── Confirm submit dialog ─────────────────────────────
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingValidItems, setPendingValidItems] = useState<ExpenseItem[]>([]);
+
   // ── Detail dialog ──────────────────────────────────────
   const [detailId, setDetailId] = useState<number | null>(null);
 
@@ -216,7 +220,8 @@ export default function Expense() {
 
   const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
-  const handleSubmit = async () => {
+  /** Step 1: validate and open confirm dialog */
+  const handleSubmit = () => {
     if (!purpose.trim()) { toast.error("请填写报销用途"); return; }
     const validItems = items.filter(i => i.description.trim() && parseFloat(i.amount) > 0);
     if (validItems.length === 0) { toast.error("请至少填写一条有效的费用明细（需有摘要且金额>0）"); return; }
@@ -230,6 +235,19 @@ export default function Expense() {
       toast.error("检测到滴滴发票，请上传对应的行程报销单后再提交");
       return;
     }
+    // Warn if any item has invoices but amount is 0 (OCR may still be running)
+    const uploadingItems = items.filter(i => i.uploading || i.uploadingDidi);
+    if (uploadingItems.length > 0) {
+      toast.error("有发票正在上传中，请等待上传完成后再提交");
+      return;
+    }
+    setPendingValidItems(validItems);
+    setConfirmOpen(true);
+  };
+
+  /** Step 2: actually submit after user confirms */
+  const handleConfirmedSubmit = async () => {
+    setConfirmOpen(false);
     setSubmitting(true);
     try {
       await submitReport.mutateAsync({
@@ -238,7 +256,7 @@ export default function Expense() {
         periodStart: periodStart || undefined,
         periodEnd: periodEnd || undefined,
         note: note || undefined,
-        items: validItems.map(item => {
+        items: pendingValidItems.map(item => {
           const proj = (projects as any[]).find((p: any) => p.id === parseInt(item.projectId));
           return {
             expenseDate: item.expenseDate,
@@ -740,6 +758,98 @@ export default function Expense() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailId(null)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Confirm Submit Dialog ── */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>确认提交报销申请</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              <span className="text-muted-foreground">报销用途</span>
+              <span className="font-medium">{purpose}</span>
+              {payeeName && <>
+                <span className="text-muted-foreground">收款人</span>
+                <span className="font-medium">{payeeName}</span>
+              </>}
+              {(periodStart || periodEnd) && <>
+                <span className="text-muted-foreground">报销期间</span>
+                <span className="font-medium">{periodStart || "—"} – {periodEnd || "—"}</span>
+              </>}
+            </div>
+
+            <div className="border rounded-md overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium">摘要</th>
+                    <th className="text-left px-3 py-2 font-medium">类别</th>
+                    <th className="text-left px-3 py-2 font-medium">承担项目</th>
+                    <th className="text-right px-3 py-2 font-medium">金额</th>
+                    <th className="text-right px-3 py-2 font-medium">发票</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingValidItems.map((item, idx) => {
+                    const proj = (projects as any[]).find((p: any) => p.id === parseInt(item.projectId));
+                    const projName = proj?.name ?? proj?.clientNameDisplay ?? "—";
+                    const effectiveAmount = item.correctionAmount
+                      ? parseFloat(item.correctionAmount)
+                      : parseFloat(item.amount);
+                    return (
+                      <tr key={item.id} className={idx % 2 === 0 ? "" : "bg-muted/20"}>
+                        <td className="px-3 py-2">{item.description}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[item.category] ?? item.category}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{projName}</td>
+                        <td className="px-3 py-2 text-right">
+                          {item.correctionAmount ? (
+                            <span>
+                              <span className="line-through text-muted-foreground mr-1">¥{parseFloat(item.amount).toFixed(2)}</span>
+                              <span className="text-orange-600 font-medium">¥{parseFloat(item.correctionAmount).toFixed(2)}</span>
+                            </span>
+                          ) : (
+                            <span>¥{parseFloat(item.amount).toFixed(2)}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">
+                          {item.invoices.length > 0 ? `${item.invoices.length}张` : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="border-t bg-muted/30">
+                  <tr>
+                    <td colSpan={3} className="px-3 py-2 font-semibold text-right">合计</td>
+                    <td className="px-3 py-2 text-right font-semibold">
+                      ¥{pendingValidItems.reduce((s, i) => {
+                        const eff = i.correctionAmount ? parseFloat(i.correctionAmount) : parseFloat(i.amount);
+                        return s + (isNaN(eff) ? 0 : eff);
+                      }, 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">
+                      {pendingValidItems.reduce((s, i) => s + i.invoices.length, 0)}张
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {items.filter(i => i.description.trim() && !(parseFloat(i.amount) > 0)).length > 0 && (
+              <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                ⚠️ 注意：有 {items.filter(i => i.description.trim() && !(parseFloat(i.amount) > 0)).length} 条明细因金额为 0 将被跳过。如需包含，请返回填写金额。
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>返回修改</Button>
+            <Button onClick={handleConfirmedSubmit} disabled={submitting}>
+              {submitting ? "提交中…" : "确认提交"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
