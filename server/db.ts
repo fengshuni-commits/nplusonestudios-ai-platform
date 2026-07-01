@@ -2885,7 +2885,26 @@ export async function getExpenseReports(opts: {
         .offset(opts.offset ?? 0),
       db.select({ count: sql<number>`count(*)` }).from(expenseReports).where(whereClause),
     ]);
-    return { reports, total: Number(countResult[0]?.count ?? 0) };
+    // Aggregate distinct project names from expense_items for each report
+    const reportIds = reports.map(r => r.id);
+    let projectNamesMap: Record<number, string[]> = {};
+    if (reportIds.length > 0) {
+      const itemRows = await db
+        .select({ reportId: expenseItems.reportId, projectName: expenseItems.projectName })
+        .from(expenseItems)
+        .where(inArray(expenseItems.reportId, reportIds));
+      for (const row of itemRows) {
+        if (!projectNamesMap[row.reportId]) projectNamesMap[row.reportId] = [];
+        if (row.projectName && !projectNamesMap[row.reportId].includes(row.projectName)) {
+          projectNamesMap[row.reportId].push(row.projectName);
+        }
+      }
+    }
+    const reportsWithProjects = reports.map(r => ({
+      ...r,
+      projectNames: projectNamesMap[r.id] ?? [],
+    }));
+    return { reports: reportsWithProjects, total: Number(countResult[0]?.count ?? 0) };
   });
 }
 
@@ -3134,7 +3153,26 @@ export async function listAllExpenseReports(opts?: {
         .offset(opts?.offset ?? 0),
       db.select({ count: sql<number>`COUNT(*)` }).from(expenseReports).where(where),
     ]);
-    return { reports, total: Number(countResult[0]?.count ?? 0) };
+    // Aggregate distinct project names from expense_items for each report
+    const reportIds = reports.map(r => r.id);
+    let projectNamesMap2: Record<number, string[]> = {};
+    if (reportIds.length > 0) {
+      const itemRows = await db
+        .select({ reportId: expenseItems.reportId, projectName: expenseItems.projectName })
+        .from(expenseItems)
+        .where(inArray(expenseItems.reportId, reportIds));
+      for (const row of itemRows) {
+        if (!projectNamesMap2[row.reportId]) projectNamesMap2[row.reportId] = [];
+        if (row.projectName && !projectNamesMap2[row.reportId].includes(row.projectName)) {
+          projectNamesMap2[row.reportId].push(row.projectName);
+        }
+      }
+    }
+    const reportsWithProjects2 = reports.map(r => ({
+      ...r,
+      projectNames: projectNamesMap2[r.id] ?? [],
+    }));
+    return { reports: reportsWithProjects2, total: Number(countResult[0]?.count ?? 0) };
   });
 }
 

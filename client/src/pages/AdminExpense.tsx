@@ -265,7 +265,7 @@ export default function AdminExpense() {
   }));
 
   const byProject = (statsData?.byProject ?? []).map((row: any) => ({
-    name: row.projectName ?? "公司公共费用",
+    name: row.projectName ?? "未指定项目",
     amount: Number(row.totalAmount) / 100,
     count: Number(row.itemCount),
   }));
@@ -397,7 +397,7 @@ export default function AdminExpense() {
                       <div className="font-medium text-sm truncate">{report.purpose}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         <span className="font-medium">{report.submitterName ?? "未知"}</span>
-                        {report.projectName ? ` · ${report.projectName}` : " · 公司公共费用"}
+                        {" · "}{(report as any).projectNames?.length > 0 ? (report as any).projectNames.join(" / ") : "公司公共费用"}
                         {" · "}
                         {new Date(report.createdAt).toLocaleDateString("zh-CN")}
                       </div>
@@ -548,8 +548,8 @@ export default function AdminExpense() {
                         </td>
                         <td className="px-3 py-2.5 max-w-xs">
                           <div className="truncate">{report.purpose}</div>
-                          {report.projectName && (
-                            <div className="text-xs text-muted-foreground truncate">{report.projectName}</div>
+                          {(report as any).projectNames?.length > 0 && (
+                            <div className="text-xs text-muted-foreground truncate">{(report as any).projectNames.join(" / ")}</div>
                           )}
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">
@@ -782,7 +782,7 @@ export default function AdminExpense() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">提交人：</span>{detailReport.submitterName ?? "—"}</div>
-                <div><span className="text-muted-foreground">项目：</span>{detailReport.projectName ?? "公司公共费用"}</div>
+                <div><span className="text-muted-foreground">承担项目：</span>{detailReport.items && Array.from(new Set(detailReport.items.map((i: any) => i.projectName).filter(Boolean))).join(" / ") || "公司公共费用"}</div>
                 <div className="col-span-2"><span className="text-muted-foreground">用途：</span>{detailReport.purpose}</div>
                 {(detailReport as any).payeeName && (
                   <div><span className="text-muted-foreground">收款人：</span>{(detailReport as any).payeeName}</div>
