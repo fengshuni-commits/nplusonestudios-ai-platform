@@ -404,6 +404,9 @@ export default function AdminExpense() {
                       <div className="font-medium text-sm truncate">{report.purpose}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         <span className="font-medium">{report.submitterName ?? "未知"}</span>
+                        {(report as any).payeeName && (
+                          <span className="ml-1 text-muted-foreground">收款: {(report as any).payeeName}</span>
+                        )}
                         {" · "}{(report as any).projectNames?.length > 0 ? (report as any).projectNames.join(" / ") : "公司公共费用"}
                         {" · "}
                         {new Date(report.createdAt).toLocaleDateString("zh-CN")}
@@ -526,6 +529,7 @@ export default function AdminExpense() {
                       />
                     </th>
                     <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">报销人</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">收款人</th>
                     <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">报销事由</th>
                     <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">提交时间</th>
                     <th className="text-right px-3 py-2.5 font-medium text-muted-foreground">金额</th>
@@ -552,6 +556,9 @@ export default function AdminExpense() {
                         </td>
                         <td className="px-3 py-2.5 font-medium whitespace-nowrap">
                           {report.submitterName ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">
+                          {(report as any).payeeName ?? "—"}
                         </td>
                         <td className="px-3 py-2.5 max-w-xs">
                           <div className="truncate">{report.purpose}</div>
