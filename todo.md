@@ -2817,3 +2817,14 @@
 - [x] 导出 Excel 增加「收款人」列和「滴滴行程单」列
 - [x] 导出 ZIP 包含滴滴行程报销单文件
 - [x] 详情弹窗（Expense + AdminExpense）显示收款人和滴滴行程单链接
+
+## 报销管理 - 修改记录模块（2026-07-01）
+- [x] Schema: expense_item_changes 表（id, itemId, reportId, changedBy, changedByName, fieldName, oldValue, newValue, changedAt）
+- [x] DB 迁移 SQL 执行
+- [x] db.ts: insertExpenseItemChange helper + getExpenseItemChanges helper
+- [x] updateExpenseItemCategory 在 routers.ts 中调用 insertExpenseItemChange 记录变更
+- [x] routers.ts: getItemChanges adminProcedure（按 reportId 查询）
+- [x] AdminExpense.tsx: 详情弹窗中在明细表格下方添加「修改记录」折叠区域，显示类别变更历史（时间、操作人、从什么改成什么）
+
+## 报销表单改进 - 发票多选上传（2026-07-01）
+- [x] Expense.tsx: 发票上传 input 改为 multiple，允许一次性选择多张发票文件并批量上传

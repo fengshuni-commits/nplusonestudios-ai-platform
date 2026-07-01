@@ -456,6 +456,13 @@
       "when": 1782536633419,
       "tag": "0064_bumpy_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1782877461545,
+      "tag": "0065_sturdy_sinister_six",
+      "breakpoints": true
     }
   ]
 }

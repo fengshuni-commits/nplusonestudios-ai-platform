@@ -1105,3 +1105,25 @@ export const expenseItems = mysqlTable("expense_items", {
 });
 export type ExpenseItem = typeof expenseItems.$inferSelect;
 export type InsertExpenseItem = typeof expenseItems.$inferInsert;
+
+// ─── Expense Item Changes (费用明细修改记录) ─────────────────────────────
+export const expenseItemChanges = mysqlTable("expense_item_changes", {
+  id: int("id").autoincrement().primaryKey(),
+  // 关联的费用明细 ID
+  itemId: int("itemId").notNull(),
+  // 关联的报销单 ID
+  reportId: int("reportId").notNull(),
+  // 操作者 ID
+  changedBy: int("changedBy").notNull(),
+  // 操作者名称
+  changedByName: varchar("changedByName", { length: 128 }),
+  // 修改的字段名称（如 "category"）
+  fieldName: varchar("fieldName", { length: 64 }).notNull(),
+  // 修改前的值
+  oldValue: varchar("oldValue", { length: 256 }),
+  // 修改后的值
+  newValue: varchar("newValue", { length: 256 }),
+  changedAt: timestamp("changedAt").defaultNow().notNull(),
+});
+export type ExpenseItemChange = typeof expenseItemChanges.$inferSelect;
+export type InsertExpenseItemChange = typeof expenseItemChanges.$inferInsert;

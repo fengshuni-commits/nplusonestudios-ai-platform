@@ -34,6 +34,7 @@ import {
   designBriefInputs, InsertDesignBriefInput,
   expenseReports, InsertExpenseReport,
   expenseItems, InsertExpenseItem,
+  expenseItemChanges, InsertExpenseItemChange,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -3184,5 +3185,27 @@ export async function updateExpenseItemCategory(
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await db.update(expenseItems).set({ category }).where(eq(expenseItems.id, itemId));
+  });
+}
+
+export async function insertExpenseItemChange(
+  change: InsertExpenseItemChange
+) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db.insert(expenseItemChanges).values(change);
+  });
+}
+
+export async function getExpenseItemChanges(reportId: number) {
+  return withRetry(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select()
+      .from(expenseItemChanges)
+      .where(eq(expenseItemChanges.reportId, reportId))
+      .orderBy(desc(expenseItemChanges.changedAt));
   });
 }

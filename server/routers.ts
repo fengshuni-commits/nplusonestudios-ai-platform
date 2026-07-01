@@ -7973,7 +7973,25 @@ const expenseRouter = router({
       // 2. Apply the category update
       await db.updateExpenseItemCategory(input.itemId, input.category);
 
-      // 3. Send a director (所长) assistant message to the submitter if category actually changed
+      // 3. Record the change in expense_item_changes if category actually changed
+      if (item.category !== input.category) {
+        try {
+          const adminUser2 = await db.getUserById(ctx.user.id);
+          await db.insertExpenseItemChange({
+            itemId: input.itemId,
+            reportId: item.reportId,
+            changedBy: ctx.user.id,
+            changedByName: adminUser2?.name ?? "管理员",
+            fieldName: "category",
+            oldValue: oldLabel,
+            newValue: newLabel,
+          });
+        } catch (e) {
+          console.error("[updateItemCategory] Failed to insert change record:", e);
+        }
+      }
+
+      // 4. Send a director (所长) assistant message to the submitter if category actually changed
       if (item.category !== input.category) {
         try {
           const adminUser = await db.getUserById(ctx.user.id);
@@ -7993,6 +8011,13 @@ const expenseRouter = router({
       }
 
       return { success: true };
+    }),
+
+  /** Admin: get category change history for a report */
+  getItemChanges: adminProcedure
+    .input(z.object({ reportId: z.number() }))
+    .query(async ({ input }) => {
+      return db.getExpenseItemChanges(input.reportId);
     }),
 });
 

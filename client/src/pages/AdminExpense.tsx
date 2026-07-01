@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   CheckCircle, XCircle, FileText, BarChart3, TrendingUp,
-  Download, FileSpreadsheet, Archive, Trash2, List, Search,
+  Download, FileSpreadsheet, Archive, Trash2, List, Search, History, ChevronDown, ChevronUp,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -138,15 +138,22 @@ export default function AdminExpense() {
   });
 
   const [editingCategoryItemId, setEditingCategoryItemId] = useState<number | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const updateItemCategoryMutation = trpc.expense.updateItemCategory.useMutation({
     onSuccess: () => {
       toast.success("费用类别已更新");
       setEditingCategoryItemId(null);
       utils.expense.getById.invalidate({ id: detailId! });
+      utils.expense.getItemChanges.invalidate({ reportId: detailId! });
     },
     onError: (e) => toast.error("更新失败：" + e.message),
   });
+
+  const { data: itemChanges } = trpc.expense.getItemChanges.useQuery(
+    { reportId: detailId! },
+    { enabled: detailId !== null && showHistory }
+  );
 
   const bulkListExportMutation = trpc.expense.export.useMutation({
     onSuccess: (data) => {
@@ -773,7 +780,7 @@ export default function AdminExpense() {
       </Tabs>
 
       {/* Detail / Review Dialog */}
-      <Dialog open={detailId !== null} onOpenChange={open => !open && setDetailId(null)}>
+      <Dialog open={detailId !== null} onOpenChange={open => { if (!open) { setDetailId(null); setShowHistory(false); } }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>报销单详情</DialogTitle>
@@ -890,6 +897,61 @@ export default function AdminExpense() {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              {/* 修改记录折叠区域 */}
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium bg-muted/30 hover:bg-muted/50 transition-colors"
+                  onClick={() => setShowHistory(h => !h)}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-muted-foreground" />
+                    修改记录
+                    {itemChanges && itemChanges.length > 0 && (
+                      <span className="text-xs text-muted-foreground">({itemChanges.length})</span>
+                    )}
+                  </span>
+                  {showHistory ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                </button>
+                {showHistory && (
+                  <div className="px-3 py-2">
+                    {!itemChanges ? (
+                      <p className="text-xs text-muted-foreground py-1">加载中…</p>
+                    ) : itemChanges.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-1">暂无修改记录</p>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground w-32">时间</th>
+                            <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground w-20">操作人</th>
+                            <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground">字段</th>
+                            <th className="text-left py-1.5 pr-3 font-medium text-muted-foreground">修改前</th>
+                            <th className="text-left py-1.5 font-medium text-muted-foreground">修改后</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itemChanges.map((ch: any) => (
+                            <tr key={ch.id} className="border-b last:border-0">
+                              <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                                {new Date(ch.changedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                              </td>
+                              <td className="py-1.5 pr-3 whitespace-nowrap">{ch.changedByName ?? "管理员"}</td>
+                              <td className="py-1.5 pr-3 text-muted-foreground">{ch.fieldName === "category" ? "费用类别" : ch.fieldName}</td>
+                              <td className="py-1.5 pr-3">
+                                <span className="line-through text-muted-foreground">{ch.oldValue ?? "—"}</span>
+                              </td>
+                              <td className="py-1.5">
+                                <span className="text-foreground font-medium">{ch.newValue ?? "—"}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
               </div>
 
               {detailReport.status === "submitted" && (

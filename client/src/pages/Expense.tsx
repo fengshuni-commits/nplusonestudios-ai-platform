@@ -175,6 +175,13 @@ export default function Expense() {
     }
   };
 
+  /** Upload multiple invoice files sequentially */
+  const handleMultipleInvoiceUpload = async (itemId: string, files: FileList) => {
+    for (let i = 0; i < files.length; i++) {
+      await handleInvoiceUpload(itemId, files[i]);
+    }
+  };
+
   /** Upload a DiDi trip receipt (行程报销单) */
   const handleDidiReceiptUpload = async (itemId: string, file: File) => {
     updateItem(itemId, { uploadingDidi: true });
@@ -454,11 +461,12 @@ export default function Expense() {
                     <input
                       type="file"
                       accept="image/*,application/pdf"
+                      multiple
                       className="hidden"
                       ref={el => { fileInputRefs.current[item.id] = el; }}
                       onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) handleInvoiceUpload(item.id, file);
+                        const files = e.target.files;
+                        if (files && files.length > 0) handleMultipleInvoiceUpload(item.id, files);
                         e.target.value = "";
                       }}
                     />
