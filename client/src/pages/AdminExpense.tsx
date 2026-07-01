@@ -868,8 +868,12 @@ export default function AdminExpense() {
                                 : item.invoiceUrl
                                   ? [{ url: item.invoiceUrl, fileName: "发票" }]
                                   : [];
-                            const didiUrl = (item as any).didiTripReceiptUrl;
-                            const didiName = (item as any).didiTripReceiptFileName ?? "行程报销单";
+                            const didiReceipts: { url: string; fileName: string }[] =
+                              (item as any).didiTripReceiptsJson
+                                ? (() => { try { return JSON.parse((item as any).didiTripReceiptsJson); } catch { return []; } })()
+                                : (item as any).didiTripReceiptUrl
+                                  ? [{ url: (item as any).didiTripReceiptUrl, fileName: (item as any).didiTripReceiptFileName ?? "行程报销单" }]
+                                  : [];
                             return (
                               <div className="flex flex-col gap-0.5">
                                 {invs.map((inv, i) => (
@@ -878,12 +882,12 @@ export default function AdminExpense() {
                                     {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
                                   </a>
                                 ))}
-                                {didiUrl && (
-                                  <a href={didiUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline text-xs">
-                                    🚖 {didiName}
+                                {didiReceipts.map((r, i) => (
+                                  <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline text-xs">
+                                    🚖 {r.fileName}{didiReceipts.length > 1 ? ` (${i + 1})` : ""}
                                   </a>
-                                )}
-                                {invs.length === 0 && !didiUrl && <span className="text-muted-foreground text-xs">—</span>}
+                                ))}
+                                {invs.length === 0 && didiReceipts.length === 0 && <span className="text-muted-foreground text-xs">—</span>}
                               </div>
                             );
                           })()}

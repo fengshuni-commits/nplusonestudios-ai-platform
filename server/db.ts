@@ -2816,6 +2816,7 @@ export async function createExpenseReport(data: {
     invoiceUrl?: string | null;
     invoiceFileName?: string | null;
     invoicesJson?: string | null;
+    didiTripReceiptsJson?: string | null;
     didiTripReceiptUrl?: string | null;
     didiTripReceiptFileName?: string | null;
     correctionAmount?: number | null; // 分
@@ -2854,6 +2855,7 @@ export async function createExpenseReport(data: {
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
           invoicesJson: item.invoicesJson ?? null,
+          didiTripReceiptsJson: item.didiTripReceiptsJson ?? null,
           didiTripReceiptUrl: item.didiTripReceiptUrl ?? null,
           didiTripReceiptFileName: item.didiTripReceiptFileName ?? null,
         }))

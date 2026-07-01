@@ -7479,7 +7479,9 @@ const expenseRouter = router({
         // legacy single invoice fields (kept for backward compat)
         invoiceUrl: z.string().optional(),
         invoiceFileName: z.string().optional(),
-        // 滴滴行程报销单
+        // 滴滴行程报销单（支持多张，JSON数组）
+        didiTripReceiptsJson: z.string().optional(),
+        // 旧字段兼容
         didiTripReceiptUrl: z.string().optional(),
         didiTripReceiptFileName: z.string().optional(),
         // 修正金额（可选，单位：元）
@@ -7512,6 +7514,7 @@ const expenseRouter = router({
               : null,
           invoiceUrl: item.invoiceUrl ?? null,
           invoiceFileName: item.invoiceFileName ?? null,
+          didiTripReceiptsJson: item.didiTripReceiptsJson ?? null,
           didiTripReceiptUrl: item.didiTripReceiptUrl ?? null,
           didiTripReceiptFileName: item.didiTripReceiptFileName ?? null,
         })),

@@ -40,6 +40,11 @@ type InvoiceFile = {
   amount: number | null;
 };
 
+type DidiReceiptFile = {
+  url: string;
+  fileName: string;
+};
+
 type ExpenseItem = {
   id: string;
   expenseDate: string;
@@ -50,9 +55,8 @@ type ExpenseItem = {
   projectId: string;
   invoices: InvoiceFile[];
   uploading?: boolean;
-  // DiDi trip receipt
-  didiTripReceiptUrl?: string;
-  didiTripReceiptFileName?: string;
+  // DiDi trip receipts (支持多张)
+  didiReceipts: DidiReceiptFile[];
   uploadingDidi?: boolean;
 };
 
@@ -73,6 +77,7 @@ function newItem(): ExpenseItem {
     correctionAmount: "",
     projectId: "",
     invoices: [],
+    didiReceipts: [],
   };
 }
 
@@ -182,7 +187,7 @@ export default function Expense() {
     }
   };
 
-  /** Upload a DiDi trip receipt (行程报销单) */
+  /** Upload a DiDi trip receipt (行程报销单) - supports multiple */
   const handleDidiReceiptUpload = async (itemId: string, file: File) => {
     updateItem(itemId, { uploadingDidi: true });
     try {
@@ -197,11 +202,14 @@ export default function Expense() {
         fileData: base64,
         contentType: file.type,
       });
-      updateItem(itemId, {
-        uploadingDidi: false,
-        didiTripReceiptUrl: result.url,
-        didiTripReceiptFileName: file.name,
-      });
+      setItems(prev => prev.map(item => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          uploadingDidi: false,
+          didiReceipts: [...item.didiReceipts, { url: result.url, fileName: file.name }],
+        };
+      }));
       toast.success("行程报销单上传成功");
     } catch {
       updateItem(itemId, { uploadingDidi: false });
@@ -237,7 +245,7 @@ export default function Expense() {
     const missingProject = validItems.find(i => !i.projectId);
     if (missingProject) { toast.error("每条费用明细必须选择承担项目"); return; }
     // Warn if DiDi invoice without trip receipt
-    const missingDidi = validItems.find(i => hasDidiInvoice(i.invoices) && !i.didiTripReceiptUrl);
+    const missingDidi = validItems.find(i => hasDidiInvoice(i.invoices) && i.didiReceipts.length === 0);
     if (missingDidi) {
       toast.error("检测到滴滴发票，请上传对应的行程报销单后再提交");
       return;
@@ -274,8 +282,7 @@ export default function Expense() {
             projectId: parseInt(item.projectId),
             projectName: proj?.name ?? proj?.clientNameDisplay ?? undefined,
             invoices: item.invoices.length > 0 ? item.invoices : undefined,
-            didiTripReceiptUrl: item.didiTripReceiptUrl,
-            didiTripReceiptFileName: item.didiTripReceiptFileName,
+            didiTripReceiptsJson: item.didiReceipts.length > 0 ? JSON.stringify(item.didiReceipts) : undefined,
           };
         }),
       });
@@ -519,31 +526,32 @@ export default function Expense() {
                           e.target.value = "";
                         }}
                       />
-                      <div className="flex items-center gap-2">
-                        {item.didiTripReceiptUrl ? (
-                          <div className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 dark:bg-orange-950/30 rounded px-1.5 py-0.5 max-w-[220px]">
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {item.didiReceipts.map((receipt, idx) => (
+                          <div key={idx} className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 dark:bg-orange-950/30 rounded px-1.5 py-0.5 max-w-[220px]">
                             <Car className="w-3 h-3 flex-shrink-0" />
-                            <a href={item.didiTripReceiptUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline flex-1">
-                              {item.didiTripReceiptFileName ?? "行程报销单"}
+                            <a href={receipt.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline flex-1">
+                              {receipt.fileName}
                             </a>
                             <button
-                              onClick={() => updateItem(item.id, { didiTripReceiptUrl: undefined, didiTripReceiptFileName: undefined })}
+                              onClick={() => setItems(prev => prev.map(it =>
+                                it.id !== item.id ? it : { ...it, didiReceipts: it.didiReceipts.filter((_, i) => i !== idx) }
+                              ))}
                               className="text-muted-foreground hover:text-destructive flex-shrink-0 ml-0.5"
                             >
                               <X className="w-3 h-3" />
                             </button>
                           </div>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 text-xs px-2 border-orange-300 text-orange-600 hover:bg-orange-50"
-                            disabled={item.uploadingDidi}
-                            onClick={() => didiFileInputRefs.current[item.id]?.click()}
-                          >
-                            {item.uploadingDidi ? "上传中…" : <><Upload className="w-3 h-3 mr-1" />上传行程报销单</>}
-                          </Button>
-                        )}
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-xs px-2 border-orange-300 text-orange-600 hover:bg-orange-50"
+                          disabled={item.uploadingDidi}
+                          onClick={() => didiFileInputRefs.current[item.id]?.click()}
+                        >
+                          {item.uploadingDidi ? "上传中…" : <><Upload className="w-3 h-3 mr-1" />{item.didiReceipts.length > 0 ? "继续添加" : "上传行程报销单"}</>}
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -723,8 +731,12 @@ export default function Expense() {
                           : (item as any).invoiceUrl
                             ? [{ url: (item as any).invoiceUrl, fileName: (item as any).invoiceFileName ?? "发票" }]
                             : [];
-                      const didiUrl = (item as any).didiTripReceiptUrl;
-                      const didiName = (item as any).didiTripReceiptFileName ?? "行程报销单";
+                      const didiReceipts: { url: string; fileName: string }[] =
+                        (item as any).didiTripReceiptsJson
+                          ? (() => { try { return JSON.parse((item as any).didiTripReceiptsJson); } catch { return []; } })()
+                          : (item as any).didiTripReceiptUrl
+                            ? [{ url: (item as any).didiTripReceiptUrl, fileName: (item as any).didiTripReceiptFileName ?? "行程报销单" }]
+                            : [];
                       return (
                         <tr key={item.id} className="border-t">
                           <td className="px-3 py-2 text-muted-foreground text-xs">{new Date(item.expenseDate).toLocaleDateString("zh-CN")}</td>
@@ -740,12 +752,12 @@ export default function Expense() {
                                   {inv.amount != null ? ` ¥${Number(inv.amount).toFixed(2)}` : ""}
                                 </a>
                               ))}
-                              {didiUrl && (
-                                <a href={didiUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline text-xs flex items-center gap-0.5">
-                                  <Car className="w-3 h-3" />{didiName}
+                              {didiReceipts.map((r, i) => (
+                                <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline text-xs flex items-center gap-0.5">
+                                  <Car className="w-3 h-3" />{r.fileName}{didiReceipts.length > 1 ? ` (${i + 1})` : ""}
                                 </a>
-                              )}
-                              {invs.length === 0 && !didiUrl && <span className="text-muted-foreground text-xs">—</span>}
+                              ))}
+                              {invs.length === 0 && didiReceipts.length === 0 && <span className="text-muted-foreground text-xs">—</span>}
                             </div>
                           </td>
                         </tr>

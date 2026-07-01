@@ -1,0 +1,1 @@
+ALTER TABLE `expense_items` ADD `didiTripReceiptsJson` text;

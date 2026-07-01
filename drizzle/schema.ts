@@ -1099,6 +1099,9 @@ export const expenseItems = mysqlTable("expense_items", {
   invoiceUrl: text("invoiceUrl"),
   invoiceFileName: varchar("invoiceFileName", { length: 256 }),
   // 滴滴行程报销单（当发票为滴滴发票时需上传）
+  // 新字段：JSON 数组 [{url, fileName}]，支持多张行程单
+  didiTripReceiptsJson: text("didiTripReceiptsJson"),
+  // 旧字段（兼容已有数据，新数据使用 didiTripReceiptsJson）
   didiTripReceiptUrl: text("didiTripReceiptUrl"),
   didiTripReceiptFileName: varchar("didiTripReceiptFileName", { length: 256 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
