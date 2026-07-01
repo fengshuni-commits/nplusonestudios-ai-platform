@@ -181,9 +181,9 @@ export default function Expense() {
   };
 
   /** Upload multiple invoice files sequentially */
-  const handleMultipleInvoiceUpload = async (itemId: string, files: FileList) => {
-    for (let i = 0; i < files.length; i++) {
-      await handleInvoiceUpload(itemId, files[i]);
+  const handleMultipleInvoiceUpload = async (itemId: string, files: File[]) => {
+    for (const file of files) {
+      await handleInvoiceUpload(itemId, file);
     }
   };
 
@@ -473,8 +473,15 @@ export default function Expense() {
                       ref={el => { fileInputRefs.current[item.id] = el; }}
                       onChange={e => {
                         const files = e.target.files;
-                        if (files && files.length > 0) handleMultipleInvoiceUpload(item.id, files);
-                        e.target.value = "";
+                        if (files && files.length > 0) {
+                          // Snapshot to a stable array BEFORE clearing the input
+                          // (FileList is live-backed by the input element)
+                          const fileArray = Array.from(files);
+                          e.target.value = "";
+                          handleMultipleInvoiceUpload(item.id, fileArray);
+                        } else {
+                          e.target.value = "";
+                        }
                       }}
                     />
                     <div className="flex flex-wrap gap-1.5 items-center">
