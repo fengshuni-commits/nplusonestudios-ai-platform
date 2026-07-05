@@ -302,8 +302,11 @@ async function executeTool(
       const referenceImageUrl = args.reference_image_url ? String(args.reference_image_url) : undefined;
       const title = args.title ? String(args.title) : `AI 效果图 - ${prompt.substring(0, 30)}`;
 
-      // Resolve image generation tool (use ai_render capability default)
-      const imageToolId = await db.getDefaultToolForCapability("ai_render") ?? undefined;
+      // Resolve image generation tool: try image_generation first, then rendering as fallback
+      const imageToolId = (
+        await db.getDefaultToolForCapability("image_generation") ??
+        await db.getDefaultToolForCapability("rendering")
+      ) ?? undefined;
 
       const genOpts: Parameters<typeof generateImageWithTool>[0] = { prompt, toolId: imageToolId };
       if (referenceImageUrl) {
