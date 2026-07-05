@@ -487,28 +487,44 @@ async function saveMessage(data: {
 async function getRecentHistory(userId: number, limit = 20): Promise<Message[]> {
   const dbConn = await getDb();
   if (!dbConn) return [];
+  // Use id (autoincrement) for stable ordering — TIMESTAMP has second-level precision
+  // and multiple messages inserted in the same second can be misordered.
   const rows = await dbConn
     .select()
     .from(directorConversations)
     .where(eq(directorConversations.userId, userId))
-    .orderBy(desc(directorConversations.createdAt))
+    .orderBy(desc(directorConversations.id))
     .limit(limit);
   // Reverse to chronological order
   rows.reverse();
-  return rows.map((r) => {
+
+  // Build a set of assistant tool-call IDs present in this window
+  const assistantToolCallIds = new Set<string>();
+  for (const r of rows) {
     if (r.role === "assistant" && r.toolCalls) {
-      return {
+      for (const tc of r.toolCalls as ToolCall[]) {
+        if (tc.id) assistantToolCallIds.add(tc.id);
+      }
+    }
+  }
+
+  const messages: Message[] = [];
+  for (const r of rows) {
+    if (r.role === "assistant" && r.toolCalls) {
+      messages.push({
         role: "assistant" as const,
         content: r.content,
         tool_calls: r.toolCalls as ToolCall[],
-      } as Message;
+      } as Message);
+      continue;
     }
     if (r.role === "tool") {
-      // Recover tool function name from the preceding assistant's toolCalls by matching toolCallId
       const toolCallId = r.toolCallId ?? undefined;
+      // Skip orphaned tool messages whose assistant is outside the history window
+      if (toolCallId && !assistantToolCallIds.has(toolCallId)) continue;
+      // Recover tool function name from the preceding assistant's toolCalls by matching toolCallId
       let toolFnName: string | undefined;
       if (toolCallId) {
-        // Find the assistant message that contains this tool call
         const assistantRow = rows.find(
           (row) => row.role === "assistant" && row.toolCalls &&
           (row.toolCalls as ToolCall[]).some((tc) => tc.id === toolCallId)
@@ -518,15 +534,19 @@ async function getRecentHistory(userId: number, limit = 20): Promise<Message[]> 
           toolFnName = tc?.function?.name;
         }
       }
-      return {
+      messages.push({
         role: "tool" as const,
         content: r.content,
         tool_call_id: toolCallId,
         ...(toolFnName ? { name: toolFnName } : {}),
-      } as Message;
+      } as Message);
+      continue;
     }
-    return { role: r.role as "user" | "assistant", content: r.content } as Message;
-  });
+    // For user/assistant without tool_calls: skip assistant messages that had tool_calls
+    // but were already added above (they won't reach here)
+    messages.push({ role: r.role as "user" | "assistant", content: r.content } as Message);
+  }
+  return messages;
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
