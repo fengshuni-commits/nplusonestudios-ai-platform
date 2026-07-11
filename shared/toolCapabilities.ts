@@ -100,6 +100,10 @@ const CAPABILITY_RULES: CapabilityRule[] = [
     capabilities: ["rendering", "image", "document", "analysis", "media", "layout_plan", "director"],
   },
   {
+    keywords: ["grok", "grok-4"],
+    capabilities: ["document", "analysis", "media", "layout_plan", "director"],
+  },
+  {
     keywords: ["claude-3", "claude3", "claude-sonnet", "claude-opus", "claude-haiku", "anthropic"],
     capabilities: ["document", "analysis", "media", "layout_plan", "director"],
   },
@@ -167,6 +171,10 @@ const CAPABILITY_RULES: CapabilityRule[] = [
   },
   {
     keywords: ["seedance", "doubao-seedance", "seedance-2-0", "seedance-2-0-fast"],
+    capabilities: ["video"],
+  },
+  {
+    keywords: ["grok-imagine-video", "grok-video", "xai"],
     capabilities: ["video"],
   },
   // ── 专用文档/分析模型 ──
