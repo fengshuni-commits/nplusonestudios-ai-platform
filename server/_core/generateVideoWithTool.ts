@@ -70,6 +70,10 @@ export async function generateVideoWithTool(
     throw new Error("Pika 视频生成暂未支持，敬请期待");
   }
 
+  if (toolName.includes("grok") || toolName.includes("xai")) {
+    return generateVideoWithGrok(input);
+  }
+
   throw new Error(`不支持的视频生成工具: ${input.tool.name}`);
 }
 
@@ -175,6 +179,10 @@ export async function queryVideoTaskStatus(
 
   if (toolName.includes("veo")) {
     return queryVeo3VideoStatus(taskId, tool);
+  }
+
+  if (toolName.includes("grok") || toolName.includes("xai")) {
+    return queryGrokVideoStatus(taskId, tool);
   }
 
   throw new Error(`不支持的视频生成工具: ${tool.name}`);
@@ -295,4 +303,133 @@ async function queryJimengVideoStatus(
   }
 
   return queryJimengVideoTask({ accessKeyId, secretAccessKey }, taskId, mode);
+}
+
+/**
+ * Grok Imagine Video 视频生成实现（xAI API）
+ * API: POST https://api.x.ai/v1/videos/generations
+ * 工具配置：使用平台注入的 XAI_API_KEY 环境变量，或 apiKeyEncrypted 中存储的 key
+ */
+async function generateVideoWithGrok(
+  input: VideoGenerationInput
+): Promise<VideoGenerationOutput> {
+  const { decryptApiKey } = await import("./crypto");
+
+  // 优先使用工具自身的 apiKeyEncrypted，回退到平台环境变量
+  let apiKey: string | null = null;
+  if (input.tool?.apiKeyEncrypted) {
+    apiKey = decryptApiKey(input.tool.apiKeyEncrypted);
+  }
+  if (!apiKey) {
+    apiKey = process.env.XAI_API_KEY ?? null;
+  }
+  if (!apiKey) {
+    throw new Error("Grok 视频生成工具缺少 API Key（请在工具配置中填写 xAI API Key，或在平台环境变量中设置 XAI_API_KEY）");
+  }
+
+  const modelName = (input.tool?.configJson?.modelName as string) ?? "grok-imagine-video-1.5";
+
+  // 分辨率映射
+  const resolutionMap: Record<string, "480p" | "720p" | "1080p"> = {
+    "480p": "480p",
+    "720p": "720p",
+    "1080p": "720p", // grok-imagine-video-1.5 text-to-video 最高支持 720p
+  };
+  const resolution = resolutionMap[input.resolution ?? "720p"] ?? "720p";
+
+  // 构建请求体
+  const body: Record<string, unknown> = {
+    model: modelName,
+    prompt: input.prompt,
+    duration: Math.min(Math.max(input.duration ?? 8, 1), 15),
+    aspect_ratio: "16:9",
+    resolution,
+  };
+
+  // 图生视频：传入首帧图
+  if (input.mode === "image-to-video" && input.inputImageUrl) {
+    body.image = { url: input.inputImageUrl };
+  }
+
+  const response = await fetch("https://api.x.ai/v1/videos/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Grok 视频生成请求失败 (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json() as { request_id: string };
+  if (!data.request_id) {
+    throw new Error("Grok 视频生成未返回 request_id");
+  }
+
+  return {
+    taskId: data.request_id,
+    status: "pending",
+  };
+}
+
+/**
+ * 查询 Grok 视频任务状态
+ * API: GET https://api.x.ai/v1/videos/{request_id}
+ */
+async function queryGrokVideoStatus(
+  taskId: string,
+  tool: {
+    apiKeyEncrypted?: string;
+    configJson?: Record<string, unknown>;
+  }
+): Promise<VideoStatusResponse> {
+  const { decryptApiKey } = await import("./crypto");
+
+  let apiKey: string | null = null;
+  if (tool.apiKeyEncrypted) {
+    apiKey = decryptApiKey(tool.apiKeyEncrypted);
+  }
+  if (!apiKey) {
+    apiKey = process.env.XAI_API_KEY ?? null;
+  }
+  if (!apiKey) {
+    throw new Error("Grok 视频工具缺少 API Key");
+  }
+
+  const response = await fetch(`https://api.x.ai/v1/videos/${taskId}`, {
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Grok 视频状态查询失败 (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json() as {
+    status: string;
+    progress?: number;
+    video?: { url?: string; duration?: number };
+    error?: { message?: string };
+  };
+
+  // 状态映射：xAI 的 "done" → "completed"，"pending" → "processing"
+  const statusMap: Record<string, "pending" | "processing" | "completed" | "failed"> = {
+    pending: "processing",
+    done: "completed",
+    expired: "failed",
+    failed: "failed",
+  };
+
+  return {
+    status: statusMap[data.status] ?? "processing",
+    videoUrl: data.video?.url,
+    errorMessage: data.error?.message,
+    progress: data.progress,
+  };
 }
