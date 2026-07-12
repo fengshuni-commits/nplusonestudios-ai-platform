@@ -1,15 +1,30 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterAll } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { db } from "./db";
+import { generationHistory } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
+// IMPORTANT: Use a non-owner test user ID (9995) to avoid polluting real user data.
+const TEST_USER_ID = 9995;
+
+// Clean up any generation_history rows created by this test suite
+afterAll(async () => {
+  try {
+    await db.delete(generationHistory).where(eq(generationHistory.userId, TEST_USER_ID));
+  } catch {
+    // Best-effort cleanup
+  }
+});
+
 function createTestUser(overrides?: Partial<AuthenticatedUser>): AuthenticatedUser {
   return {
-    id: 1,
-    openId: "test-user-001",
-    email: "test@nplus1.com",
-    name: "Test User",
+    id: TEST_USER_ID,
+    openId: "test-rendering-user-9995",
+    email: "test-rendering@nplus1.test",
+    name: "__test_rendering__",
     loginMethod: "manus",
     role: "user",
     createdAt: new Date(),
