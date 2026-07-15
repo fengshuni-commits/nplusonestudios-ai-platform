@@ -88,7 +88,7 @@ export default function Home() {
           </span>
           <div className="flex items-center gap-2">
             <img
-              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/QdFeMEelOoqczBDN.png"
+              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/dJCoXIINwvzMismp.png"
               alt="N+1 STUDIOS"
               className="h-3 w-auto object-contain opacity-60"
             />
