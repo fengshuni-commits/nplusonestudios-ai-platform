@@ -178,7 +178,7 @@ export default function DashboardLayout({
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-2">
             <img
-              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/dJCoXIINwvzMismp.png"
+              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/kFYQxzqIMkgIjHrp.png"
               alt="N+1 STUDIOS"
               className="h-12 w-auto object-contain brightness-0 invert"
             />
@@ -351,7 +351,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
         {expanded ? (
           <div className="flex items-center justify-between px-3 pt-3 pb-2">
             <img
-              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/dJCoXIINwvzMismp.png"
+              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/kFYQxzqIMkgIjHrp.png"
               alt="N+1 STUDIOS"
               className="h-[28px] w-auto object-contain opacity-90"
             />
