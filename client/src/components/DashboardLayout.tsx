@@ -353,7 +353,7 @@ function IconSidebarLayout({ children }: { children: React.ReactNode }) {
             <img
               src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663304605552/dJCoXIINwvzMismp.png"
               alt="N+1 STUDIOS"
-              className="h-[16px] w-auto object-contain brightness-0 invert opacity-80"
+              className="h-[28px] w-auto object-contain opacity-90"
             />
             <button
               onClick={toggleExpanded}
