@@ -2834,3 +2834,11 @@
 - [x] Schema/提交链路: expense_items 支持保存多张滴滴行程单（JSON 数组）
 - [x] Expense.tsx / Expense 详情 / AdminExpense / 导出：统一显示与导出多张滴滴行程单
 - [x] 类型检查与回归验证
+
+## 规范标准库接入（2026-07-15）
+- [ ] 查看规范库 API 端点（GET /search, POST /ask, GET /stats）
+- [ ] 在所长 AI 工具系统中注册 search_building_codes 工具（向量检索）
+- [ ] 在所长 AI 工具系统中注册 ask_building_codes 工具（RAG 问答）
+- [ ] 实现后端工具调用处理器（调用 http://140.143.202.172:8965）
+- [ ] 更新所长系统 prompt，说明可用规范库工具及使用时机
+- [ ] TypeScript 检查 + 保存检查点
