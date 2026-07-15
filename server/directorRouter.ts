@@ -409,11 +409,16 @@ async function executeTool(
             answer: string;
             sources: Array<{
               id?: number;
+              // /ask endpoint returns 'standard' (full name) and 'article' (article number)
+              standard?: string;
+              article?: string;
+              // /search endpoint returns these (for fallback compatibility)
               standard_code?: string;
               standard_title?: string;
               article_number?: string;
               content?: string;
               is_mandatory?: boolean;
+              similarity?: number;
             }>;
             total_results: number;
           };
@@ -421,7 +426,11 @@ async function executeTool(
           if (sources.length === 0) return `未在规范库中找到与「${query}」相关的条文。`;
           const sourceLines = sources.map((s, i) => {
             const mandatory = s.is_mandatory ? " ⚠️强制条文" : "";
-            return `${i + 1}. 【${s.standard_code || ""} ${s.standard_title || ""}】第${s.article_number || ""}条${mandatory}\n   ${(s.content || "").trim()}`;
+            // /ask returns 'standard' as full name (e.g. "JGJ/T 67-2019 办公建筑设计标准")
+            // /search returns separate standard_code + standard_title
+            const standardDisplay = s.standard || `${s.standard_code || ""} ${s.standard_title || ""}`.trim();
+            const articleDisplay = s.article || s.article_number || "";
+            return `${i + 1}. 【${standardDisplay}】第${articleDisplay}条${mandatory}`;
           });
           const hasAiAnswer = askData.answer && !askData.answer.startsWith("（LLM生成失败");
           const answer = hasAiAnswer
