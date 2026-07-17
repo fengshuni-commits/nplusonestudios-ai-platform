@@ -1,0 +1,1 @@
+ALTER TABLE `assets` ADD `fileHash` varchar(64);

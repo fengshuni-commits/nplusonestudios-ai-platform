@@ -115,29 +115,35 @@ export default function VideoGeneration() {
         reader.readAsDataURL(file);
       });
 
-      // 上传到 S3
-      const { url, key } = await uploadAsset.mutateAsync({
+      // 上传到 S3（含去重检测）
+      const uploadResult = await uploadAsset.mutateAsync({
         fileName: file.name,
         fileData: base64,
         contentType: file.type,
       });
 
-      // 同步到素材库
-      await createAsset.mutateAsync({
-        name: file.name.replace(/\.[^.]+$/, "") || "上传图片",
-        fileUrl: url,
-        fileKey: key,
-        fileType: file.type,
-        fileSize: file.size,
-        thumbnailUrl: url,
-        category: "image",
-        tags: "视频首帧,本地上传",
-      });
+      if (uploadResult.duplicate) {
+        // 文件已在素材库中，直接使用
+        toast.info(`「${file.name}」已在素材库中，直接调用`);
+      } else {
+        // 新文件，同步到素材库
+        await createAsset.mutateAsync({
+          name: file.name.replace(/\.[^.]+$/, "") || "上传图片",
+          fileUrl: uploadResult.url,
+          fileKey: uploadResult.key,
+          fileType: file.type,
+          fileSize: file.size,
+          thumbnailUrl: uploadResult.url,
+          category: "image",
+          tags: "视频首帧,本地上传",
+          fileHash: uploadResult.fileHash,
+        });
+        toast.success(`图片已上传并同步到素材库：${file.name}`);
+      }
 
       // 填入首帧图
-      setInputImageUrl(url);
-      setInputImagePreview(url);
-      toast.success(`图片已上传并同步到素材库：${file.name}`);
+      setInputImageUrl(uploadResult.url);
+      setInputImagePreview(uploadResult.url);
     } catch (err: any) {
       toast.error(`上传失败：${err.message || "未知错误"}`);
     } finally {

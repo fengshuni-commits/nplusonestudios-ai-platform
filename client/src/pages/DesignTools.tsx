@@ -618,17 +618,23 @@ export default function DesignTools() {
                 fileName: mat.file.name, fileData: base64, contentType: mat.file.type,
               });
               resolvedMaterialUrls.push(uploadResult.url);
-              // Sync to asset library
-              await createAssetMutation.mutateAsync({
-                name: mat.file.name.replace(/\.[^.]+$/, ""),
-                fileUrl: uploadResult.url,
-                fileKey: uploadResult.key,
-                fileType: mat.file.type,
-                fileSize: mat.file.size,
-                thumbnailUrl: uploadResult.url,
-                category: "image",
-                tags: "素材,AI效果图上传",
-              });
+              if (uploadResult.duplicate) {
+                // File already in library — skip creating duplicate record
+                toast.info(`「${mat.file.name}」已在素材库中，直接调用`);
+              } else {
+                // New file — sync to asset library with hash
+                await createAssetMutation.mutateAsync({
+                  name: mat.file.name.replace(/\.[^.]+$/, ""),
+                  fileUrl: uploadResult.url,
+                  fileKey: uploadResult.key,
+                  fileType: mat.file.type,
+                  fileSize: mat.file.size,
+                  thumbnailUrl: uploadResult.url,
+                  category: "image",
+                  tags: "素材,AI效果图上传",
+                  fileHash: uploadResult.fileHash,
+                });
+              }
             }
           }
           if (resolvedMaterialUrls.length > 0) {

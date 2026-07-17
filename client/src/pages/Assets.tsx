@@ -258,6 +258,7 @@ function UploadDialog({
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string>(defaultCategory);
+  const [duplicateFiles, setDuplicateFiles] = useState<Array<{ name: string; existingName: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -298,6 +299,8 @@ function UploadDialog({
     setProgress(0);
 
     let successCount = 0;
+    let dupCount = 0;
+    const newDuplicates: Array<{ name: string; existingName: string }> = [];
     const folderMap = new Map<string, number>();
 
     for (let i = 0; i < files.length; i++) {
@@ -335,24 +338,34 @@ function UploadDialog({
           reader.readAsDataURL(file);
         });
 
-        const { url, key } = await uploadMutation.mutateAsync({
+        const uploadResult = await uploadMutation.mutateAsync({
           fileName: file.name,
           fileData: base64,
           contentType: file.type,
         });
 
-        await createMutation.mutateAsync({
-          name: file.name.replace(/\.[^.]+$/, ""),
-          fileUrl: url,
-          fileKey: key,
-          fileType: file.type,
-          fileSize: file.size,
-          thumbnailUrl: file.type.startsWith("image/") ? url : undefined,
-          category: selectedCategory,
-          parentId: parentId ?? undefined,
-        });
-
-        successCount++;
+        if (uploadResult.duplicate && uploadResult.existingAsset) {
+          // File already exists in the library — skip creating a new record
+          dupCount++;
+          newDuplicates.push({
+            name: file.name,
+            existingName: uploadResult.existingAsset.name,
+          });
+        } else {
+          // New file — create the asset record with the hash for future dedup
+          await createMutation.mutateAsync({
+            name: file.name.replace(/\.[^.]+$/, ""),
+            fileUrl: uploadResult.url,
+            fileKey: uploadResult.key,
+            fileType: file.type,
+            fileSize: file.size,
+            thumbnailUrl: file.type.startsWith("image/") ? uploadResult.url : undefined,
+            category: selectedCategory,
+            parentId: parentId ?? undefined,
+            fileHash: uploadResult.fileHash,
+          });
+          successCount++;
+        }
       } catch (err: any) {
         toast.error(`${file.name} 上传失败：${err.message || "未知错误"}`);
       }
@@ -360,12 +373,19 @@ function UploadDialog({
     }
 
     setUploading(false);
-    if (successCount > 0) {
+    setDuplicateFiles(newDuplicates);
+
+    if (successCount > 0 && dupCount === 0) {
       toast.success(`成功上传 ${successCount} 个文件`);
       onUploaded();
       onClose();
+    } else if (successCount > 0 && dupCount > 0) {
+      toast.success(`成功上传 ${successCount} 个文件，${dupCount} 个文件已在素材库中`);
+      onUploaded();
+    } else if (successCount === 0 && dupCount > 0) {
+      // All duplicates — show inline warning, don't close
     }
-    setFiles([]);
+    if (successCount > 0) setFiles([]);
   };
 
   return (
@@ -457,6 +477,26 @@ function UploadDialog({
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Duplicate warning */}
+        {duplicateFiles.length > 0 && !uploading && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20 p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+              <svg className="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              以下文件已在素材库中存在，可直接从素材库调用，无需重复上传
+            </div>
+            <div className="space-y-1">
+              {duplicateFiles.map((d, i) => (
+                <div key={i} className="text-xs text-amber-600 dark:text-amber-300 flex items-center gap-1.5 pl-5">
+                  <span className="font-medium truncate max-w-[180px]">{d.name}</span>
+                  <span className="text-amber-500/70">→ 已存在为「{d.existingName}」</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -826,6 +826,16 @@ export async function findAssetByUrl(fileUrl: string) {
   return result[0];
 }
 
+export async function findAssetByHash(fileHash: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(assets)
+    .where(and(eq(assets.fileHash, fileHash), eq(assets.isFolder, false)))
+    .orderBy(assets.createdAt)
+    .limit(1);
+  return result[0];
+}
+
 export async function createFolder(data: { name: string; parentId?: number; path?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

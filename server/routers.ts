@@ -1666,6 +1666,7 @@ const assetsRouter = router({
       historyId: z.number().optional(),
       projectId: z.number().optional(),
       parentId: z.number().optional(),
+      fileHash: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       return db.createAsset({ ...input, uploadedBy: ctx.user.id });
@@ -1685,10 +1686,19 @@ const assetsRouter = router({
       contentType: z.string(),
     }))
     .mutation(async ({ input }) => {
+      const { createHash } = await import("crypto");
       const buffer = Buffer.from(input.fileData, "base64");
+      const fileHash = createHash("sha256").update(buffer).digest("hex");
+
+      // Dedup check: if a non-folder asset with this hash already exists, return it directly
+      const existing = await db.findAssetByHash(fileHash);
+      if (existing) {
+        return { url: existing.fileUrl, key: existing.fileKey, fileHash, duplicate: true, existingAsset: existing };
+      }
+
       const key = `assets/${nanoid()}-${input.fileName}`;
       const { url } = await storagePut(key, buffer, input.contentType);
-      return { url, key };
+      return { url, key, fileHash, duplicate: false };
     }),
   importFromHistory: protectedProcedure
     .input(z.object({

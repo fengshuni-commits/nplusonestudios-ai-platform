@@ -167,6 +167,7 @@ export const assets = mysqlTable("assets", {
   parentId: int("parentId"),
   isFolder: boolean("isFolder").default(false).notNull(),
   path: varchar("path", { length: 1024 }),
+  fileHash: varchar("fileHash", { length: 64 }), // SHA-256 hex of file content for dedup
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type Asset = typeof assets.$inferSelect;
