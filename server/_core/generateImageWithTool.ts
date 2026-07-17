@@ -16,7 +16,7 @@ import { storagePut } from "server/storage";
 import { generateImage, type GenerateImageOptions } from "./imageGeneration";
 import { generateImageWithJimeng, imageToImageWithJimeng, inpaintWithJimeng, upscaleWithJimeng, type VolcengineConfig } from "./volcengine";
 import { pickKey, pickKeyByIndex, reportSuccess, reportFailure } from "./keyPool";
-import { buildCacheKey, getCached, setCached } from "./imageCache";
+// imageCache removed — every generation call must hit the model for unique results
 
 export type GenerateWithToolOptions = GenerateImageOptions & {
   toolId?: number | null;
@@ -303,21 +303,7 @@ export async function generateImageWithTool(
 
   console.log(`[generateImageWithTool] Using external API: provider=${provider}, model=${modelName}, tool="${tool.name}"`);
 
-  // ── Cache lookup ──────────────────────────────────────────────────────────
-  // Skip cache for inpainting/upscale modes (results are always unique)
-  const skipCache = opts.jimengMode === "inpaint" || opts.jimengMode === "upscale";
-  const cacheKey = skipCache ? null : buildCacheKey({
-    toolId,
-    prompt: genOpts.prompt,
-    originalImages: genOpts.originalImages,
-    size: genOpts.size,
-  });
-  if (cacheKey) {
-    const cached = getCached(cacheKey);
-    if (cached) {
-      return { url: cached.url, modelName: cached.modelName ?? tool.name };
-    }
-  }
+  // No caching — each request must call the model to produce a unique result
 
   try {
     let imageBuffer: Buffer;
@@ -709,9 +695,6 @@ export async function generateImageWithTool(
       ),
       reportSuccess(toolId, _poolKeyId).catch(() => {}),
     ]);
-
-    // ── Cache store ───────────────────────────────────────────────────────────
-    if (cacheKey) setCached(cacheKey, { url, modelName: tool.name });
 
     return { url, modelName: tool.name };
   } catch (err) {
