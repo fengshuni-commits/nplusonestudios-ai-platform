@@ -82,7 +82,7 @@ const EMPTY_FORM: SupplierFormData = {
   name: "", category: "建材", subCategory: "", address: "",
   contact: "", description: "", priceLevel: "", sourceNote: "",
   referenceUrl: "", inspectionNote: "", cooperatedProjects: "",
-  score: "", rating: "", recommender: "",
+  score: "none", rating: "none", recommender: "",
 };
 
 const CATEGORIES = [
@@ -268,8 +268,8 @@ function SupplierFormDialog({
       referenceUrl: form.referenceUrl || undefined,
       inspectionNote: form.inspectionNote || undefined,
       cooperatedProjects: form.cooperatedProjects || undefined,
-      score: form.score ? parseInt(form.score) : undefined,
-      rating: form.rating || undefined,
+      score: (form.score && form.score !== "none") ? parseInt(form.score) : undefined,
+      rating: (form.rating && form.rating !== "none") ? form.rating : undefined,
       recommender: form.recommender || undefined,
     };
     if (isEdit) {
@@ -354,7 +354,7 @@ function SupplierFormDialog({
             <Select value={form.score} onValueChange={(v) => set("score", v)}>
               <SelectTrigger><SelectValue placeholder="选择评分" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">不评分</SelectItem>
+                <SelectItem value="none">不评分</SelectItem>
                 {[1, 2, 3, 4, 5].map((n) => (
                   <SelectItem key={n} value={String(n)}>
                     {"★".repeat(n)}{"☆".repeat(5 - n)} {n}分
@@ -369,7 +369,7 @@ function SupplierFormDialog({
             <Select value={form.rating} onValueChange={(v) => set("rating", v)}>
               <SelectTrigger><SelectValue placeholder="选择评级" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">不评级</SelectItem>
+                <SelectItem value="none">不评级</SelectItem>
                 {["A+", "A", "B+", "B", "C"].map((r) => (
                   <SelectItem key={r} value={r}>{r}</SelectItem>
                 ))}
@@ -581,8 +581,8 @@ export default function SupplierLibrary() {
             referenceUrl: editingSupplier.referenceUrl ?? "",
             inspectionNote: editingSupplier.inspectionNote ?? "",
             cooperatedProjects: editingSupplier.cooperatedProjects ?? "",
-            score: editingSupplier.score ? String(editingSupplier.score) : "",
-            rating: editingSupplier.rating ?? "",
+            score: editingSupplier.score ? String(editingSupplier.score) : "none",
+            rating: editingSupplier.rating ?? "none",
             recommender: editingSupplier.recommender ?? "",
           } : undefined}
           onSaved={() => utils.suppliers.list.invalidate()}
