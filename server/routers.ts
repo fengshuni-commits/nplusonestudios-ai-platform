@@ -8034,6 +8034,78 @@ const expenseRouter = router({
     }),
 });
 
+// ─── Suppliers Router ──────────────────────────────────────────────────────
+
+const SUPPLIER_CATEGORIES = [
+  "施工方", "建材", "全屋订制", "卫浴", "软装", "灯具",
+  "平面供应商", "LED软屏", "设计分包", "门窗五金", "其他",
+] as const;
+
+const supplierInput = z.object({
+  name: z.string().min(1).max(256),
+  category: z.string().min(1).max(64),
+  subCategory: z.string().max(128).optional(),
+  address: z.string().optional(),
+  contact: z.string().optional(),
+  description: z.string().optional(),
+  priceLevel: z.string().optional(),
+  sourceNote: z.string().max(256).optional(),
+  referenceUrl: z.string().optional(),
+  inspectionNote: z.string().optional(),
+  cooperatedProjects: z.string().optional(),
+  score: z.number().int().min(1).max(5).optional(),
+  rating: z.string().max(32).optional(),
+  recommender: z.string().max(64).optional(),
+});
+
+const suppliersRouter = router({
+  list: protectedProcedure
+    .input(z.object({
+      category: z.string().optional(),
+      search: z.string().optional(),
+      includeArchived: z.boolean().optional(),
+    }).optional())
+    .query(async ({ input }) => {
+      return db.listSuppliers(input ?? {});
+    }),
+
+  get: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const s = await db.getSupplierById(input.id);
+      if (!s) throw new TRPCError({ code: "NOT_FOUND", message: "供应商不存在" });
+      return s;
+    }),
+
+  create: protectedProcedure
+    .input(supplierInput)
+    .mutation(async ({ input, ctx }) => {
+      return db.createSupplier({ ...input, createdBy: ctx.user.id });
+    }),
+
+  update: protectedProcedure
+    .input(z.object({ id: z.number() }).merge(supplierInput.partial()))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateSupplier(id, data);
+    }),
+
+  archive: protectedProcedure
+    .input(z.object({ id: z.number(), archived: z.boolean() }))
+    .mutation(async ({ input }) => {
+      return db.updateSupplier(input.id, { isArchived: input.archived });
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      return db.deleteSupplier(input.id);
+    }),
+
+  categories: protectedProcedure
+    .query(() => SUPPLIER_CATEGORIES),
+});
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -8447,5 +8519,6 @@ export const appRouter = router({system: systemRouter,
   presentationProjects: presentationProjectsRouter,
   caseLibrary: caseLibraryRouter,
   expense: expenseRouter,
+  suppliers: suppliersRouter,
 });
 export type AppRouter = typeof appRouter;

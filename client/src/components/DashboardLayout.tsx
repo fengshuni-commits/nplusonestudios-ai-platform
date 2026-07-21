@@ -106,6 +106,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: HardHat, label: "施工管理", path: "/construction/docs", description: "施工图纸文档管理" },
       { icon: ShoppingCart, label: "采购跟踪", path: "/construction/procurement", description: "材料采购进度与费用跟踪" },
+      { icon: BookOpen, label: "供应商产品库", path: "/construction/suppliers", description: "N+1 积累的供应商与产品资源" },
     ],
   },
   {

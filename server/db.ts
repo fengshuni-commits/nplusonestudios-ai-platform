@@ -1038,10 +1038,36 @@ export async function getAiToolCallCount(since?: Date) {
 
 // ─── Suppliers ───────────────────────────────────────────
 
-export async function listSuppliers() {
+export async function listSuppliers(opts?: {
+  category?: string;
+  search?: string;
+  includeArchived?: boolean;
+}) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(suppliers).orderBy(suppliers.name);
+  const conditions = [];
+  if (!opts?.includeArchived) conditions.push(eq(suppliers.isArchived, false));
+  if (opts?.category) conditions.push(eq(suppliers.category, opts.category));
+  if (opts?.search) {
+    const q = `%${opts.search}%`;
+    conditions.push(
+      or(
+        like(suppliers.name, q),
+        like(suppliers.subCategory, q),
+        like(suppliers.description, q),
+        like(suppliers.contact, q),
+      ) as any
+    );
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select().from(suppliers).where(where).orderBy(suppliers.category, suppliers.name);
+}
+
+export async function getSupplierById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(suppliers).where(eq(suppliers.id, id)).limit(1);
+  return result[0];
 }
 
 export async function createSupplier(data: InsertSupplier) {
@@ -1049,6 +1075,31 @@ export async function createSupplier(data: InsertSupplier) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(suppliers).values(data);
   return { id: result[0].insertId };
+}
+
+export async function updateSupplier(id: number, data: Partial<InsertSupplier>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(suppliers).set(data).where(eq(suppliers.id, id));
+  return { success: true };
+}
+
+export async function deleteSupplier(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(suppliers).where(eq(suppliers.id, id));
+  return { success: true };
+}
+
+export async function bulkCreateSuppliers(rows: InsertSupplier[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (rows.length === 0) return { count: 0 };
+  // Insert in batches of 100
+  for (let i = 0; i < rows.length; i += 100) {
+    await db.insert(suppliers).values(rows.slice(i, i + 100));
+  }
+  return { count: rows.length };
 }
 
 // ─── Procurements ────────────────────────────────────────

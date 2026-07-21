@@ -2842,3 +2842,10 @@
 - [ ] 实现后端工具调用处理器（调用 http://140.143.202.172:8965）
 - [ ] 更新所长系统 prompt，说明可用规范库工具及使用时机
 - [ ] TypeScript 检查 + 保存检查点
+
+## 供应商产品库（营建管理）
+- [x] 扩展 suppliers 表 schema（subCategory/contact/description/priceLevel/sourceNote/inspectionNote/cooperatedProjects/score/rating/recommender/sourceFile/sourceSheet/isArchived）
+- [x] 后端 suppliersRouter（list/get/create/update/archive/delete/categories）
+- [x] 前端 SupplierLibrary 页面（按类别分组展示、搜索筛选、新增/编辑表单、归档/删除）
+- [x] 导入 SC1供应商库.xlsx 和 SC4供应商提名表.xlsx 历史数据（共 369 条）
+- [x] 营建管理侧边栏添加「供应商产品库」入口

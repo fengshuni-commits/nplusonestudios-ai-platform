@@ -250,22 +250,34 @@ export const apiTokens = mysqlTable("api_tokens", {
 export type ApiToken = typeof apiTokens.$inferSelect;
 export type InsertApiToken = typeof apiTokens.$inferInsert;
 
-// ─── Suppliers (供应商) ──────────────────────────────────
+// ─── Suppliers (供应商产品库) ─────────────────────────────
 export const suppliers = mysqlTable("suppliers", {
   id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 256 }).notNull(),
-  contactPerson: varchar("contactPerson", { length: 128 }),
-  phone: varchar("phone", { length: 32 }),
-  email: varchar("email", { length: 320 }),
-  category: varchar("category", { length: 128 }),
-  address: text("address"),
-  notes: text("notes"),
-  rating: int("rating"),
+  // 供应商基本信息
+  name: varchar("name", { length: 256 }).notNull(),           // 供应商/品牌名称
+  category: varchar("category", { length: 64 }).notNull(),    // 大类：施工方/建材/全屋订制/卫浴/软装/灯具/平面供应商/LED软屏/设计分包/门窗五金/其他
+  subCategory: varchar("subCategory", { length: 128 }),       // 细分类别（如"木地板"、"瓷砖"）
+  address: text("address"),                                    // 门店/工厂地址
+  contact: text("contact"),                                    // 联系人及联系方式（微信/电话）
+  description: text("description"),                           // 简介/主要产品
+  priceLevel: text("priceLevel"),                             // 造价水平/大概价格
+  sourceNote: varchar("sourceNote", { length: 256 }),         // 供应商来源（小红书/淘宝/朋友介绍等）
+  referenceUrl: text("referenceUrl"),                         // 参考链接（淘宝/小红书等）
+  // 评估信息
+  inspectionNote: text("inspectionNote"),                     // 考察情况
+  cooperatedProjects: text("cooperatedProjects"),             // 合作过的项目
+  score: int("score"),                                        // 评分（1-5）
+  rating: varchar("rating", { length: 32 }),                  // 评级（A/B/C 等）
+  recommender: varchar("recommender", { length: 64 }),        // 推荐人
+  // 来源标记
+  sourceFile: varchar("sourceFile", { length: 64 }),          // 来源文件（SC1/SC4）
+  sourceSheet: varchar("sourceSheet", { length: 64 }),        // 来源 Sheet 名
+  // 元数据
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  isArchived: boolean("isArchived").default(false).notNull(),
 });
-
 export type Supplier = typeof suppliers.$inferSelect;
 export type InsertSupplier = typeof suppliers.$inferInsert;
 

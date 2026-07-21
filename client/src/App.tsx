@@ -11,6 +11,7 @@ import DesignPlanning from "./pages/DesignPlanning";
 import DesignTools from "./pages/DesignTools";
 import ConstructionDocs from "./pages/ConstructionDocs";
 import Procurement from "./pages/Procurement";
+import SupplierLibrary from "./pages/SupplierLibrary";
 import Assets from "./pages/Assets";
 import Standards from "./pages/Standards";
 import Integrations from "./pages/Integrations";
@@ -72,6 +73,7 @@ function Router() {
         {/* 营建板块 */}
         <Route path="/construction/docs" component={ConstructionDocs} />
         <Route path="/construction/procurement" component={Procurement} />
+        <Route path="/construction/suppliers" component={SupplierLibrary} />
 
         {/* 项目管理板块 */}
         <Route path="/projects" component={Projects} />
