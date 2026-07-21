@@ -21,6 +21,33 @@ import {
 } from "lucide-react";
 import SupplierFormDialog, { EMPTY_FORM } from "./SupplierFormDialog";
 
+/** Render text with any http/https URLs converted to clickable links */
+function TextWithLinks({ text }: { text: string }) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        urlRegex.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-0.5 text-primary hover:underline break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part.length > 60 ? part.slice(0, 60) + '…' : part}
+            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
 function StarRating({ score }: { score: number | null | undefined }) {
   if (!score) return null;
   return (
@@ -338,7 +365,7 @@ export default function SupplierDetailPage() {
               <Tag className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">来源</p>
-                <p>{supplier.sourceNote}</p>
+                <p><TextWithLinks text={supplier.sourceNote} /></p>
               </div>
             </div>
           )}
@@ -347,7 +374,7 @@ export default function SupplierDetailPage() {
         {supplier.description && (
           <div className="mt-4 pt-4 border-t">
             <p className="text-xs text-muted-foreground mb-1">简介/主要产品</p>
-            <p className="text-sm leading-relaxed">{supplier.description}</p>
+            <p className="text-sm leading-relaxed"><TextWithLinks text={supplier.description} /></p>
           </div>
         )}
 
@@ -356,19 +383,19 @@ export default function SupplierDetailPage() {
             {supplier.priceLevel && (
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">造价水平</p>
-                <p className="leading-relaxed">{supplier.priceLevel}</p>
+                <p className="leading-relaxed"><TextWithLinks text={supplier.priceLevel} /></p>
               </div>
             )}
             {supplier.inspectionNote && (
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">考察情况</p>
-                <p className="leading-relaxed">{supplier.inspectionNote}</p>
+                <p className="leading-relaxed"><TextWithLinks text={supplier.inspectionNote} /></p>
               </div>
             )}
             {supplier.cooperatedProjects && (
               <div className="sm:col-span-2">
                 <p className="text-xs text-muted-foreground mb-0.5">合作项目</p>
-                <p className="leading-relaxed">{supplier.cooperatedProjects}</p>
+                <p className="leading-relaxed"><TextWithLinks text={supplier.cooperatedProjects} /></p>
               </div>
             )}
           </div>
