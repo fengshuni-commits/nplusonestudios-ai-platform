@@ -45,7 +45,6 @@ import {
   Archive,
   ArchiveRestore,
 } from "lucide-react";
-import DashboardLayout from "@/components/DashboardLayout";
 
 const CATEGORY_COLORS: Record<string, string> = {
   "施工方": "bg-orange-100 text-orange-700 border-orange-200",
@@ -439,8 +438,7 @@ export default function SupplierLibrary() {
   const totalCount = suppliers.length;
 
   return (
-    <DashboardLayout>
-      <div className="p-6 space-y-5 max-w-7xl mx-auto">
+    <div className="p-6 space-y-5 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -561,8 +559,6 @@ export default function SupplierLibrary() {
               ))}
           </div>
         )}
-      </div>
-
       {/* Form dialog */}
       {formOpen && (
         <SupplierFormDialog
@@ -607,6 +603,6 @@ export default function SupplierLibrary() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DashboardLayout>
+    </div>
   );
 }
