@@ -263,6 +263,7 @@ export const suppliers = mysqlTable("suppliers", {
   priceLevel: text("priceLevel"),                             // 造价水平/大概价格
   sourceNote: varchar("sourceNote", { length: 256 }),         // 供应商来源（小红书/淘宝/朋友介绍等）
   referenceUrl: text("referenceUrl"),                         // 参考链接（淘宝/小红书等）
+  websiteUrl: text("websiteUrl"),                               // 官网主页
   // 评估信息
   inspectionNote: text("inspectionNote"),                     // 考察情况
   cooperatedProjects: text("cooperatedProjects"),             // 合作过的项目

@@ -8104,6 +8104,20 @@ const suppliersRouter = router({
 
   categories: protectedProcedure
     .query(() => SUPPLIER_CATEGORIES),
+
+  categorySummary: protectedProcedure
+    .query(async () => {
+      // Return each category with supplier count
+      const all = await db.listSuppliers({ includeArchived: false });
+      const counts: Record<string, number> = {};
+      for (const s of all) {
+        counts[s.category] = (counts[s.category] ?? 0) + 1;
+      }
+      return SUPPLIER_CATEGORIES.map(cat => ({
+        category: cat,
+        count: counts[cat] ?? 0,
+      }));
+    }),
 });
 
 // --- Supplier Products Router ---

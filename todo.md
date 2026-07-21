@@ -2856,3 +2856,10 @@
 - [x] 前端：供应商卡片展开产品列表，产品新增/编辑表单（支持图片上传或填写URL）
 - [x] 修正 SC4 推荐人列映射并重新导入
 - [x] 从 Excel 提取产品信息导入 supplier_products
+
+## 供应商产品库三层导航重构
+- [x] 品类总览页（/construction/suppliers）：品类卡片展示名称+供应商数量，点击跳转品类列表
+- [x] 品类供应商列表页（/construction/suppliers/category/:category）：简略卡片列表，点击跳转详情
+- [x] 供应商详情页（/construction/suppliers/:id）：完整信息+产品图片列表，支持编辑/新增产品
+- [x] 后端补充 suppliers.get 和 suppliers.categorySummary 接口
+- [x] App.tsx 注册三条新路由

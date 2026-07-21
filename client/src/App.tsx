@@ -12,6 +12,8 @@ import DesignTools from "./pages/DesignTools";
 import ConstructionDocs from "./pages/ConstructionDocs";
 import Procurement from "./pages/Procurement";
 import SupplierLibrary from "./pages/SupplierLibrary";
+import SupplierCategoryPage from "./pages/SupplierCategoryPage";
+import SupplierDetailPage from "./pages/SupplierDetailPage";
 import Assets from "./pages/Assets";
 import Standards from "./pages/Standards";
 import Integrations from "./pages/Integrations";
@@ -74,6 +76,8 @@ function Router() {
         <Route path="/construction/docs" component={ConstructionDocs} />
         <Route path="/construction/procurement" component={Procurement} />
         <Route path="/construction/suppliers" component={SupplierLibrary} />
+        <Route path="/construction/suppliers/category/:category" component={SupplierCategoryPage} />
+        <Route path="/construction/suppliers/:id" component={SupplierDetailPage} />
 
         {/* 项目管理板块 */}
         <Route path="/projects" component={Projects} />

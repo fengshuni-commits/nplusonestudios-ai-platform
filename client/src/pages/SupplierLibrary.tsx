@@ -1,1009 +1,119 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Plus,
-  Search,
-  Pencil,
-  Trash2,
-  ExternalLink,
-  Star,
-  Phone,
-  MapPin,
-  Tag,
-  ChevronDown,
-  ChevronUp,
-  Archive,
-  ArchiveRestore,
-  Package,
-  Globe,
-  Upload,
-  X,
-  ImageIcon,
+  Building2, Layers, Home, Bath, Sofa, Lightbulb,
+  Palette, Monitor, PenTool, DoorOpen, Package, Plus,
 } from "lucide-react";
+import SupplierFormDialog from "./SupplierFormDialog";
+
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  "施工方": Building2,
+  "建材": Layers,
+  "全屋订制": Home,
+  "卫浴": Bath,
+  "软装": Sofa,
+  "灯具": Lightbulb,
+  "平面供应商": Palette,
+  "LED软屏": Monitor,
+  "设计分包": PenTool,
+  "门窗五金": DoorOpen,
+  "其他": Package,
+};
 
 const CATEGORY_COLORS: Record<string, string> = {
-  "施工方": "bg-orange-100 text-orange-700 border-orange-200",
-  "建材": "bg-stone-100 text-stone-700 border-stone-200",
-  "全屋订制": "bg-amber-100 text-amber-700 border-amber-200",
-  "卫浴": "bg-cyan-100 text-cyan-700 border-cyan-200",
-  "软装": "bg-pink-100 text-pink-700 border-pink-200",
-  "灯具": "bg-yellow-100 text-yellow-700 border-yellow-200",
-  "平面供应商": "bg-violet-100 text-violet-700 border-violet-200",
-  "LED软屏": "bg-blue-100 text-blue-700 border-blue-200",
-  "设计分包": "bg-emerald-100 text-emerald-700 border-emerald-200",
-  "门窗五金": "bg-slate-100 text-slate-700 border-slate-200",
-  "其他": "bg-gray-100 text-gray-600 border-gray-200",
+  "施工方": "bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200",
+  "建材": "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100",
+  "全屋订制": "bg-orange-50 text-orange-800 border-orange-200 hover:bg-orange-100",
+  "卫浴": "bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100",
+  "软装": "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100",
+  "灯具": "bg-yellow-50 text-yellow-800 border-yellow-200 hover:bg-yellow-100",
+  "平面供应商": "bg-violet-50 text-violet-800 border-violet-200 hover:bg-violet-100",
+  "LED软屏": "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100",
+  "设计分包": "bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100",
+  "门窗五金": "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200",
+  "其他": "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200",
 };
 
-type SupplierFormData = {
-  name: string;
-  category: string;
-  subCategory: string;
-  address: string;
-  contact: string;
-  description: string;
-  priceLevel: string;
-  sourceNote: string;
-  referenceUrl: string;
-  websiteUrl: string;
-  inspectionNote: string;
-  cooperatedProjects: string;
-  score: string;
-  rating: string;
-  recommender: string;
-};
-
-const EMPTY_FORM: SupplierFormData = {
-  name: "", category: "建材", subCategory: "", address: "",
-  contact: "", description: "", priceLevel: "", sourceNote: "",
-  referenceUrl: "", websiteUrl: "", inspectionNote: "", cooperatedProjects: "",
-  score: "none", rating: "none", recommender: "",
-};
-
-type ProductFormData = {
-  name: string;
-  detailUrl: string;
-  imageUrl: string;
-  spec: string;
-  price: string;
-  notes: string;
-};
-
-const EMPTY_PRODUCT_FORM: ProductFormData = {
-  name: "", detailUrl: "", imageUrl: "", spec: "", price: "", notes: "",
-};
-
-const CATEGORIES = [
-  "施工方", "建材", "全屋订制", "卫浴", "软装", "灯具",
-  "平面供应商", "LED软屏", "设计分包", "门窗五金", "其他",
-];
-
-function StarRating({ score }: { score: number | null | undefined }) {
-  if (!score) return null;
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={`h-3 w-3 ${i <= score ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Product Form Dialog ───────────────────────────────────────────────────
-
-function ProductFormDialog({
-  open,
-  onClose,
-  supplierId,
-  productId,
-  initialData,
-  onSaved,
-}: {
-  open: boolean;
-  onClose: () => void;
-  supplierId: number;
-  productId?: number;
-  initialData?: ProductFormData;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState<ProductFormData>(initialData ?? EMPTY_PRODUCT_FORM);
-  const [uploading, setUploading] = useState(false);
-  const [imageMode, setImageMode] = useState<"url" | "upload">(
-    initialData?.imageUrl ? "url" : "url"
-  );
-  const fileRef = useRef<HTMLInputElement>(null);
-  const isEdit = !!productId;
-
+export default function SupplierLibrary() {
+  const [, navigate] = useLocation();
+  const [addOpen, setAddOpen] = useState(false);
   const utils = trpc.useUtils();
 
-  const createMutation = trpc.supplierProducts.create.useMutation({
-    onSuccess: () => {
-      toast.success("产品已添加");
-      utils.supplierProducts.listBySupplier.invalidate({ supplierId });
-      onSaved();
-      onClose();
-    },
-    onError: (e) => toast.error(e.message || "添加失败"),
-  });
-
-  const updateMutation = trpc.supplierProducts.update.useMutation({
-    onSuccess: () => {
-      toast.success("已保存");
-      utils.supplierProducts.listBySupplier.invalidate({ supplierId });
-      onSaved();
-      onClose();
-    },
-    onError: (e) => toast.error(e.message || "保存失败"),
-  });
-
-  const uploadImageMutation = trpc.supplierProducts.uploadImage.useMutation({
-    onSuccess: (data) => {
-      setForm((f) => ({ ...f, imageUrl: data.url }));
-      setUploading(false);
-      toast.success("图片已上传");
-    },
-    onError: (e) => {
-      setUploading(false);
-      toast.error(e.message || "上传失败");
-    },
-  });
-
-  const set = (k: keyof ProductFormData, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error("图片不能超过 10MB"); return; }
-    setUploading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadImageMutation.mutate({
-        fileName: file.name,
-        fileType: file.type,
-        fileBase64: base64,
-      });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const handleSubmit = () => {
-    if (!form.name.trim()) { toast.error("请填写产品名称"); return; }
-    const payload = {
-      supplierId,
-      name: form.name.trim(),
-      detailUrl: form.detailUrl || undefined,
-      imageUrl: form.imageUrl || undefined,
-      spec: form.spec || undefined,
-      price: form.price || undefined,
-      notes: form.notes || undefined,
-    };
-    if (isEdit) {
-      updateMutation.mutate({ id: productId!, ...payload });
-    } else {
-      createMutation.mutate(payload);
-    }
-  };
-
-  const isPending = createMutation.isPending || updateMutation.isPending || uploading;
+  const { data: summary, isLoading } = trpc.suppliers.categorySummary.useQuery();
+  const totalSuppliers = summary?.reduce((s, c) => s + c.count, 0) ?? 0;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "编辑产品" : "添加产品"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          {/* Name */}
-          <div className="space-y-1.5">
-            <Label>产品名称 <span className="text-destructive">*</span></Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="如：哑光黑岩板 1200×2400…" />
-          </div>
-
-          {/* Detail URL */}
-          <div className="space-y-1.5">
-            <Label>产品详情页链接</Label>
-            <Input value={form.detailUrl} onChange={(e) => set("detailUrl", e.target.value)} placeholder="淘宝商品链接、官网产品页…" />
-          </div>
-
-          {/* Image */}
-          <div className="space-y-1.5">
-            <Label>产品图片</Label>
-            <div className="flex gap-2 mb-2">
-              <Button
-                type="button"
-                variant={imageMode === "url" ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setImageMode("url")}
-              >
-                填写 URL
-              </Button>
-              <Button
-                type="button"
-                variant={imageMode === "upload" ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setImageMode("upload")}
-              >
-                <Upload className="h-3 w-3 mr-1" />
-                上传图片
-              </Button>
-            </div>
-            {imageMode === "url" ? (
-              <Input value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://…" />
-            ) : (
-              <div>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  disabled={uploading}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload className="h-3 w-3 mr-1" />
-                  {uploading ? "上传中…" : "选择图片文件"}
-                </Button>
-              </div>
-            )}
-            {form.imageUrl && (
-              <div className="relative w-full mt-2">
-                <img
-                  src={form.imageUrl}
-                  alt="产品图片预览"
-                  className="w-full max-h-48 object-contain rounded-lg border bg-muted/30"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-1 right-1 h-6 w-6 bg-background/80"
-                  onClick={() => set("imageUrl", "")}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Spec */}
-          <div className="space-y-1.5">
-            <Label>规格参数</Label>
-            <Textarea value={form.spec} onChange={(e) => set("spec", e.target.value)} placeholder="尺寸、材质、型号、颜色…" rows={2} />
-          </div>
-
-          {/* Price */}
-          <div className="space-y-1.5">
-            <Label>价格参考</Label>
-            <Input value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="如：¥1200/㎡、¥3800/件…" />
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-1.5">
-            <Label>备注</Label>
-            <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="使用体验、注意事项…" rows={2} />
-          </div>
+    <div className="p-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">供应商产品库</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {isLoading
+              ? "加载中…"
+              : `共 ${totalSuppliers} 家供应商，分 ${summary?.filter(c => c.count > 0).length ?? 0} 个品类`}
+          </p>
         </div>
-        <DialogFooter className="mt-2">
-          <Button variant="outline" onClick={onClose} disabled={isPending}>取消</Button>
-          <Button onClick={handleSubmit} disabled={isPending}>
-            {isPending ? "保存中…" : isEdit ? "保存" : "添加"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Supplier Products Section ─────────────────────────────────────────────
-
-function SupplierProductsSection({ supplierId }: { supplierId: number }) {
-  const [productFormOpen, setProductFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [deleteProductId, setDeleteProductId] = useState<number | null>(null);
-
-  const utils = trpc.useUtils();
-  const { data: products = [], isLoading } = trpc.supplierProducts.listBySupplier.useQuery({ supplierId });
-
-  const deleteMutation = trpc.supplierProducts.delete.useMutation({
-    onSuccess: () => {
-      toast.success("已删除");
-      utils.supplierProducts.listBySupplier.invalidate({ supplierId });
-      setDeleteProductId(null);
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  return (
-    <div className="border-t pt-3 mt-2 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-foreground/70 flex items-center gap-1">
-          <Package className="h-3 w-3" />
-          产品 ({products.length})
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 text-xs px-2"
-          onClick={() => { setEditingProduct(null); setProductFormOpen(true); }}
-        >
-          <Plus className="h-3 w-3 mr-0.5" />
-          添加产品
+        <Button onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          添加供应商
         </Button>
       </div>
 
+      {/* Category grid */}
       {isLoading ? (
-        <div className="h-8 bg-muted/40 rounded animate-pulse" />
-      ) : products.length === 0 ? (
-        <p className="text-xs text-muted-foreground/60 italic">暂无产品，点击「添加产品」录入</p>
-      ) : (
-        <div className="space-y-2">
-          {products.map((p: any) => (
-            <div key={p.id} className="flex gap-2 items-start bg-muted/30 rounded-lg p-2">
-              {p.imageUrl && (
-                <img
-                  src={p.imageUrl}
-                  alt={p.name}
-                  className="w-14 h-14 object-cover rounded-md border shrink-0"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              )}
-              {!p.imageUrl && (
-                <div className="w-14 h-14 rounded-md border bg-muted/50 flex items-center justify-center shrink-0">
-                  <ImageIcon className="h-5 w-5 text-muted-foreground/40" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0 space-y-0.5">
-                <div className="flex items-start justify-between gap-1">
-                  <span className="text-xs font-medium leading-tight">{p.name}</span>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <Button
-                      variant="ghost" size="icon" className="h-5 w-5"
-                      onClick={() => { setEditingProduct(p); setProductFormOpen(true); }}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteProductId(p.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                {p.spec && <p className="text-[11px] text-muted-foreground truncate">{p.spec}</p>}
-                {p.price && <p className="text-[11px] text-foreground/70 font-medium">{p.price}</p>}
-                {p.notes && <p className="text-[11px] text-muted-foreground line-clamp-1">{p.notes}</p>}
-                {p.detailUrl && (
-                  <a
-                    href={p.detailUrl.startsWith("http") ? p.detailUrl : `https://${p.detailUrl}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-[11px] text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-2.5 w-2.5" />
-                    详情页
-                  </a>
-                )}
-              </div>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 11 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
-      )}
-
-      {productFormOpen && (
-        <ProductFormDialog
-          open={productFormOpen}
-          onClose={() => { setProductFormOpen(false); setEditingProduct(null); }}
-          supplierId={supplierId}
-          productId={editingProduct?.id}
-          initialData={editingProduct ? {
-            name: editingProduct.name ?? "",
-            detailUrl: editingProduct.detailUrl ?? "",
-            imageUrl: editingProduct.imageUrl ?? "",
-            spec: editingProduct.spec ?? "",
-            price: editingProduct.price ?? "",
-            notes: editingProduct.notes ?? "",
-          } : undefined}
-          onSaved={() => {}}
-        />
-      )}
-
-      <AlertDialog open={deleteProductId !== null} onOpenChange={(v) => { if (!v) setDeleteProductId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除产品</AlertDialogTitle>
-            <AlertDialogDescription>删除后无法恢复。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteProductId && deleteMutation.mutate({ id: deleteProductId })}
-            >
-              确认删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
-
-// ─── Supplier Card ─────────────────────────────────────────────────────────
-
-function SupplierCard({
-  supplier,
-  onEdit,
-  onDelete,
-  onArchive,
-}: {
-  supplier: any;
-  onEdit: (s: any) => void;
-  onDelete: (id: number) => void;
-  onArchive: (id: number, archived: boolean) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [showProducts, setShowProducts] = useState(false);
-  const catColor = CATEGORY_COLORS[supplier.category] ?? CATEGORY_COLORS["其他"];
-
-  return (
-    <div className={`bg-card border rounded-xl p-4 space-y-2.5 transition-all ${supplier.isArchived ? "opacity-60" : ""}`}>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-medium text-sm text-foreground leading-tight">{supplier.name}</h3>
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border ${catColor}`}>
-              {supplier.category}
-            </Badge>
-            {supplier.subCategory && (
-              <span className="text-[10px] text-muted-foreground">{supplier.subCategory}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-1">
-            <StarRating score={supplier.score} />
-            {supplier.rating && (
-              <span className="text-[10px] font-medium text-muted-foreground">评级 {supplier.rating}</span>
-            )}
-            {supplier.recommender && (
-              <span className="text-[10px] text-muted-foreground">推荐人：{supplier.recommender}</span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(supplier)}>
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
-            onClick={() => onArchive(supplier.id, !supplier.isArchived)}
-            title={supplier.isArchived ? "恢复" : "归档"}
-          >
-            {supplier.isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDelete(supplier.id)}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Key info row */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        {supplier.contact && (
-          <span className="flex items-center gap-1">
-            <Phone className="h-3 w-3 shrink-0" />
-            <span className="truncate max-w-[180px]">{supplier.contact}</span>
-          </span>
-        )}
-        {supplier.address && (
-          <span className="flex items-center gap-1">
-            <MapPin className="h-3 w-3 shrink-0" />
-            <span className="truncate max-w-[200px]">{supplier.address}</span>
-          </span>
-        )}
-        {supplier.sourceNote && (
-          <span className="flex items-center gap-1">
-            <Tag className="h-3 w-3 shrink-0" />
-            {supplier.sourceNote}
-          </span>
-        )}
-        {supplier.websiteUrl && (
-          <a
-            href={supplier.websiteUrl.startsWith("http") ? supplier.websiteUrl : `https://${supplier.websiteUrl}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-primary hover:underline"
-          >
-            <Globe className="h-3 w-3 shrink-0" />
-            官网
-          </a>
-        )}
-      </div>
-
-      {/* Description */}
-      {supplier.description && (
-        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{supplier.description}</p>
-      )}
-
-      {/* Expand for more details */}
-      {(supplier.priceLevel || supplier.inspectionNote || supplier.cooperatedProjects || supplier.referenceUrl) && (
-        <>
-          <button
-            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {expanded ? "收起" : "更多信息"}
-          </button>
-          {expanded && (
-            <div className="space-y-1.5 text-xs text-muted-foreground border-t pt-2">
-              {supplier.priceLevel && (
-                <div><span className="font-medium text-foreground/70">造价水平：</span>{supplier.priceLevel}</div>
-              )}
-              {supplier.inspectionNote && (
-                <div><span className="font-medium text-foreground/70">考察情况：</span>{supplier.inspectionNote}</div>
-              )}
-              {supplier.cooperatedProjects && (
-                <div><span className="font-medium text-foreground/70">合作项目：</span>{supplier.cooperatedProjects}</div>
-              )}
-              {supplier.referenceUrl && (
-                <a
-                  href={supplier.referenceUrl.startsWith("http") ? supplier.referenceUrl : `https://${supplier.referenceUrl}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-primary hover:underline"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  参考链接
-                </a>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Products toggle */}
-      <button
-        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-        onClick={() => setShowProducts(!showProducts)}
-      >
-        {showProducts ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        <Package className="h-3 w-3" />
-        {showProducts ? "收起产品" : "查看/添加产品"}
-      </button>
-
-      {showProducts && <SupplierProductsSection supplierId={supplier.id} />}
-    </div>
-  );
-}
-
-// ─── Supplier Form Dialog ──────────────────────────────────────────────────
-
-function SupplierFormDialog({
-  open,
-  onClose,
-  initialData,
-  supplierId,
-  onSaved,
-}: {
-  open: boolean;
-  onClose: () => void;
-  initialData?: SupplierFormData;
-  supplierId?: number;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState<SupplierFormData>(initialData ?? EMPTY_FORM);
-  const isEdit = !!supplierId;
-
-  const createMutation = trpc.suppliers.create.useMutation({
-    onSuccess: () => { toast.success("供应商已添加"); onSaved(); onClose(); },
-    onError: (e) => toast.error(e.message || "添加失败"),
-  });
-  const updateMutation = trpc.suppliers.update.useMutation({
-    onSuccess: () => { toast.success("已保存"); onSaved(); onClose(); },
-    onError: (e) => toast.error(e.message || "保存失败"),
-  });
-
-  const set = (k: keyof SupplierFormData, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const handleSubmit = () => {
-    if (!form.name.trim()) { toast.error("请填写供应商名称"); return; }
-    if (!form.category) { toast.error("请选择类别"); return; }
-    const payload = {
-      name: form.name.trim(),
-      category: form.category,
-      subCategory: form.subCategory || undefined,
-      address: form.address || undefined,
-      contact: form.contact || undefined,
-      description: form.description || undefined,
-      priceLevel: form.priceLevel || undefined,
-      sourceNote: form.sourceNote || undefined,
-      referenceUrl: form.referenceUrl || undefined,
-      websiteUrl: form.websiteUrl || undefined,
-      inspectionNote: form.inspectionNote || undefined,
-      cooperatedProjects: form.cooperatedProjects || undefined,
-      score: (form.score && form.score !== "none") ? parseInt(form.score) : undefined,
-      rating: (form.rating && form.rating !== "none") ? form.rating : undefined,
-      recommender: form.recommender || undefined,
-    };
-    if (isEdit) {
-      updateMutation.mutate({ id: supplierId!, ...payload });
-    } else {
-      createMutation.mutate(payload);
-    }
-  };
-
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "编辑供应商" : "添加供应商"}</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-4">
-          {/* Name */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>供应商/品牌名称 <span className="text-destructive">*</span></Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="如：杜亚、科思顿…" />
-          </div>
-          {/* Category */}
-          <div className="space-y-1.5">
-            <Label>大类 <span className="text-destructive">*</span></Label>
-            <Select value={form.category} onValueChange={(v) => set("category", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* SubCategory */}
-          <div className="space-y-1.5">
-            <Label>细分类别</Label>
-            <Input value={form.subCategory} onChange={(e) => set("subCategory", e.target.value)} placeholder="如：电动窗帘、木地板…" />
-          </div>
-          {/* Contact */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>联系方式</Label>
-            <Input value={form.contact} onChange={(e) => set("contact", e.target.value)} placeholder="微信号、电话、淘宝店名…" />
-          </div>
-          {/* Address */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>门店/工厂地址</Label>
-            <Input value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="城市、商场、具体地址…" />
-          </div>
-          {/* Website URL */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>官网主页</Label>
-            <Input value={form.websiteUrl} onChange={(e) => set("websiteUrl", e.target.value)} placeholder="https://…" />
-          </div>
-          {/* Description */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>简介/主要产品</Label>
-            <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="主营产品、特点、适用场景…" rows={3} />
-          </div>
-          {/* Price Level */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>造价水平</Label>
-            <Textarea value={form.priceLevel} onChange={(e) => set("priceLevel", e.target.value)} placeholder="大概价格区间、单价参考…" rows={2} />
-          </div>
-          {/* Inspection Note */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>考察情况</Label>
-            <Textarea value={form.inspectionNote} onChange={(e) => set("inspectionNote", e.target.value)} placeholder="是否实地考察、使用体验…" rows={2} />
-          </div>
-          {/* Cooperated Projects */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>合作过的项目</Label>
-            <Input value={form.cooperatedProjects} onChange={(e) => set("cooperatedProjects", e.target.value)} placeholder="如：OOHLiVE清华科技园项目…" />
-          </div>
-          {/* Source Note */}
-          <div className="space-y-1.5">
-            <Label>供应商来源</Label>
-            <Input value={form.sourceNote} onChange={(e) => set("sourceNote", e.target.value)} placeholder="小红书、淘宝、朋友介绍…" />
-          </div>
-          {/* Recommender */}
-          <div className="space-y-1.5">
-            <Label>推荐人</Label>
-            <Input value={form.recommender} onChange={(e) => set("recommender", e.target.value)} placeholder="团队成员姓名…" />
-          </div>
-          {/* Score */}
-          <div className="space-y-1.5">
-            <Label>评分（1-5）</Label>
-            <Select value={form.score} onValueChange={(v) => set("score", v)}>
-              <SelectTrigger><SelectValue placeholder="选择评分" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">不评分</SelectItem>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <SelectItem key={n} value={String(n)}>
-                    {"★".repeat(n)}{"☆".repeat(5 - n)} {n}分
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Rating */}
-          <div className="space-y-1.5">
-            <Label>评级</Label>
-            <Select value={form.rating} onValueChange={(v) => set("rating", v)}>
-              <SelectTrigger><SelectValue placeholder="选择评级" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">不评级</SelectItem>
-                {["A+", "A", "B+", "B", "C"].map((r) => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Reference URL */}
-          <div className="col-span-2 space-y-1.5">
-            <Label>参考链接（淘宝/小红书等）</Label>
-            <Input value={form.referenceUrl} onChange={(e) => set("referenceUrl", e.target.value)} placeholder="淘宝、小红书链接…" />
-          </div>
-        </div>
-        <DialogFooter className="mt-2">
-          <Button variant="outline" onClick={onClose} disabled={isPending}>取消</Button>
-          <Button onClick={handleSubmit} disabled={isPending}>
-            {isPending ? "保存中…" : isEdit ? "保存" : "添加"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Main Page ─────────────────────────────────────────────────────────────
-
-export default function SupplierLibrary() {
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [showArchived, setShowArchived] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState<any>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-
-  const utils = trpc.useUtils();
-
-  const { data: suppliers = [], isLoading } = trpc.suppliers.list.useQuery({
-    category: categoryFilter === "all" ? undefined : categoryFilter,
-    search: search.trim() || undefined,
-    includeArchived: showArchived,
-  });
-
-  const archiveMutation = trpc.suppliers.archive.useMutation({
-    onSuccess: () => { toast.success("已更新"); utils.suppliers.list.invalidate(); },
-    onError: (e) => toast.error(e.message),
-  });
-  const deleteMutation = trpc.suppliers.delete.useMutation({
-    onSuccess: () => { toast.success("已删除"); utils.suppliers.list.invalidate(); setDeleteId(null); },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const handleEdit = (s: any) => {
-    setEditingSupplier(s);
-    setFormOpen(true);
-  };
-
-  const handleClose = () => {
-    setFormOpen(false);
-    setEditingSupplier(null);
-  };
-
-  // Group by category
-  const grouped = suppliers.reduce<Record<string, any[]>>((acc, s) => {
-    const key = s.category || "其他";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(s);
-    return acc;
-  }, {});
-
-  const totalCount = suppliers.length;
-
-  return (
-    <div className="p-6 space-y-5 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">供应商产品库</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              N+1 STUDIOS 积累的供应商与产品资源，共 {totalCount} 条
-            </p>
-          </div>
-          <Button onClick={() => { setEditingSupplier(null); setFormOpen(true); }}>
-            <Plus className="h-4 w-4 mr-1.5" />
-            添加供应商
-          </Button>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              className="pl-9 h-9 text-sm"
-              placeholder="搜索供应商名称、产品、联系方式…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-9 w-36 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部类别</SelectItem>
-              {CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant={showArchived ? "default" : "outline"}
-            size="sm"
-            className="h-9"
-            onClick={() => setShowArchived(!showArchived)}
-          >
-            <Archive className="h-3.5 w-3.5 mr-1.5" />
-            {showArchived ? "隐藏归档" : "显示归档"}
-          </Button>
-        </div>
-
-        {/* Content */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-32 rounded-xl bg-muted/50 animate-pulse" />
-            ))}
-          </div>
-        ) : totalCount === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
-            <p className="text-base">暂无供应商数据</p>
-            <p className="text-sm mt-1 opacity-60">点击右上角「添加供应商」开始录入</p>
-          </div>
-        ) : categoryFilter !== "all" ? (
-          // Single category flat grid
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {suppliers.map((s) => (
-              <SupplierCard
-                key={s.id}
-                supplier={s}
-                onEdit={handleEdit}
-                onDelete={setDeleteId}
-                onArchive={(id, archived) => archiveMutation.mutate({ id, archived })}
-              />
-            ))}
-          </div>
-        ) : (
-          // Grouped by category
-          <div className="space-y-6">
-            {CATEGORIES.filter((c) => grouped[c]?.length > 0).map((cat) => (
-              <div key={cat}>
-                <div className="flex items-center gap-2 mb-3">
-                  <Badge variant="outline" className={`text-xs px-2 py-0.5 border ${CATEGORY_COLORS[cat]}`}>
-                    {cat}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{grouped[cat].length} 家</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {grouped[cat].map((s) => (
-                    <SupplierCard
-                      key={s.id}
-                      supplier={s}
-                      onEdit={handleEdit}
-                      onDelete={setDeleteId}
-                      onArchive={(id, archived) => archiveMutation.mutate({ id, archived })}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-            {/* Uncategorized */}
-            {Object.keys(grouped)
-              .filter((c) => !CATEGORIES.includes(c))
-              .map((cat) => (
-                <div key={cat}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Badge variant="outline" className="text-xs px-2 py-0.5">{cat}</Badge>
-                    <span className="text-xs text-muted-foreground">{grouped[cat].length} 家</span>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {summary?.map(({ category, count }) => {
+            const Icon = CATEGORY_ICONS[category] ?? Package;
+            const colorCls = CATEGORY_COLORS[category] ?? "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200";
+            return (
+              <Card
+                key={category}
+                className={`cursor-pointer border transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 ${colorCls}`}
+                onClick={() => navigate(`/construction/suppliers/category/${encodeURIComponent(category)}`)}
+              >
+                <CardContent className="p-5 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <Icon className="w-6 h-6 opacity-60" />
+                    <Badge
+                      variant="secondary"
+                      className="text-xs font-medium bg-white/70 border-0 text-current"
+                    >
+                      {count} 家
+                    </Badge>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {grouped[cat].map((s) => (
-                      <SupplierCard
-                        key={s.id}
-                        supplier={s}
-                        onEdit={handleEdit}
-                        onDelete={setDeleteId}
-                        onArchive={(id, archived) => archiveMutation.mutate({ id, archived })}
-                      />
-                    ))}
+                  <div>
+                    <p className="font-semibold text-base leading-tight">{category}</p>
+                    <p className="text-xs opacity-50 mt-0.5">点击查看供应商</p>
                   </div>
-                </div>
-              ))}
-          </div>
-        )}
-      {/* Form dialog */}
-      {formOpen && (
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {addOpen && (
         <SupplierFormDialog
-          open={formOpen}
-          onClose={handleClose}
-          supplierId={editingSupplier?.id}
-          initialData={editingSupplier ? {
-            name: editingSupplier.name ?? "",
-            category: editingSupplier.category ?? "建材",
-            subCategory: editingSupplier.subCategory ?? "",
-            address: editingSupplier.address ?? "",
-            contact: editingSupplier.contact ?? "",
-            description: editingSupplier.description ?? "",
-            priceLevel: editingSupplier.priceLevel ?? "",
-            sourceNote: editingSupplier.sourceNote ?? "",
-            referenceUrl: editingSupplier.referenceUrl ?? "",
-            websiteUrl: editingSupplier.websiteUrl ?? "",
-            inspectionNote: editingSupplier.inspectionNote ?? "",
-            cooperatedProjects: editingSupplier.cooperatedProjects ?? "",
-            score: editingSupplier.score ? String(editingSupplier.score) : "none",
-            rating: editingSupplier.rating ?? "none",
-            recommender: editingSupplier.recommender ?? "",
-          } : undefined}
-          onSaved={() => utils.suppliers.list.invalidate()}
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => {
+            utils.suppliers.categorySummary.invalidate();
+            setAddOpen(false);
+          }}
         />
       )}
-
-      {/* Delete confirm */}
-      <AlertDialog open={deleteId !== null} onOpenChange={(v) => { if (!v) setDeleteId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除</AlertDialogTitle>
-            <AlertDialogDescription>删除后无法恢复，建议使用「归档」代替删除。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
-            >
-              确认删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
