@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,11 @@ import {
   ChevronUp,
   Archive,
   ArchiveRestore,
+  Package,
+  Globe,
+  Upload,
+  X,
+  ImageIcon,
 } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -70,6 +75,7 @@ type SupplierFormData = {
   priceLevel: string;
   sourceNote: string;
   referenceUrl: string;
+  websiteUrl: string;
   inspectionNote: string;
   cooperatedProjects: string;
   score: string;
@@ -80,8 +86,21 @@ type SupplierFormData = {
 const EMPTY_FORM: SupplierFormData = {
   name: "", category: "建材", subCategory: "", address: "",
   contact: "", description: "", priceLevel: "", sourceNote: "",
-  referenceUrl: "", inspectionNote: "", cooperatedProjects: "",
+  referenceUrl: "", websiteUrl: "", inspectionNote: "", cooperatedProjects: "",
   score: "none", rating: "none", recommender: "",
+};
+
+type ProductFormData = {
+  name: string;
+  detailUrl: string;
+  imageUrl: string;
+  spec: string;
+  price: string;
+  notes: string;
+};
+
+const EMPTY_PRODUCT_FORM: ProductFormData = {
+  name: "", detailUrl: "", imageUrl: "", spec: "", price: "", notes: "",
 };
 
 const CATEGORIES = [
@@ -103,6 +122,353 @@ function StarRating({ score }: { score: number | null | undefined }) {
   );
 }
 
+// ─── Product Form Dialog ───────────────────────────────────────────────────
+
+function ProductFormDialog({
+  open,
+  onClose,
+  supplierId,
+  productId,
+  initialData,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  supplierId: number;
+  productId?: number;
+  initialData?: ProductFormData;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<ProductFormData>(initialData ?? EMPTY_PRODUCT_FORM);
+  const [uploading, setUploading] = useState(false);
+  const [imageMode, setImageMode] = useState<"url" | "upload">(
+    initialData?.imageUrl ? "url" : "url"
+  );
+  const fileRef = useRef<HTMLInputElement>(null);
+  const isEdit = !!productId;
+
+  const utils = trpc.useUtils();
+
+  const createMutation = trpc.supplierProducts.create.useMutation({
+    onSuccess: () => {
+      toast.success("产品已添加");
+      utils.supplierProducts.listBySupplier.invalidate({ supplierId });
+      onSaved();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message || "添加失败"),
+  });
+
+  const updateMutation = trpc.supplierProducts.update.useMutation({
+    onSuccess: () => {
+      toast.success("已保存");
+      utils.supplierProducts.listBySupplier.invalidate({ supplierId });
+      onSaved();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message || "保存失败"),
+  });
+
+  const uploadImageMutation = trpc.supplierProducts.uploadImage.useMutation({
+    onSuccess: (data) => {
+      setForm((f) => ({ ...f, imageUrl: data.url }));
+      setUploading(false);
+      toast.success("图片已上传");
+    },
+    onError: (e) => {
+      setUploading(false);
+      toast.error(e.message || "上传失败");
+    },
+  });
+
+  const set = (k: keyof ProductFormData, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast.error("图片不能超过 10MB"); return; }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      uploadImageMutation.mutate({
+        fileName: file.name,
+        fileType: file.type,
+        fileBase64: base64,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleSubmit = () => {
+    if (!form.name.trim()) { toast.error("请填写产品名称"); return; }
+    const payload = {
+      supplierId,
+      name: form.name.trim(),
+      detailUrl: form.detailUrl || undefined,
+      imageUrl: form.imageUrl || undefined,
+      spec: form.spec || undefined,
+      price: form.price || undefined,
+      notes: form.notes || undefined,
+    };
+    if (isEdit) {
+      updateMutation.mutate({ id: productId!, ...payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const isPending = createMutation.isPending || updateMutation.isPending || uploading;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "编辑产品" : "添加产品"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {/* Name */}
+          <div className="space-y-1.5">
+            <Label>产品名称 <span className="text-destructive">*</span></Label>
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="如：哑光黑岩板 1200×2400…" />
+          </div>
+
+          {/* Detail URL */}
+          <div className="space-y-1.5">
+            <Label>产品详情页链接</Label>
+            <Input value={form.detailUrl} onChange={(e) => set("detailUrl", e.target.value)} placeholder="淘宝商品链接、官网产品页…" />
+          </div>
+
+          {/* Image */}
+          <div className="space-y-1.5">
+            <Label>产品图片</Label>
+            <div className="flex gap-2 mb-2">
+              <Button
+                type="button"
+                variant={imageMode === "url" ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setImageMode("url")}
+              >
+                填写 URL
+              </Button>
+              <Button
+                type="button"
+                variant={imageMode === "upload" ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setImageMode("upload")}
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                上传图片
+              </Button>
+            </div>
+            {imageMode === "url" ? (
+              <Input value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://…" />
+            ) : (
+              <div>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={uploading}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Upload className="h-3 w-3 mr-1" />
+                  {uploading ? "上传中…" : "选择图片文件"}
+                </Button>
+              </div>
+            )}
+            {form.imageUrl && (
+              <div className="relative w-full mt-2">
+                <img
+                  src={form.imageUrl}
+                  alt="产品图片预览"
+                  className="w-full max-h-48 object-contain rounded-lg border bg-muted/30"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-1 right-1 h-6 w-6 bg-background/80"
+                  onClick={() => set("imageUrl", "")}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Spec */}
+          <div className="space-y-1.5">
+            <Label>规格参数</Label>
+            <Textarea value={form.spec} onChange={(e) => set("spec", e.target.value)} placeholder="尺寸、材质、型号、颜色…" rows={2} />
+          </div>
+
+          {/* Price */}
+          <div className="space-y-1.5">
+            <Label>价格参考</Label>
+            <Input value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="如：¥1200/㎡、¥3800/件…" />
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label>备注</Label>
+            <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="使用体验、注意事项…" rows={2} />
+          </div>
+        </div>
+        <DialogFooter className="mt-2">
+          <Button variant="outline" onClick={onClose} disabled={isPending}>取消</Button>
+          <Button onClick={handleSubmit} disabled={isPending}>
+            {isPending ? "保存中…" : isEdit ? "保存" : "添加"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Supplier Products Section ─────────────────────────────────────────────
+
+function SupplierProductsSection({ supplierId }: { supplierId: number }) {
+  const [productFormOpen, setProductFormOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [deleteProductId, setDeleteProductId] = useState<number | null>(null);
+
+  const utils = trpc.useUtils();
+  const { data: products = [], isLoading } = trpc.supplierProducts.listBySupplier.useQuery({ supplierId });
+
+  const deleteMutation = trpc.supplierProducts.delete.useMutation({
+    onSuccess: () => {
+      toast.success("已删除");
+      utils.supplierProducts.listBySupplier.invalidate({ supplierId });
+      setDeleteProductId(null);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <div className="border-t pt-3 mt-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-foreground/70 flex items-center gap-1">
+          <Package className="h-3 w-3" />
+          产品 ({products.length})
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 text-xs px-2"
+          onClick={() => { setEditingProduct(null); setProductFormOpen(true); }}
+        >
+          <Plus className="h-3 w-3 mr-0.5" />
+          添加产品
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="h-8 bg-muted/40 rounded animate-pulse" />
+      ) : products.length === 0 ? (
+        <p className="text-xs text-muted-foreground/60 italic">暂无产品，点击「添加产品」录入</p>
+      ) : (
+        <div className="space-y-2">
+          {products.map((p: any) => (
+            <div key={p.id} className="flex gap-2 items-start bg-muted/30 rounded-lg p-2">
+              {p.imageUrl && (
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  className="w-14 h-14 object-cover rounded-md border shrink-0"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              )}
+              {!p.imageUrl && (
+                <div className="w-14 h-14 rounded-md border bg-muted/50 flex items-center justify-center shrink-0">
+                  <ImageIcon className="h-5 w-5 text-muted-foreground/40" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <div className="flex items-start justify-between gap-1">
+                  <span className="text-xs font-medium leading-tight">{p.name}</span>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <Button
+                      variant="ghost" size="icon" className="h-5 w-5"
+                      onClick={() => { setEditingProduct(p); setProductFormOpen(true); }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteProductId(p.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+                {p.spec && <p className="text-[11px] text-muted-foreground truncate">{p.spec}</p>}
+                {p.price && <p className="text-[11px] text-foreground/70 font-medium">{p.price}</p>}
+                {p.notes && <p className="text-[11px] text-muted-foreground line-clamp-1">{p.notes}</p>}
+                {p.detailUrl && (
+                  <a
+                    href={p.detailUrl.startsWith("http") ? p.detailUrl : `https://${p.detailUrl}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 text-[11px] text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-2.5 w-2.5" />
+                    详情页
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {productFormOpen && (
+        <ProductFormDialog
+          open={productFormOpen}
+          onClose={() => { setProductFormOpen(false); setEditingProduct(null); }}
+          supplierId={supplierId}
+          productId={editingProduct?.id}
+          initialData={editingProduct ? {
+            name: editingProduct.name ?? "",
+            detailUrl: editingProduct.detailUrl ?? "",
+            imageUrl: editingProduct.imageUrl ?? "",
+            spec: editingProduct.spec ?? "",
+            price: editingProduct.price ?? "",
+            notes: editingProduct.notes ?? "",
+          } : undefined}
+          onSaved={() => {}}
+        />
+      )}
+
+      <AlertDialog open={deleteProductId !== null} onOpenChange={(v) => { if (!v) setDeleteProductId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除产品</AlertDialogTitle>
+            <AlertDialogDescription>删除后无法恢复。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteProductId && deleteMutation.mutate({ id: deleteProductId })}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ─── Supplier Card ─────────────────────────────────────────────────────────
+
 function SupplierCard({
   supplier,
   onEdit,
@@ -115,6 +481,7 @@ function SupplierCard({
   onArchive: (id: number, archived: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showProducts, setShowProducts] = useState(false);
   const catColor = CATEGORY_COLORS[supplier.category] ?? CATEGORY_COLORS["其他"];
 
   return (
@@ -178,6 +545,17 @@ function SupplierCard({
             {supplier.sourceNote}
           </span>
         )}
+        {supplier.websiteUrl && (
+          <a
+            href={supplier.websiteUrl.startsWith("http") ? supplier.websiteUrl : `https://${supplier.websiteUrl}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-primary hover:underline"
+          >
+            <Globe className="h-3 w-3 shrink-0" />
+            官网
+          </a>
+        )}
       </div>
 
       {/* Description */}
@@ -221,9 +599,23 @@ function SupplierCard({
           )}
         </>
       )}
+
+      {/* Products toggle */}
+      <button
+        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setShowProducts(!showProducts)}
+      >
+        {showProducts ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        <Package className="h-3 w-3" />
+        {showProducts ? "收起产品" : "查看/添加产品"}
+      </button>
+
+      {showProducts && <SupplierProductsSection supplierId={supplier.id} />}
     </div>
   );
 }
+
+// ─── Supplier Form Dialog ──────────────────────────────────────────────────
 
 function SupplierFormDialog({
   open,
@@ -265,6 +657,7 @@ function SupplierFormDialog({
       priceLevel: form.priceLevel || undefined,
       sourceNote: form.sourceNote || undefined,
       referenceUrl: form.referenceUrl || undefined,
+      websiteUrl: form.websiteUrl || undefined,
       inspectionNote: form.inspectionNote || undefined,
       cooperatedProjects: form.cooperatedProjects || undefined,
       score: (form.score && form.score !== "none") ? parseInt(form.score) : undefined,
@@ -316,6 +709,11 @@ function SupplierFormDialog({
           <div className="col-span-2 space-y-1.5">
             <Label>门店/工厂地址</Label>
             <Input value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="城市、商场、具体地址…" />
+          </div>
+          {/* Website URL */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>官网主页</Label>
+            <Input value={form.websiteUrl} onChange={(e) => set("websiteUrl", e.target.value)} placeholder="https://…" />
           </div>
           {/* Description */}
           <div className="col-span-2 space-y-1.5">
@@ -377,7 +775,7 @@ function SupplierFormDialog({
           </div>
           {/* Reference URL */}
           <div className="col-span-2 space-y-1.5">
-            <Label>参考链接</Label>
+            <Label>参考链接（淘宝/小红书等）</Label>
             <Input value={form.referenceUrl} onChange={(e) => set("referenceUrl", e.target.value)} placeholder="淘宝、小红书链接…" />
           </div>
         </div>
@@ -391,6 +789,8 @@ function SupplierFormDialog({
     </Dialog>
   );
 }
+
+// ─── Main Page ─────────────────────────────────────────────────────────────
 
 export default function SupplierLibrary() {
   const [search, setSearch] = useState("");
@@ -575,6 +975,7 @@ export default function SupplierLibrary() {
             priceLevel: editingSupplier.priceLevel ?? "",
             sourceNote: editingSupplier.sourceNote ?? "",
             referenceUrl: editingSupplier.referenceUrl ?? "",
+            websiteUrl: editingSupplier.websiteUrl ?? "",
             inspectionNote: editingSupplier.inspectionNote ?? "",
             cooperatedProjects: editingSupplier.cooperatedProjects ?? "",
             score: editingSupplier.score ? String(editingSupplier.score) : "none",

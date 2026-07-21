@@ -2849,3 +2849,10 @@
 - [x] 前端 SupplierLibrary 页面（按类别分组展示、搜索筛选、新增/编辑表单、归档/删除）
 - [x] 导入 SC1供应商库.xlsx 和 SC4供应商提名表.xlsx 历史数据（共 369 条）
 - [x] 营建管理侧边栏添加「供应商产品库」入口
+
+## 供应商产品库扩展（产品层）
+- [x] suppliers 表加 websiteUrl 字段，新建 supplier_products 表（名称/详情页链接/图片/规格/价格/备注）
+- [x] 后端 supplier_products CRUD router
+- [x] 前端：供应商卡片展开产品列表，产品新增/编辑表单（支持图片上传或填写URL）
+- [x] 修正 SC4 推荐人列映射并重新导入
+- [x] 从 Excel 提取产品信息导入 supplier_products

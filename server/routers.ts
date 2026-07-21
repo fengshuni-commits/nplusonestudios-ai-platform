@@ -8106,6 +8106,58 @@ const suppliersRouter = router({
     .query(() => SUPPLIER_CATEGORIES),
 });
 
+// --- Supplier Products Router ---
+const supplierProductInput = z.object({
+  supplierId: z.number().int(),
+  name: z.string().min(1).max(256),
+  detailUrl: z.string().optional(),
+  imageUrl: z.string().optional(),
+  spec: z.string().optional(),
+  price: z.string().max(256).optional(),
+  notes: z.string().optional(),
+});
+
+const supplierProductsRouter = router({
+  listBySupplier: protectedProcedure
+    .input(z.object({ supplierId: z.number() }))
+    .query(async ({ input }) => {
+      return db.listSupplierProducts(input.supplierId);
+    }),
+
+  create: protectedProcedure
+    .input(supplierProductInput)
+    .mutation(async ({ input }) => {
+      return db.createSupplierProduct(input);
+    }),
+
+  update: protectedProcedure
+    .input(z.object({ id: z.number() }).merge(supplierProductInput.partial()))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateSupplierProduct(id, data);
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      return db.deleteSupplierProduct(input.id);
+    }),
+
+  uploadImage: protectedProcedure
+    .input(z.object({
+      fileName: z.string(),
+      fileType: z.string(),
+      fileBase64: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const buf = Buffer.from(input.fileBase64, 'base64');
+      const key = `supplier-products/${Date.now()}-${input.fileName}`;
+      const { url } = await storagePut(key, buf, input.fileType);
+      return { url };
+    }),
+});
+
+
 // ─── Main Router ─────────────────────────────────────────────────────────
 
 export const appRouter = router({system: systemRouter,
@@ -8520,5 +8572,6 @@ export const appRouter = router({system: systemRouter,
   caseLibrary: caseLibraryRouter,
   expense: expenseRouter,
   suppliers: suppliersRouter,
+  supplierProducts: supplierProductsRouter,
 });
 export type AppRouter = typeof appRouter;

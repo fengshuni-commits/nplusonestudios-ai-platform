@@ -281,7 +281,24 @@ export const suppliers = mysqlTable("suppliers", {
 export type Supplier = typeof suppliers.$inferSelect;
 export type InsertSupplier = typeof suppliers.$inferInsert;
 
-// ─── Procurement (采购清单) ──────────────────────────────
+// ─── Supplier Products (供应商产品) ──────────────────────────
+export const supplierProducts = mysqlTable("supplier_products", {
+  id: int("id").autoincrement().primaryKey(),
+  supplierId: int("supplierId").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  detailUrl: text("detailUrl"),
+  imageUrl: text("imageUrl"),
+  spec: text("spec"),
+  price: varchar("price", { length: 256 }),
+  notes: text("notes"),
+  sourceFile: varchar("sourceFile", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SupplierProduct = typeof supplierProducts.$inferSelect;
+export type InsertSupplierProduct = typeof supplierProducts.$inferInsert;
+
+// --- Procurement (采购清单) ---
 export const procurements = mysqlTable("procurements", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(),

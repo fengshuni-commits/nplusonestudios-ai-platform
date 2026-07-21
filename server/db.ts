@@ -11,7 +11,8 @@ import {
   standards, InsertStandard,
   aiTools, InsertAiTool,
   aiToolLogs,
-  suppliers, InsertSupplier,
+  suppliers, InsertSupplier, Supplier,
+  supplierProducts, InsertSupplierProduct, SupplierProduct,
   procurements, InsertProcurement,
   webhooks, InsertWebhook,
   apiKeys, InsertApiKey,
@@ -1095,9 +1096,49 @@ export async function bulkCreateSuppliers(rows: InsertSupplier[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (rows.length === 0) return { count: 0 };
-  // Insert in batches of 100
   for (let i = 0; i < rows.length; i += 100) {
     await db.insert(suppliers).values(rows.slice(i, i + 100));
+  }
+  return { count: rows.length };
+}
+
+// --- Supplier Products ---
+
+export async function listSupplierProducts(supplierId: number): Promise<SupplierProduct[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(supplierProducts)
+    .where(eq(supplierProducts.supplierId, supplierId))
+    .orderBy(supplierProducts.createdAt);
+}
+
+export async function createSupplierProduct(data: Omit<InsertSupplierProduct, 'id' | 'createdAt' | 'updatedAt'>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(supplierProducts).values(data);
+  return { id: (result as any).insertId };
+}
+
+export async function updateSupplierProduct(id: number, data: Partial<InsertSupplierProduct>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(supplierProducts).set(data).where(eq(supplierProducts.id, id));
+  return { success: true };
+}
+
+export async function deleteSupplierProduct(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(supplierProducts).where(eq(supplierProducts.id, id));
+  return { success: true };
+}
+
+export async function bulkCreateSupplierProducts(rows: Omit<InsertSupplierProduct, 'id' | 'createdAt' | 'updatedAt'>[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (rows.length === 0) return { count: 0 };
+  for (let i = 0; i < rows.length; i += 100) {
+    await db.insert(supplierProducts).values(rows.slice(i, i + 100));
   }
   return { count: rows.length };
 }
